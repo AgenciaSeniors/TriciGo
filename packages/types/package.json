@@ -1,0 +1,19 @@
+{
+  "name": "@tricigo/types",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./enums": "./src/enums.ts",
+    "./user": "./src/user.ts",
+    "./driver": "./src/driver.ts",
+    "./vehicle": "./src/vehicle.ts",
+    "./wallet": "./src/wallet.ts",
+    "./ride": "./src/ride.ts",
+    "./review": "./src/review.ts",
+    "./incident": "./src/incident.ts",
+    "./promotion": "./src/promotion.ts",
+    "./admin": "./src/admin.ts",
+    "./pricing": "./src/pricing.ts"
+  }
+}

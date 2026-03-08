@@ -1,0 +1,114 @@
+// ============================================================
+// TriciGo — Wallet Service
+// Client-side wallet operations. Financial mutations happen
+// server-side via Edge Functions for safety.
+// ============================================================
+
+import type {
+  WalletAccount,
+  LedgerTransaction,
+  WalletSummary,
+  WalletRedemption,
+} from '@tricigo/types';
+import { getSupabaseClient } from '../client';
+
+export const walletService = {
+  /**
+   * Get the wallet account for the current user.
+   */
+  async getAccount(userId: string): Promise<WalletAccount | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_accounts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('account_type', 'customer_cash')
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data as WalletAccount | null;
+  },
+
+  /**
+   * Get wallet summary (balance, held, totals) for display.
+   */
+  async getSummary(userId: string): Promise<WalletSummary> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .rpc('get_wallet_summary', { p_user_id: userId });
+    if (error) throw error;
+    return data as WalletSummary;
+  },
+
+  /**
+   * Get transaction history for a wallet account.
+   */
+  async getTransactions(
+    accountId: string,
+    page = 0,
+    pageSize = 20,
+  ): Promise<LedgerTransaction[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('ledger_transactions')
+      .select(`
+        *,
+        ledger_entries!inner(account_id)
+      `)
+      .eq('ledger_entries.account_id', accountId)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as LedgerTransaction[];
+  },
+
+  /**
+   * Get balance (read-only, derived from ledger).
+   */
+  async getBalance(userId: string): Promise<{ available: number; held: number }> {
+    const account = await walletService.getAccount(userId);
+    if (!account) return { available: 0, held: 0 };
+    return {
+      available: account.balance,
+      held: account.held_balance,
+    };
+  },
+
+  /**
+   * Request a redemption (driver only).
+   * The actual processing happens via admin approval.
+   */
+  async requestRedemption(
+    driverId: string,
+    amount: number,
+  ): Promise<WalletRedemption> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_redemptions')
+      .insert({
+        driver_id: driverId,
+        amount,
+        status: 'requested',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as WalletRedemption;
+  },
+
+  /**
+   * Get redemption history for a driver.
+   */
+  async getRedemptions(driverId: string): Promise<WalletRedemption[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_redemptions')
+      .select('*')
+      .eq('driver_id', driverId)
+      .order('requested_at', { ascending: false });
+    if (error) throw error;
+    return data as WalletRedemption[];
+  },
+};

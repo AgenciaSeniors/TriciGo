@@ -1,0 +1,76 @@
+{
+  "app_name": "TriciGo",
+  "loading": "Cargando...",
+  "error": "Ha ocurrido un error",
+  "retry": "Reintentar",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "save": "Guardar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "back": "Volver",
+  "next": "Siguiente",
+  "done": "Listo",
+  "close": "Cerrar",
+  "search": "Buscar",
+  "no_results": "Sin resultados",
+  "see_all": "Ver todo",
+  "ok": "Aceptar",
+
+  "auth": {
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "phone_placeholder": "Número de teléfono",
+    "phone_label": "Tu número de teléfono",
+    "otp_title": "Verificación",
+    "otp_subtitle": "Ingresa el código enviado a {{phone}}",
+    "otp_placeholder": "Código de 6 dígitos",
+    "send_code": "Enviar código",
+    "verify": "Verificar",
+    "resend_code": "Reenviar código",
+    "resend_in": "Reenviar en {{seconds}}s",
+    "invalid_phone": "Número de teléfono inválido",
+    "invalid_otp": "Código inválido"
+  },
+
+  "wallet": {
+    "title": "Wallet",
+    "balance": "Saldo disponible",
+    "held": "Retenido",
+    "tricicoin": "TriciCoin",
+    "recharge": "Recargar",
+    "transfer": "Transferir",
+    "history": "Historial",
+    "no_transactions": "No hay movimientos aún"
+  },
+
+  "profile": {
+    "title": "Perfil",
+    "edit_profile": "Editar perfil",
+    "name": "Nombre completo",
+    "phone": "Teléfono",
+    "email": "Correo electrónico",
+    "language": "Idioma",
+    "emergency_contact": "Contacto de emergencia",
+    "saved_locations": "Lugares guardados",
+    "settings": "Configuración",
+    "help": "Ayuda",
+    "about": "Acerca de TriciGo",
+    "version": "Versión {{version}}"
+  },
+
+  "network": {
+    "offline": "Sin conexión",
+    "reconnecting": "Reconectando...",
+    "syncing": "Sincronizando...",
+    "online": "Conectado"
+  },
+
+  "errors": {
+    "generic": "Algo salió mal. Inténtalo de nuevo.",
+    "network": "Error de conexión. Verifica tu red.",
+    "server": "Error del servidor. Inténtalo más tarde.",
+    "unauthorized": "Sesión expirada. Inicia sesión de nuevo.",
+    "not_found": "No encontrado"
+  }
+}

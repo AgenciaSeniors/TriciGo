@@ -1,0 +1,102 @@
+// ============================================================
+// TriciGo — Date & Time Utilities
+// Timezone: America/Havana (Cuba Standard Time)
+// ============================================================
+
+const HAVANA_TIMEZONE = 'America/Havana';
+
+/**
+ * Format an ISO timestamp for display in Havana timezone.
+ */
+export function formatDateTime(
+  isoString: string,
+  options: Intl.DateTimeFormatOptions = {},
+): string {
+  const date = new Date(isoString);
+  return date.toLocaleString('es-CU', {
+    timeZone: HAVANA_TIMEZONE,
+    ...options,
+  });
+}
+
+/**
+ * Format a date as "dd/MM/yyyy"
+ */
+export function formatDate(isoString: string): string {
+  return formatDateTime(isoString, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Format time as "HH:mm"
+ */
+export function formatTime(isoString: string): string {
+  return formatDateTime(isoString, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/**
+ * Format duration in seconds to human-readable string.
+ * Examples:
+ *   formatDuration(90) → "1 min 30 s"
+ *   formatDuration(3661) → "1 h 1 min"
+ */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} s`;
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+  }
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds > 0
+    ? `${minutes} min ${remainingSeconds} s`
+    : `${minutes} min`;
+}
+
+/**
+ * Format distance in meters to human-readable string.
+ * Examples:
+ *   formatDistance(500) → "500 m"
+ *   formatDistance(2500) → "2.5 km"
+ */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+/**
+ * Get relative time string (e.g., "hace 5 min", "hace 2 h")
+ */
+export function getRelativeTime(isoString: string, locale = 'es'): string {
+  const now = Date.now();
+  const date = new Date(isoString).getTime();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (locale === 'es') {
+    if (diffSec < 60) return 'ahora';
+    if (diffMin < 60) return `hace ${diffMin} min`;
+    if (diffHour < 24) return `hace ${diffHour} h`;
+    if (diffDay === 1) return 'ayer';
+    return `hace ${diffDay} días`;
+  }
+
+  // English fallback
+  if (diffSec < 60) return 'now';
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHour < 24) return `${diffHour}h ago`;
+  if (diffDay === 1) return 'yesterday';
+  return `${diffDay} days ago`;
+}

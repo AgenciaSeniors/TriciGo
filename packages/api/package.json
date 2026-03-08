@@ -1,0 +1,20 @@
+{
+  "name": "@tricigo/api",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./services/auth": "./src/services/auth.service.ts",
+    "./services/wallet": "./src/services/wallet.service.ts",
+    "./services/ride": "./src/services/ride.service.ts",
+    "./services/driver": "./src/services/driver.service.ts",
+    "./services/review": "./src/services/review.service.ts",
+    "./services/admin": "./src/services/admin.service.ts",
+    "./queries/keys": "./src/queries/keys.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@tricigo/types": "workspace:*"
+  }
+}

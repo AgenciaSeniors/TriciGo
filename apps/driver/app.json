@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "TriciGo Conductor",
+    "slug": "tricigo-driver",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "tricigo-driver",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#111111",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.tricigo.driver",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para mostrar viajes cercanos",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo necesita tu ubicación para el seguimiento de viajes activos",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#111111"
+      },
+      "package": "app.tricigo.driver",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE"
+      ]
+    },
+    "plugins": ["expo-router", "expo-localization"]
+  }
+}

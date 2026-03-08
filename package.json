@@ -1,0 +1,24 @@
+{
+  "name": "tricigo",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:client": "turbo run dev --filter=@tricigo/client",
+    "dev:driver": "turbo run dev --filter=@tricigo/driver",
+    "dev:admin": "turbo run dev --filter=@tricigo/admin",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "turbo": "^2.7.0"
+  }
+}

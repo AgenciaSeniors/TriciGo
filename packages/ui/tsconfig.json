@@ -1,0 +1,9 @@
+{
+  "extends": "../config/tsconfig/react-library.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["nativewind/types"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

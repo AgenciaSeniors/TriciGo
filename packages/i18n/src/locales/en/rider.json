@@ -1,0 +1,55 @@
+{
+  "home": {
+    "greeting": "Hey, {{name}}!",
+    "where_to": "Where to?",
+    "search_destination": "Search destination",
+    "recent_places": "Recent places",
+    "saved_places": "Saved places"
+  },
+
+  "ride": {
+    "request": "Request ride",
+    "searching_driver": "Searching for a driver...",
+    "driver_assigned": "Driver assigned",
+    "driver_arriving": "Your driver is on the way",
+    "driver_arrived": "Your driver has arrived",
+    "in_progress": "On trip",
+    "completed": "Trip completed",
+    "canceled": "Trip canceled",
+    "estimated_fare": "Estimated fare",
+    "final_fare": "Final fare",
+    "payment_method": "Payment method",
+    "pickup": "Pickup",
+    "dropoff": "Dropoff",
+    "eta": "Estimated time",
+    "distance": "Distance",
+    "cancel_ride": "Cancel ride",
+    "cancel_confirm": "Are you sure you want to cancel?",
+    "share_ride": "Share ride",
+    "sos": "SOS - Emergency",
+    "rate_driver": "Rate your driver",
+    "rate_placeholder": "How was your ride?",
+    "submit_review": "Submit rating"
+  },
+
+  "service_type": {
+    "triciclo_basico": "Basic Tricycle",
+    "triciclo_premium": "Premium Tricycle",
+    "moto_standard": "Motorcycle",
+    "auto_standard": "Car"
+  },
+
+  "payment": {
+    "tricicoin": "TriciCoin",
+    "cash": "Cash",
+    "mixed": "Mixed",
+    "insufficient_balance": "Insufficient balance"
+  },
+
+  "rides_history": {
+    "title": "My rides",
+    "no_rides": "No rides yet",
+    "completed": "Completed",
+    "canceled": "Canceled"
+  }
+}

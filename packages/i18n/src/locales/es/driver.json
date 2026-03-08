@@ -1,0 +1,79 @@
+{
+  "home": {
+    "go_online": "Conectarse",
+    "go_offline": "Desconectarse",
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "waiting_requests": "Esperando solicitudes...",
+    "new_request": "¡Nueva solicitud!",
+    "accept": "Aceptar",
+    "decline": "Rechazar",
+    "time_to_respond": "Tiempo para responder: {{seconds}}s"
+  },
+
+  "trip": {
+    "navigate_to_pickup": "Navegar al punto de recogida",
+    "arrived_at_pickup": "Llegué al punto de recogida",
+    "start_trip": "Iniciar viaje",
+    "complete_trip": "Finalizar viaje",
+    "trip_completed": "Viaje completado",
+    "earned": "Ganaste",
+    "passenger_name": "Pasajero: {{name}}",
+    "pickup_address": "Recogida",
+    "dropoff_address": "Destino",
+    "call_passenger": "Llamar al pasajero",
+    "chat_passenger": "Chat con pasajero",
+    "sos": "SOS - Emergencia",
+    "cancel_trip": "Cancelar viaje",
+    "cancel_reason": "Motivo de cancelación",
+    "rate_passenger": "Califica al pasajero"
+  },
+
+  "earnings": {
+    "title": "Ganancias",
+    "today": "Hoy",
+    "this_week": "Esta semana",
+    "this_month": "Este mes",
+    "total_earned": "Total ganado",
+    "total_trips": "Viajes completados",
+    "balance": "Saldo disponible",
+    "redeem": "Canjear saldo",
+    "redeem_amount": "Monto a canjear",
+    "redeem_confirm": "¿Confirmar canje de {{amount}}?",
+    "history": "Historial de ganancias"
+  },
+
+  "onboarding": {
+    "title": "Registro de conductor",
+    "step_personal": "Datos personales",
+    "step_vehicle": "Vehículo",
+    "step_documents": "Documentos",
+    "step_review": "Revisión",
+    "full_name": "Nombre completo",
+    "phone": "Teléfono",
+    "email": "Correo (opcional)",
+    "vehicle_type": "Tipo de vehículo",
+    "vehicle_make": "Marca",
+    "vehicle_model": "Modelo",
+    "vehicle_year": "Año",
+    "vehicle_color": "Color",
+    "plate_number": "Número de placa",
+    "vehicle_photo": "Foto del vehículo",
+    "national_id": "Carné de identidad",
+    "drivers_license": "Licencia de conducción",
+    "vehicle_registration": "Matrícula del vehículo",
+    "selfie": "Selfie de verificación",
+    "upload": "Subir documento",
+    "pending_review": "Tu solicitud está en revisión",
+    "approved": "¡Solicitud aprobada!",
+    "rejected": "Solicitud rechazada",
+    "submit": "Enviar solicitud"
+  },
+
+  "trips_history": {
+    "title": "Mis viajes",
+    "no_trips": "Aún no tienes viajes",
+    "completed": "Completados",
+    "canceled": "Cancelados"
+  }
+}

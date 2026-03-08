@@ -1,0 +1,76 @@
+{
+  "app_name": "TriciGo",
+  "loading": "Loading...",
+  "error": "An error occurred",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "back": "Back",
+  "next": "Next",
+  "done": "Done",
+  "close": "Close",
+  "search": "Search",
+  "no_results": "No results",
+  "see_all": "See all",
+  "ok": "OK",
+
+  "auth": {
+    "login": "Sign in",
+    "logout": "Sign out",
+    "phone_placeholder": "Phone number",
+    "phone_label": "Your phone number",
+    "otp_title": "Verification",
+    "otp_subtitle": "Enter the code sent to {{phone}}",
+    "otp_placeholder": "6-digit code",
+    "send_code": "Send code",
+    "verify": "Verify",
+    "resend_code": "Resend code",
+    "resend_in": "Resend in {{seconds}}s",
+    "invalid_phone": "Invalid phone number",
+    "invalid_otp": "Invalid code"
+  },
+
+  "wallet": {
+    "title": "Wallet",
+    "balance": "Available balance",
+    "held": "On hold",
+    "tricicoin": "TriciCoin",
+    "recharge": "Top up",
+    "transfer": "Transfer",
+    "history": "History",
+    "no_transactions": "No transactions yet"
+  },
+
+  "profile": {
+    "title": "Profile",
+    "edit_profile": "Edit profile",
+    "name": "Full name",
+    "phone": "Phone",
+    "email": "Email",
+    "language": "Language",
+    "emergency_contact": "Emergency contact",
+    "saved_locations": "Saved locations",
+    "settings": "Settings",
+    "help": "Help",
+    "about": "About TriciGo",
+    "version": "Version {{version}}"
+  },
+
+  "network": {
+    "offline": "Offline",
+    "reconnecting": "Reconnecting...",
+    "syncing": "Syncing...",
+    "online": "Online"
+  },
+
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "network": "Connection error. Check your network.",
+    "server": "Server error. Try again later.",
+    "unauthorized": "Session expired. Please sign in again.",
+    "not_found": "Not found"
+  }
+}

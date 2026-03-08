@@ -1,0 +1,75 @@
+{
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "drivers": "Drivers",
+    "rides": "Rides",
+    "users": "Users",
+    "wallet": "Wallet / Finance",
+    "settings": "Settings",
+    "audit": "Audit",
+    "reports": "Reports"
+  },
+
+  "dashboard": {
+    "title": "Dashboard",
+    "active_rides": "Active rides",
+    "total_rides_today": "Rides today",
+    "online_drivers": "Online drivers",
+    "total_revenue": "Total revenue",
+    "pending_verifications": "Pending verifications",
+    "open_incidents": "Open incidents"
+  },
+
+  "drivers": {
+    "title": "Driver management",
+    "pending": "Pending",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "suspended": "Suspended",
+    "approve": "Approve",
+    "reject": "Reject",
+    "suspend": "Suspend",
+    "reactivate": "Reactivate",
+    "view_documents": "View documents",
+    "rejection_reason": "Rejection reason",
+    "suspension_reason": "Suspension reason"
+  },
+
+  "rides": {
+    "title": "Ride management",
+    "active": "Active",
+    "completed": "Completed",
+    "canceled": "Canceled",
+    "disputed": "Disputed",
+    "view_details": "View details",
+    "resolve_dispute": "Resolve dispute"
+  },
+
+  "users": {
+    "title": "User management",
+    "total_users": "Total users",
+    "active": "Active",
+    "blocked": "Blocked",
+    "block_user": "Block user",
+    "unblock_user": "Unblock user"
+  },
+
+  "wallet_admin": {
+    "title": "Wallet / Finance",
+    "total_tricicoin": "Total TriciCoin in circulation",
+    "pending_redemptions": "Pending redemptions",
+    "adjust_balance": "Adjust balance",
+    "adjustment_reason": "Adjustment reason",
+    "view_ledger": "View ledger",
+    "process_redemption": "Process redemption"
+  },
+
+  "settings": {
+    "title": "Settings",
+    "pricing_rules": "Pricing rules",
+    "zones": "Operational zones",
+    "service_types": "Service types",
+    "promotions": "Promotions",
+    "feature_flags": "Feature flags"
+  }
+}

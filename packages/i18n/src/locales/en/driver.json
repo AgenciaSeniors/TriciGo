@@ -1,0 +1,79 @@
+{
+  "home": {
+    "go_online": "Go online",
+    "go_offline": "Go offline",
+    "online": "Online",
+    "offline": "Offline",
+    "waiting_requests": "Waiting for requests...",
+    "new_request": "New request!",
+    "accept": "Accept",
+    "decline": "Decline",
+    "time_to_respond": "Time to respond: {{seconds}}s"
+  },
+
+  "trip": {
+    "navigate_to_pickup": "Navigate to pickup",
+    "arrived_at_pickup": "Arrived at pickup",
+    "start_trip": "Start trip",
+    "complete_trip": "Complete trip",
+    "trip_completed": "Trip completed",
+    "earned": "You earned",
+    "passenger_name": "Passenger: {{name}}",
+    "pickup_address": "Pickup",
+    "dropoff_address": "Dropoff",
+    "call_passenger": "Call passenger",
+    "chat_passenger": "Chat with passenger",
+    "sos": "SOS - Emergency",
+    "cancel_trip": "Cancel trip",
+    "cancel_reason": "Cancellation reason",
+    "rate_passenger": "Rate passenger"
+  },
+
+  "earnings": {
+    "title": "Earnings",
+    "today": "Today",
+    "this_week": "This week",
+    "this_month": "This month",
+    "total_earned": "Total earned",
+    "total_trips": "Completed trips",
+    "balance": "Available balance",
+    "redeem": "Redeem balance",
+    "redeem_amount": "Amount to redeem",
+    "redeem_confirm": "Confirm redemption of {{amount}}?",
+    "history": "Earnings history"
+  },
+
+  "onboarding": {
+    "title": "Driver registration",
+    "step_personal": "Personal info",
+    "step_vehicle": "Vehicle",
+    "step_documents": "Documents",
+    "step_review": "Review",
+    "full_name": "Full name",
+    "phone": "Phone",
+    "email": "Email (optional)",
+    "vehicle_type": "Vehicle type",
+    "vehicle_make": "Make",
+    "vehicle_model": "Model",
+    "vehicle_year": "Year",
+    "vehicle_color": "Color",
+    "plate_number": "Plate number",
+    "vehicle_photo": "Vehicle photo",
+    "national_id": "National ID",
+    "drivers_license": "Driver's license",
+    "vehicle_registration": "Vehicle registration",
+    "selfie": "Verification selfie",
+    "upload": "Upload document",
+    "pending_review": "Your application is under review",
+    "approved": "Application approved!",
+    "rejected": "Application rejected",
+    "submit": "Submit application"
+  },
+
+  "trips_history": {
+    "title": "My trips",
+    "no_trips": "No trips yet",
+    "completed": "Completed",
+    "canceled": "Canceled"
+  }
+}

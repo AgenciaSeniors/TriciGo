@@ -1,0 +1,12 @@
+{
+  "name": "@tricigo/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/react-library": "./tsconfig/react-library.json",
+    "./tsconfig/react-native": "./tsconfig/react-native.json",
+    "./tsconfig/nextjs": "./tsconfig/nextjs.json",
+    "./eslint/base": "./eslint/base.js"
+  }
+}

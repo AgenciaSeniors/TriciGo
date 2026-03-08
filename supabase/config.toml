@@ -1,0 +1,13 @@
+[project]
+id = "tricigo"
+
+[api]
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+
+[studio]
+port = 54323

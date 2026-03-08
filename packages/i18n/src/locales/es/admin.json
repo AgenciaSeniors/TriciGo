@@ -1,0 +1,75 @@
+{
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "drivers": "Conductores",
+    "rides": "Viajes",
+    "users": "Usuarios",
+    "wallet": "Wallet / Finanzas",
+    "settings": "Configuración",
+    "audit": "Auditoría",
+    "reports": "Reportes"
+  },
+
+  "dashboard": {
+    "title": "Panel de control",
+    "active_rides": "Viajes activos",
+    "total_rides_today": "Viajes hoy",
+    "online_drivers": "Conductores en línea",
+    "total_revenue": "Ingresos totales",
+    "pending_verifications": "Verificaciones pendientes",
+    "open_incidents": "Incidentes abiertos"
+  },
+
+  "drivers": {
+    "title": "Gestión de conductores",
+    "pending": "Pendientes",
+    "approved": "Aprobados",
+    "rejected": "Rechazados",
+    "suspended": "Suspendidos",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "suspend": "Suspender",
+    "reactivate": "Reactivar",
+    "view_documents": "Ver documentos",
+    "rejection_reason": "Motivo de rechazo",
+    "suspension_reason": "Motivo de suspensión"
+  },
+
+  "rides": {
+    "title": "Gestión de viajes",
+    "active": "Activos",
+    "completed": "Completados",
+    "canceled": "Cancelados",
+    "disputed": "En disputa",
+    "view_details": "Ver detalles",
+    "resolve_dispute": "Resolver disputa"
+  },
+
+  "users": {
+    "title": "Gestión de usuarios",
+    "total_users": "Total de usuarios",
+    "active": "Activos",
+    "blocked": "Bloqueados",
+    "block_user": "Bloquear usuario",
+    "unblock_user": "Desbloquear usuario"
+  },
+
+  "wallet_admin": {
+    "title": "Wallet / Finanzas",
+    "total_tricicoin": "Total TriciCoin en circulación",
+    "pending_redemptions": "Canjes pendientes",
+    "adjust_balance": "Ajustar saldo",
+    "adjustment_reason": "Motivo del ajuste",
+    "view_ledger": "Ver ledger",
+    "process_redemption": "Procesar canje"
+  },
+
+  "settings": {
+    "title": "Configuración",
+    "pricing_rules": "Reglas de precio",
+    "zones": "Zonas operativas",
+    "service_types": "Tipos de servicio",
+    "promotions": "Promociones",
+    "feature_flags": "Feature flags"
+  }
+}
