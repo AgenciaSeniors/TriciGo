@@ -34,6 +34,24 @@ export const reviewService = {
   },
 
   /**
+   * Get the review for a specific ride by a specific reviewer.
+   */
+  async getReviewForRide(
+    rideId: string,
+    reviewerId: string,
+  ): Promise<Review | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('*')
+      .eq('ride_id', rideId)
+      .eq('reviewer_id', reviewerId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as Review | null;
+  },
+
+  /**
    * Get reviews received by a user.
    */
   async getReviewsForUser(

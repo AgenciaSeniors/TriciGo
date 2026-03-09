@@ -151,6 +151,7 @@ export const rideService = {
     const rideData = ride as Ride;
     const result: RideWithDriver = {
       ...rideData,
+      driver_user_id: null,
       driver_name: null,
       driver_avatar_url: null,
       driver_rating: null,
@@ -170,6 +171,7 @@ export const rideService = {
         .single();
 
       if (driverProfile) {
+        result.driver_user_id = driverProfile.user_id;
         result.driver_rating = driverProfile.rating_avg;
 
         // Fetch user info for driver name/phone

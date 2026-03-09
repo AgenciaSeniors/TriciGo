@@ -43,7 +43,9 @@
     "canceled_by_driver": "El conductor canceló el viaje",
     "call_driver": "Llamar conductor",
     "trip_summary": "Resumen del viaje",
-    "done": "Listo"
+    "done": "Listo",
+    "review_thanks": "¡Gracias por tu calificación!",
+    "your_comment": "Comentario (opcional)"
   },
 
   "locations": {
@@ -67,7 +69,11 @@
   "rides_history": {
     "title": "Mis viajes",
     "no_rides": "Aún no tienes viajes",
-    "completed": "Completados",
-    "canceled": "Cancelados"
+    "completed": "Completado",
+    "canceled": "Cancelado",
+    "load_more": "Cargar más",
+    "fare": "Tarifa",
+    "payment_method": "Método de pago",
+    "date": "Fecha"
   }
 }

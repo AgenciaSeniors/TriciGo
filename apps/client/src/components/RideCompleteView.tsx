@@ -1,20 +1,60 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useState } from 'react';
+import { View, Pressable, TextInput } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { reviewService } from '@tricigo/api/services/review';
 import { useRideStore } from '@/stores/ride.store';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
   const activeRide = useRideStore((s) => s.activeRide);
+  const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const resetAll = useRideStore((s) => s.resetAll);
+  const userId = useAuthStore((s) => s.user?.id);
+
+  const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   if (!activeRide) return null;
 
   const fare = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
+  const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;
+
+  const handleSubmitReview = async () => {
+    if (!selectedRating || !userId || !rideWithDriver?.driver_user_id) return;
+    setSubmitting(true);
+    try {
+      await reviewService.submitReview({
+        ride_id: activeRide.id,
+        reviewer_id: userId,
+        reviewee_id: rideWithDriver.driver_user_id,
+        rating: selectedRating as 1 | 2 | 3 | 4 | 5,
+        comment: comment.trim() || undefined,
+      });
+      setSubmitted(true);
+      setTimeout(() => resetAll(), 1500);
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <View className="flex-1 pt-8 items-center justify-center">
+        <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
+          <Text variant="h1" color="inverse">✓</Text>
+        </View>
+        <Text variant="h3">{t('ride.review_thanks')}</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 pt-8 items-center">
@@ -23,14 +63,10 @@ export function RideCompleteView() {
         <Text variant="h1" color="inverse">✓</Text>
       </View>
 
-      <Text variant="h3" className="mb-2">
-        {t('ride.completed')}
-      </Text>
+      <Text variant="h3" className="mb-2">{t('ride.completed')}</Text>
 
       {/* Fare */}
-      <Text variant="h2" color="accent" className="mb-6">
-        {formatCUP(fare)}
-      </Text>
+      <Text variant="h2" color="accent" className="mb-6">{formatCUP(fare)}</Text>
 
       {/* Route summary */}
       <Card variant="outlined" padding="md" className="w-full mb-6">
@@ -50,23 +86,57 @@ export function RideCompleteView() {
         </View>
       </Card>
 
-      {/* Rating placeholder */}
-      <View className="flex-row gap-2 mb-6">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Text key={star} variant="h3" color="tertiary">★</Text>
-        ))}
-      </View>
-      <Text variant="caption" color="tertiary" className="mb-6">
-        {t('ride.rate_driver')}
-      </Text>
+      {/* Rating */}
+      {hasDriver ? (
+        <>
+          <View className="flex-row gap-2 mb-2">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Pressable key={star} onPress={() => setSelectedRating(star)}>
+                <Text
+                  variant="h3"
+                  className={
+                    selectedRating && star <= selectedRating
+                      ? 'text-yellow-500'
+                      : 'text-neutral-300'
+                  }
+                >
+                  ★
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text variant="caption" color="tertiary" className="mb-4">
+            {t('ride.rate_driver')}
+          </Text>
 
-      {/* Done button */}
-      <Button
-        title={t('ride.done', { defaultValue: 'Listo' })}
-        size="lg"
-        fullWidth
-        onPress={resetAll}
-      />
+          {selectedRating && (
+            <TextInput
+              className="w-full border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
+              placeholder={t('ride.your_comment')}
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              numberOfLines={3}
+              style={{ textAlignVertical: 'top', minHeight: 80 }}
+            />
+          )}
+
+          <Button
+            title={selectedRating ? t('ride.submit_review') : t('ride.done', { defaultValue: 'Listo' })}
+            size="lg"
+            fullWidth
+            onPress={selectedRating ? handleSubmitReview : resetAll}
+            loading={submitting}
+          />
+        </>
+      ) : (
+        <Button
+          title={t('ride.done', { defaultValue: 'Listo' })}
+          size="lg"
+          fullWidth
+          onPress={resetAll}
+        />
+      )}
     </View>
   );
 }

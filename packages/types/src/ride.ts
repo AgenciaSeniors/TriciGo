@@ -106,6 +106,7 @@ export interface RideValidTransition {
 
 /** Ride with joined driver info for client display */
 export interface RideWithDriver extends Ride {
+  driver_user_id: string | null;
   driver_name: string | null;
   driver_avatar_url: string | null;
   driver_rating: number | null;

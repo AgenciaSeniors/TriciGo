@@ -43,7 +43,9 @@
     "canceled_by_driver": "Driver canceled the ride",
     "call_driver": "Call driver",
     "trip_summary": "Trip summary",
-    "done": "Done"
+    "done": "Done",
+    "review_thanks": "Thanks for your rating!",
+    "your_comment": "Comment (optional)"
   },
 
   "locations": {
@@ -68,6 +70,10 @@
     "title": "My rides",
     "no_rides": "No rides yet",
     "completed": "Completed",
-    "canceled": "Canceled"
+    "canceled": "Canceled",
+    "load_more": "Load more",
+    "fare": "Fare",
+    "payment_method": "Payment method",
+    "date": "Date"
   }
 }

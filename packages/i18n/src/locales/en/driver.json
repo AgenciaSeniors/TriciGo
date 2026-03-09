@@ -49,7 +49,12 @@
     "redeem": "Redeem balance",
     "redeem_amount": "Amount to redeem",
     "redeem_confirm": "Confirm redemption of {{amount}}?",
-    "history": "Earnings history"
+    "history": "Earnings history",
+    "rating": "Your rating",
+    "reviews_count": "{{count}} reviews",
+    "no_reviews": "No reviews yet",
+    "request_withdrawal": "Request withdrawal",
+    "withdrawal_info": "Withdrawals are processed by administration"
   },
 
   "onboarding": {
@@ -108,6 +113,8 @@
     "title": "My trips",
     "no_trips": "No trips yet",
     "completed": "Completed",
-    "canceled": "Canceled"
+    "canceled": "Canceled",
+    "load_more": "Load more",
+    "fare": "Earning"
   }
 }

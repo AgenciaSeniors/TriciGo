@@ -7,7 +7,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { StorageAdapter } from './storage';
 
-declare const process: { env: Record<string, string | undefined> } | undefined;
+declare const process: { env: Record<string, string | undefined> };
 
 let clientInstance: SupabaseClient | null = null;
 let storageAdapter: StorageAdapter | undefined;

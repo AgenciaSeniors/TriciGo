@@ -49,7 +49,12 @@
     "redeem": "Canjear saldo",
     "redeem_amount": "Monto a canjear",
     "redeem_confirm": "¿Confirmar canje de {{amount}}?",
-    "history": "Historial de ganancias"
+    "history": "Historial de ganancias",
+    "rating": "Tu calificación",
+    "reviews_count": "{{count}} reseñas",
+    "no_reviews": "Sin reseñas aún",
+    "request_withdrawal": "Solicitar retiro",
+    "withdrawal_info": "Los retiros son procesados por administración"
   },
 
   "onboarding": {
@@ -107,7 +112,9 @@
   "trips_history": {
     "title": "Mis viajes",
     "no_trips": "Aún no tienes viajes",
-    "completed": "Completados",
-    "canceled": "Cancelados"
+    "completed": "Completado",
+    "canceled": "Cancelado",
+    "load_more": "Cargar más",
+    "fare": "Ganancia"
   }
 }
