@@ -6,9 +6,12 @@
 import type {
   AdminAction,
   AuditLog,
+  DriverDocument,
   DriverProfile,
+  DriverProfileWithUser,
   Ride,
   User,
+  Vehicle,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -38,19 +41,87 @@ export const adminService = {
     status: DriverStatus,
     page = 0,
     pageSize = 20,
-  ): Promise<DriverProfile[]> {
+  ): Promise<DriverProfileWithUser[]> {
     const supabase = getSupabaseClient();
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
     const { data, error } = await supabase
       .from('driver_profiles')
-      .select('*, users!inner(full_name, phone, email)')
+      .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
       .eq('status', status)
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as DriverProfile[];
+    return data as DriverProfileWithUser[];
+  },
+
+  /**
+   * Get all drivers (no status filter) with pagination.
+   */
+  async getAllDrivers(
+    page = 0,
+    pageSize = 20,
+  ): Promise<DriverProfileWithUser[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as DriverProfileWithUser[];
+  },
+
+  /**
+   * Get full driver detail: profile + vehicle + documents.
+   */
+  async getDriverDetail(driverId: string) {
+    const supabase = getSupabaseClient();
+
+    const [profileRes, vehiclesRes, documentsRes] = await Promise.all([
+      supabase
+        .from('driver_profiles')
+        .select('*, users!inner(full_name, phone, email)')
+        .eq('id', driverId)
+        .single(),
+      supabase
+        .from('vehicles')
+        .select('*')
+        .eq('driver_id', driverId)
+        .eq('is_active', true)
+        .limit(1),
+      supabase
+        .from('driver_documents')
+        .select('*')
+        .eq('driver_id', driverId)
+        .order('uploaded_at', { ascending: false }),
+    ]);
+
+    if (profileRes.error) throw profileRes.error;
+
+    return {
+      profile: profileRes.data as DriverProfile & {
+        users: { full_name: string; phone: string; email: string | null };
+      },
+      vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
+      documents: (documentsRes.data as DriverDocument[]) ?? [],
+    };
+  },
+
+  /**
+   * Get a signed URL for a driver document in Storage.
+   */
+  async getDocumentUrl(storagePath: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from('driver-documents')
+      .createSignedUrl(storagePath, 3600);
+    if (error) throw error;
+    return data.signedUrl;
   },
 
   /**

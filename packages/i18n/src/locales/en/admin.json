@@ -32,7 +32,26 @@
     "reactivate": "Reactivate",
     "view_documents": "View documents",
     "rejection_reason": "Rejection reason",
-    "suspension_reason": "Suspension reason"
+    "suspension_reason": "Suspension reason",
+    "all": "All",
+    "under_review": "Under review",
+    "no_drivers": "No drivers registered yet",
+    "driver_detail": "Driver detail",
+    "personal_info": "Personal info",
+    "vehicle_info": "Vehicle info",
+    "documents_section": "Documents",
+    "confirm_approve": "Approve this driver?",
+    "confirm_reject": "Reject this driver?",
+    "confirm_suspend": "Suspend this driver?",
+    "enter_reason": "Enter a reason",
+    "action_success": "Action completed successfully",
+    "view_detail": "View detail",
+    "back_to_list": "Back to list",
+    "vehicle_type": "Type",
+    "vehicle_plate": "Plate",
+    "vehicle_capacity": "Capacity",
+    "rating": "Rating",
+    "registered_at": "Registered"
   },
 
   "rides": {

@@ -1,6 +1,5 @@
 import type { Config } from 'tailwindcss';
-
-const tricigoPreset = require('@tricigo/theme/tailwind-preset');
+import tricigoPreset from '@tricigo/theme/tailwind-preset';
 
 const config: Config = {
   content: [

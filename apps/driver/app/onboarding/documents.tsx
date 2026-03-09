@@ -1,47 +1,149 @@
-import React from 'react';
-import { View, Pressable } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
+import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
+import { driverService } from '@tricigo/api';
+import { useAuthStore } from '@/stores/auth.store';
+import { useOnboardingStore } from '@/stores/onboarding.store';
+import type { DocumentType } from '@tricigo/types';
+
+const STEPS = [
+  { key: 'personal', label: 'Personal' },
+  { key: 'vehicle', label: 'Vehículo' },
+  { key: 'documents', label: 'Docs' },
+  { key: 'review', label: 'Revisión' },
+];
+
+const DOC_LABELS: Record<DocumentType, string> = {
+  national_id: 'onboarding.national_id',
+  drivers_license: 'onboarding.drivers_license',
+  vehicle_registration: 'onboarding.vehicle_registration',
+  selfie: 'onboarding.selfie',
+  vehicle_photo: 'onboarding.vehicle_photo',
+};
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
+  const user = useAuthStore((s) => s.user);
+  const {
+    documents,
+    driverProfileId,
+    setDocumentUri,
+    setDocumentUploaded,
+    setDocumentUploading,
+    setDocumentError,
+    setDriverProfileId,
+  } = useOnboardingStore();
 
-  const documents = [
-    { key: 'national_id', label: t('onboarding.national_id'), uploaded: false },
-    { key: 'drivers_license', label: t('onboarding.drivers_license'), uploaded: false },
-    { key: 'vehicle_registration', label: t('onboarding.vehicle_registration'), uploaded: false },
-    { key: 'selfie', label: t('onboarding.selfie'), uploaded: false },
-    { key: 'vehicle_photo', label: t('onboarding.vehicle_photo'), uploaded: false },
-  ];
+  // Create driver profile eagerly if not yet created
+  useEffect(() => {
+    if (driverProfileId || !user) return;
+
+    (async () => {
+      try {
+        const profile = await driverService.createProfile(user.id);
+        setDriverProfileId(profile.id);
+      } catch {
+        // Profile may already exist
+        try {
+          const existing = await driverService.getProfile(user.id);
+          if (existing) setDriverProfileId(existing.id);
+        } catch {
+          // Will be handled when user tries to upload
+        }
+      }
+    })();
+  }, [driverProfileId, user, setDriverProfileId]);
+
+  const pickAndUpload = async (docType: DocumentType) => {
+    if (!driverProfileId) {
+      Alert.alert('Error', t('errors.generic'));
+      return;
+    }
+
+    const isCamera = docType === 'selfie';
+
+    if (isCamera) {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
+        return;
+      }
+    } else {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a la galería.');
+        return;
+      }
+    }
+
+    const result = isCamera
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.7,
+          allowsEditing: true,
+        });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    const fileName = asset.fileName ?? `${docType}_${Date.now()}.jpg`;
+    setDocumentUri(docType, asset.uri, fileName);
+
+    // Upload immediately
+    setDocumentUploading(docType, true);
+    try {
+      await driverService.uploadDocument(driverProfileId, docType, asset.uri, fileName);
+      setDocumentUploaded(docType);
+    } catch {
+      setDocumentError(docType, t('onboarding.error_upload_failed'));
+    }
+  };
+
+  const allUploaded = documents.every((d) => d.uploaded);
+  const uploadedCount = documents.filter((d) => d.uploaded).length;
 
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
+        <StatusStepper steps={STEPS} currentStep="documents" className="mb-6" />
+
         <Text variant="h3" className="mb-1">
           {t('onboarding.step_documents')}
         </Text>
         <Text variant="bodySmall" color="secondary" className="mb-6">
-          Paso 3 de 4
+          {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {uploadedCount}/5
         </Text>
 
         {documents.map((doc) => (
-          <Pressable key={doc.key}>
+          <Pressable key={doc.document_type} onPress={() => pickAndUpload(doc.document_type)}>
             <Card variant="outlined" padding="md" className="mb-3 flex-row items-center">
-              <Ionicons
-                name={doc.uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}
-                size={24}
-                color={doc.uploaded ? '#10B981' : '#A3A3A3'}
-              />
+              {doc.uploading ? (
+                <ActivityIndicator size="small" color="#FF4D00" />
+              ) : (
+                <Ionicons
+                  name={doc.uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}
+                  size={24}
+                  color={doc.uploaded ? '#10B981' : '#A3A3A3'}
+                />
+              )}
               <View className="flex-1 ml-3">
-                <Text variant="body">{doc.label}</Text>
-                <Text variant="caption" color={doc.uploaded ? 'accent' : 'tertiary'}>
-                  {doc.uploaded ? 'Subido' : t('onboarding.upload')}
-                </Text>
+                <Text variant="body">{t(DOC_LABELS[doc.document_type])}</Text>
+                {doc.error ? (
+                  <Text variant="caption" color="error">{doc.error}</Text>
+                ) : (
+                  <Text variant="caption" color={doc.uploaded ? 'accent' : 'tertiary'}>
+                    {doc.uploaded ? 'Subido' : doc.document_type === 'selfie' ? t('onboarding.take_photo') : t('onboarding.pick_from_gallery')}
+                  </Text>
+                )}
               </View>
               <Ionicons name="chevron-forward" size={20} color="#A3A3A3" />
             </Card>
@@ -49,11 +151,12 @@ export default function DocumentsScreen() {
         ))}
 
         <Button
-          title="Siguiente"
+          title={t('common:next')}
           size="lg"
           fullWidth
           className="mt-4"
           onPress={() => router.push('/onboarding/review')}
+          disabled={!allUploaded}
         />
       </View>
     </Screen>

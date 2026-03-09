@@ -2,6 +2,18 @@
 // TriciGo — Admin & Audit Types
 // ============================================================
 
+import type { DriverProfile } from './driver';
+import type { VehicleType } from './enums';
+
+export interface DriverProfileWithUser extends DriverProfile {
+  users: {
+    full_name: string;
+    phone: string;
+    email: string | null;
+  };
+  vehicles?: { type: VehicleType; plate_number: string }[];
+}
+
 export interface AdminAction {
   id: string;
   admin_id: string;

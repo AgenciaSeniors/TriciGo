@@ -32,7 +32,26 @@
     "reactivate": "Reactivar",
     "view_documents": "Ver documentos",
     "rejection_reason": "Motivo de rechazo",
-    "suspension_reason": "Motivo de suspensión"
+    "suspension_reason": "Motivo de suspensión",
+    "all": "Todos",
+    "under_review": "En revisión",
+    "no_drivers": "No hay conductores registrados aún",
+    "driver_detail": "Detalle del conductor",
+    "personal_info": "Información personal",
+    "vehicle_info": "Información del vehículo",
+    "documents_section": "Documentos",
+    "confirm_approve": "¿Aprobar a este conductor?",
+    "confirm_reject": "¿Rechazar a este conductor?",
+    "confirm_suspend": "¿Suspender a este conductor?",
+    "enter_reason": "Ingresa un motivo",
+    "action_success": "Acción realizada correctamente",
+    "view_detail": "Ver detalle",
+    "back_to_list": "Volver a la lista",
+    "vehicle_type": "Tipo",
+    "vehicle_plate": "Placa",
+    "vehicle_capacity": "Capacidad",
+    "rating": "Calificación",
+    "registered_at": "Registrado"
   },
 
   "rides": {
