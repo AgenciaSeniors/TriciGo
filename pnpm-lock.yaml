@@ -281,6 +281,9 @@ importers:
       '@tricigo/types':
         specifier: workspace:*
         version: link:../types
+      '@tricigo/utils':
+        specifier: workspace:*
+        version: link:../utils
 
   packages/config: {}
 
@@ -312,7 +315,11 @@ importers:
         specifier: '>=0.74'
         version: 0.76.6(@babel/core@7.29.0)(@babel/preset-env@7.29.0(@babel/core@7.29.0))(@types/react@18.3.28)(react@18.3.1)
 
-  packages/utils: {}
+  packages/utils:
+    dependencies:
+      '@tricigo/types':
+        specifier: workspace:*
+        version: link:../types
 
 packages:
 

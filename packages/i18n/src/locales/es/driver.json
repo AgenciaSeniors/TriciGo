@@ -8,7 +8,10 @@
     "new_request": "¡Nueva solicitud!",
     "accept": "Aceptar",
     "decline": "Rechazar",
-    "time_to_respond": "Tiempo para responder: {{seconds}}s"
+    "time_to_respond": "Tiempo para responder: {{seconds}}s",
+    "incoming_rides": "Solicitudes disponibles",
+    "no_rides_available": "No hay solicitudes en este momento",
+    "accept_failed": "Otro conductor aceptó este viaje"
   },
 
   "trip": {
@@ -26,7 +29,13 @@
     "sos": "SOS - Emergencia",
     "cancel_trip": "Cancelar viaje",
     "cancel_reason": "Motivo de cancelación",
-    "rate_passenger": "Califica al pasajero"
+    "rate_passenger": "Califica al pasajero",
+    "en_route_to_pickup": "En camino al pasajero",
+    "confirm_arrived": "Confirmar llegada",
+    "confirm_start": "Iniciar viaje",
+    "confirm_complete": "Finalizar viaje",
+    "fare_earned": "Tarifa ganada",
+    "back_to_home": "Volver al inicio"
   },
 
   "earnings": {

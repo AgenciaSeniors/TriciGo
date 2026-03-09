@@ -29,7 +29,25 @@
     "sos": "SOS - Emergencia",
     "rate_driver": "Califica a tu conductor",
     "rate_placeholder": "¿Cómo estuvo tu viaje?",
-    "submit_review": "Enviar calificación"
+    "submit_review": "Enviar calificación",
+    "enter_pickup": "Punto de recogida",
+    "enter_dropoff": "Destino",
+    "get_estimate": "Ver tarifa estimada",
+    "confirm_ride": "Confirmar viaje",
+    "fare_breakdown": "Desglose de tarifa",
+    "base_fare": "Tarifa base",
+    "distance_charge": "Cargo por distancia",
+    "time_charge": "Cargo por tiempo",
+    "total": "Total estimado",
+    "no_driver_found": "No se encontró conductor. Intenta de nuevo.",
+    "canceled_by_driver": "El conductor canceló el viaje",
+    "call_driver": "Llamar conductor",
+    "trip_summary": "Resumen del viaje",
+    "done": "Listo"
+  },
+
+  "locations": {
+    "presets_title": "Lugares populares"
   },
 
   "service_type": {

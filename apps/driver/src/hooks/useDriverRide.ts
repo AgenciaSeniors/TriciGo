@@ -1,0 +1,182 @@
+import { useEffect, useRef, useCallback } from 'react';
+import { Alert } from 'react-native';
+import { rideService, driverService } from '@tricigo/api';
+import { useDriverStore } from '@/stores/driver.store';
+import { useDriverRideStore } from '@/stores/ride.store';
+import { useAuthStore } from '@/stores/auth.store';
+import type { RideStatus } from '@tricigo/types';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
+/** Next status in the ride FSM for driver actions. */
+const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
+  accepted: 'driver_en_route',
+  driver_en_route: 'arrived_at_pickup',
+  arrived_at_pickup: 'in_progress',
+  in_progress: 'completed',
+};
+
+/**
+ * Initialize driver ride state on mount.
+ * Checks for an active trip and restores state.
+ */
+export function useDriverRideInit() {
+  const profile = useDriverStore((s) => s.profile);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const { setActiveTrip } = useDriverRideStore();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useEffect(() => {
+    if (!isInitialized || !profile) return;
+
+    let mounted = true;
+
+    async function checkActive() {
+      try {
+        const trip = await driverService.getActiveTrip(profile!.id);
+        if (!trip || !mounted) return;
+
+        setActiveTrip(trip);
+
+        // Subscribe to trip updates
+        channelRef.current?.unsubscribe();
+        channelRef.current = rideService.subscribeToRide(trip.id, (ride) => {
+          useDriverRideStore.getState().updateActiveTrip(ride);
+        });
+      } catch {
+        // No active trip
+      }
+    }
+
+    checkActive();
+
+    return () => {
+      mounted = false;
+      channelRef.current?.unsubscribe();
+    };
+  }, [isInitialized, profile, setActiveTrip]);
+}
+
+/**
+ * Manage incoming ride requests subscription.
+ */
+export function useIncomingRequests(isOnline: boolean) {
+  const { addRequest, removeRequest, clearRequests } = useDriverRideStore();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useEffect(() => {
+    if (!isOnline) {
+      channelRef.current?.unsubscribe();
+      channelRef.current = null;
+      clearRequests();
+      return;
+    }
+
+    // Fetch existing searching rides
+    rideService.getSearchingRides().then((rides) => {
+      for (const ride of rides) {
+        addRequest(ride);
+      }
+    }).catch(() => {});
+
+    // Subscribe to new rides
+    channelRef.current = rideService.subscribeToNewRides(
+      // On INSERT (new searching ride)
+      (ride) => {
+        addRequest(ride);
+      },
+      // On UPDATE (ride status changed)
+      (ride) => {
+        if (ride.status !== 'searching') {
+          removeRequest(ride.id);
+        }
+      },
+    );
+
+    return () => {
+      channelRef.current?.unsubscribe();
+      channelRef.current = null;
+    };
+  }, [isOnline, addRequest, removeRequest, clearRequests]);
+}
+
+/**
+ * Driver ride actions: accept, advance status, cancel.
+ */
+export function useDriverRideActions() {
+  const profile = useDriverStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
+  const { setActiveTrip, removeRequest, reset } = useDriverRideStore();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      channelRef.current?.unsubscribe();
+    };
+  }, []);
+
+  const acceptRide = useCallback(async (rideId: string) => {
+    if (!profile) return;
+
+    try {
+      const ride = await driverService.acceptRide(rideId, profile.id);
+      setActiveTrip(ride);
+      removeRequest(rideId);
+
+      // Subscribe to this ride's updates
+      channelRef.current?.unsubscribe();
+      channelRef.current = rideService.subscribeToRide(ride.id, (updated) => {
+        useDriverRideStore.getState().updateActiveTrip(updated);
+      });
+    } catch {
+      Alert.alert('Error', 'Otro conductor ya aceptó este viaje');
+      removeRequest(rideId);
+    }
+  }, [profile, setActiveTrip, removeRequest]);
+
+  const advanceStatus = useCallback(async () => {
+    const { activeTrip } = useDriverRideStore.getState();
+    if (!activeTrip) return;
+
+    const nextStatus = NEXT_STATUS[activeTrip.status];
+    if (!nextStatus) return;
+
+    try {
+      await driverService.updateRideStatus(activeTrip.id, nextStatus);
+      // Realtime will update the store, but also update optimistically
+      useDriverRideStore.getState().updateActiveTrip({
+        ...activeTrip,
+        status: nextStatus,
+      });
+
+      // If completed, cleanup
+      if (nextStatus === 'completed') {
+        // Keep activeTrip for the complete view, will be reset by user
+      }
+    } catch (err) {
+      Alert.alert('Error', 'No se pudo actualizar el estado del viaje');
+    }
+  }, []);
+
+  const cancelTrip = useCallback(async (reason?: string) => {
+    const { activeTrip } = useDriverRideStore.getState();
+    if (!activeTrip) return;
+
+    try {
+      await rideService.cancelRide(activeTrip.id, user?.id, reason);
+      channelRef.current?.unsubscribe();
+      channelRef.current = null;
+      reset();
+    } catch {
+      Alert.alert('Error', 'No se pudo cancelar el viaje');
+    }
+  }, [user, reset]);
+
+  const clearCompletedTrip = useCallback(() => {
+    channelRef.current?.unsubscribe();
+    channelRef.current = null;
+    useDriverRideStore.getState().setActiveTrip(null);
+  }, []);
+
+  return { acceptRide, advanceStatus, cancelTrip, clearCompletedTrip };
+}

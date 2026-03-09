@@ -29,7 +29,25 @@
     "sos": "SOS - Emergency",
     "rate_driver": "Rate your driver",
     "rate_placeholder": "How was your ride?",
-    "submit_review": "Submit rating"
+    "submit_review": "Submit rating",
+    "enter_pickup": "Pickup point",
+    "enter_dropoff": "Destination",
+    "get_estimate": "Get fare estimate",
+    "confirm_ride": "Confirm ride",
+    "fare_breakdown": "Fare breakdown",
+    "base_fare": "Base fare",
+    "distance_charge": "Distance charge",
+    "time_charge": "Time charge",
+    "total": "Estimated total",
+    "no_driver_found": "No driver found. Try again.",
+    "canceled_by_driver": "Driver canceled the ride",
+    "call_driver": "Call driver",
+    "trip_summary": "Trip summary",
+    "done": "Done"
+  },
+
+  "locations": {
+    "presets_title": "Popular places"
   },
 
   "service_type": {

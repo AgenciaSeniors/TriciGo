@@ -6,6 +6,10 @@
     ".": "./src/index.ts",
     "./currency": "./src/currency.ts",
     "./date": "./src/date.ts",
-    "./validation": "./src/validation.ts"
+    "./validation": "./src/validation.ts",
+    "./geo": "./src/geo.ts"
+  },
+  "dependencies": {
+    "@tricigo/types": "workspace:*"
   }
 }

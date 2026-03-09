@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
-    "@tricigo/types": "workspace:*"
+    "@tricigo/types": "workspace:*",
+    "@tricigo/utils": "workspace:*"
   }
 }

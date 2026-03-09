@@ -1,3 +1,4 @@
+const nativewind = require('nativewind/preset');
 const tricigoPreset = require('@tricigo/theme/tailwind-preset');
 
 /** @type {import('tailwindcss').Config} */
@@ -7,7 +8,7 @@ module.exports = {
     './src/**/*.{ts,tsx}',
     '../../packages/ui/src/**/*.{ts,tsx}',
   ],
-  presets: [tricigoPreset],
+  presets: [nativewind, tricigoPreset],
   theme: {
     extend: {},
   },

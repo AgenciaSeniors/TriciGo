@@ -9,7 +9,9 @@
     "./Screen": "./src/Screen.tsx",
     "./BalanceBadge": "./src/BalanceBadge.tsx",
     "./Input": "./src/Input.tsx",
-    "./Text": "./src/Text.tsx"
+    "./Text": "./src/Text.tsx",
+    "./StatusStepper": "./src/StatusStepper.tsx",
+    "./BottomSheet": "./src/BottomSheet.tsx"
   },
   "dependencies": {
     "@tricigo/utils": "workspace:*"

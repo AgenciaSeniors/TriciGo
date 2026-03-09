@@ -15,3 +15,9 @@ export type { InputProps } from './Input';
 
 export { Text } from './Text';
 export type { TextProps } from './Text';
+
+export { StatusStepper } from './StatusStepper';
+export type { StatusStepperProps, StatusStep } from './StatusStepper';
+
+export { BottomSheet } from './BottomSheet';
+export type { BottomSheetProps } from './BottomSheet';
