@@ -11,7 +11,8 @@
     "./services/driver": "./src/services/driver.service.ts",
     "./services/review": "./src/services/review.service.ts",
     "./services/admin": "./src/services/admin.service.ts",
-    "./queries/keys": "./src/queries/keys.ts"
+    "./queries/keys": "./src/queries/keys.ts",
+    "./storage": "./src/storage.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

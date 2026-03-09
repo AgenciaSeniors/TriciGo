@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
@@ -6,13 +6,28 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
+import { authService } from '@tricigo/api';
+import { router } from 'expo-router';
 
 export default function ProfileScreen() {
   const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
+  const reset = useAuthStore((s) => s.reset);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await authService.signOut();
+      reset();
+      // Auth guard handles redirect
+    } catch {
+      setLoggingOut(false);
+    }
+  };
 
   const menuItems = [
-    { icon: 'person-outline' as const, label: t('profile.edit_profile') },
+    { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
     { icon: 'location-outline' as const, label: t('profile.saved_locations') },
     { icon: 'call-outline' as const, label: t('profile.emergency_contact') },
     { icon: 'language-outline' as const, label: t('profile.language') },
@@ -48,6 +63,7 @@ export default function ProfileScreen() {
           <Pressable
             key={item.label}
             className="flex-row items-center py-4 border-b border-neutral-100"
+            onPress={item.onPress}
           >
             <Ionicons name={item.icon} size={22} color="#525252" />
             <Text variant="body" className="ml-3 flex-1">
@@ -58,10 +74,14 @@ export default function ProfileScreen() {
         ))}
 
         {/* Logout */}
-        <Pressable className="flex-row items-center py-4 mt-4">
+        <Pressable
+          className="flex-row items-center py-4 mt-4"
+          onPress={handleLogout}
+          disabled={loggingOut}
+        >
           <Ionicons name="log-out-outline" size={22} color="#EF4444" />
           <Text variant="body" color="error" className="ml-3">
-            {t('auth.logout')}
+            {loggingOut ? t('auth.logging_out') : t('auth.logout')}
           </Text>
         </Pressable>
       </View>

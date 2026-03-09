@@ -7,3 +7,7 @@ export { driverService } from './services/driver.service';
 export { reviewService } from './services/review.service';
 export { adminService } from './services/admin.service';
 export { queryKeys } from './queries/keys';
+export { createStorageAdapter } from './storage';
+export type { StorageAdapter } from './storage';
+export { configureStorage } from './client';
+export { customerService } from './services/customer.service';

@@ -5,8 +5,20 @@
 // ============================================================
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { StorageAdapter } from './storage';
+
+declare const process: { env: Record<string, string | undefined> } | undefined;
 
 let clientInstance: SupabaseClient | null = null;
+let storageAdapter: StorageAdapter | undefined;
+
+/**
+ * Configure a custom storage adapter for Supabase auth.
+ * Must be called before the first getSupabaseClient() call.
+ */
+export function configureStorage(adapter: StorageAdapter): void {
+  storageAdapter = adapter;
+}
 
 function getEnvVar(name: string): string {
   // Try Expo prefix first (EXPO_PUBLIC_)
@@ -49,6 +61,7 @@ export function getSupabaseClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false, // Disable for React Native
+      ...(storageAdapter ? { storage: storageAdapter } : {}),
     },
     realtime: {
       params: {
