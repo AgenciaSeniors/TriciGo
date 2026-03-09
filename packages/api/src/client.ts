@@ -20,25 +20,24 @@ export function configureStorage(adapter: StorageAdapter): void {
   storageAdapter = adapter;
 }
 
+// Static env references using dot notation so bundlers (webpack/metro)
+// can resolve them at compile time. Computed access like
+// process.env[`PREFIX_${name}`] is NOT replaced by webpack.
+const STATIC_ENV: Record<string, () => string | undefined> = {
+  SUPABASE_URL: () =>
+    process.env.EXPO_PUBLIC_SUPABASE_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL ??
+    process.env.SUPABASE_URL,
+  SUPABASE_ANON_KEY: () =>
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.SUPABASE_ANON_KEY,
+};
+
 function getEnvVar(name: string): string {
-  // Try Expo prefix first (EXPO_PUBLIC_)
-  const expoVar =
-    typeof process !== 'undefined'
-      ? process.env[`EXPO_PUBLIC_${name}`]
-      : undefined;
-  if (expoVar) return expoVar;
-
-  // Try Next.js prefix (NEXT_PUBLIC_)
-  const nextVar =
-    typeof process !== 'undefined'
-      ? process.env[`NEXT_PUBLIC_${name}`]
-      : undefined;
-  if (nextVar) return nextVar;
-
-  // Try plain name (server-side / Edge Functions)
-  const plainVar =
-    typeof process !== 'undefined' ? process.env[name] : undefined;
-  if (plainVar) return plainVar;
+  const getter = STATIC_ENV[name];
+  const value = typeof process !== 'undefined' && getter ? getter() : undefined;
+  if (value) return value;
 
   throw new Error(
     `Missing environment variable: ${name}. ` +
