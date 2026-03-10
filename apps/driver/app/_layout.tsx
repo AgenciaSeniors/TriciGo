@@ -4,6 +4,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import '../global.css';
 
 function RootNavigator() {
@@ -74,8 +75,10 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <AppProviders>
-      <RootNavigator />
-    </AppProviders>
+    <ErrorBoundary>
+      <AppProviders>
+        <RootNavigator />
+      </AppProviders>
+    </ErrorBoundary>
   );
 }

@@ -21,3 +21,6 @@ export type { StatusStepperProps, StatusStep } from './StatusStepper';
 
 export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
+
+export { ErrorBoundary } from './ErrorBoundary';
+export type { ErrorBoundaryProps } from './ErrorBoundary';

@@ -14,21 +14,21 @@ import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
 
-const CATEGORIES: { value: TicketCategory; label: string }[] = [
-  { value: 'ride_issue', label: 'Problema con viaje' },
-  { value: 'payment_issue', label: 'Problema de pago' },
-  { value: 'driver_complaint', label: 'Queja de conductor' },
-  { value: 'account_issue', label: 'Cuenta' },
-  { value: 'app_bug', label: 'Error en la app' },
-  { value: 'other', label: 'Otro' },
+const CATEGORY_KEYS: { value: TicketCategory; key: string }[] = [
+  { value: 'ride_issue', key: 'profile.help_category_ride_issue' },
+  { value: 'payment_issue', key: 'profile.help_category_payment_issue' },
+  { value: 'driver_complaint', key: 'profile.help_category_driver_complaint' },
+  { value: 'account_issue', key: 'profile.help_category_account_issue' },
+  { value: 'app_bug', key: 'profile.help_category_app_bug' },
+  { value: 'other', key: 'profile.help_category_other' },
 ];
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  open: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Abierto' },
-  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'En proceso' },
-  waiting_user: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Esperando respuesta' },
-  resolved: { bg: 'bg-green-100', text: 'text-green-700', label: 'Resuelto' },
-  closed: { bg: 'bg-neutral-100', text: 'text-neutral-600', label: 'Cerrado' },
+const STATUS_COLORS: Record<string, { bg: string; text: string; key: string }> = {
+  open: { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' },
+  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', key: 'profile.help_status_in_progress' },
+  waiting_user: { bg: 'bg-orange-100', text: 'text-orange-700', key: 'profile.help_status_waiting_response' },
+  resolved: { bg: 'bg-green-100', text: 'text-green-700', key: 'profile.help_status_resolved' },
+  closed: { bg: 'bg-neutral-100', text: 'text-neutral-600', key: 'profile.help_status_closed' },
 };
 
 export default function HelpScreen() {
@@ -82,18 +82,18 @@ export default function HelpScreen() {
         description: description.trim() || undefined,
       });
       setSheetVisible(false);
-      Alert.alert(t('profile.help_title'), 'Tu ticket ha sido creado exitosamente.');
+      Alert.alert(t('profile.help_title'), t('profile.help_ticket_created'));
       fetchTickets();
     } catch (err) {
       console.warn('[Help] Failed to create ticket:', err);
-      Alert.alert(t('error'), 'No se pudo crear el ticket. Intenta de nuevo.');
+      Alert.alert(t('error'), t('profile.help_ticket_error'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const renderTicket = ({ item }: { item: SupportTicket }) => {
-    const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Abierto' };
+    const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' };
     return (
       <Pressable onPress={() => router.push(`/profile/ticket-detail?ticketId=${item.id}`)}>
         <Card variant="outlined" padding="md" className="mb-2">
@@ -111,7 +111,7 @@ export default function HelpScreen() {
             </View>
             <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>
               <Text className={`text-xs font-medium ${status.text}`}>
-                {status.label}
+                {t(status.key)}
               </Text>
             </View>
           </View>
@@ -166,7 +166,7 @@ export default function HelpScreen() {
 
               {/* Contact info */}
               <Card variant="outlined" padding="md" className="mt-1 mb-6">
-                <Text variant="body" className="font-semibold mb-2">Contacto</Text>
+                <Text variant="body" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="mail-outline" size={18} color="#525252" />
                   <Text variant="bodySmall" color="secondary" className="ml-2">soporte@tricigo.app</Text>
@@ -179,7 +179,7 @@ export default function HelpScreen() {
 
               {/* Create ticket button */}
               <Button
-                title="Crear ticket de soporte"
+                title={t('profile.help_create_ticket')}
                 variant="primary"
                 size="lg"
                 fullWidth
@@ -189,7 +189,7 @@ export default function HelpScreen() {
 
               {/* Tickets header */}
               {tickets.length > 0 && (
-                <Text variant="h4" className="mb-3">Mis tickets</Text>
+                <Text variant="h4" className="mb-3">{t('profile.help_my_tickets')}</Text>
               )}
             </View>
           }
@@ -197,7 +197,7 @@ export default function HelpScreen() {
             !loadingTickets ? (
               <View className="items-center py-6">
                 <Text variant="bodySmall" color="tertiary">
-                  No tienes tickets de soporte
+                  {t('profile.help_no_tickets')}
                 </Text>
               </View>
             ) : null
@@ -208,12 +208,12 @@ export default function HelpScreen() {
       {/* Create Ticket BottomSheet */}
       <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
         <View className="px-4 pb-6">
-          <Text variant="h4" className="mb-4">Nuevo ticket</Text>
+          <Text variant="h4" className="mb-4">{t('profile.help_new_ticket')}</Text>
 
           {/* Category picker */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">Categoría</Text>
+          <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_category_label')}</Text>
           <View className="flex-row flex-wrap gap-2 mb-4">
-            {CATEGORIES.map((cat) => (
+            {CATEGORY_KEYS.map((cat) => (
               <Pressable
                 key={cat.value}
                 onPress={() => setCategory(cat.value)}
@@ -227,27 +227,27 @@ export default function HelpScreen() {
                     category === cat.value ? 'text-white' : 'text-neutral-600'
                   }`}
                 >
-                  {cat.label}
+                  {t(cat.key)}
                 </Text>
               </Pressable>
             ))}
           </View>
 
           {/* Subject */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">Asunto</Text>
+          <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_subject_label')}</Text>
           <TextInput
             className="border border-neutral-200 rounded-lg p-3 mb-3 text-neutral-900"
-            placeholder="Describe brevemente tu problema"
+            placeholder={t('profile.help_subject_placeholder')}
             value={subject}
             onChangeText={setSubject}
             maxLength={100}
           />
 
           {/* Description */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">Descripción (opcional)</Text>
+          <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_description_label')}</Text>
           <TextInput
             className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
-            placeholder="Agrega más detalles..."
+            placeholder={t('profile.help_description_placeholder')}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -257,7 +257,7 @@ export default function HelpScreen() {
           />
 
           <Button
-            title="Enviar ticket"
+            title={t('profile.help_submit_ticket')}
             variant="primary"
             size="lg"
             fullWidth

@@ -11,7 +11,8 @@
     "./Input": "./src/Input.tsx",
     "./Text": "./src/Text.tsx",
     "./StatusStepper": "./src/StatusStepper.tsx",
-    "./BottomSheet": "./src/BottomSheet.tsx"
+    "./BottomSheet": "./src/BottomSheet.tsx",
+    "./ErrorBoundary": "./src/ErrorBoundary.tsx"
   },
   "dependencies": {
     "@tricigo/utils": "workspace:*"

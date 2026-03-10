@@ -37,9 +37,9 @@ export default function ProfileScreen() {
     { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
     { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations') },
     { icon: 'call-outline' as const, label: t('profile.emergency_contact'), onPress: () => router.push('/profile/emergency-contact') },
-    { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/edit') },
+    { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/settings') },
     { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
-    { icon: 'gift-outline' as const, label: 'Referidos', onPress: () => router.push('/profile/referral') },
+    { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
     { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
     { icon: 'information-circle-outline' as const, label: t('profile.about'), onPress: () => router.push('/profile/about') },
   ];

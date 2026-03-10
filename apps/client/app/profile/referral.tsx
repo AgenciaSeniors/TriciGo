@@ -13,10 +13,10 @@ import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Referral } from '@tricigo/types';
 
-const STATUS_DISPLAY: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pendiente' },
-  rewarded: { bg: 'bg-green-100', text: 'text-green-700', label: 'Recompensado' },
-  invalidated: { bg: 'bg-red-100', text: 'text-red-700', label: 'Invalidado' },
+const STATUS_DISPLAY: Record<string, { bg: string; text: string; key: string }> = {
+  pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.referral_status_pending' },
+  rewarded: { bg: 'bg-green-100', text: 'text-green-700', key: 'profile.referral_status_rewarded' },
+  invalidated: { bg: 'bg-red-100', text: 'text-red-700', key: 'profile.referral_status_invalidated' },
 };
 
 export default function ReferralScreen() {
@@ -55,7 +55,7 @@ export default function ReferralScreen() {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Usa mi código de referido ${myCode} en TriciGo y gana un bono. Descarga la app: https://tricigo.app`,
+        message: t('profile.referral_share_message', { code: myCode }),
       });
     } catch {
       /* user cancelled share */
@@ -67,26 +67,26 @@ export default function ReferralScreen() {
     setSubmitting(true);
     try {
       await referralService.applyReferralCode(userId, inputCode.trim());
-      Alert.alert('Referido', 'Código aplicado exitosamente. Recibirás tu bono pronto.');
+      Alert.alert(t('profile.referral_success_title'), t('profile.referral_success_message'));
       setInputCode('');
       setHasBeenReferred(true);
       fetchData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo aplicar el código.';
-      Alert.alert('Error', message);
+      const message = err instanceof Error ? err.message : t('profile.referral_error');
+      Alert.alert(t('error'), message);
     } finally {
       setSubmitting(false);
     }
   };
 
   const renderReferral = ({ item }: { item: Referral }) => {
-    const display = STATUS_DISPLAY[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', label: item.status };
+    const display = STATUS_DISPLAY[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.referral_status_pending' };
     return (
       <Card variant="outlined" padding="md" className="mb-2">
         <View className="flex-row items-center justify-between">
           <View className="flex-1 mr-2">
             <Text variant="bodySmall" numberOfLines={1}>
-              Referido #{item.id.substring(0, 8)}
+              {t('profile.referral_item', { id: item.id.substring(0, 8) })}
             </Text>
             <Text variant="caption" color="tertiary" className="mt-0.5">
               {new Date(item.created_at).toLocaleDateString('es-CU', {
@@ -95,12 +95,12 @@ export default function ReferralScreen() {
                 year: 'numeric',
               })}
               {' · '}
-              Bono: {formatCUP(item.bonus_amount)}
+              {t('profile.referral_bonus', { amount: formatCUP(item.bonus_amount) })}
             </Text>
           </View>
           <View className={`px-2 py-0.5 rounded-full ${display.bg}`}>
             <Text className={`text-xs font-medium ${display.text}`}>
-              {display.label}
+              {t(display.key)}
             </Text>
           </View>
         </View>
@@ -115,7 +115,7 @@ export default function ReferralScreen() {
           <Pressable onPress={() => router.back()} className="mr-3">
             <Ionicons name="arrow-back" size={24} color="#171717" />
           </Pressable>
-          <Text variant="h3">Referidos</Text>
+          <Text variant="h3">{t('profile.referral_title')}</Text>
         </View>
 
         <FlatList
@@ -127,20 +127,20 @@ export default function ReferralScreen() {
               {/* My Code Section */}
               <Card variant="filled" padding="lg" className="mb-6 bg-primary-50 items-center">
                 <Text variant="bodySmall" color="secondary" className="mb-2">
-                  Tu código de referido
+                  {t('profile.referral_your_code')}
                 </Text>
                 <Text variant="h2" color="primary" className="mb-3 tracking-widest">
                   {myCode || '...'}
                 </Text>
                 <Button
-                  title="Compartir código"
+                  title={t('profile.referral_share')}
                   variant="primary"
                   size="md"
                   onPress={handleShare}
                   disabled={!myCode}
                 />
                 <Text variant="caption" color="tertiary" className="mt-3 text-center">
-                  Comparte tu código con amigos. Ambos recibirán un bono de {formatCUP(50000)} cuando completen su primer viaje.
+                  {t('profile.referral_share_help', { bonus: formatCUP(50000) })}
                 </Text>
               </Card>
 
@@ -148,17 +148,17 @@ export default function ReferralScreen() {
               {!hasBeenReferred && (
                 <Card variant="outlined" padding="md" className="mb-6">
                   <Text variant="body" className="font-semibold mb-3">
-                    ¿Tienes un código de referido?
+                    {t('profile.referral_have_code')}
                   </Text>
                   <Input
                     label=""
-                    placeholder="Ingresa el código"
+                    placeholder={t('profile.referral_enter_code')}
                     value={inputCode}
                     onChangeText={setInputCode}
                     autoCapitalize="characters"
                   />
                   <Button
-                    title="Aplicar código"
+                    title={t('profile.referral_apply')}
                     variant="outline"
                     size="md"
                     fullWidth
@@ -175,7 +175,7 @@ export default function ReferralScreen() {
                   <View className="flex-row items-center">
                     <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
                     <Text variant="bodySmall" color="secondary" className="ml-2">
-                      Ya aplicaste un código de referido
+                      {t('profile.referral_already_applied')}
                     </Text>
                   </View>
                 </Card>
@@ -183,7 +183,7 @@ export default function ReferralScreen() {
 
               {/* History header */}
               {referrals.length > 0 && (
-                <Text variant="h4" className="mb-3">Mis referidos</Text>
+                <Text variant="h4" className="mb-3">{t('profile.referral_history')}</Text>
               )}
             </View>
           }
@@ -191,7 +191,7 @@ export default function ReferralScreen() {
             !loading ? (
               <View className="items-center py-6">
                 <Text variant="bodySmall" color="tertiary">
-                  Aún no has referido a nadie
+                  {t('profile.referral_empty')}
                 </Text>
               </View>
             ) : null
