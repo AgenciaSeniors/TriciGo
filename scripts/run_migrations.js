@@ -38,6 +38,7 @@ async function main() {
     '00009_user_levels_p2p.sql',
     '00010_eligibility_cancellations.sql',
     '00011_dynamic_pricing_tips.sql',
+    '00012_score_matching.sql',
   ];
 
   for (const file of migrations) {

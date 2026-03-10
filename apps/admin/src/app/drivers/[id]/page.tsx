@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
-import type { DriverProfile, DriverDocument, Vehicle, DriverStatus } from '@tricigo/types';
+import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus } from '@tricigo/types';
 
 type DriverDetail = {
   profile: DriverProfile & { users: { full_name: string; phone: string; email: string | null } };
   vehicle: Vehicle | null;
   documents: DriverDocument[];
+  scoreEvents: DriverScoreEvent[];
 };
 
 const statusBadgeClasses: Record<DriverStatus, string> = {
@@ -148,7 +149,7 @@ export default function DriverDetailPage() {
     );
   }
 
-  const { profile, vehicle, documents } = driver;
+  const { profile, vehicle, documents, scoreEvents } = driver;
   const status = profile.status as DriverStatus;
 
   return (
@@ -307,6 +308,63 @@ export default function DriverDetailPage() {
           <p className="text-sm text-neutral-500 mt-2">
             El conductor no puede aceptar viajes hasta que resuelva su saldo negativo.
           </p>
+        )}
+      </div>
+
+      {/* Match Score */}
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
+        <h2 className="text-lg font-bold mb-4">Puntuación de matching</h2>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="bg-neutral-50 rounded-lg p-4">
+            <p className="text-xs text-neutral-500 mb-1">Match Score</p>
+            <p className={`text-2xl font-bold ${
+              Number(profile.match_score ?? 50) >= 70 ? 'text-green-600' :
+              Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-600' : 'text-red-600'
+            }`}>
+              {Number(profile.match_score ?? 50).toFixed(1)}
+            </p>
+          </div>
+          <div className="bg-neutral-50 rounded-lg p-4">
+            <p className="text-xs text-neutral-500 mb-1">Tasa de aceptación</p>
+            <p className="text-2xl font-bold text-neutral-700">
+              {Number(profile.acceptance_rate ?? 100).toFixed(0)}%
+            </p>
+          </div>
+          <div className="bg-neutral-50 rounded-lg p-4">
+            <p className="text-xs text-neutral-500 mb-1">Viajes ofrecidos</p>
+            <p className="text-2xl font-bold text-neutral-700">
+              {profile.total_rides_offered ?? 0}
+            </p>
+          </div>
+        </div>
+
+        {/* Score events timeline */}
+        {scoreEvents.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-700 mb-2">Historial de eventos</h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {scoreEvents.map((evt) => (
+                <div key={evt.id} className="flex items-center justify-between py-1.5 border-b border-neutral-50">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${
+                      evt.delta > 0 ? 'bg-green-500' : evt.delta < 0 ? 'bg-red-500' : 'bg-neutral-300'
+                    }`} />
+                    <span className="text-sm text-neutral-600">{evt.event_type.replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-medium ${
+                      evt.delta > 0 ? 'text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
+                    }`}>
+                      {evt.delta > 0 ? '+' : ''}{Number(evt.delta).toFixed(1)}
+                    </span>
+                    <span className="text-xs text-neutral-400">
+                      {formatDate(evt.created_at)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

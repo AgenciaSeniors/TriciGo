@@ -18,6 +18,7 @@ import type {
   RideTransition,
   ServiceTypeConfig,
   SurgeZone,
+  DriverScoreEvent,
   User,
   Vehicle,
   WalletRechargeRequest,
@@ -101,7 +102,7 @@ export const adminService = {
   async getDriverDetail(driverId: string) {
     const supabase = getSupabaseClient();
 
-    const [profileRes, vehiclesRes, documentsRes] = await Promise.all([
+    const [profileRes, vehiclesRes, documentsRes, scoreEventsRes] = await Promise.all([
       supabase
         .from('driver_profiles')
         .select('*, users!inner(full_name, phone, email)')
@@ -118,16 +119,26 @@ export const adminService = {
         .select('*')
         .eq('driver_id', driverId)
         .order('uploaded_at', { ascending: false }),
+      supabase
+        .from('driver_score_events')
+        .select('*')
+        .eq('driver_id', driverId)
+        .order('created_at', { ascending: false })
+        .limit(20),
     ]);
 
     if (profileRes.error) throw profileRes.error;
 
+    // Resolve user_id from profile for score events query
+    const profile = profileRes.data as DriverProfile & {
+      users: { full_name: string; phone: string; email: string | null };
+    };
+
     return {
-      profile: profileRes.data as DriverProfile & {
-        users: { full_name: string; phone: string; email: string | null };
-      },
+      profile,
       vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
       documents: (documentsRes.data as DriverDocument[]) ?? [],
+      scoreEvents: (scoreEventsRes.data as DriverScoreEvent[]) ?? [],
     };
   },
 
@@ -959,5 +970,25 @@ export const adminService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+  },
+
+  // ==================== DRIVER SCORE ====================
+
+  /**
+   * Manually adjust a driver's match score (admin action).
+   */
+  async adjustDriverScore(
+    driverId: string,
+    delta: number,
+    reason?: string,
+  ): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('update_driver_score', {
+      p_driver_id: driverId,
+      p_event_type: 'admin_adjustment',
+      p_details: { delta, reason: reason ?? 'Admin adjustment' },
+    });
+    if (error) throw error;
+    return typeof data === 'number' ? data : 50.0;
   },
 };

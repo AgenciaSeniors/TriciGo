@@ -23,10 +23,46 @@ export interface DriverProfile {
   approved_at: string | null;
   suspended_at: string | null;
   suspended_reason: string | null;
+  match_score: number;
+  acceptance_rate: number;
+  total_rides_offered: number;
   is_financially_eligible: boolean;
   negative_balance_since: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ScoreEventType =
+  | 'ride_completed'
+  | '5_star_rating'
+  | '4_star_rating'
+  | '3_star_rating'
+  | '2_star_rating'
+  | '1_star_rating'
+  | 'cancel_by_driver'
+  | 'sos_report'
+  | 'tip_received'
+  | 'ride_declined'
+  | 'consecutive_completions_5'
+  | 'admin_adjustment';
+
+export interface DriverScoreEvent {
+  id: string;
+  driver_id: string;
+  event_type: ScoreEventType;
+  delta: number;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface DriverMatchResult {
+  driver_id: string;
+  user_id: string;
+  distance_m: number;
+  match_score: number;
+  rating_avg: number;
+  acceptance_rate: number;
+  composite_score: number;
 }
 
 export interface CancellationPenalty {
