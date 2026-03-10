@@ -4,20 +4,22 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { PricingRule, Zone } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
-const SERVICE_TABS = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Triciclo Básico', value: 'triciclo_basico' },
-  { label: 'Moto', value: 'moto_standard' },
-  { label: 'Auto', value: 'auto_standard' },
+const SERVICE_TAB_KEYS = [
+  { labelKey: 'pricing.filter_all', value: 'all' },
+  { labelKey: 'pricing.filter_triciclo', value: 'triciclo_basico' },
+  { labelKey: 'pricing.filter_moto', value: 'moto_standard' },
+  { labelKey: 'pricing.filter_auto', value: 'auto_standard' },
 ] as const;
 
 type ZoneRow = Omit<Zone, 'boundary'>;
 
 export default function PricingPage() {
+  const { t } = useTranslation('admin');
   const [rules, setRules] = useState<PricingRule[]>([]);
   const [zones, setZones] = useState<ZoneRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,13 +121,13 @@ export default function PricingPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
-      <h1 className="text-3xl font-bold mb-6">Reglas de precio</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('pricing.title')}</h1>
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {SERVICE_TABS.map((tab) => (
+        {SERVICE_TAB_KEYS.map((tab) => (
           <button
             key={tab.value}
             onClick={() => { setFilter(tab.value); setPage(0); }}
@@ -135,7 +137,7 @@ export default function PricingPage() {
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -144,29 +146,29 @@ export default function PricingPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Zona</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Servicio</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Base</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Por KM</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Por Min</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Mín</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Surge</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Activo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_zone')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_service')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_base')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_km')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_surge')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={9} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'Sin reglas de precio'}
+                  {loading ? t('common.loading') : t('pricing.no_rules')}
                 </td>
               </tr>
             ) : (
               filtered.map((r) => (
                 <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                   <td className="px-4 py-3 text-neutral-500">
-                    {r.zone_id ? (zoneMap.get(r.zone_id) ?? 'Zona') : 'Global'}
+                    {r.zone_id ? (zoneMap.get(r.zone_id) ?? t('pricing.zone_label')) : t('pricing.global_zone')}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{r.service_type}</td>
                   <td className="px-4 py-3">
@@ -185,10 +187,10 @@ export default function PricingPage() {
                     {editingId === r.id ? (
                       <div className="flex gap-1 items-center">
                         {numInput('max_surge_multiplier', '0.1')}
-                        <span>×</span>
+                        <span>x</span>
                       </div>
                     ) : (
-                      r.max_surge_multiplier ? `${r.max_surge_multiplier}×` : '—'
+                      r.max_surge_multiplier ? `${r.max_surge_multiplier}x` : '—'
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -198,7 +200,7 @@ export default function PricingPage() {
                         r.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {r.is_active ? 'Activo' : 'Inactivo'}
+                      {r.is_active ? t('common.active') : t('common.inactive')}
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -209,13 +211,13 @@ export default function PricingPage() {
                           disabled={saving}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
                         >
-                          Guardar
+                          {t('common.save')}
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                         >
-                          Cancelar
+                          {t('common.cancel')}
                         </button>
                       </div>
                     ) : (
@@ -223,7 +225,7 @@ export default function PricingPage() {
                         onClick={() => startEdit(r)}
                         className="text-sm text-[#FF4D00] hover:underline"
                       >
-                        Editar
+                        {t('common.edit')}
                       </button>
                     )}
                   </td>
@@ -241,17 +243,17 @@ export default function PricingPage() {
           disabled={!canGoPrev}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página <strong>{page + 1}</strong>
+          {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

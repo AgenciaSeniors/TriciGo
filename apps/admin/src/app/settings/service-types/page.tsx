@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { ServiceTypeConfig } from '@tricigo/types';
 
 export default function ServiceTypesPage() {
+  const { t } = useTranslation('admin');
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -82,30 +84,30 @@ export default function ServiceTypesPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
-      <h1 className="text-3xl font-bold mb-6">Tipos de servicio</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Slug</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Nombre ES</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Base</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Por KM</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Por Min</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Mín</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Pasajeros</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Activo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_slug')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_name_es')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_base')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_per_km')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_per_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_passengers')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {configs.length === 0 ? (
               <tr>
                 <td colSpan={9} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'Sin tipos de servicio'}
+                  {loading ? t('common.loading') : t('service_types.no_service_types')}
                 </td>
               </tr>
             ) : (
@@ -152,7 +154,7 @@ export default function ServiceTypesPage() {
                         c.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {c.is_active ? 'Activo' : 'Inactivo'}
+                      {c.is_active ? t('common.active') : t('common.inactive')}
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -163,13 +165,13 @@ export default function ServiceTypesPage() {
                           disabled={saving}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
                         >
-                          Guardar
+                          {t('common.save')}
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                         >
-                          Cancelar
+                          {t('common.cancel')}
                         </button>
                       </div>
                     ) : (
@@ -177,7 +179,7 @@ export default function ServiceTypesPage() {
                         onClick={() => startEdit(c)}
                         className="text-sm text-[#FF4D00] hover:underline"
                       >
-                        Editar
+                        {t('common.edit')}
                       </button>
                     )}
                   </td>

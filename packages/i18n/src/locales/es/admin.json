@@ -153,7 +153,9 @@
     "reject_reason_title": "Motivo de rechazo",
     "suspend_reason_title": "Motivo de suspensión",
     "explain_reason_placeholder": "Explica el motivo...",
-    "driver_not_found": "Conductor no encontrado"
+    "driver_not_found": "Conductor no encontrado",
+    "doc_uploaded_at": "Subido:",
+    "actions_section": "Acciones"
   },
 
   "rides": {
@@ -268,7 +270,10 @@
     "col_amount": "Monto",
     "col_reason": "Motivo",
     "no_penalties": "Sin penalizaciones",
-    "no_charge": "Sin cargo"
+    "no_charge": "Sin cargo",
+    "col_date": "Fecha",
+    "col_type": "Tipo",
+    "col_note": "Nota"
   },
 
   "wallet_admin": {

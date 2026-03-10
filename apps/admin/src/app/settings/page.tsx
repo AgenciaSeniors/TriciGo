@@ -1,48 +1,53 @@
-import Link from 'next/link';
+'use client';
 
-const sections = [
-  {
-    href: '/settings/service-types',
-    title: 'Tipos de servicio',
-    description: 'Administrar los tipos de vehículo disponibles y sus configuraciones.',
-    icon: '🛺',
-  },
-  {
-    href: '/settings/pricing',
-    title: 'Reglas de precio',
-    description: 'Configurar tarifas base, por km, por minuto y multiplicadores de surge.',
-    icon: '💰',
-  },
-  {
-    href: '/settings/zones',
-    title: 'Zonas operativas',
-    description: 'Definir y editar las zonas de operación en La Habana.',
-    icon: '🗺️',
-  },
-  {
-    href: '/settings/surge-zones',
-    title: 'Tarifa dinámica (Surge)',
-    description: 'Crear reglas de surge por zona y período de tiempo.',
-    icon: '⚡',
-  },
-  {
-    href: '/settings/promotions',
-    title: 'Promociones',
-    description: 'Crear y gestionar códigos promocionales y bonos.',
-    icon: '🎁',
-  },
-  {
-    href: '/settings/feature-flags',
-    title: 'Feature Flags',
-    description: 'Activar o desactivar funcionalidades por entorno.',
-    icon: '🚩',
-  },
-];
+import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 
 export default function SettingsPage() {
+  const { t } = useTranslation('admin');
+
+  const sections = [
+    {
+      href: '/settings/service-types',
+      titleKey: 'settings.service_types',
+      descKey: 'settings.service_types_desc',
+      icon: '🛺',
+    },
+    {
+      href: '/settings/pricing',
+      titleKey: 'settings.pricing_rules',
+      descKey: 'settings.pricing_desc',
+      icon: '💰',
+    },
+    {
+      href: '/settings/zones',
+      titleKey: 'settings.zones',
+      descKey: 'settings.zones_desc',
+      icon: '🗺️',
+    },
+    {
+      href: '/settings/surge-zones',
+      titleKey: 'settings.surge_zones',
+      descKey: 'settings.surge_zones_desc',
+      icon: '⚡',
+    },
+    {
+      href: '/settings/promotions',
+      titleKey: 'settings.promotions',
+      descKey: 'settings.promotions_desc',
+      icon: '🎁',
+    },
+    {
+      href: '/settings/feature-flags',
+      titleKey: 'settings.feature_flags',
+      descKey: 'settings.flags_desc',
+      icon: '🚩',
+    },
+  ];
+
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Configuración</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('settings.title')}</h1>
 
       <div className="space-y-4">
         {sections.map((section) => (
@@ -54,8 +59,8 @@ export default function SettingsPage() {
             <div className="flex items-center gap-4">
               <span className="text-2xl">{section.icon}</span>
               <div>
-                <h3 className="font-bold text-lg">{section.title}</h3>
-                <p className="text-sm text-neutral-500 mt-1">{section.description}</p>
+                <h3 className="font-bold text-lg">{t(section.titleKey)}</h3>
+                <p className="text-sm text-neutral-500 mt-1">{t(section.descKey)}</p>
               </div>
             </div>
             <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
+import { useTranslation } from '@tricigo/i18n';
 import type { FeatureFlag } from '@tricigo/types';
 
 export default function FeatureFlagsPage() {
+  const { t } = useTranslation('admin');
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -65,15 +67,15 @@ export default function FeatureFlagsPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Feature Flags</h1>
+        <h1 className="text-3xl font-bold">{t('feature_flags.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500]"
         >
-          Agregar flag
+          {t('feature_flags.add_flag')}
         </button>
       </div>
 
@@ -81,19 +83,19 @@ export default function FeatureFlagsPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
           <div className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Clave</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('feature_flags.label_key')}</label>
               <input
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
-                placeholder="nombre_de_flag"
+                placeholder={t('feature_flags.key_placeholder')}
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Descripción</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('feature_flags.label_description')}</label>
               <input
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
-                placeholder="Descripción del flag"
+                placeholder={t('feature_flags.description_placeholder')}
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
               />
@@ -103,23 +105,23 @@ export default function FeatureFlagsPage() {
               disabled={creating || !newKey.trim()}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
             >
-              Crear
+              {t('common.create')}
             </button>
             <button
               onClick={() => setShowCreate(false)}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-neutral-400">Cargando...</p>
+        <p className="text-neutral-400">{t('common.loading')}</p>
       ) : flags.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-8 text-center">
-          <p className="text-neutral-400">Sin feature flags configurados</p>
+          <p className="text-neutral-400">{t('feature_flags.no_flags')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -130,7 +132,7 @@ export default function FeatureFlagsPage() {
             >
               <div>
                 <p className="font-mono text-sm font-medium text-neutral-900">{flag.key}</p>
-                <p className="text-sm text-neutral-500 mt-0.5">{flag.description || 'Sin descripción'}</p>
+                <p className="text-sm text-neutral-500 mt-0.5">{flag.description || t('feature_flags.no_description')}</p>
               </div>
               <button
                 onClick={() => handleToggle(flag)}

@@ -4,22 +4,23 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { Promotion } from '@tricigo/types';
 import type { PromotionType } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 
 const PAGE_SIZE = 20;
 
-const STATUS_TABS = [
-  { label: 'Todas', value: 'all' },
-  { label: 'Activas', value: 'active' },
-  { label: 'Inactivas', value: 'inactive' },
+const STATUS_TAB_KEYS = [
+  { labelKey: 'promotions.filter_all', value: 'all' },
+  { labelKey: 'promotions.filter_active', value: 'active' },
+  { labelKey: 'promotions.filter_inactive', value: 'inactive' },
 ] as const;
 
-const TYPE_LABEL: Record<string, string> = {
-  percentage_discount: '% Descuento',
-  fixed_discount: 'Fijo CUP',
-  bonus_credit: 'Bono TC',
+const TYPE_LABEL_KEY: Record<string, string> = {
+  percentage_discount: 'promotions.type_percentage',
+  fixed_discount: 'promotions.type_fixed',
+  bonus_credit: 'promotions.type_bonus',
 };
 
 type CreateForm = {
@@ -43,6 +44,7 @@ const emptyForm: CreateForm = {
 };
 
 export default function PromotionsPage() {
+  const { t } = useTranslation('admin');
   const { userId: adminUserId } = useAdminUser();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +106,7 @@ export default function PromotionsPage() {
       setShowCreate(false);
     } catch (err) {
       console.error('Error creating promotion:', err);
-      window.alert('Error al crear promoción');
+      window.alert(t('promotions.error_creating'));
     } finally {
       setSaving(false);
     }
@@ -121,13 +123,13 @@ export default function PromotionsPage() {
 
   async function handleDelete(promo: Promotion) {
     if (promo.current_uses > 0) return;
-    if (!window.confirm(`¿Eliminar la promoción "${promo.code}"?`)) return;
+    if (!window.confirm(t('promotions.confirm_delete', { code: promo.code }))) return;
     try {
       await adminService.deletePromotion(promo.id);
       setPromotions((prev) => prev.filter((p) => p.id !== promo.id));
     } catch (err) {
       console.error('Error deleting:', err);
-      window.alert('Error al eliminar');
+      window.alert(t('promotions.error_deleting'));
     }
   }
 
@@ -147,15 +149,15 @@ export default function PromotionsPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Promociones</h1>
+        <h1 className="text-3xl font-bold">{t('promotions.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500]"
         >
-          Crear promoción
+          {t('promotions.create_promotion')}
         </button>
       </div>
 
@@ -164,7 +166,7 @@ export default function PromotionsPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Código</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_code')}</label>
               <input
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm uppercase"
                 placeholder="PROMO2024"
@@ -173,21 +175,21 @@ export default function PromotionsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Tipo</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_type')}</label>
               <select
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
                 value={form.type}
                 onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as PromotionType }))}
               >
-                <option value="percentage_discount">Descuento porcentual</option>
-                <option value="fixed_discount">Descuento fijo (CUP)</option>
-                <option value="bonus_credit">Crédito bonus (TC)</option>
+                <option value="percentage_discount">{t('promotions.option_percentage')}</option>
+                <option value="fixed_discount">{t('promotions.option_fixed')}</option>
+                <option value="bonus_credit">{t('promotions.option_bonus')}</option>
               </select>
             </div>
             <div>
               {form.type === 'percentage_discount' ? (
                 <>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">Descuento (%)</label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_discount_percent')}</label>
                   <input
                     type="number"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
@@ -200,7 +202,7 @@ export default function PromotionsPage() {
                 </>
               ) : (
                 <>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">Monto (CUP)</label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_amount')}</label>
                   <input
                     type="number"
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
@@ -215,17 +217,17 @@ export default function PromotionsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Usos máximos</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_max_uses')}</label>
               <input
                 type="number"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
-                placeholder="Ilimitado"
+                placeholder={t('promotions.unlimited_placeholder')}
                 value={form.max_uses}
                 onChange={(e) => setForm((f) => ({ ...f, max_uses: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Válido desde</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_from')}</label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
@@ -234,7 +236,7 @@ export default function PromotionsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Válido hasta</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_until')}</label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
@@ -249,13 +251,13 @@ export default function PromotionsPage() {
               disabled={saving || !form.code.trim()}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
             >
-              Crear
+              {t('common.create')}
             </button>
             <button
               onClick={() => { setShowCreate(false); setForm(emptyForm); }}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -263,7 +265,7 @@ export default function PromotionsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
-        {STATUS_TABS.map((tab) => (
+        {STATUS_TAB_KEYS.map((tab) => (
           <button
             key={tab.value}
             onClick={() => setFilter(tab.value)}
@@ -273,7 +275,7 @@ export default function PromotionsPage() {
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -283,20 +285,20 @@ export default function PromotionsPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Código</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Tipo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Descuento</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Usos</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Válido hasta</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Activo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_code')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_type')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_discount')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_uses')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_valid_until')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'Sin promociones'}
+                  {loading ? t('common.loading') : t('promotions.no_promotions')}
                 </td>
               </tr>
             ) : (
@@ -305,7 +307,7 @@ export default function PromotionsPage() {
                   <td className="px-4 py-3 font-mono font-medium">{p.code}</td>
                   <td className="px-4 py-3">
                     <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700">
-                      {TYPE_LABEL[p.type] ?? p.type}
+                      {TYPE_LABEL_KEY[p.type] ? t(TYPE_LABEL_KEY[p.type]!) : p.type}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium">{formatDiscount(p)}</td>
@@ -315,7 +317,7 @@ export default function PromotionsPage() {
                   <td className="px-4 py-3 text-neutral-500">
                     {p.valid_until
                       ? new Date(p.valid_until).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })
-                      : 'Sin límite'}
+                      : t('promotions.no_limit')}
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -324,7 +326,7 @@ export default function PromotionsPage() {
                         p.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {p.is_active ? 'Activa' : 'Inactiva'}
+                      {p.is_active ? t('promotions.active_label') : t('promotions.inactive_label')}
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -333,7 +335,7 @@ export default function PromotionsPage() {
                         onClick={() => handleDelete(p)}
                         className="text-sm text-red-500 hover:underline"
                       >
-                        Eliminar
+                        {t('common.delete')}
                       </button>
                     )}
                   </td>
@@ -351,17 +353,17 @@ export default function PromotionsPage() {
           disabled={!canGoPrev}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página <strong>{page + 1}</strong>
+          {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

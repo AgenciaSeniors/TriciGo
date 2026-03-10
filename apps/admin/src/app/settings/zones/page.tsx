@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
+import { useTranslation } from '@tricigo/i18n';
 import type { Zone } from '@tricigo/types';
 
 const TYPE_BADGE: Record<string, string> = {
@@ -11,15 +12,16 @@ const TYPE_BADGE: Record<string, string> = {
   restricted: 'bg-red-100 text-red-700',
 };
 
-const TYPE_LABEL: Record<string, string> = {
-  operational: 'Operativa',
-  surge: 'Surge',
-  restricted: 'Restringida',
+const TYPE_LABEL_KEY: Record<string, string> = {
+  operational: 'zones.type_operational',
+  surge: 'zones.type_surge',
+  restricted: 'zones.type_restricted',
 };
 
 type ZoneRow = Omit<Zone, 'boundary'>;
 
 export default function ZonesPage() {
+  const { t } = useTranslation('admin');
   const [zones, setZones] = useState<ZoneRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,30 +77,30 @@ export default function ZonesPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
-      <h1 className="text-3xl font-bold mb-6">Zonas operativas</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('zones.title')}</h1>
 
       <p className="text-sm text-neutral-500 mb-4">
-        Edición de polígonos disponible en futura versión con integración de mapas.
+        {t('zones.map_note')}
       </p>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Nombre</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Tipo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Multiplicador surge</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Activo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_name')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_type')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_surge_multiplier')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {zones.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'Sin zonas configuradas'}
+                  {loading ? t('common.loading') : t('zones.no_zones')}
                 </td>
               </tr>
             ) : (
@@ -115,7 +117,7 @@ export default function ZonesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[z.type] ?? 'bg-neutral-100 text-neutral-700'}`}>
-                      {TYPE_LABEL[z.type] ?? z.type}
+                      {TYPE_LABEL_KEY[z.type] ? t(TYPE_LABEL_KEY[z.type]!) : z.type}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -131,7 +133,7 @@ export default function ZonesPage() {
                       />
                     ) : (
                       <span className={z.surge_multiplier > 1 ? 'text-yellow-600 font-medium' : ''}>
-                        {z.surge_multiplier.toFixed(2)}×
+                        {z.surge_multiplier.toFixed(2)}x
                       </span>
                     )}
                   </td>
@@ -142,7 +144,7 @@ export default function ZonesPage() {
                         z.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {z.is_active ? 'Activo' : 'Inactivo'}
+                      {z.is_active ? t('common.active') : t('common.inactive')}
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -153,13 +155,13 @@ export default function ZonesPage() {
                           disabled={saving}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
                         >
-                          Guardar
+                          {t('common.save')}
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                         >
-                          Cancelar
+                          {t('common.cancel')}
                         </button>
                       </div>
                     ) : (
@@ -167,7 +169,7 @@ export default function ZonesPage() {
                         onClick={() => startEdit(z)}
                         className="text-sm text-[#FF4D00] hover:underline"
                       >
-                        Editar
+                        {t('common.edit')}
                       </button>
                     )}
                   </td>

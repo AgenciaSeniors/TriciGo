@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
+import { useTranslation } from '@tricigo/i18n';
 import type { SurgeZone } from '@tricigo/types';
 
 function formatDate(d: string | null): string {
@@ -17,6 +18,7 @@ function formatDate(d: string | null): string {
 }
 
 export default function SurgeZonesPage() {
+  const { t } = useTranslation('admin');
   const [surges, setSurges] = useState<SurgeZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -80,7 +82,7 @@ export default function SurgeZonesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('¿Eliminar esta regla de surge?')) return;
+    if (!window.confirm(t('surge_zones.confirm_delete'))) return;
     try {
       await adminService.deleteSurgeZone(id);
       setSurges((prev) => prev.filter((s) => s.id !== id));
@@ -92,34 +94,34 @@ export default function SurgeZonesPage() {
   return (
     <div>
       <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
-        ← Volver a configuración
+        &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Zonas de tarifa dinámica</h1>
+        <h1 className="text-3xl font-bold">{t('surge_zones.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors"
         >
-          {showCreate ? 'Cancelar' : '+ Crear regla'}
+          {showCreate ? t('common.cancel') : t('surge_zones.create_rule')}
         </button>
       </div>
 
       {/* Create form */}
       {showCreate && (
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-6">
-          <h2 className="text-lg font-bold mb-4">Nueva regla de surge</h2>
+          <h2 className="text-lg font-bold mb-4">{t('surge_zones.new_rule_title')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">Zone ID</label>
+              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_zone_id')}</label>
               <input
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
-                placeholder="UUID de la zona"
+                placeholder={t('surge_zones.zone_placeholder')}
                 value={form.zone_id}
                 onChange={(e) => setForm((f) => ({ ...f, zone_id: e.target.value }))}
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">Multiplicador</label>
+              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_multiplier')}</label>
               <input
                 type="number"
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
@@ -131,16 +133,16 @@ export default function SurgeZonesPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">Motivo</label>
+              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_reason')}</label>
               <input
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
-                placeholder="Alta demanda, evento, etc."
+                placeholder={t('surge_zones.reason_placeholder')}
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">Inicio (opcional)</label>
+              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_start')}</label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
@@ -149,7 +151,7 @@ export default function SurgeZonesPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">Fin (opcional)</label>
+              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_end')}</label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
@@ -163,7 +165,7 @@ export default function SurgeZonesPage() {
             disabled={creating || !form.zone_id}
             className="px-6 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors disabled:opacity-50"
           >
-            {creating ? 'Creando...' : 'Crear regla'}
+            {creating ? t('surge_zones.creating') : t('surge_zones.create_rule_btn')}
           </button>
         </div>
       )}
@@ -173,26 +175,26 @@ export default function SurgeZonesPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Multiplicador</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Motivo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Inicio</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Fin</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Activo</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_multiplier')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_reason')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_start')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_end')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {surges.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'Sin reglas de surge activas'}
+                  {loading ? t('common.loading') : t('surge_zones.no_rules')}
                 </td>
               </tr>
             ) : (
               surges.map((s) => (
                 <tr key={s.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                   <td className="px-4 py-3">
-                    <span className="text-yellow-600 font-bold">{Number(s.multiplier).toFixed(1)}×</span>
+                    <span className="text-yellow-600 font-bold">{Number(s.multiplier).toFixed(1)}x</span>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">{s.reason || '—'}</td>
                   <td className="px-4 py-3 text-neutral-500 text-xs">{formatDate(s.starts_at)}</td>
@@ -204,7 +206,7 @@ export default function SurgeZonesPage() {
                         s.active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {s.active ? 'Activo' : 'Inactivo'}
+                      {s.active ? t('common.active') : t('common.inactive')}
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -212,7 +214,7 @@ export default function SurgeZonesPage() {
                       onClick={() => handleDelete(s.id)}
                       className="text-sm text-red-500 hover:underline"
                     >
-                      Eliminar
+                      {t('common.delete')}
                     </button>
                   </td>
                 </tr>

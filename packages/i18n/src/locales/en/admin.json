@@ -153,7 +153,9 @@
     "reject_reason_title": "Rejection reason",
     "suspend_reason_title": "Suspension reason",
     "explain_reason_placeholder": "Explain the reason...",
-    "driver_not_found": "Driver not found"
+    "driver_not_found": "Driver not found",
+    "doc_uploaded_at": "Uploaded:",
+    "actions_section": "Actions"
   },
 
   "rides": {
@@ -268,7 +270,10 @@
     "col_amount": "Amount",
     "col_reason": "Reason",
     "no_penalties": "No penalties",
-    "no_charge": "No charge"
+    "no_charge": "No charge",
+    "col_date": "Date",
+    "col_type": "Type",
+    "col_note": "Note"
   },
 
   "wallet_admin": {
