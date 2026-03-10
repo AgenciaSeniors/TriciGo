@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -10,11 +10,13 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatCUP, HAVANA_PRESETS } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideInit, useRideActions } from '@/hooks/useRide';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
+import { RideMapView } from '@/components/RideMapView';
 import type { GeoPoint, LocationPreset } from '@tricigo/utils';
 
 const SEARCH_STEPS = [
@@ -51,6 +53,20 @@ function IdleView() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await walletService.ensureAccount(user.id);
+        const bal = await walletService.getBalance(user.id);
+        if (!cancelled) setWalletBalance(bal.available);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   return (
     <View className="pt-4">
@@ -58,7 +74,7 @@ function IdleView() {
         {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
       </Text>
 
-      <BalanceBadge balance={0} size="sm" className="mt-4 mb-6" />
+      <BalanceBadge balance={walletBalance} size="sm" className="mt-4 mb-6" />
 
       {/* Destination search */}
       <Pressable
@@ -258,16 +274,26 @@ function SelectingView() {
 
 function ReviewingView() {
   const { t } = useTranslation('rider');
-  const { draft, fareEstimate, setFlowStep, isLoading, error } = useRideStore();
-  const { confirmRide } = useRideActions();
+  const { draft, fareEstimate, setFlowStep, isLoading, error, promoCode, promoResult, setPromoCode } = useRideStore();
+  const { confirmRide, validatePromo, validatingPromo } = useRideActions();
 
   if (!fareEstimate) return null;
 
   const distanceKm = (fareEstimate.estimated_distance_m / 1000).toFixed(1);
   const durationMin = Math.round(fareEstimate.estimated_duration_s / 60);
+  const discount = promoResult?.valid ? promoResult.discountAmount : 0;
+  const finalFare = fareEstimate.estimated_fare_cup - discount;
 
   return (
     <View className="pt-4 flex-1">
+      {/* Map preview */}
+      <RideMapView
+        pickupLocation={draft.pickup?.location ?? null}
+        dropoffLocation={draft.dropoff?.location ?? null}
+        height={150}
+      />
+      <View className="h-3" />
+
       {/* Route summary */}
       <Card variant="outlined" padding="md" className="mb-4">
         <View className="flex-row items-start mb-3">
@@ -287,7 +313,7 @@ function ReviewingView() {
       </Card>
 
       {/* Fare breakdown */}
-      <Card variant="elevated" padding="lg" className="mb-6">
+      <Card variant="elevated" padding="lg" className="mb-4">
         <Text variant="h4" className="mb-4">
           {t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
         </Text>
@@ -309,14 +335,55 @@ function ReviewingView() {
           </Text>
         </View>
 
+        {discount > 0 && (
+          <View className="flex-row justify-between mb-2">
+            <Text variant="bodySmall" className="text-green-600">Descuento</Text>
+            <Text variant="bodySmall" className="text-green-600">-{formatCUP(discount)}</Text>
+          </View>
+        )}
+
         <View className="h-px bg-neutral-200 my-3" />
 
         <View className="flex-row justify-between">
           <Text variant="h4">{t('ride.estimated_fare')}</Text>
           <Text variant="h3" color="accent">
-            {formatCUP(fareEstimate.estimated_fare_cup)}
+            {formatCUP(finalFare)}
           </Text>
         </View>
+      </Card>
+
+      {/* Promo code */}
+      <Card variant="outlined" padding="md" className="mb-6">
+        <Text variant="label" className="mb-2">Código promocional</Text>
+        <View className="flex-row gap-2">
+          <View className="flex-1">
+            <Input
+              placeholder="Ingresa tu código"
+              value={promoCode}
+              onChangeText={setPromoCode}
+              autoCapitalize="characters"
+            />
+          </View>
+          <Button
+            title="Aplicar"
+            size="sm"
+            variant="outline"
+            onPress={validatePromo}
+            loading={validatingPromo}
+            disabled={!promoCode.trim()}
+          />
+        </View>
+        {promoResult && (
+          <Text
+            variant="caption"
+            color={promoResult.valid ? 'accent' : 'error'}
+            className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
+          >
+            {promoResult.valid
+              ? `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`
+              : promoResult.error ?? 'Código inválido'}
+          </Text>
+        )}
       </Card>
 
       {error && (
@@ -352,7 +419,19 @@ function SearchingView() {
   const { cancelRide } = useRideActions();
 
   return (
-    <View className="pt-8 flex-1 items-center">
+    <View className="pt-4 flex-1 items-center">
+      {/* Map showing pickup + dropoff */}
+      {activeRide && (
+        <>
+          <RideMapView
+            pickupLocation={activeRide.pickup_location}
+            dropoffLocation={activeRide.dropoff_location}
+            height={180}
+          />
+          <View className="h-4" />
+        </>
+      )}
+
       <StatusStepper
         steps={SEARCH_STEPS}
         currentStep="searching"

@@ -7,8 +7,12 @@ import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { incidentService } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
+import { useAuthStore } from '@/stores/auth.store';
+import { RideMapView } from '@/components/RideMapView';
+import { useDriverPosition } from '@/hooks/useDriverPosition';
 
 const RIDE_STEPS = [
   { key: 'accepted', label: 'Aceptado' },
@@ -22,7 +26,9 @@ export function RideActiveView() {
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const isLoading = useRideStore((s) => s.isLoading);
+  const userId = useAuthStore((s) => s.user?.id);
   const { cancelRide } = useRideActions();
+  const driverPosition = useDriverPosition(activeRide?.id ?? null);
 
   if (!activeRide) return null;
 
@@ -35,6 +41,31 @@ export function RideActiveView() {
     if (rideWithDriver?.driver_phone) {
       Linking.openURL(`tel:${rideWithDriver.driver_phone}`);
     }
+  };
+
+  const handleSOS = () => {
+    Alert.alert(
+      'SOS - Emergencia',
+      '¿Estás en peligro? Se registrará un reporte de emergencia y se abrirá el marcador telefónico.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Llamar emergencia',
+          style: 'destructive',
+          onPress: async () => {
+            if (userId) {
+              incidentService.createSOSReport({
+                ride_id: activeRide.id,
+                reported_by: userId,
+                against_user_id: activeRide.driver_id ?? undefined,
+                description: 'SOS activado por pasajero durante viaje',
+              }).catch(() => {});
+            }
+            Linking.openURL('tel:106');
+          },
+        },
+      ],
+    );
   };
 
   const handleCancel = () => {
@@ -61,6 +92,15 @@ export function RideActiveView() {
 
   return (
     <View className="flex-1 pt-4">
+      {/* Live map */}
+      <RideMapView
+        pickupLocation={activeRide.pickup_location}
+        dropoffLocation={activeRide.dropoff_location}
+        driverLocation={driverPosition}
+        height={200}
+      />
+      <View className="h-4" />
+
       {/* Status stepper */}
       <StatusStepper
         steps={RIDE_STEPS}
@@ -112,6 +152,12 @@ export function RideActiveView() {
                   <Text variant="h4" color="inverse">📞</Text>
                 </Pressable>
               )}
+              <Pressable
+                className="bg-red-600 w-12 h-12 rounded-full items-center justify-center"
+                onPress={handleSOS}
+              >
+                <Text variant="caption" color="inverse" className="font-bold">SOS</Text>
+              </Pressable>
             </View>
           </View>
         </Card>

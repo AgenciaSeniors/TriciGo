@@ -7,8 +7,11 @@ import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { incidentService } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
+import { RideMapView } from '@/components/RideMapView';
+import { useDriverStore } from '@/stores/driver.store';
 import type { RideStatus } from '@tricigo/types';
 
 const TRIP_STEPS = [
@@ -29,6 +32,7 @@ const ACTION_LABELS: Partial<Record<RideStatus, string>> = {
 export function DriverTripView() {
   const { t } = useTranslation('driver');
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
+  const driverProfile = useDriverStore((s) => s.profile);
   const { advanceStatus, cancelTrip, clearCompletedTrip } = useDriverRideActions();
 
   if (!activeTrip) return null;
@@ -44,6 +48,31 @@ export function DriverTripView() {
     activeTrip.status === 'arrived_at_pickup';
 
   const actionLabel = ACTION_LABELS[activeTrip.status];
+
+  const handleSOS = () => {
+    Alert.alert(
+      'SOS - Emergencia',
+      '¿Estás en peligro? Se registrará un reporte de emergencia.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Llamar emergencia',
+          style: 'destructive',
+          onPress: async () => {
+            if (driverProfile?.user_id) {
+              incidentService.createSOSReport({
+                ride_id: activeTrip.id,
+                reported_by: driverProfile.user_id,
+                against_user_id: activeTrip.customer_id,
+                description: 'SOS activado por conductor durante viaje',
+              }).catch(() => {});
+            }
+            Linking.openURL('tel:106');
+          },
+        },
+      ],
+    );
+  };
 
   const handleCancel = () => {
     Alert.alert(
@@ -62,6 +91,14 @@ export function DriverTripView() {
 
   return (
     <View className="flex-1 pt-4">
+      {/* Map */}
+      <RideMapView
+        pickupLocation={activeTrip.pickup_location}
+        dropoffLocation={activeTrip.dropoff_location}
+        height={180}
+      />
+      <View className="h-3" />
+
       {/* Status stepper */}
       <StatusStepper
         steps={TRIP_STEPS}
@@ -96,13 +133,19 @@ export function DriverTripView() {
         </View>
       </Card>
 
-      {/* Chat button */}
-      <View className="flex-row justify-center mb-4">
+      {/* Chat + SOS buttons */}
+      <View className="flex-row justify-center gap-3 mb-4">
         <Pressable
           className="bg-neutral-700 px-6 py-3 rounded-full flex-row items-center"
           onPress={() => router.push(`/chat/${activeTrip.id}`)}
         >
           <Text variant="body" color="inverse">💬  {t('chat.title', { defaultValue: 'Chat' })}</Text>
+        </Pressable>
+        <Pressable
+          className="bg-red-600 w-12 h-12 rounded-full items-center justify-center"
+          onPress={handleSOS}
+        >
+          <Text variant="caption" color="inverse" className="font-bold">SOS</Text>
         </Pressable>
       </View>
 

@@ -80,6 +80,18 @@ export const queryKeys = {
     messages: (rideId: string) => ['chat', 'messages', rideId] as const,
   },
 
+  // Incidents
+  incident: {
+    byRide: (rideId: string) => ['incident', 'byRide', rideId] as const,
+    byUser: (userId: string) => ['incident', 'byUser', userId] as const,
+    list: (status?: string) => ['incident', 'list', status] as const,
+  },
+
+  // Devices
+  device: {
+    byUser: (userId: string) => ['device', 'byUser', userId] as const,
+  },
+
   // Admin
   admin: {
     dashboard: ['admin', 'dashboard'] as const,

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Notifications from 'expo-notifications';
 import type { Ride } from '@tricigo/types';
 
 interface DriverRideState {
@@ -21,6 +22,14 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     set((s) => {
       // Avoid duplicates
       if (s.incomingRequests.some((r) => r.id === ride.id)) return s;
+      // Local notification for new ride request
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'TriciGo',
+          body: 'Nueva solicitud de viaje',
+        },
+        trigger: null,
+      }).catch(() => {});
       return { incomingRequests: [ride, ...s.incomingRequests] };
     }),
 

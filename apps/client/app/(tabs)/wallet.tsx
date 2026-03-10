@@ -34,6 +34,8 @@ export default function WalletScreen() {
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
+      // Ensure wallet account exists before fetching
+      await walletService.ensureAccount(userId);
       const [balanceData, account] = await Promise.all([
         walletService.getBalance(userId),
         walletService.getAccount(userId),

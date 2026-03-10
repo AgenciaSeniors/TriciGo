@@ -66,7 +66,13 @@ export function RideCompleteView() {
       <Text variant="h3" className="mb-2">{t('ride.completed')}</Text>
 
       {/* Fare */}
-      <Text variant="h2" color="accent" className="mb-6">{formatCUP(fare)}</Text>
+      <Text variant="h2" color="accent" className="mb-2">{formatCUP(fare)}</Text>
+      {activeRide.discount_amount_cup > 0 && (
+        <Text variant="caption" color="accent" className="mb-4 text-green-600">
+          Descuento aplicado: -{formatCUP(activeRide.discount_amount_cup)}
+        </Text>
+      )}
+      {activeRide.discount_amount_cup === 0 && <View className="mb-4" />}
 
       {/* Route summary */}
       <Card variant="outlined" padding="md" className="w-full mb-6">

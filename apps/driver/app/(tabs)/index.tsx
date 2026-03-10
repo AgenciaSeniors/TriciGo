@@ -14,6 +14,7 @@ import {
 } from '@/hooks/useDriverRide';
 import { IncomingRideCard } from '@/components/IncomingRideCard';
 import { DriverTripView } from '@/components/DriverTripView';
+import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import type { Ride } from '@tricigo/types';
 
 export default function DriverHomeScreen() {
@@ -28,6 +29,9 @@ export default function DriverHomeScreen() {
 
   // Subscribe to incoming requests when online
   useIncomingRequests(isOnline && !activeTrip);
+
+  // GPS tracking when online
+  useDriverLocationTracking(profile?.id ?? null, isOnline, activeTrip?.id ?? null);
 
   const { acceptRide } = useDriverRideActions();
 

@@ -1,12 +1,30 @@
 import { create } from 'zustand';
+import * as Notifications from 'expo-notifications';
 import type {
   Ride,
   RideWithDriver,
   FareEstimate,
   ServiceTypeSlug,
   PaymentMethod,
+  RideStatus,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
+
+const STATUS_NOTIFICATIONS: Partial<Record<RideStatus, string>> = {
+  accepted: 'Conductor asignado',
+  driver_en_route: 'Conductor en camino',
+  arrived_at_pickup: 'Conductor llegó al punto de recogida',
+  completed: 'Viaje completado',
+};
+
+function scheduleLocalNotification(status: RideStatus) {
+  const body = STATUS_NOTIFICATIONS[status];
+  if (!body) return;
+  Notifications.scheduleNotificationAsync({
+    content: { title: 'TriciGo', body },
+    trigger: null,
+  }).catch(() => {});
+}
 
 export type RideFlowStep =
   | 'idle'
@@ -35,6 +53,13 @@ const defaultDraft: RideRequestDraft = {
   paymentMethod: 'cash',
 };
 
+interface PromoResult {
+  valid: boolean;
+  discountAmount: number;
+  promotionId?: string;
+  error?: string;
+}
+
 interface RideState {
   flowStep: RideFlowStep;
   draft: RideRequestDraft;
@@ -43,6 +68,10 @@ interface RideState {
   rideWithDriver: RideWithDriver | null;
   isLoading: boolean;
   error: string | null;
+
+  // Promo state
+  promoCode: string;
+  promoResult: PromoResult | null;
 
   setFlowStep: (step: RideFlowStep) => void;
   setPickup: (address: string, location: GeoPoint) => void;
@@ -55,6 +84,8 @@ interface RideState {
   updateRideFromRealtime: (ride: Ride) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setPromoCode: (code: string) => void;
+  setPromoResult: (result: PromoResult | null) => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -67,6 +98,8 @@ export const useRideStore = create<RideState>((set, get) => ({
   rideWithDriver: null,
   isLoading: false,
   error: null,
+  promoCode: '',
+  promoResult: null,
 
   setFlowStep: (flowStep) => set({ flowStep }),
 
@@ -92,6 +125,11 @@ export const useRideStore = create<RideState>((set, get) => ({
     const { activeRide } = get();
     if (!activeRide || activeRide.id !== ride.id) return;
 
+    // Fire local notification on status change
+    if (ride.status !== activeRide.status) {
+      scheduleLocalNotification(ride.status);
+    }
+
     set({ activeRide: ride });
 
     // Advance flowStep based on status
@@ -113,9 +151,11 @@ export const useRideStore = create<RideState>((set, get) => ({
 
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
+  setPromoCode: (promoCode) => set({ promoCode }),
+  setPromoResult: (promoResult) => set({ promoResult }),
 
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, error: null }),
+    set({ draft: { ...defaultDraft }, fareEstimate: null, error: null, promoCode: '', promoResult: null }),
 
   resetAll: () =>
     set({
@@ -126,5 +166,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       rideWithDriver: null,
       isLoading: false,
       error: null,
+      promoCode: '',
+      promoResult: null,
     }),
 }));

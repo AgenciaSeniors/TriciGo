@@ -84,6 +84,25 @@ export const walletService = {
   },
 
   /**
+   * Ensure a wallet account exists for the user. Creates one if missing.
+   */
+  async ensureAccount(
+    userId: string,
+    accountType = 'customer_cash',
+  ): Promise<WalletAccount> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('ensure_wallet_account', {
+      p_user_id: userId,
+      p_type: accountType,
+    });
+    if (error) throw error;
+    // RPC returns the account ID; fetch full account
+    const account = await this.getAccount(userId);
+    if (!account) throw new Error('Failed to ensure wallet account');
+    return account;
+  },
+
+  /**
    * Request a redemption (driver only).
    * The actual processing happens via admin approval.
    */

@@ -10,6 +10,7 @@ import type {
   RideTransition,
   FareEstimate,
   ServiceTypeConfig,
+  Promotion,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
@@ -32,6 +33,8 @@ export interface CreateRideParams {
   estimated_distance_m?: number;
   estimated_duration_s?: number;
   scheduled_at?: string;
+  promo_code_id?: string;
+  discount_amount_cup?: number;
 }
 
 export const rideService = {
@@ -125,11 +128,26 @@ export const rideService = {
         estimated_duration_s: params.estimated_duration_s ?? 0,
         scheduled_at: params.scheduled_at ?? null,
         is_scheduled: !!params.scheduled_at,
+        promo_code_id: params.promo_code_id ?? null,
+        discount_amount_cup: params.discount_amount_cup ?? 0,
         status: 'searching' as RideStatus,
       })
       .select()
       .single();
     if (error) throw error;
+
+    // Record promo usage if applicable
+    if (params.promo_code_id && data) {
+      await supabase.from('promotion_uses').insert({
+        promotion_id: params.promo_code_id,
+        user_id: user.id,
+        ride_id: (data as Ride).id,
+      });
+      await supabase.rpc('increment_promo_uses', {
+        p_promo_id: params.promo_code_id,
+      });
+    }
+
     return data as Ride;
   },
 
@@ -334,6 +352,67 @@ export const rideService = {
         },
       )
       .subscribe();
+  },
+
+  /**
+   * Validate a promo code for a ride.
+   */
+  async validatePromoCode(params: {
+    code: string;
+    userId: string;
+    fareAmount: number;
+  }): Promise<{
+    valid: boolean;
+    promotion?: Promotion;
+    discountAmount: number;
+    error?: string;
+  }> {
+    const supabase = getSupabaseClient();
+
+    // Find active promotion by code
+    const { data: promo, error } = await supabase
+      .from('promotions')
+      .select('*')
+      .ilike('code', params.code.trim())
+      .eq('is_active', true)
+      .lte('valid_from', new Date().toISOString())
+      .maybeSingle();
+    if (error) throw error;
+    if (!promo) return { valid: false, discountAmount: 0, error: 'invalid' };
+
+    const promotion = promo as Promotion;
+
+    // Check expiration
+    if (promotion.valid_until && new Date(promotion.valid_until) < new Date()) {
+      return { valid: false, discountAmount: 0, error: 'expired' };
+    }
+
+    // Check max uses
+    if (promotion.max_uses !== null && promotion.current_uses >= promotion.max_uses) {
+      return { valid: false, discountAmount: 0, error: 'max_uses' };
+    }
+
+    // Check if user already used this promo
+    const { data: existing } = await supabase
+      .from('promotion_uses')
+      .select('id')
+      .eq('promotion_id', promotion.id)
+      .eq('user_id', params.userId)
+      .maybeSingle();
+    if (existing) {
+      return { valid: false, discountAmount: 0, error: 'already_used' };
+    }
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (promotion.type === 'percentage_discount' && promotion.discount_percent) {
+      discountAmount = Math.round(params.fareAmount * promotion.discount_percent / 100);
+    } else if (promotion.type === 'fixed_discount' && promotion.discount_fixed_cup) {
+      discountAmount = Math.min(promotion.discount_fixed_cup, params.fareAmount);
+    }
+    // bonus_credit: discount is 0, credit applied post-ride
+
+    return { valid: true, promotion, discountAmount };
   },
 
   /**

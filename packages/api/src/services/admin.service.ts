@@ -553,6 +553,59 @@ export const adminService = {
     if (error) throw error;
   },
 
+  // ==================== INCIDENTS ====================
+
+  async getIncidents(
+    status?: string,
+    page = 0,
+    pageSize = 20,
+  ) {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('incident_reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data as Record<string, unknown>[];
+  },
+
+  async updateIncidentStatus(
+    id: string,
+    status: string,
+    adminId: string,
+    notes?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const updatePayload: Record<string, unknown> = {
+      status,
+      resolved_at: status === 'resolved' ? new Date().toISOString() : null,
+    };
+
+    const { error } = await supabase
+      .from('incident_reports')
+      .update(updatePayload)
+      .eq('id', id);
+    if (error) throw error;
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: `incident_${status}`,
+      target_type: 'incident_report',
+      target_id: id,
+      reason: notes ?? null,
+    });
+  },
+
   // ==================== FEATURE FLAGS ====================
 
   async getFeatureFlags(): Promise<FeatureFlag[]> {

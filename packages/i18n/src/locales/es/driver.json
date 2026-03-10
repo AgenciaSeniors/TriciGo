@@ -27,6 +27,8 @@
     "call_passenger": "Llamar al pasajero",
     "chat_passenger": "Chat con pasajero",
     "sos": "SOS - Emergencia",
+    "sos_confirm": "¿Estás en peligro? Se registrará un reporte de emergencia.",
+    "sos_call": "Llamar emergencia",
     "cancel_trip": "Cancelar viaje",
     "cancel_reason": "Motivo de cancelación",
     "rate_passenger": "Califica al pasajero",

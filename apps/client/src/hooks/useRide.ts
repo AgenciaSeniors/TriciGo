@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { rideService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
@@ -75,8 +75,10 @@ export function useRideActions() {
     setFlowStep,
     setLoading,
     setError,
+    setPromoResult,
     resetAll,
   } = useRideStore();
+  const [validatingPromo, setValidatingPromo] = useState(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -108,8 +110,32 @@ export function useRideActions() {
     }
   }, [draft, setFareEstimate, setFlowStep, setLoading, setError]);
 
+  const validatePromo = useCallback(async () => {
+    const { promoCode, fareEstimate: fe } = useRideStore.getState();
+    if (!promoCode.trim() || !user) return;
+
+    setValidatingPromo(true);
+    try {
+      const result = await rideService.validatePromoCode({
+        code: promoCode.trim(),
+        userId: user.id,
+        fareAmount: fe?.estimated_fare_cup ?? 0,
+      });
+      setPromoResult({
+        valid: result.valid,
+        discountAmount: result.discountAmount,
+        promotionId: result.promotion?.id,
+        error: result.error,
+      });
+    } catch {
+      setPromoResult({ valid: false, discountAmount: 0, error: 'Error al validar código' });
+    } finally {
+      setValidatingPromo(false);
+    }
+  }, [user, setPromoResult]);
+
   const confirmRide = useCallback(async () => {
-    const { draft: d, fareEstimate } = useRideStore.getState();
+    const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
     if (!d.pickup || !d.dropoff) return;
 
     setLoading(true);
@@ -127,6 +153,8 @@ export function useRideActions() {
         estimated_fare_cup: fareEstimate?.estimated_fare_cup,
         estimated_distance_m: fareEstimate?.estimated_distance_m,
         estimated_duration_s: fareEstimate?.estimated_duration_s,
+        promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
+        discount_amount_cup: promoResult?.valid ? promoResult.discountAmount : undefined,
       });
 
       setActiveRide(ride);
@@ -183,5 +211,5 @@ export function useRideActions() {
     }
   }, [user, setLoading, setError, resetAll]);
 
-  return { requestEstimate, confirmRide, cancelRide };
+  return { requestEstimate, confirmRide, cancelRide, validatePromo, validatingPromo };
 }

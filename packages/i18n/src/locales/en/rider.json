@@ -45,7 +45,17 @@
     "trip_summary": "Trip summary",
     "done": "Done",
     "review_thanks": "Thanks for your rating!",
-    "your_comment": "Comment (optional)"
+    "your_comment": "Comment (optional)",
+    "promo_code_placeholder": "Enter your code",
+    "apply_promo": "Apply",
+    "promo_applied": "Discount of {{amount}} applied",
+    "promo_invalid": "Invalid code",
+    "promo_already_used": "You already used this code",
+    "promo_max_uses": "Code is fully redeemed",
+    "discount": "Discount",
+    "final_total": "Final total",
+    "sos_confirm": "Are you in danger? An emergency report will be filed.",
+    "sos_call": "Call emergency"
   },
 
   "locations": {

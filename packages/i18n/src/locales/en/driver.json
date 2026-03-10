@@ -27,6 +27,8 @@
     "call_passenger": "Call passenger",
     "chat_passenger": "Chat with passenger",
     "sos": "SOS - Emergency",
+    "sos_confirm": "Are you in danger? An emergency report will be filed.",
+    "sos_call": "Call emergency",
     "cancel_trip": "Cancel trip",
     "cancel_reason": "Cancellation reason",
     "rate_passenger": "Rate passenger",

@@ -88,6 +88,17 @@
     "online": "Online"
   },
 
+  "notifications": {
+    "permission_title": "Notifications",
+    "permission_message": "Allow notifications to receive ride updates"
+  },
+
+  "location": {
+    "permission_title": "Location",
+    "permission_message": "We need your location to track the ride",
+    "denied": "Location permission denied"
+  },
+
   "errors": {
     "generic": "Something went wrong. Please try again.",
     "network": "Connection error. Check your network.",

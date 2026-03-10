@@ -88,6 +88,17 @@
     "online": "Conectado"
   },
 
+  "notifications": {
+    "permission_title": "Notificaciones",
+    "permission_message": "Permite notificaciones para recibir actualizaciones de tu viaje"
+  },
+
+  "location": {
+    "permission_title": "Ubicación",
+    "permission_message": "Necesitamos tu ubicación para rastrear el viaje",
+    "denied": "Permiso de ubicación denegado"
+  },
+
   "errors": {
     "generic": "Algo salió mal. Inténtalo de nuevo.",
     "network": "Error de conexión. Verifica tu red.",

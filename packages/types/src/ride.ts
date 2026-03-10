@@ -52,6 +52,10 @@ export interface Ride {
   // Safety
   share_token: string | null;
 
+  // Promo
+  promo_code_id: string | null;
+  discount_amount_cup: number;
+
   created_at: string;
   updated_at: string;
 }

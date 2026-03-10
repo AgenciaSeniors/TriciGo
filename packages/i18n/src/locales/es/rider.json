@@ -45,7 +45,17 @@
     "trip_summary": "Resumen del viaje",
     "done": "Listo",
     "review_thanks": "¡Gracias por tu calificación!",
-    "your_comment": "Comentario (opcional)"
+    "your_comment": "Comentario (opcional)",
+    "promo_code_placeholder": "Ingresa tu código",
+    "apply_promo": "Aplicar",
+    "promo_applied": "Descuento de {{amount}} aplicado",
+    "promo_invalid": "Código inválido",
+    "promo_already_used": "Ya usaste este código",
+    "promo_max_uses": "Código agotado",
+    "discount": "Descuento",
+    "final_total": "Total final",
+    "sos_confirm": "¿Estás en peligro? Se registrará un reporte de emergencia.",
+    "sos_call": "Llamar emergencia"
   },
 
   "locations": {
