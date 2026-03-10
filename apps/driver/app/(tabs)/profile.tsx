@@ -35,9 +35,9 @@ export default function DriverProfileScreen() {
 
   const menuItems = [
     { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-    { icon: 'car-outline' as const, label: 'Vehiculo' },
+    { icon: 'car-outline' as const, label: t('profile.vehicle_info'), onPress: () => router.push('/profile/vehicle') },
     { icon: 'document-text-outline' as const, label: 'Documentos' },
-    { icon: 'language-outline' as const, label: t('profile.language') },
+    { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/edit') },
     { icon: 'settings-outline' as const, label: t('profile.settings') },
     { icon: 'help-circle-outline' as const, label: t('profile.help') },
   ];

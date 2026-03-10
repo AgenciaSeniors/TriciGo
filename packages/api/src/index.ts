@@ -11,3 +11,4 @@ export { createStorageAdapter } from './storage';
 export type { StorageAdapter } from './storage';
 export { configureStorage } from './client';
 export { customerService } from './services/customer.service';
+export { chatService } from './services/chat.service';

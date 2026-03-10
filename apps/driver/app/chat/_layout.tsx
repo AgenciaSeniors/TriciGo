@@ -1,10 +1,9 @@
 import { Stack } from 'expo-router';
 
-export default function ProfileLayout() {
+export default function ChatLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="edit" />
-      <Stack.Screen name="vehicle" />
+      <Stack.Screen name="[rideId]" />
     </Stack>
   );
 }

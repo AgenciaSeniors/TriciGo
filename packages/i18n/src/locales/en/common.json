@@ -58,7 +58,27 @@
     "settings": "Settings",
     "help": "Help",
     "about": "About TriciGo",
-    "version": "Version {{version}}"
+    "version": "Version {{version}}",
+    "profile_updated": "Profile updated",
+    "preferred_language": "Preferred language",
+    "payment_method": "Default payment method",
+    "payment_cash": "Cash",
+    "payment_tricicoin": "TriciCoin",
+    "payment_mixed": "Mixed",
+    "saved_locations_title": "Saved locations",
+    "add_location": "Add location",
+    "location_label": "Label",
+    "location_address": "Address",
+    "no_saved_locations": "No saved locations yet",
+    "delete_location_confirm": "Delete this saved location?",
+    "emergency_contact_title": "Emergency contact",
+    "emergency_name": "Name",
+    "emergency_phone": "Phone",
+    "emergency_relationship": "Relationship",
+    "no_emergency_contact": "No emergency contact set",
+    "vehicle_info": "Vehicle",
+    "spanish": "Spanish",
+    "english": "English"
   },
 
   "network": {

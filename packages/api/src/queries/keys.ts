@@ -75,6 +75,11 @@ export const queryKeys = {
     validate: (code: string) => ['promotion', 'validate', code] as const,
   },
 
+  // Chat
+  chat: {
+    messages: (rideId: string) => ['chat', 'messages', rideId] as const,
+  },
+
   // Admin
   admin: {
     dashboard: ['admin', 'dashboard'] as const,

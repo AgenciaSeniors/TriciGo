@@ -66,6 +66,14 @@
     "insufficient_balance": "Saldo insuficiente"
   },
 
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Escribe un mensaje...",
+    "send": "Enviar",
+    "no_messages": "Sin mensajes aún. ¡Envía el primero!",
+    "chat_driver": "Chat con conductor"
+  },
+
   "rides_history": {
     "title": "Mis viajes",
     "no_rides": "Aún no tienes viajes",

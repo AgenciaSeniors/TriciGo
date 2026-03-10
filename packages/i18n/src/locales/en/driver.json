@@ -115,6 +115,13 @@
     "error_upload_failed": "Failed to upload document. Try again."
   },
 
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "no_messages": "No messages yet. Send the first one!"
+  },
+
   "trips_history": {
     "title": "My trips",
     "no_trips": "No trips yet",

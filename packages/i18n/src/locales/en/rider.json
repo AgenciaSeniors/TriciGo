@@ -66,6 +66,14 @@
     "insufficient_balance": "Insufficient balance"
   },
 
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "no_messages": "No messages yet. Send the first one!",
+    "chat_driver": "Chat with driver"
+  },
+
   "rides_history": {
     "title": "My rides",
     "no_rides": "No rides yet",

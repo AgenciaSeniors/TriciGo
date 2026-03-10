@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Pressable, Linking, Alert } from 'react-native';
+import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
@@ -96,14 +97,22 @@ export function RideActiveView() {
               )}
             </View>
 
-            {rideWithDriver.driver_phone && (
+            <View className="flex-row gap-2">
               <Pressable
-                className="bg-primary-500 w-12 h-12 rounded-full items-center justify-center"
-                onPress={handleCall}
+                className="bg-neutral-200 w-12 h-12 rounded-full items-center justify-center"
+                onPress={() => router.push(`/chat/${activeRide.id}`)}
               >
-                <Text variant="h4" color="inverse">📞</Text>
+                <Text variant="h4">💬</Text>
               </Pressable>
-            )}
+              {rideWithDriver.driver_phone && (
+                <Pressable
+                  className="bg-primary-500 w-12 h-12 rounded-full items-center justify-center"
+                  onPress={handleCall}
+                >
+                  <Text variant="h4" color="inverse">📞</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         </Card>
       )}

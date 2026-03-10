@@ -28,9 +28,9 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-    { icon: 'location-outline' as const, label: t('profile.saved_locations') },
-    { icon: 'call-outline' as const, label: t('profile.emergency_contact') },
-    { icon: 'language-outline' as const, label: t('profile.language') },
+    { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations') },
+    { icon: 'call-outline' as const, label: t('profile.emergency_contact'), onPress: () => router.push('/profile/emergency-contact') },
+    { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/edit') },
     { icon: 'settings-outline' as const, label: t('profile.settings') },
     { icon: 'help-circle-outline' as const, label: t('profile.help') },
     { icon: 'information-circle-outline' as const, label: t('profile.about') },

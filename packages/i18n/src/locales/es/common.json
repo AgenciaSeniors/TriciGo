@@ -58,7 +58,27 @@
     "settings": "Configuración",
     "help": "Ayuda",
     "about": "Acerca de TriciGo",
-    "version": "Versión {{version}}"
+    "version": "Versión {{version}}",
+    "profile_updated": "Perfil actualizado",
+    "preferred_language": "Idioma preferido",
+    "payment_method": "Método de pago predeterminado",
+    "payment_cash": "Efectivo",
+    "payment_tricicoin": "TriciCoin",
+    "payment_mixed": "Mixto",
+    "saved_locations_title": "Lugares guardados",
+    "add_location": "Agregar lugar",
+    "location_label": "Etiqueta",
+    "location_address": "Dirección",
+    "no_saved_locations": "No tienes lugares guardados",
+    "delete_location_confirm": "¿Eliminar este lugar guardado?",
+    "emergency_contact_title": "Contacto de emergencia",
+    "emergency_name": "Nombre",
+    "emergency_phone": "Teléfono",
+    "emergency_relationship": "Relación",
+    "no_emergency_contact": "Sin contacto de emergencia",
+    "vehicle_info": "Vehículo",
+    "spanish": "Español",
+    "english": "Inglés"
   },
 
   "network": {

@@ -115,6 +115,13 @@
     "error_upload_failed": "Error al subir documento. Intenta de nuevo."
   },
 
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Escribe un mensaje...",
+    "send": "Enviar",
+    "no_messages": "Sin mensajes aún. ¡Envía el primero!"
+  },
+
   "trips_history": {
     "title": "Mis viajes",
     "no_trips": "Aún no tienes viajes",

@@ -99,6 +99,22 @@ export const driverService = {
   },
 
   /**
+   * Get the active vehicle for a driver.
+   */
+  async getVehicle(driverId: string): Promise<Vehicle | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('driver_id', driverId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data as Vehicle | null;
+  },
+
+  /**
    * Register a vehicle for the driver.
    */
   async registerVehicle(vehicle: Omit<Vehicle, 'id' | 'created_at' | 'updated_at'>): Promise<Vehicle> {

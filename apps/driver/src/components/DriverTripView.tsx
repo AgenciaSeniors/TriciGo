@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Pressable, Linking, Alert } from 'react-native';
+import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
@@ -94,6 +95,16 @@ export function DriverTripView() {
           </View>
         </View>
       </Card>
+
+      {/* Chat button */}
+      <View className="flex-row justify-center mb-4">
+        <Pressable
+          className="bg-neutral-700 px-6 py-3 rounded-full flex-row items-center"
+          onPress={() => router.push(`/chat/${activeTrip.id}`)}
+        >
+          <Text variant="body" color="inverse">💬  {t('chat.title', { defaultValue: 'Chat' })}</Text>
+        </Pressable>
+      </View>
 
       {/* Fare */}
       <View className="flex-row justify-between items-center mb-6 px-2">
