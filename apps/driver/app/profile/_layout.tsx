@@ -8,6 +8,7 @@ export default function ProfileLayout() {
       <Stack.Screen name="documents" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="help" />
+      <Stack.Screen name="ticket-detail" />
     </Stack>
   );
 }

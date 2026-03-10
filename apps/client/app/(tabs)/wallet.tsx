@@ -11,6 +11,10 @@ import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone } from '@tricig
 import type { LedgerTransaction } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 
+type TransactionWithAmount = LedgerTransaction & {
+  ledger_entries: { account_id: string; amount: number }[];
+};
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -28,7 +32,7 @@ export default function WalletScreen() {
 
   const [balance, setBalance] = useState({ available: 0, held: 0 });
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -59,7 +63,7 @@ export default function WalletScreen() {
 
       if (account?.id) {
         const txns = await walletService.getTransactions(account.id, 0, 20);
-        setTransactions(txns);
+        setTransactions(txns as TransactionWithAmount[]);
       }
     } catch (err) {
       console.error('Error fetching wallet:', err);
@@ -168,14 +172,24 @@ export default function WalletScreen() {
     }
   };
 
-  const renderTransaction = ({ item }: { item: LedgerTransaction }) => (
-    <View className="flex-row items-center py-3 border-b border-neutral-100">
-      <View className="flex-1">
-        <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text>
-        <Text variant="caption" color="tertiary">{formatDate(item.created_at)}</Text>
+  const renderTransaction = ({ item }: { item: TransactionWithAmount }) => {
+    const amount = item.ledger_entries?.[0]?.amount ?? 0;
+    const isCredit = amount > 0;
+    return (
+      <View className="flex-row items-center py-3 border-b border-neutral-100">
+        <View className="flex-1">
+          <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text>
+          <Text variant="caption" color="tertiary">{formatDate(item.created_at)}</Text>
+        </View>
+        <Text
+          variant="body"
+          className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-500'}`}
+        >
+          {isCredit ? '+' : ''}{formatTriciCoin(amount)}
+        </Text>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (

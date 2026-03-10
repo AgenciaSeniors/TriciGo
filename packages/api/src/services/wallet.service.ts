@@ -64,7 +64,7 @@ export const walletService = {
       .from('ledger_transactions')
       .select(`
         *,
-        ledger_entries!inner(account_id)
+        ledger_entries!inner(account_id, amount)
       `)
       .eq('ledger_entries.account_id', accountId)
       .order('created_at', { ascending: false })
@@ -222,5 +222,21 @@ export const walletService = {
       .limit(50);
     if (error) throw error;
     return data as WalletTransfer[];
+  },
+
+  // ==================== PLATFORM CONFIG ====================
+
+  /**
+   * Get a value from the platform_config table.
+   */
+  async getConfigValue(key: string): Promise<string | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('platform_config')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.value != null ? String(data.value) : null;
   },
 };

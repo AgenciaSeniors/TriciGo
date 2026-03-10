@@ -53,10 +53,11 @@ export default function EarningsScreen() {
   const fetchData = useCallback(async () => {
     if (!userId || !driverProfileId) return;
     try {
-      const [balanceData, trips, redHistory] = await Promise.all([
+      const [balanceData, trips, redHistory, commRateStr] = await Promise.all([
         walletService.getBalance(userId),
         driverService.getTripHistory(driverProfileId, 0, 100),
         walletService.getRedemptions(driverProfileId),
+        walletService.getConfigValue('commission_rate').catch(() => null),
       ]);
 
       setBalance(balanceData.available);
@@ -67,14 +68,15 @@ export default function EarningsScreen() {
       let todaySum = 0;
       let todayComm = 0;
       let completedCount = 0;
-      const COMMISSION_RATE = 0.15;
+      const parsedRate = commRateStr ? parseFloat(String(commRateStr).replace(/"/g, '')) : NaN;
+      const commissionRate = !isNaN(parsedRate) && parsedRate > 0 && parsedRate < 1 ? parsedRate : 0.15;
       for (const trip of trips) {
         if (trip.status === 'completed') {
           completedCount++;
           const tripFare = trip.final_fare_cup ?? trip.estimated_fare_cup;
           if (new Date(trip.completed_at ?? trip.created_at).toDateString() === today) {
             todaySum += tripFare;
-            todayComm += Math.round(tripFare * COMMISSION_RATE);
+            todayComm += Math.round(tripFare * commissionRate);
           }
         }
       }

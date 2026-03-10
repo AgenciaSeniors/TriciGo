@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Pressable, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
@@ -7,7 +7,7 @@ import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { incidentService } from '@tricigo/api';
+import { incidentService, walletService } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { RideMapView } from '@/components/RideMapView';
@@ -196,11 +196,22 @@ function TripCompleteView() {
   const { t } = useTranslation('driver');
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const { clearCompletedTrip } = useDriverRideActions();
+  const [commissionRate, setCommissionRate] = useState(0.15);
+
+  useEffect(() => {
+    walletService.getConfigValue('commission_rate')
+      .then((val) => {
+        if (val) {
+          const parsed = parseFloat(String(val).replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) setCommissionRate(parsed);
+        }
+      })
+      .catch(() => { /* best-effort: use default 0.15 */ });
+  }, []);
 
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;
-  const commissionRate = 0.15;
   const commissionAmount = Math.round(fare * commissionRate);
   const netEarnings = fare - commissionAmount;
   const isCash = activeTrip.payment_method === 'cash' || activeTrip.payment_method === 'mixed';
