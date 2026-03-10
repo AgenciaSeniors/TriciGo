@@ -108,6 +108,15 @@ export interface RideValidTransition {
   allowed_roles: UserRole[];
 }
 
+/** Result from complete_ride_and_pay RPC */
+export interface CompleteRideResult {
+  final_fare_cup: number;
+  commission_amount: number;
+  driver_earnings: number;
+  payment_method: string;
+  share_token: string;
+}
+
 /** Ride with joined driver info for client display */
 export interface RideWithDriver extends Ride {
   driver_user_id: string | null;

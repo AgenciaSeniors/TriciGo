@@ -192,6 +192,10 @@ function TripCompleteView() {
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;
+  const commissionRate = 0.15;
+  const commissionAmount = Math.round(fare * commissionRate);
+  const netEarnings = fare - commissionAmount;
+  const isCash = activeTrip.payment_method === 'cash' || activeTrip.payment_method === 'mixed';
 
   return (
     <View className="flex-1 pt-8 items-center">
@@ -203,13 +207,55 @@ function TripCompleteView() {
         {t('trip.trip_completed')}
       </Text>
 
-      <Text variant="h2" color="accent" className="mb-6">
+      <Text variant="h2" color="accent" className="mb-2">
         {formatCUP(fare)}
       </Text>
 
-      <Text variant="bodySmall" color="inverse" className="opacity-50 mb-8">
-        {t('trip.earned')}
-      </Text>
+      {/* Trip stats */}
+      {activeTrip.actual_distance_m != null && (
+        <View className="flex-row gap-4 mb-4">
+          <Text variant="caption" color="inverse" className="opacity-50">
+            {(activeTrip.actual_distance_m / 1000).toFixed(1)} km
+          </Text>
+          <Text variant="caption" color="inverse" className="opacity-50">
+            {Math.round((activeTrip.actual_duration_s ?? 0) / 60)} min
+          </Text>
+        </View>
+      )}
+
+      {/* Commission breakdown */}
+      <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
+        <View className="flex-row justify-between mb-2">
+          <Text variant="bodySmall" color="inverse" className="opacity-60">
+            Tarifa total
+          </Text>
+          <Text variant="bodySmall" color="inverse">
+            {formatCUP(fare)}
+          </Text>
+        </View>
+        <View className="flex-row justify-between mb-2">
+          <Text variant="bodySmall" color="inverse" className="opacity-60">
+            Comisión plataforma (15%)
+          </Text>
+          <Text variant="bodySmall" className="text-red-400">
+            -{formatCUP(commissionAmount)}
+          </Text>
+        </View>
+        <View className="h-px bg-neutral-600 my-2" />
+        <View className="flex-row justify-between">
+          <Text variant="body" color="inverse" className="font-bold">
+            {isCash ? 'Cobras en efectivo' : 'Ganancia neta'}
+          </Text>
+          <Text variant="body" color="accent" className="font-bold">
+            {formatCUP(netEarnings)}
+          </Text>
+        </View>
+        {isCash && (
+          <Text variant="caption" color="inverse" className="opacity-40 mt-1">
+            La comisión se descuenta de tu saldo
+          </Text>
+        )}
+      </Card>
 
       <Button
         title={t('trip.back_to_home', { defaultValue: 'Volver al inicio' })}

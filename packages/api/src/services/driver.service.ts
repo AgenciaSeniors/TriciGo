@@ -8,6 +8,7 @@ import type {
   DriverDocument,
   Vehicle,
   Ride,
+  CompleteRideResult,
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -202,24 +203,25 @@ export const driverService = {
 
   /**
    * Update ride status (driver-side transitions).
+   * For completion, use completeRide() instead.
    */
   async updateRideStatus(
     rideId: string,
     status: RideStatus,
   ): Promise<void> {
+    if (status === 'completed') {
+      throw new Error('Use completeRide() for ride completion');
+    }
+
     const supabase = getSupabaseClient();
     const updates: Record<string, unknown> = { status };
 
-    // Set relevant timestamps
     switch (status) {
       case 'arrived_at_pickup':
         updates.driver_arrived_at = new Date().toISOString();
         break;
       case 'in_progress':
         updates.pickup_at = new Date().toISOString();
-        break;
-      case 'completed':
-        updates.completed_at = new Date().toISOString();
         break;
     }
 
@@ -228,6 +230,27 @@ export const driverService = {
       .update(updates)
       .eq('id', rideId);
     if (error) throw error;
+  },
+
+  /**
+   * Complete a ride with final fare calculation and payment processing.
+   * Calls complete_ride_and_pay PL/pgSQL function atomically.
+   */
+  async completeRide(params: {
+    rideId: string;
+    driverId: string;
+    actualDistanceM: number;
+    actualDurationS: number;
+  }): Promise<CompleteRideResult> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('complete_ride_and_pay', {
+      p_ride_id: params.rideId,
+      p_driver_id: params.driverId,
+      p_actual_distance_m: params.actualDistanceM,
+      p_actual_duration_s: params.actualDurationS,
+    });
+    if (error) throw error;
+    return data as CompleteRideResult;
   },
 
   /**

@@ -21,6 +21,18 @@ export const locationService = {
     if (error) throw error;
   },
 
+  async calculateRideDistance(
+    rideId: string,
+  ): Promise<{ distance_m: number; point_count: number }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('calculate_ride_distance', {
+      p_ride_id: rideId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return row ?? { distance_m: 0, point_count: 0 };
+  },
+
   async getLatestLocation(
     rideId: string,
   ): Promise<RideLocationEvent | null> {

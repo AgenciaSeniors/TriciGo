@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { rideService, driverService } from '@tricigo/api';
+import { rideService, driverService, locationService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -136,27 +136,57 @@ export function useDriverRideActions() {
 
   const advanceStatus = useCallback(async () => {
     const { activeTrip } = useDriverRideStore.getState();
-    if (!activeTrip) return;
+    if (!activeTrip || !profile) return;
 
     const nextStatus = NEXT_STATUS[activeTrip.status];
     if (!nextStatus) return;
 
     try {
-      await driverService.updateRideStatus(activeTrip.id, nextStatus);
-      // Realtime will update the store, but also update optimistically
-      useDriverRideStore.getState().updateActiveTrip({
-        ...activeTrip,
-        status: nextStatus,
-      });
-
-      // If completed, cleanup
       if (nextStatus === 'completed') {
-        // Keep activeTrip for the complete view, will be reset by user
+        // Calculate actual duration from pickup_at
+        const pickupTime = activeTrip.pickup_at
+          ? new Date(activeTrip.pickup_at).getTime()
+          : Date.now() - 60000;
+        const actualDurationS = Math.round((Date.now() - pickupTime) / 1000);
+
+        // Calculate distance from GPS trail, fall back to estimate
+        let actualDistanceM = activeTrip.estimated_distance_m;
+        try {
+          const distResult = await locationService.calculateRideDistance(activeTrip.id);
+          if (distResult.point_count >= 2) {
+            actualDistanceM = distResult.distance_m;
+          }
+        } catch {
+          // Fall back to estimated distance
+        }
+
+        const result = await driverService.completeRide({
+          rideId: activeTrip.id,
+          driverId: profile.id,
+          actualDistanceM,
+          actualDurationS,
+        });
+
+        useDriverRideStore.getState().updateActiveTrip({
+          ...activeTrip,
+          status: 'completed',
+          final_fare_cup: result.final_fare_cup,
+          actual_distance_m: actualDistanceM,
+          actual_duration_s: actualDurationS,
+          share_token: result.share_token,
+          completed_at: new Date().toISOString(),
+        });
+      } else {
+        await driverService.updateRideStatus(activeTrip.id, nextStatus);
+        useDriverRideStore.getState().updateActiveTrip({
+          ...activeTrip,
+          status: nextStatus,
+        });
       }
     } catch (err) {
       Alert.alert('Error', 'No se pudo actualizar el estado del viaje');
     }
-  }, []);
+  }, [profile]);
 
   const cancelTrip = useCallback(async (reason?: string) => {
     const { activeTrip } = useDriverRideStore.getState();

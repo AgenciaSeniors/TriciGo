@@ -67,8 +67,21 @@ export function RideCompleteView() {
 
       {/* Fare */}
       <Text variant="h2" color="accent" className="mb-2">{formatCUP(fare)}</Text>
+      {activeRide.actual_distance_m != null && (
+        <View className="flex-row gap-4 mb-2">
+          <Text variant="caption" color="secondary">
+            {(activeRide.actual_distance_m / 1000).toFixed(1)} km
+          </Text>
+          <Text variant="caption" color="secondary">
+            {Math.round((activeRide.actual_duration_s ?? 0) / 60)} min
+          </Text>
+        </View>
+      )}
+      <Text variant="caption" color="secondary" className="mb-2">
+        {activeRide.payment_method === 'cash' ? 'Pagado en efectivo' : 'Pagado con TriciCoin'}
+      </Text>
       {activeRide.discount_amount_cup > 0 && (
-        <Text variant="caption" color="accent" className="mb-4 text-green-600">
+        <Text variant="caption" className="mb-4 text-green-600">
           Descuento aplicado: -{formatCUP(activeRide.discount_amount_cup)}
         </Text>
       )}

@@ -177,11 +177,19 @@ export function useRideActions() {
         }
       });
 
-      // Search timeout
+      // Search timeout — actually cancel the ride
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        const { flowStep } = useRideStore.getState();
-        if (flowStep === 'searching') {
+      timeoutRef.current = setTimeout(async () => {
+        const { flowStep, activeRide: ar } = useRideStore.getState();
+        if (flowStep === 'searching' && ar) {
+          try {
+            await rideService.cancelRide(ar.id, user?.id, 'search_timeout');
+          } catch {
+            // Best effort
+          }
+          channelRef.current?.unsubscribe();
+          channelRef.current = null;
+          resetAll();
           setError('No se encontró conductor. Intenta de nuevo.');
         }
       }, SEARCH_TIMEOUT_MS);

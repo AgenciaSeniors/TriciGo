@@ -37,6 +37,7 @@ export default function EarningsScreen() {
 
   const [balance, setBalance] = useState(0);
   const [todayEarnings, setTodayEarnings] = useState(0);
+  const [todayCommission, setTodayCommission] = useState(0);
   const [totalTrips, setTotalTrips] = useState(0);
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [totalReviews, setTotalReviews] = useState(0);
@@ -64,16 +65,21 @@ export default function EarningsScreen() {
       // Count completed trips and today's earnings
       const today = new Date().toDateString();
       let todaySum = 0;
+      let todayComm = 0;
       let completedCount = 0;
+      const COMMISSION_RATE = 0.15;
       for (const trip of trips) {
         if (trip.status === 'completed') {
           completedCount++;
+          const tripFare = trip.final_fare_cup ?? trip.estimated_fare_cup;
           if (new Date(trip.completed_at ?? trip.created_at).toDateString() === today) {
-            todaySum += trip.final_fare_cup ?? trip.estimated_fare_cup;
+            todaySum += tripFare;
+            todayComm += Math.round(tripFare * COMMISSION_RATE);
           }
         }
       }
       setTodayEarnings(todaySum);
+      setTodayCommission(todayComm);
       setTotalTrips(completedCount);
 
       // Fetch rating
@@ -157,11 +163,16 @@ export default function EarningsScreen() {
           <View className="flex-row gap-3 mb-4">
             <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
               <Text variant="caption" color="inverse" className="opacity-50">
-                {t('earnings.today')}
+                Ganancia neta hoy
               </Text>
               <Text variant="h4" color="inverse" className="mt-1">
-                {formatCUP(todayEarnings)}
+                {formatCUP(todayEarnings - todayCommission)}
               </Text>
+              {todayCommission > 0 && (
+                <Text variant="caption" className="text-red-400 mt-0.5">
+                  Comisión: {formatCUP(todayCommission)}
+                </Text>
+              )}
             </Card>
             <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
               <Text variant="caption" color="inverse" className="opacity-50">

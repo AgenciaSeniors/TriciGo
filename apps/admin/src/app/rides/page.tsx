@@ -102,6 +102,7 @@ export default function RidesPage() {
               <th className="text-left px-4 py-3 font-medium text-neutral-500">Origen → Destino</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">Estado</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">Tarifa</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">Distancia</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">Pago</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
             </tr>
@@ -109,7 +110,7 @@ export default function RidesPage() {
           <tbody>
             {rides.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-neutral-400">
+                <td colSpan={6} className="text-center py-12 text-neutral-400">
                   {loading ? 'Cargando...' : 'No hay viajes registrados'}
                 </td>
               </tr>
@@ -126,7 +127,25 @@ export default function RidesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
+                    {ride.final_fare_cup != null ? (
+                      <>
+                        <span>{formatCUP(ride.final_fare_cup)}</span>
+                        {ride.final_fare_cup !== ride.estimated_fare_cup && (
+                          <span className="text-xs text-neutral-400 ml-1 line-through">
+                            {formatCUP(ride.estimated_fare_cup)}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-neutral-400">{formatCUP(ride.estimated_fare_cup)} (est.)</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-500">
+                    {ride.actual_distance_m != null
+                      ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
+                      : ride.estimated_distance_m > 0
+                        ? <span className="text-neutral-400">{(ride.estimated_distance_m / 1000).toFixed(1)} km (est.)</span>
+                        : '—'}
                   </td>
                   <td className="px-4 py-3 text-neutral-500">
                     {ride.payment_method === 'cash' ? 'Efectivo' : 'TriciCoin'}
