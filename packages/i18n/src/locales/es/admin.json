@@ -76,11 +76,29 @@
   "wallet_admin": {
     "title": "Wallet / Finanzas",
     "total_tricicoin": "Total TriciCoin en circulación",
+    "tc_in_circulation": "TC en circulación",
     "pending_redemptions": "Canjes pendientes",
+    "pending_amount": "Monto pendiente",
     "adjust_balance": "Ajustar saldo",
     "adjustment_reason": "Motivo del ajuste",
     "view_ledger": "Ver ledger",
-    "process_redemption": "Procesar canje"
+    "process_redemption": "Procesar canje",
+    "tab_redemptions": "Canjes pendientes",
+    "tab_ledger": "Ledger",
+    "driver": "Conductor",
+    "amount": "Monto",
+    "date": "Fecha",
+    "actions": "Acciones",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "confirm_approve": "¿Aprobar este canje?",
+    "reject_reason": "Motivo del rechazo:",
+    "no_redemptions": "Sin canjes pendientes",
+    "no_ledger": "Sin movimientos en el ledger",
+    "description": "Descripción",
+    "type": "Tipo",
+    "ref": "Ref",
+    "error_processing": "Error al procesar el canje"
   },
 
   "settings": {

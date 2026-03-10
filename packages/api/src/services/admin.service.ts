@@ -9,9 +9,11 @@ import type {
   DriverDocument,
   DriverProfile,
   DriverProfileWithUser,
+  LedgerTransaction,
   Ride,
   User,
   Vehicle,
+  WalletRedemption,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -24,7 +26,15 @@ export const adminService = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('get_admin_dashboard_metrics');
     if (error) throw error;
-    return data as {
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? {
+      active_rides: 0,
+      total_rides_today: 0,
+      online_drivers: 0,
+      total_revenue_today: 0,
+      pending_verifications: 0,
+      open_incidents: 0,
+    }) as {
       active_rides: number;
       total_rides_today: number;
       online_drivers: number;
@@ -282,5 +292,115 @@ export const adminService = {
       .range(from, to);
     if (error) throw error;
     return data as AdminAction[];
+  },
+
+  /**
+   * Get wallet system stats for admin overview.
+   */
+  async getWalletStats() {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_admin_wallet_stats');
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? {
+      total_in_circulation: 0,
+      pending_redemptions_count: 0,
+      pending_redemptions_amount: 0,
+    }) as {
+      total_in_circulation: number;
+      pending_redemptions_count: number;
+      pending_redemptions_amount: number;
+    };
+  },
+
+  /**
+   * Get pending redemption requests with driver info.
+   */
+  async getPendingRedemptions(
+    page = 0,
+    pageSize = 20,
+  ): Promise<(WalletRedemption & { driver_name: string })[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('wallet_redemptions')
+      .select(`
+        *,
+        driver_profiles!inner(
+          users!inner(full_name)
+        )
+      `)
+      .eq('status', 'requested')
+      .order('requested_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const dp = row.driver_profiles as Record<string, unknown> | undefined;
+      const usr = dp?.users as Record<string, string> | undefined;
+      return {
+        ...(row as unknown as WalletRedemption),
+        driver_name: usr?.full_name ?? 'Desconocido',
+      };
+    });
+  },
+
+  /**
+   * Approve or reject a redemption request.
+   */
+  async processRedemption(
+    redemptionId: string,
+    adminId: string,
+    action: 'approved' | 'rejected',
+    reason?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+
+    const updatePayload: Record<string, unknown> = {
+      status: action,
+      processed_at: new Date().toISOString(),
+      processed_by: adminId,
+    };
+
+    if (action === 'rejected' && reason) {
+      updatePayload.rejection_reason = reason;
+    }
+
+    const { error } = await supabase
+      .from('wallet_redemptions')
+      .update(updatePayload)
+      .eq('id', redemptionId)
+      .eq('status', 'requested');
+    if (error) throw error;
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: action === 'approved' ? 'approve_redemption' : 'reject_redemption',
+      target_type: 'wallet_redemption',
+      target_id: redemptionId,
+      reason: reason ?? null,
+    });
+  },
+
+  /**
+   * Get all ledger transactions for admin view.
+   */
+  async getAdminTransactions(
+    page = 0,
+    pageSize = 20,
+  ): Promise<LedgerTransaction[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('ledger_transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as LedgerTransaction[];
   },
 };

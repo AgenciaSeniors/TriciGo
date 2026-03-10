@@ -41,7 +41,9 @@
     "recharge": "Top up",
     "transfer": "Transfer",
     "history": "History",
-    "no_transactions": "No transactions yet"
+    "no_transactions": "No transactions yet",
+    "coming_soon": "Coming soon",
+    "no_account": "No wallet yet"
   },
 
   "profile": {

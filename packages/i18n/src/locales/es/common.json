@@ -41,7 +41,9 @@
     "recharge": "Recargar",
     "transfer": "Transferir",
     "history": "Historial",
-    "no_transactions": "No hay movimientos aún"
+    "no_transactions": "No hay movimientos aún",
+    "coming_soon": "Próximamente",
+    "no_account": "No tienes wallet aún"
   },
 
   "profile": {

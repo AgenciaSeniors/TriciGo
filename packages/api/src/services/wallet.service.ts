@@ -36,7 +36,14 @@ export const walletService = {
     const { data, error } = await supabase
       .rpc('get_wallet_summary', { p_user_id: userId });
     if (error) throw error;
-    return data as WalletSummary;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? {
+      available_balance: 0,
+      held_balance: 0,
+      total_earned: 0,
+      total_spent: 0,
+      currency: 'TRC',
+    }) as WalletSummary;
   },
 
   /**

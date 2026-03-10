@@ -76,11 +76,29 @@
   "wallet_admin": {
     "title": "Wallet / Finance",
     "total_tricicoin": "Total TriciCoin in circulation",
+    "tc_in_circulation": "TC in circulation",
     "pending_redemptions": "Pending redemptions",
+    "pending_amount": "Pending amount",
     "adjust_balance": "Adjust balance",
     "adjustment_reason": "Adjustment reason",
     "view_ledger": "View ledger",
-    "process_redemption": "Process redemption"
+    "process_redemption": "Process redemption",
+    "tab_redemptions": "Pending redemptions",
+    "tab_ledger": "Ledger",
+    "driver": "Driver",
+    "amount": "Amount",
+    "date": "Date",
+    "actions": "Actions",
+    "approve": "Approve",
+    "reject": "Reject",
+    "confirm_approve": "Approve this redemption?",
+    "reject_reason": "Rejection reason:",
+    "no_redemptions": "No pending redemptions",
+    "no_ledger": "No ledger entries",
+    "description": "Description",
+    "type": "Type",
+    "ref": "Ref",
+    "error_processing": "Error processing redemption"
   },
 
   "settings": {
