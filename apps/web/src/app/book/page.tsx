@@ -3,19 +3,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 import { HAVANA_PRESETS, formatCUP } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 
-const SERVICE_TYPES: { slug: ServiceTypeSlug; icon: string; label: string }[] = [
-  { slug: 'triciclo_basico', icon: '🛺', label: 'Triciclo' },
-  { slug: 'moto_standard', icon: '🏍️', label: 'Moto' },
-  { slug: 'auto_standard', icon: '🚗', label: 'Auto' },
+const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; icon: string; labelKey: string }[] = [
+  { slug: 'triciclo_basico', icon: '\u{1F6FA}', labelKey: 'book.service_triciclo' },
+  { slug: 'moto_standard', icon: '\u{1F3CD}\uFE0F', labelKey: 'book.service_moto' },
+  { slug: 'auto_standard', icon: '\u{1F697}', labelKey: 'book.service_auto' },
 ];
 
 export default function BookPage() {
   const router = useRouter();
+  const { t } = useTranslation('web');
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
   const [dropoff, setDropoff] = useState<LocationPreset | null>(null);
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
@@ -41,7 +43,7 @@ export default function BookPage() {
       });
       setEstimate(result);
     } catch (err) {
-      setError('No se pudo calcular la tarifa. Intenta de nuevo.');
+      setError(t('book.error_estimate'));
       console.error(err);
     } finally {
       setIsEstimating(false);
@@ -68,11 +70,11 @@ export default function BookPage() {
       });
       router.push(`/track/${ride.id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      const msg = err instanceof Error ? err.message : t('book.error_unknown');
       if (msg.includes('Not authenticated') || msg.includes('Missing')) {
-        setError('Debes iniciar sesión para solicitar un viaje.');
+        setError(t('book.error_auth'));
       } else {
-        setError('No se pudo solicitar el viaje. Intenta de nuevo.');
+        setError(t('book.error_request'));
       }
       console.error(err);
     } finally {
@@ -95,21 +97,21 @@ export default function BookPage() {
           href="/"
           style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}
         >
-          ← Volver
+          {t('book.back')}
         </Link>
 
         <h1 style={{ fontSize: '2rem', fontWeight: 800, marginTop: '1rem', marginBottom: '0.5rem' }}>
-          Solicitar viaje
+          {t('book.title')}
         </h1>
         <p style={{ color: '#888', marginBottom: '2rem' }}>
-          Selecciona las ubicaciones para obtener una estimación de tarifa.
+          {t('book.subtitle')}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Pickup selector */}
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-              Punto de recogida
+              {t('book.pickup_label')}
             </label>
             <select
               value={pickup?.label ?? ''}
@@ -129,7 +131,7 @@ export default function BookPage() {
                 cursor: 'pointer',
               }}
             >
-              <option value="">¿Dónde te recogemos?</option>
+              <option value="">{t('book.pickup_placeholder')}</option>
               {HAVANA_PRESETS.map((p) => (
                 <option key={p.label} value={p.label}>
                   {p.label} — {p.address}
@@ -141,7 +143,7 @@ export default function BookPage() {
           {/* Dropoff selector */}
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-              Destino
+              {t('book.dropoff_label')}
             </label>
             <select
               value={dropoff?.label ?? ''}
@@ -161,7 +163,7 @@ export default function BookPage() {
                 cursor: 'pointer',
               }}
             >
-              <option value="">¿A dónde vas?</option>
+              <option value="">{t('book.dropoff_placeholder')}</option>
               {HAVANA_PRESETS.map((p) => (
                 <option key={p.label} value={p.label}>
                   {p.label} — {p.address}
@@ -173,10 +175,10 @@ export default function BookPage() {
           {/* Service type selector */}
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-              Tipo de servicio
+              {t('book.service_type')}
             </label>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              {SERVICE_TYPES.map((svc) => (
+              {SERVICE_TYPE_KEYS.map((svc) => (
                 <button
                   key={svc.slug}
                   type="button"
@@ -199,7 +201,7 @@ export default function BookPage() {
                   <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.25rem' }}>
                     {svc.icon}
                   </span>
-                  {svc.label}
+                  {t(svc.labelKey)}
                 </button>
               ))}
             </div>
@@ -222,7 +224,7 @@ export default function BookPage() {
               marginTop: '0.5rem',
             }}
           >
-            {isEstimating ? 'Calculando...' : 'Obtener estimación'}
+            {isEstimating ? t('book.estimating') : t('book.get_estimate')}
           </button>
 
           {/* Error message */}
@@ -243,17 +245,17 @@ export default function BookPage() {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.875rem', color: '#666' }}>Tarifa estimada</span>
+                <span style={{ fontSize: '0.875rem', color: '#666' }}>{t('book.estimated_fare')}</span>
                 <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>
                   {formatCUP(estimate.estimated_fare_cup)}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: '#666' }}>
-                <span>📏 {(estimate.estimated_distance_m / 1000).toFixed(1)} km</span>
-                <span>⏱️ {Math.round(estimate.estimated_duration_s / 60)} min</span>
+                <span>{'\u{1F4CF}'} {(estimate.estimated_distance_m / 1000).toFixed(1)} km</span>
+                <span>{'\u23F1\uFE0F'} {Math.round(estimate.estimated_duration_s / 60)} min</span>
                 {estimate.surge_multiplier > 1 && (
                   <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                    ⚡ {estimate.surge_multiplier}x
+                    {'\u26A1'} {estimate.surge_multiplier}x
                   </span>
                 )}
               </div>
@@ -261,7 +263,7 @@ export default function BookPage() {
               {/* Payment method */}
               <div style={{ marginTop: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  Método de pago
+                  {t('book.payment_method')}
                 </label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
@@ -278,7 +280,7 @@ export default function BookPage() {
                       fontWeight: paymentMethod === 'cash' ? 700 : 400,
                     }}
                   >
-                    💵 Efectivo
+                    {'\u{1F4B5}'} {t('book.payment_cash')}
                   </button>
                   <button
                     type="button"
@@ -294,7 +296,7 @@ export default function BookPage() {
                       fontWeight: paymentMethod === 'tricicoin' ? 700 : 400,
                     }}
                   >
-                    🪙 TriciCoin
+                    {'\u{1FA99}'} {t('book.payment_tricicoin')}
                   </button>
                 </div>
               </div>
@@ -316,7 +318,7 @@ export default function BookPage() {
                   marginTop: '1rem',
                 }}
               >
-                {isRequesting ? 'Solicitando...' : 'Solicitar viaje'}
+                {isRequesting ? t('book.requesting') : t('book.request_ride')}
               </button>
             </div>
           )}
@@ -333,7 +335,7 @@ export default function BookPage() {
             textAlign: 'center',
           }}
         >
-          Para una experiencia completa, descarga la app de TriciGo.
+          {t('book.download_cta')}
         </p>
       </div>
     </main>

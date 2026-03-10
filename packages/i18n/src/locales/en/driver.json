@@ -56,7 +56,18 @@
     "action_start": "Start trip",
     "action_complete": "Complete trip",
     "tip_received": "You received a tip of {{amount}}!",
-    "surge_active": "Surge pricing {{multiplier}}x active"
+    "surge_active": "Surge pricing {{multiplier}}x active",
+    "not_found": "Trip not found",
+    "distance": "Distance",
+    "duration": "Duration",
+    "payment": "Payment",
+    "cash": "Cash",
+    "tricicoin": "TriciCoin",
+    "created": "Created",
+    "accepted": "Accepted",
+    "completed_at": "Completed",
+    "canceled_at": "Canceled",
+    "platform_commission_pct": "Platform commission ({{pct}}%)"
   },
 
   "earnings": {

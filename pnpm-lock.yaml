@@ -320,6 +320,9 @@ importers:
       '@tricigo/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@tricigo/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@tricigo/types':
         specifier: workspace:*
         version: link:../../packages/types

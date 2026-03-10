@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, Alert, Pressable } from 'react-native';
+import { View, FlatList, ScrollView, Alert, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
@@ -10,6 +10,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService } from '@tricigo/api';
+import { HAVANA_PRESETS } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { CustomerProfile, SavedLocation } from '@tricigo/types';
 
@@ -21,7 +22,7 @@ export default function SavedLocationsScreen() {
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [newLabel, setNewLabel] = useState('');
-  const [newAddress, setNewAddress] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -33,15 +34,21 @@ export default function SavedLocationsScreen() {
   }, [user]);
 
   const handleAdd = async () => {
-    if (!profile || !newLabel.trim() || !newAddress.trim()) return;
+    if (!profile || !newLabel.trim() || selectedPreset === null) return;
     setSaving(true);
     try {
-      const updated = [...locations, { label: newLabel.trim(), address: newAddress.trim(), latitude: 0, longitude: 0 }];
+      const preset = HAVANA_PRESETS[selectedPreset]!;
+      const updated = [...locations, {
+        label: newLabel.trim(),
+        address: preset.address,
+        latitude: preset.latitude,
+        longitude: preset.longitude,
+      }];
       await customerService.updateProfile(profile.id, { saved_locations: updated });
       setLocations(updated);
       setSheetVisible(false);
       setNewLabel('');
-      setNewAddress('');
+      setSelectedPreset(null);
     } catch {
       Alert.alert('Error', t('errors.generic'));
     } finally {
@@ -121,18 +128,29 @@ export default function SavedLocationsScreen() {
           value={newLabel}
           onChangeText={setNewLabel}
         />
-        <Input
-          label={t('profile.location_address')}
-          placeholder="Calle 23 #456, Vedado"
-          value={newAddress}
-          onChangeText={setNewAddress}
-        />
+        <Text variant="bodySmall" color="secondary" className="mt-3 mb-2">
+          {t('profile.location_address')}
+        </Text>
+        <ScrollView style={{ maxHeight: 220 }} className="mb-4">
+          {HAVANA_PRESETS.map((preset, idx) => (
+            <Pressable
+              key={idx}
+              onPress={() => setSelectedPreset(idx)}
+              className={`p-3 rounded-lg mb-2 border ${
+                selectedPreset === idx ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+              }`}
+            >
+              <Text variant="body">{preset.label}</Text>
+              <Text variant="bodySmall" color="secondary">{preset.address}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
         <Button
           title={saving ? '...' : t('save')}
           variant="primary"
           size="lg"
           fullWidth
-          disabled={saving || !newLabel.trim() || !newAddress.trim()}
+          disabled={saving || !newLabel.trim() || selectedPreset === null}
           onPress={handleAdd}
         />
       </BottomSheet>

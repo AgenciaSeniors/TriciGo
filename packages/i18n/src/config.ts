@@ -11,12 +11,14 @@ import esCommon from './locales/es/common.json';
 import esRider from './locales/es/rider.json';
 import esDriver from './locales/es/driver.json';
 import esAdmin from './locales/es/admin.json';
+import esWeb from './locales/es/web.json';
 
 // English translations
 import enCommon from './locales/en/common.json';
 import enRider from './locales/en/rider.json';
 import enDriver from './locales/en/driver.json';
 import enAdmin from './locales/en/admin.json';
+import enWeb from './locales/en/web.json';
 
 export const defaultNS = 'common';
 export const supportedLanguages = ['es', 'en'] as const;
@@ -28,12 +30,14 @@ export const resources = {
     rider: esRider,
     driver: esDriver,
     admin: esAdmin,
+    web: esWeb,
   },
   en: {
     common: enCommon,
     rider: enRider,
     driver: enDriver,
     admin: enAdmin,
+    web: enWeb,
   },
 } as const;
 
@@ -47,7 +51,7 @@ export function initI18n(detectedLanguage?: string) {
     lng,
     fallbackLng: 'es',
     defaultNS,
-    ns: ['common', 'rider', 'driver', 'admin'],
+    ns: ['common', 'rider', 'driver', 'admin', 'web'],
     interpolation: {
       escapeValue: false,
     },

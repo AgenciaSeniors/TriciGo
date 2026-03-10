@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tricigo/api": "workspace:*",
+    "@tricigo/i18n": "workspace:*",
     "@tricigo/types": "workspace:*",
     "@tricigo/utils": "workspace:*",
     "next": "15.5.12",

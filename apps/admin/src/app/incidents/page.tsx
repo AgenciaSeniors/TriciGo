@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
+import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 
 const PAGE_SIZE = 20;
 
-const STATUS_FILTERS = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Abiertos', value: 'open' },
-  { label: 'Investigando', value: 'investigating' },
-  { label: 'Resueltos', value: 'resolved' },
+const STATUS_FILTER_KEYS = [
+  { labelKey: 'incidents.filter_all', value: 'all' },
+  { labelKey: 'incidents.filter_open', value: 'open' },
+  { labelKey: 'incidents.filter_investigating', value: 'investigating' },
+  { labelKey: 'incidents.filter_resolved', value: 'resolved' },
 ] as const;
 
 const STATUS_BADGE: Record<string, string> = {
@@ -18,14 +19,6 @@ const STATUS_BADGE: Record<string, string> = {
   investigating: 'bg-yellow-100 text-yellow-700',
   resolved: 'bg-green-100 text-green-700',
   dismissed: 'bg-neutral-100 text-neutral-500',
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  sos: 'SOS',
-  harassment: 'Acoso',
-  accident: 'Accidente',
-  fraud: 'Fraude',
-  other: 'Otro',
 };
 
 const SEVERITY_BADGE: Record<string, string> = {
@@ -49,10 +42,16 @@ interface Incident {
 
 export default function IncidentsPage() {
   const { userId: adminUserId } = useAdminUser();
+  const { t } = useTranslation('admin');
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const getTypeLabel = (type: string) => {
+    const key = `incidents.type_${type}`;
+    return t(key, { defaultValue: type });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -84,11 +83,11 @@ export default function IncidentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Incidentes</h1>
+      <h1 className="text-2xl font-bold mb-6">{t('incidents.title')}</h1>
 
       {/* Filters */}
       <div className="flex gap-2 mb-6">
-        {STATUS_FILTERS.map((f) => (
+        {STATUS_FILTER_KEYS.map((f) => (
           <button
             key={f.value}
             onClick={() => { setPage(0); setStatusFilter(f.value); }}
@@ -98,7 +97,7 @@ export default function IncidentsPage() {
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
           >
-            {f.label}
+            {t(f.labelKey)}
           </button>
         ))}
       </div>
@@ -108,33 +107,33 @@ export default function IncidentsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-neutral-50 border-b">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Tipo</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Severidad</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Estado</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Viaje</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Descripción</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Fecha</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">Acciones</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_type')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_severity')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_status')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_ride')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_description')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_date')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-neutral-400">
-                  Cargando...
+                  {t('incidents.loading')}
                 </td>
               </tr>
             ) : incidents.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-neutral-400">
-                  No hay incidentes
+                  {t('incidents.no_incidents')}
                 </td>
               </tr>
             ) : (
               incidents.map((incident) => (
                 <tr key={incident.id} className="border-b hover:bg-neutral-50">
                   <td className="px-4 py-3 text-sm">
-                    {TYPE_LABEL[incident.type] ?? incident.type}
+                    {getTypeLabel(incident.type)}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${SEVERITY_BADGE[incident.severity] ?? 'bg-neutral-100'}`}>
@@ -166,7 +165,7 @@ export default function IncidentsPage() {
                         onClick={() => handleStatusChange(incident.id, 'investigating')}
                         className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full hover:bg-yellow-200"
                       >
-                        Investigar
+                        {t('incidents.investigate')}
                       </button>
                     )}
                     {incident.status === 'investigating' && (
@@ -174,11 +173,11 @@ export default function IncidentsPage() {
                         onClick={() => handleStatusChange(incident.id, 'resolved')}
                         className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full hover:bg-green-200"
                       >
-                        Resolver
+                        {t('incidents.resolve')}
                       </button>
                     )}
                     {incident.status === 'resolved' && (
-                      <span className="text-xs text-neutral-400">Resuelto</span>
+                      <span className="text-xs text-neutral-400">{t('incidents.resolved')}</span>
                     )}
                   </td>
                 </tr>
@@ -195,14 +194,14 @@ export default function IncidentsPage() {
           onClick={() => setPage((p) => p - 1)}
           className="px-4 py-2 rounded-lg text-sm bg-neutral-100 disabled:opacity-30"
         >
-          Anterior
+          {t('incidents.previous')}
         </button>
         <button
           disabled={incidents.length < PAGE_SIZE}
           onClick={() => setPage((p) => p + 1)}
           className="px-4 py-2 rounded-lg text-sm bg-neutral-100 disabled:opacity-30"
         >
-          Siguiente
+          {t('incidents.next')}
         </button>
       </div>
     </div>

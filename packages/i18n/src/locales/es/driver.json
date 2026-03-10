@@ -56,7 +56,18 @@
     "action_start": "Iniciar viaje",
     "action_complete": "Finalizar viaje",
     "tip_received": "¡Recibiste una propina de {{amount}}!",
-    "surge_active": "Tarifa dinámica {{multiplier}}x activa"
+    "surge_active": "Tarifa dinámica {{multiplier}}x activa",
+    "not_found": "Viaje no encontrado",
+    "distance": "Distancia",
+    "duration": "Duración",
+    "payment": "Pago",
+    "cash": "Efectivo",
+    "tricicoin": "TriciCoin",
+    "created": "Creado",
+    "accepted": "Aceptado",
+    "completed_at": "Completado",
+    "canceled_at": "Cancelado",
+    "platform_commission_pct": "Comisión plataforma ({{pct}}%)"
   },
 
   "earnings": {

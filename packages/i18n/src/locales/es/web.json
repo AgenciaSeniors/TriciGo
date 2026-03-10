@@ -1,0 +1,48 @@
+{
+  "nav": {
+    "book_ride": "Solicitar viaje",
+    "login": "Iniciar sesión"
+  },
+  "footer": {
+    "location": "La Habana, Cuba",
+    "book_ride": "Solicitar viaje",
+    "login": "Iniciar sesión",
+    "download": "Descarga la app para la experiencia completa"
+  },
+  "home": {
+    "tagline": "Pide tu viaje en La Habana. Rápido, seguro y al mejor precio.",
+    "cta": "Solicitar viaje",
+    "feature_triciclos": "Triciclos",
+    "feature_triciclos_desc": "El transporte emblemático de La Habana",
+    "feature_motos": "Motos",
+    "feature_motos_desc": "Rápido para distancias cortas",
+    "feature_autos": "Autos",
+    "feature_autos_desc": "Comodidad para trayectos largos"
+  },
+  "book": {
+    "back": "← Volver",
+    "title": "Solicitar viaje",
+    "subtitle": "Selecciona las ubicaciones para obtener una estimación de tarifa.",
+    "pickup_label": "Punto de recogida",
+    "pickup_placeholder": "¿Dónde te recogemos?",
+    "dropoff_label": "Destino",
+    "dropoff_placeholder": "¿A dónde vas?",
+    "service_type": "Tipo de servicio",
+    "service_triciclo": "Triciclo",
+    "service_moto": "Moto",
+    "service_auto": "Auto",
+    "estimating": "Calculando...",
+    "get_estimate": "Obtener estimación",
+    "estimated_fare": "Tarifa estimada",
+    "payment_method": "Método de pago",
+    "payment_cash": "Efectivo",
+    "payment_tricicoin": "TriciCoin",
+    "requesting": "Solicitando...",
+    "request_ride": "Solicitar viaje",
+    "download_cta": "Para una experiencia completa, descarga la app de TriciGo.",
+    "error_estimate": "No se pudo calcular la tarifa. Intenta de nuevo.",
+    "error_auth": "Debes iniciar sesión para solicitar un viaje.",
+    "error_request": "No se pudo solicitar el viaje. Intenta de nuevo.",
+    "error_unknown": "Error desconocido"
+  }
+}

@@ -7,7 +7,11 @@
     "wallet": "Wallet / Finance",
     "settings": "Settings",
     "audit": "Audit",
-    "reports": "Reports"
+    "reports": "Reports",
+    "incidents": "Incidents",
+    "support": "Support",
+    "fraud": "Fraud",
+    "admin_panel": "Admin Panel"
   },
 
   "dashboard": {
@@ -123,5 +127,59 @@
     "zones_desc": "Operational areas and surge multipliers",
     "promotions_desc": "Promotional codes and discounts",
     "flags_desc": "Enable or disable system features"
+  },
+
+  "fraud": {
+    "title": "Fraud Alerts",
+    "unresolved_count": "{{count}} unresolved alerts",
+    "filter_unresolved": "Unresolved",
+    "filter_all": "All",
+    "col_date": "Date",
+    "col_type": "Type",
+    "col_severity": "Severity",
+    "col_details": "Details",
+    "col_status": "Status",
+    "col_actions": "Actions",
+    "loading": "Loading...",
+    "no_alerts": "No alerts",
+    "status_resolved": "Resolved",
+    "status_pending": "Pending",
+    "resolve": "Resolve",
+    "resolve_title": "Resolve alert",
+    "resolve_note_placeholder": "Resolution note (optional)...",
+    "cancel": "Cancel",
+    "resolving": "Resolving...",
+    "mark_resolved": "Mark as resolved",
+    "type_unusual_transfer": "Unusual transfers",
+    "type_rapid_recharges": "Rapid recharges",
+    "type_suspicious_cancellations": "Suspicious cancellations",
+    "type_velocity_anomaly": "Velocity anomaly"
+  },
+
+  "incidents": {
+    "title": "Incidents",
+    "filter_all": "All",
+    "filter_open": "Open",
+    "filter_investigating": "Investigating",
+    "filter_resolved": "Resolved",
+    "col_type": "Type",
+    "col_severity": "Severity",
+    "col_status": "Status",
+    "col_ride": "Ride",
+    "col_description": "Description",
+    "col_date": "Date",
+    "col_actions": "Actions",
+    "loading": "Loading...",
+    "no_incidents": "No incidents",
+    "type_sos": "SOS",
+    "type_harassment": "Harassment",
+    "type_accident": "Accident",
+    "type_fraud": "Fraud",
+    "type_other": "Other",
+    "investigate": "Investigate",
+    "resolve": "Resolve",
+    "resolved": "Resolved",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

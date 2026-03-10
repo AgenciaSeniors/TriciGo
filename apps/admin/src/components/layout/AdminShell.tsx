@@ -1,16 +1,32 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { initI18n } from '@tricigo/i18n';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+
+let i18nInitialized = false;
 
 /**
  * Conditionally renders the admin chrome (sidebar + header).
  * The /login page renders without chrome.
+ * Also initialises i18n for the admin app.
  */
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
+  const [ready, setReady] = useState(i18nInitialized);
+
+  useEffect(() => {
+    if (!i18nInitialized) {
+      initI18n();
+      i18nInitialized = true;
+      setReady(true);
+    }
+  }, []);
+
+  if (!ready) return null;
 
   if (isLoginPage) {
     return <>{children}</>;

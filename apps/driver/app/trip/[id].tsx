@@ -60,7 +60,7 @@ export default function TripDetailScreen() {
           <Pressable onPress={() => router.back()} className="mb-4">
             <Text variant="body" color="accent">← {t('trip.back_to_home', { defaultValue: 'Volver' })}</Text>
           </Pressable>
-          <Text variant="body" color="inverse" className="opacity-50">Viaje no encontrado</Text>
+          <Text variant="body" color="inverse" className="opacity-50">{t('trip.not_found')}</Text>
         </View>
       </Screen>
     );
@@ -68,7 +68,7 @@ export default function TripDetailScreen() {
 
   const fare = ride.final_fare_cup ?? ride.estimated_fare_cup;
   const isCompleted = ride.status === 'completed';
-  const commissionRate = 0.15;
+  const commissionRate = pricing?.commission_rate ?? 0.15;
   const commissionAmount = Math.round(fare * commissionRate);
   const netEarnings = fare - commissionAmount;
   const isCash = ride.payment_method === 'cash' || ride.payment_method === 'mixed';
@@ -128,7 +128,7 @@ export default function TripDetailScreen() {
           </View>
           <View className="flex-row justify-between mb-2">
             <Text variant="bodySmall" color="inverse" className="opacity-60">
-              {t('trip.platform_commission', { defaultValue: 'Comisión plataforma (15%)' })}
+              {t('trip.platform_commission_pct', { pct: Math.round(commissionRate * 100) })}
             </Text>
             <Text variant="bodySmall" className="text-red-400">-{formatCUP(commissionAmount)}</Text>
           </View>
@@ -153,21 +153,21 @@ export default function TripDetailScreen() {
           <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
             <View className="flex-row gap-6">
               <View>
-                <Text variant="caption" color="inverse" className="opacity-50">Distancia</Text>
+                <Text variant="caption" color="inverse" className="opacity-50">{t('trip.distance')}</Text>
                 <Text variant="body" color="inverse" className="font-semibold">
                   {((ride.actual_distance_m ?? ride.estimated_distance_m) / 1000).toFixed(1)} km
                 </Text>
               </View>
               <View>
-                <Text variant="caption" color="inverse" className="opacity-50">Duración</Text>
+                <Text variant="caption" color="inverse" className="opacity-50">{t('trip.duration')}</Text>
                 <Text variant="body" color="inverse" className="font-semibold">
                   {Math.round((ride.actual_duration_s ?? ride.estimated_duration_s) / 60)} min
                 </Text>
               </View>
               <View>
-                <Text variant="caption" color="inverse" className="opacity-50">Pago</Text>
+                <Text variant="caption" color="inverse" className="opacity-50">{t('trip.payment')}</Text>
                 <Text variant="body" color="inverse" className="font-semibold">
-                  {ride.payment_method === 'cash' ? 'Efectivo' : 'TriciCoin'}
+                  {ride.payment_method === 'cash' ? t('trip.cash') : t('trip.tricicoin')}
                 </Text>
               </View>
             </View>
@@ -177,24 +177,24 @@ export default function TripDetailScreen() {
         {/* Timestamps */}
         <Card variant="filled" padding="md" className="bg-neutral-800">
           <View className="flex-row justify-between mb-1">
-            <Text variant="caption" color="inverse" className="opacity-50">Creado</Text>
+            <Text variant="caption" color="inverse" className="opacity-50">{t('trip.created')}</Text>
             <Text variant="caption" color="inverse">{new Date(ride.created_at).toLocaleString('es-CU')}</Text>
           </View>
           {ride.accepted_at && (
             <View className="flex-row justify-between mb-1">
-              <Text variant="caption" color="inverse" className="opacity-50">Aceptado</Text>
+              <Text variant="caption" color="inverse" className="opacity-50">{t('trip.accepted')}</Text>
               <Text variant="caption" color="inverse">{new Date(ride.accepted_at).toLocaleString('es-CU')}</Text>
             </View>
           )}
           {ride.completed_at && (
             <View className="flex-row justify-between mb-1">
-              <Text variant="caption" color="inverse" className="opacity-50">Completado</Text>
+              <Text variant="caption" color="inverse" className="opacity-50">{t('trip.completed_at')}</Text>
               <Text variant="caption" color="inverse">{new Date(ride.completed_at).toLocaleString('es-CU')}</Text>
             </View>
           )}
           {ride.canceled_at && (
             <View className="flex-row justify-between mb-1">
-              <Text variant="caption" color="inverse" className="opacity-50">Cancelado</Text>
+              <Text variant="caption" color="inverse" className="opacity-50">{t('trip.canceled_at')}</Text>
               <Text variant="caption" color="inverse">{new Date(ride.canceled_at).toLocaleString('es-CU')}</Text>
             </View>
           )}

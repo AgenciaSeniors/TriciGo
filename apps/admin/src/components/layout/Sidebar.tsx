@@ -2,21 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: '📊' },
-  { href: '/drivers', label: 'Conductores', icon: '🛺' },
-  { href: '/rides', label: 'Viajes', icon: '🗺️' },
-  { href: '/users', label: 'Usuarios', icon: '👥' },
-  { href: '/wallet', label: 'Wallet', icon: '💰' },
-  { href: '/incidents', label: 'Incidentes', icon: '🚨' },
-  { href: '/support', label: 'Soporte', icon: '🎧' },
-  { href: '/fraud', label: 'Fraude', icon: '🛡️' },
-  { href: '/settings', label: 'Configuración', icon: '⚙️' },
+  { href: '/', labelKey: 'sidebar.dashboard', icon: '📊' },
+  { href: '/drivers', labelKey: 'sidebar.drivers', icon: '🛺' },
+  { href: '/rides', labelKey: 'sidebar.rides', icon: '🗺️' },
+  { href: '/users', labelKey: 'sidebar.users', icon: '👥' },
+  { href: '/wallet', labelKey: 'sidebar.wallet', icon: '💰' },
+  { href: '/incidents', labelKey: 'sidebar.incidents', icon: '🚨' },
+  { href: '/support', labelKey: 'sidebar.support', icon: '🎧' },
+  { href: '/fraud', labelKey: 'sidebar.fraud', icon: '🛡️' },
+  { href: '/settings', labelKey: 'sidebar.settings', icon: '⚙️' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { t } = useTranslation('admin');
 
   return (
     <aside className="w-64 bg-neutral-950 text-white flex flex-col">
@@ -27,7 +29,7 @@ export function Sidebar() {
           alt="TriciGo"
           className="h-8 w-auto"
         />
-        <p className="text-xs text-neutral-500 mt-1">Panel de administración</p>
+        <p className="text-xs text-neutral-500 mt-1">{t('sidebar.admin_panel')}</p>
       </div>
 
       {/* Navigation */}
@@ -47,7 +49,7 @@ export function Sidebar() {
               `}
             >
               <span className="text-lg">{item.icon}</span>
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}

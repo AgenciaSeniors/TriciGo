@@ -1,0 +1,48 @@
+{
+  "nav": {
+    "book_ride": "Book a ride",
+    "login": "Sign in"
+  },
+  "footer": {
+    "location": "Havana, Cuba",
+    "book_ride": "Book a ride",
+    "login": "Sign in",
+    "download": "Download the app for the full experience"
+  },
+  "home": {
+    "tagline": "Book your ride in Havana. Fast, safe, and affordable.",
+    "cta": "Book a ride",
+    "feature_triciclos": "Triciclos",
+    "feature_triciclos_desc": "Havana's iconic transport",
+    "feature_motos": "Motos",
+    "feature_motos_desc": "Fast for short distances",
+    "feature_autos": "Autos",
+    "feature_autos_desc": "Comfort for longer trips"
+  },
+  "book": {
+    "back": "← Back",
+    "title": "Book a ride",
+    "subtitle": "Select locations to get a fare estimate.",
+    "pickup_label": "Pickup point",
+    "pickup_placeholder": "Where should we pick you up?",
+    "dropoff_label": "Destination",
+    "dropoff_placeholder": "Where are you going?",
+    "service_type": "Service type",
+    "service_triciclo": "Triciclo",
+    "service_moto": "Moto",
+    "service_auto": "Auto",
+    "estimating": "Calculating...",
+    "get_estimate": "Get estimate",
+    "estimated_fare": "Estimated fare",
+    "payment_method": "Payment method",
+    "payment_cash": "Cash",
+    "payment_tricicoin": "TriciCoin",
+    "requesting": "Requesting...",
+    "request_ride": "Book ride",
+    "download_cta": "For the full experience, download the TriciGo app.",
+    "error_estimate": "Could not calculate the fare. Please try again.",
+    "error_auth": "You must sign in to request a ride.",
+    "error_request": "Could not request the ride. Please try again.",
+    "error_unknown": "Unknown error"
+  }
+}

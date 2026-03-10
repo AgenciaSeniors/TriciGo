@@ -1,6 +1,17 @@
+'use client';
+
 import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 
 export default function HomePage() {
+  const { t } = useTranslation('web');
+
+  const features = [
+    { icon: '\u{1F6FA}', titleKey: 'home.feature_triciclos', descKey: 'home.feature_triciclos_desc' },
+    { icon: '\u{1F3CD}\uFE0F', titleKey: 'home.feature_motos', descKey: 'home.feature_motos_desc' },
+    { icon: '\u{1F697}', titleKey: 'home.feature_autos', descKey: 'home.feature_autos_desc' },
+  ];
+
   return (
     <main
       style={{
@@ -31,7 +42,7 @@ export default function HomePage() {
             marginBottom: '2rem',
           }}
         >
-          Pide tu viaje en La Habana. Rápido, seguro y al mejor precio.
+          {t('home.tagline')}
         </p>
         <Link
           href="/book"
@@ -47,7 +58,7 @@ export default function HomePage() {
             transition: 'background 0.2s',
           }}
         >
-          Solicitar viaje
+          {t('home.cta')}
         </Link>
       </div>
 
@@ -62,13 +73,9 @@ export default function HomePage() {
           width: '100%',
         }}
       >
-        {[
-          { icon: '🛺', title: 'Triciclos', desc: 'El transporte emblemático de La Habana' },
-          { icon: '🏍️', title: 'Motos', desc: 'Rápido para distancias cortas' },
-          { icon: '🚗', title: 'Autos', desc: 'Comodidad para trayectos largos' },
-        ].map((f) => (
+        {features.map((f) => (
           <div
-            key={f.title}
+            key={f.titleKey}
             style={{
               textAlign: 'center',
               padding: '1.5rem',
@@ -77,9 +84,9 @@ export default function HomePage() {
             }}
           >
             <span style={{ fontSize: '2rem' }}>{f.icon}</span>
-            <h3 style={{ fontWeight: 700, marginTop: '0.5rem' }}>{f.title}</h3>
+            <h3 style={{ fontWeight: 700, marginTop: '0.5rem' }}>{t(f.titleKey)}</h3>
             <p style={{ color: '#888', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-              {f.desc}
+              {t(f.descKey)}
             </p>
           </div>
         ))}

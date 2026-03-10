@@ -7,7 +7,11 @@
     "wallet": "Wallet / Finanzas",
     "settings": "Configuración",
     "audit": "Auditoría",
-    "reports": "Reportes"
+    "reports": "Reportes",
+    "incidents": "Incidentes",
+    "support": "Soporte",
+    "fraud": "Fraude",
+    "admin_panel": "Panel de administración"
   },
 
   "dashboard": {
@@ -123,5 +127,59 @@
     "zones_desc": "Áreas de operación y multiplicadores surge",
     "promotions_desc": "Códigos promocionales y descuentos",
     "flags_desc": "Activar o desactivar funcionalidades del sistema"
+  },
+
+  "fraud": {
+    "title": "Alertas de fraude",
+    "unresolved_count": "{{count}} alertas sin resolver",
+    "filter_unresolved": "Sin resolver",
+    "filter_all": "Todas",
+    "col_date": "Fecha",
+    "col_type": "Tipo",
+    "col_severity": "Severidad",
+    "col_details": "Detalles",
+    "col_status": "Estado",
+    "col_actions": "Acciones",
+    "loading": "Cargando...",
+    "no_alerts": "Sin alertas",
+    "status_resolved": "Resuelto",
+    "status_pending": "Pendiente",
+    "resolve": "Resolver",
+    "resolve_title": "Resolver alerta",
+    "resolve_note_placeholder": "Nota de resolución (opcional)...",
+    "cancel": "Cancelar",
+    "resolving": "Resolviendo...",
+    "mark_resolved": "Marcar como resuelto",
+    "type_unusual_transfer": "Transferencias inusuales",
+    "type_rapid_recharges": "Recargas rápidas",
+    "type_suspicious_cancellations": "Cancelaciones sospechosas",
+    "type_velocity_anomaly": "Anomalía de velocidad"
+  },
+
+  "incidents": {
+    "title": "Incidentes",
+    "filter_all": "Todos",
+    "filter_open": "Abiertos",
+    "filter_investigating": "Investigando",
+    "filter_resolved": "Resueltos",
+    "col_type": "Tipo",
+    "col_severity": "Severidad",
+    "col_status": "Estado",
+    "col_ride": "Viaje",
+    "col_description": "Descripción",
+    "col_date": "Fecha",
+    "col_actions": "Acciones",
+    "loading": "Cargando...",
+    "no_incidents": "No hay incidentes",
+    "type_sos": "SOS",
+    "type_harassment": "Acoso",
+    "type_accident": "Accidente",
+    "type_fraud": "Fraude",
+    "type_other": "Otro",
+    "investigate": "Investigar",
+    "resolve": "Resolver",
+    "resolved": "Resuelto",
+    "previous": "Anterior",
+    "next": "Siguiente"
   }
 }
