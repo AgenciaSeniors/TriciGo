@@ -40,6 +40,7 @@ async function main() {
     '00011_dynamic_pricing_tips.sql',
     '00012_score_matching.sql',
     '00013_fraud_wallet_freeze.sql',
+    '00014_support_mensajeria.sql',
   ];
 
   for (const file of migrations) {
