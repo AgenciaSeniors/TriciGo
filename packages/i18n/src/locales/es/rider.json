@@ -72,7 +72,13 @@
     "ride_detail": "Detalle del viaje",
     "trip_stats": "Estadísticas del viaje",
     "driver_info": "Información del conductor",
-    "timestamps": "Tiempos"
+    "timestamps": "Tiempos",
+    "surge_active": "Tarifa dinámica {{multiplier}}x",
+    "surge_info": "Hay alta demanda en esta zona",
+    "tip_title": "¿Dejar propina?",
+    "tip_custom": "Otra cantidad",
+    "tip_sent": "¡Propina de {{amount}} enviada!",
+    "tip_skip": "No, gracias"
   },
 
   "locations": {

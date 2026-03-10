@@ -265,6 +265,25 @@ function TripCompleteView() {
         )}
       </Card>
 
+      {/* Tip received */}
+      {(activeTrip.tip_amount ?? 0) > 0 && (
+        <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
+          <View className="flex-row justify-between items-center">
+            <Text variant="body" color="inverse">🎉 {t('trip.tip_received', { amount: formatCUP(activeTrip.tip_amount!), defaultValue: '¡Recibiste una propina!' })}</Text>
+            <Text variant="body" color="accent" className="font-bold">
+              +{formatCUP(activeTrip.tip_amount!)}
+            </Text>
+          </View>
+        </Card>
+      )}
+
+      {/* Surge indicator */}
+      {(activeTrip.surge_multiplier ?? 1) > 1 && (
+        <Text variant="caption" color="inverse" className="opacity-50 text-center mb-4">
+          {t('trip.surge_active', { multiplier: activeTrip.surge_multiplier, defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa` })}
+        </Text>
+      )}
+
       <Button
         title={t('trip.back_to_home', { defaultValue: 'Volver al inicio' })}
         size="lg"

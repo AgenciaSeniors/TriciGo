@@ -11,6 +11,8 @@ import type {
   FareEstimate,
   ServiceTypeConfig,
   Promotion,
+  Tip,
+  SurgeZone,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
@@ -477,5 +479,63 @@ export const rideService = {
         },
       )
       .subscribe();
+  },
+
+  // ==================== TIPS ====================
+
+  /**
+   * Add a tip to a completed ride (100% to driver, no commission).
+   */
+  async addTip(rideId: string, fromUserId: string, amount: number): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('add_tip', {
+      p_ride_id: rideId,
+      p_from_user_id: fromUserId,
+      p_amount: amount,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * Get tips for a ride.
+   */
+  async getTipsForRide(rideId: string): Promise<Tip[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('tips')
+      .select('*')
+      .eq('ride_id', rideId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data as Tip[];
+  },
+
+  // ==================== SURGE ====================
+
+  /**
+   * Get active surge multiplier for a zone.
+   */
+  async getSurgeForZone(zoneId: string): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('calculate_surge', {
+      p_zone_id: zoneId,
+    });
+    if (error) throw error;
+    return (data as number) ?? 1.0;
+  },
+
+  /**
+   * Get all active surge zones.
+   */
+  async getActiveSurges(): Promise<SurgeZone[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('surge_zones')
+      .select('*')
+      .eq('active', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data as SurgeZone[];
   },
 };

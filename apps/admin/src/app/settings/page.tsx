@@ -20,6 +20,12 @@ const sections = [
     icon: '🗺️',
   },
   {
+    href: '/settings/surge-zones',
+    title: 'Tarifa dinámica (Surge)',
+    description: 'Crear reglas de surge por zona y período de tiempo.',
+    icon: '⚡',
+  },
+  {
     href: '/settings/promotions',
     title: 'Promociones',
     description: 'Crear y gestionar códigos promocionales y bonos.',

@@ -54,7 +54,9 @@
     "action_en_route": "On the way to passenger",
     "action_arrived": "Arrived at pickup",
     "action_start": "Start trip",
-    "action_complete": "Complete trip"
+    "action_complete": "Complete trip",
+    "tip_received": "You received a tip of {{amount}}!",
+    "surge_active": "Surge pricing {{multiplier}}x active"
   },
 
   "earnings": {

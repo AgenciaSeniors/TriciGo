@@ -72,7 +72,13 @@
     "ride_detail": "Ride detail",
     "trip_stats": "Trip stats",
     "driver_info": "Driver info",
-    "timestamps": "Timestamps"
+    "timestamps": "Timestamps",
+    "surge_active": "Surge pricing {{multiplier}}x",
+    "surge_info": "High demand in this area",
+    "tip_title": "Leave a tip?",
+    "tip_custom": "Custom amount",
+    "tip_sent": "Tip of {{amount}} sent!",
+    "tip_skip": "No thanks"
   },
 
   "locations": {

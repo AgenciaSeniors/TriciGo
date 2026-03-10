@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Pressable, TextInput, Share } from 'react-native';
+import { View, Pressable, TextInput, Share, Alert } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
+import { rideService } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -20,11 +21,28 @@ export function RideCompleteView() {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [tipSent, setTipSent] = useState(false);
+  const [sendingTip, setSendingTip] = useState(false);
 
   if (!activeRide) return null;
 
   const fare = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
   const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;
+
+  const handleTip = async (amount: number) => {
+    if (!userId || !activeRide) return;
+    setSendingTip(true);
+    try {
+      await rideService.addTip(activeRide.id, userId, amount);
+      setTipSent(true);
+      Alert.alert(t('ride.tip_sent', { amount: formatCUP(amount) }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error';
+      Alert.alert('Error', msg);
+    } finally {
+      setSendingTip(false);
+    }
+  };
 
   const handleSubmitReview = async () => {
     if (!selectedRating || !userId || !rideWithDriver?.driver_user_id) return;
@@ -115,6 +133,32 @@ export function RideCompleteView() {
           onPress={() => Share.share({ message: `https://tricigo.app/ride/${activeRide.share_token}` })}
           className="mb-4"
         />
+      )}
+
+      {/* Tip section */}
+      {hasDriver && activeRide.payment_method !== 'cash' && !tipSent && (
+        <View className="w-full mb-4">
+          <Text variant="bodySmall" color="secondary" className="text-center mb-2">
+            {t('ride.tip_title')}
+          </Text>
+          <View className="flex-row gap-2 justify-center">
+            {[5000, 10000, 20000].map((amount) => (
+              <Pressable
+                key={amount}
+                className="px-4 py-2 rounded-full bg-neutral-100"
+                onPress={() => handleTip(amount)}
+                disabled={sendingTip}
+              >
+                <Text variant="bodySmall">{formatCUP(amount)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+      {tipSent && (
+        <View className="w-full mb-4 items-center">
+          <Text variant="bodySmall" className="text-green-600">✓ Propina enviada</Text>
+        </View>
       )}
 
       {/* Rating */}

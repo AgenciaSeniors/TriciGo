@@ -17,6 +17,7 @@ import type {
   RidePricingSnapshot,
   RideTransition,
   ServiceTypeConfig,
+  SurgeZone,
   User,
   Vehicle,
   WalletRechargeRequest,
@@ -904,5 +905,59 @@ export const adminService = {
       target_id: rechargeId,
       reason: reason ?? null,
     });
+  },
+
+  // ==================== SURGE ZONES ====================
+
+  async getSurgeZones(): Promise<SurgeZone[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('surge_zones')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data as SurgeZone[];
+  },
+
+  async createSurgeZone(surge: {
+    zone_id: string | null;
+    multiplier: number;
+    reason?: string;
+    starts_at?: string;
+    ends_at?: string;
+  }): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('surge_zones')
+      .insert({
+        zone_id: surge.zone_id,
+        multiplier: surge.multiplier,
+        reason: surge.reason ?? null,
+        active: true,
+        starts_at: surge.starts_at ?? null,
+        ends_at: surge.ends_at ?? null,
+      });
+    if (error) throw error;
+  },
+
+  async updateSurgeZone(
+    id: string,
+    updates: Partial<Pick<SurgeZone, 'multiplier' | 'active' | 'reason' | 'starts_at' | 'ends_at'>>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('surge_zones')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteSurgeZone(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('surge_zones')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
   },
 };

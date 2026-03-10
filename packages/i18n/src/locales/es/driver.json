@@ -54,7 +54,9 @@
     "action_en_route": "En camino al pasajero",
     "action_arrived": "Llegué al punto de recogida",
     "action_start": "Iniciar viaje",
-    "action_complete": "Finalizar viaje"
+    "action_complete": "Finalizar viaje",
+    "tip_received": "¡Recibiste una propina de {{amount}}!",
+    "surge_active": "Tarifa dinámica {{multiplier}}x activa"
   },
 
   "earnings": {
