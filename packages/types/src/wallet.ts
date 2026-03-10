@@ -78,6 +78,17 @@ export interface WalletRedemption {
   rejection_reason: string | null;
 }
 
+export interface WalletRechargeRequest {
+  id: string;
+  user_id: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  processed_by: string | null;
+  processed_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+}
+
 /** Summary view for displaying wallet info in the UI */
 export interface WalletSummary {
   available_balance: number;

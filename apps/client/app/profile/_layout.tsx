@@ -6,6 +6,9 @@ export default function ProfileLayout() {
       <Stack.Screen name="edit" />
       <Stack.Screen name="saved-locations" />
       <Stack.Screen name="emergency-contact" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="help" />
+      <Stack.Screen name="about" />
     </Stack>
   );
 }

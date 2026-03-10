@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, FlatList, ActivityIndicator, Alert, RefreshControl, TextInput } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { Button } from '@tricigo/ui/Button';
+import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { formatTriciCoin } from '@tricigo/utils';
@@ -30,6 +31,9 @@ export default function WalletScreen() {
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState('');
+  const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -73,7 +77,24 @@ export default function WalletScreen() {
   }, [fetchData]);
 
   const handleRecharge = () => {
-    Alert.alert(t('wallet.recharge'), t('wallet.coming_soon'));
+    setRechargeAmount('');
+    setRechargeSheetVisible(true);
+  };
+
+  const submitRecharge = async () => {
+    const amountNum = parseInt(rechargeAmount, 10);
+    if (!amountNum || amountNum <= 0 || !userId) return;
+    setRechargeSubmitting(true);
+    try {
+      await walletService.requestRecharge(userId, amountNum * 100); // centavos
+      setRechargeSheetVisible(false);
+      Alert.alert(t('wallet.recharge'), t('wallet.recharge_success'));
+    } catch (err) {
+      console.error('Error requesting recharge:', err);
+      Alert.alert(t('error'), t('errors.generic'));
+    } finally {
+      setRechargeSubmitting(false);
+    }
   };
 
   const handleTransfer = () => {
@@ -151,6 +172,33 @@ export default function WalletScreen() {
           }
         />
       </View>
+
+      <BottomSheet
+        visible={rechargeSheetVisible}
+        onClose={() => setRechargeSheetVisible(false)}
+      >
+        <View className="px-4 pb-6">
+          <Text variant="h4" className="mb-4">{t('wallet.request_recharge')}</Text>
+          <Text variant="bodySmall" color="secondary" className="mb-3">
+            {t('wallet.recharge_amount')} (CUP)
+          </Text>
+          <TextInput
+            className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900 text-lg"
+            placeholder="500"
+            value={rechargeAmount}
+            onChangeText={setRechargeAmount}
+            keyboardType="numeric"
+          />
+          <Button
+            title={t('wallet.request_recharge')}
+            size="lg"
+            fullWidth
+            onPress={submitRecharge}
+            loading={rechargeSubmitting}
+            disabled={!rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
+          />
+        </View>
+      </BottomSheet>
     </Screen>
   );
 }

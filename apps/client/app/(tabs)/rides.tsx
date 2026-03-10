@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -71,7 +72,7 @@ export default function RidesScreen() {
     const fare = item.final_fare_cup ?? item.estimated_fare_cup;
 
     return (
-      <Pressable onPress={() => setExpandedId(isExpanded ? null : item.id)}>
+      <Pressable onPress={() => router.push(`/ride/${item.id}`)}>
         <Card variant="outlined" padding="md" className="mb-3">
           <View className="flex-row items-center justify-between mb-2">
             <Text variant="caption" color="secondary">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import type { Ride, RideStatus } from '@tricigo/types';
@@ -44,6 +45,7 @@ function truncate(str: string, len: number) {
 }
 
 export default function RidesPage() {
+  const router = useRouter();
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -116,7 +118,7 @@ export default function RidesPage() {
               </tr>
             ) : (
               rides.map((ride) => (
-                <tr key={ride.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={ride.id} className="border-b border-neutral-50 hover:bg-neutral-50 cursor-pointer" onClick={() => router.push(`/rides/${ride.id}`)}>
                   <td className="px-4 py-3">
                     <div className="text-neutral-900">{truncate(ride.pickup_address, 25)}</div>
                     <div className="text-neutral-500 text-xs">→ {truncate(ride.dropoff_address, 25)}</div>

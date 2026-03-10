@@ -163,14 +163,14 @@ export default function EarningsScreen() {
           <View className="flex-row gap-3 mb-4">
             <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
               <Text variant="caption" color="inverse" className="opacity-50">
-                Ganancia neta hoy
+                {t('earnings.net_today', { defaultValue: 'Ganancia neta hoy' })}
               </Text>
               <Text variant="h4" color="inverse" className="mt-1">
                 {formatCUP(todayEarnings - todayCommission)}
               </Text>
               {todayCommission > 0 && (
                 <Text variant="caption" className="text-red-400 mt-0.5">
-                  Comisión: {formatCUP(todayCommission)}
+                  {t('earnings.commission_label', { defaultValue: 'Comisión' })}: {formatCUP(todayCommission)}
                 </Text>
               )}
             </Card>

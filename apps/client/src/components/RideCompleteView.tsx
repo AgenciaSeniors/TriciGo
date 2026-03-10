@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable, TextInput } from 'react-native';
+import { View, Pressable, TextInput, Share } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
@@ -78,11 +78,11 @@ export function RideCompleteView() {
         </View>
       )}
       <Text variant="caption" color="secondary" className="mb-2">
-        {activeRide.payment_method === 'cash' ? 'Pagado en efectivo' : 'Pagado con TriciCoin'}
+        {activeRide.payment_method === 'cash' ? t('ride.paid_cash', { defaultValue: 'Pagado en efectivo' }) : t('ride.paid_tricicoin', { defaultValue: 'Pagado con TriciCoin' })}
       </Text>
       {activeRide.discount_amount_cup > 0 && (
         <Text variant="caption" className="mb-4 text-green-600">
-          Descuento aplicado: -{formatCUP(activeRide.discount_amount_cup)}
+          {t('ride.discount_applied', { defaultValue: 'Descuento aplicado' })}: -{formatCUP(activeRide.discount_amount_cup)}
         </Text>
       )}
       {activeRide.discount_amount_cup === 0 && <View className="mb-4" />}
@@ -104,6 +104,18 @@ export function RideCompleteView() {
           </View>
         </View>
       </Card>
+
+      {/* Share ride */}
+      {activeRide.share_token && (
+        <Button
+          title={t('ride.share_ride', { defaultValue: 'Compartir viaje' })}
+          variant="outline"
+          size="md"
+          fullWidth
+          onPress={() => Share.share({ message: `https://tricigo.app/ride/${activeRide.share_token}` })}
+          className="mb-4"
+        />
+      )}
 
       {/* Rating */}
       {hasDriver ? (

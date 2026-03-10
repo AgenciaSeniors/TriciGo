@@ -9,6 +9,7 @@ import type {
   LedgerTransaction,
   WalletSummary,
   WalletRedemption,
+  WalletRechargeRequest,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
@@ -136,5 +137,36 @@ export const walletService = {
       .order('requested_at', { ascending: false });
     if (error) throw error;
     return data as WalletRedemption[];
+  },
+
+  /**
+   * Request a wallet recharge (customer).
+   */
+  async requestRecharge(
+    userId: string,
+    amount: number,
+  ): Promise<WalletRechargeRequest> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_recharge_requests')
+      .insert({ user_id: userId, amount })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as WalletRechargeRequest;
+  },
+
+  /**
+   * Get recharge request history for a user.
+   */
+  async getRechargeRequests(userId: string): Promise<WalletRechargeRequest[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_recharge_requests')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data as WalletRechargeRequest[];
   },
 };

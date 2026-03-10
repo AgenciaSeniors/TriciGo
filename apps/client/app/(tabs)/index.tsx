@@ -88,7 +88,7 @@ function IdleView() {
       </Pressable>
 
       {/* Service types */}
-      <Text variant="h4" className="mb-3">Servicios</Text>
+      <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
       <View className="flex-row gap-3">
         {[
           { key: 'triciclo_basico', icon: '🛺' },
@@ -143,7 +143,7 @@ function SelectingView() {
     <View className="pt-4">
       {/* Back button */}
       <Pressable onPress={() => setFlowStep('idle')} className="mb-4">
-        <Text variant="body" color="accent">← Volver</Text>
+        <Text variant="body" color="accent">{t('home.back', { defaultValue: '← Volver' })}</Text>
       </Pressable>
 
       {/* Pickup */}
@@ -211,7 +211,7 @@ function SelectingView() {
       </ScrollView>
 
       {/* Service type */}
-      <Text variant="label" className="mb-2">Servicio</Text>
+      <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
       <View className="flex-row gap-3 mb-4">
         {(['triciclo_basico', 'moto_standard', 'auto_standard'] as const).map((st) => (
           <Pressable
@@ -337,7 +337,7 @@ function ReviewingView() {
 
         {discount > 0 && (
           <View className="flex-row justify-between mb-2">
-            <Text variant="bodySmall" className="text-green-600">Descuento</Text>
+            <Text variant="bodySmall" className="text-green-600">{t('ride.discount', { defaultValue: 'Descuento' })}</Text>
             <Text variant="bodySmall" className="text-green-600">-{formatCUP(discount)}</Text>
           </View>
         )}
@@ -354,18 +354,18 @@ function ReviewingView() {
 
       {/* Promo code */}
       <Card variant="outlined" padding="md" className="mb-6">
-        <Text variant="label" className="mb-2">Código promocional</Text>
+        <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
         <View className="flex-row gap-2">
           <View className="flex-1">
             <Input
-              placeholder="Ingresa tu código"
+              placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
               value={promoCode}
               onChangeText={setPromoCode}
               autoCapitalize="characters"
             />
           </View>
           <Button
-            title="Aplicar"
+            title={t('ride.apply', { defaultValue: 'Aplicar' })}
             size="sm"
             variant="outline"
             onPress={validatePromo}
@@ -380,7 +380,7 @@ function ReviewingView() {
             className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
           >
             {promoResult.valid
-              ? `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`
+              ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`, amount: formatCUP(promoResult.discountAmount) })
               : promoResult.error ?? 'Código inválido'}
           </Text>
         )}
@@ -401,7 +401,7 @@ function ReviewingView() {
         className="mb-3"
       />
       <Button
-        title="Volver"
+        title={t('home.back', { defaultValue: 'Volver' })}
         variant="ghost"
         size="lg"
         fullWidth
@@ -444,7 +444,7 @@ function SearchingView() {
         {t('ride.searching_driver')}
       </Text>
       <Text variant="bodySmall" color="secondary" className="mb-8 text-center">
-        Esto puede tomar hasta 2 minutos
+        {t('ride.searching_wait', { defaultValue: 'Esto puede tomar hasta 2 minutos' })}
       </Text>
 
       {error && (
@@ -458,7 +458,7 @@ function SearchingView() {
         variant="outline"
         size="lg"
         fullWidth
-        onPress={() => cancelRide('Cancelado por el pasajero')}
+        onPress={() => cancelRide(t('ride.canceled_by_passenger', { defaultValue: 'Cancelado por el pasajero' }))}
         loading={isLoading}
       />
     </View>

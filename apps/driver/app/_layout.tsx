@@ -65,6 +65,7 @@ function RootNavigator() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="trip" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="+not-found" />
     </Stack>

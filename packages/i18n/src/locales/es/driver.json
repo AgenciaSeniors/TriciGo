@@ -37,7 +37,22 @@
     "confirm_start": "Iniciar viaje",
     "confirm_complete": "Finalizar viaje",
     "fare_earned": "Tarifa ganada",
-    "back_to_home": "Volver al inicio"
+    "back_to_home": "Volver al inicio",
+    "trip_detail": "Detalle del viaje",
+    "total_fare": "Tarifa total",
+    "platform_commission": "Comisión plataforma (15%)",
+    "collect_cash": "Cobras en efectivo",
+    "net_earnings": "Ganancia neta",
+    "commission_deducted": "La comisión se descuenta de tu saldo",
+    "step_accepted": "Aceptado",
+    "step_en_route": "En camino",
+    "step_arrived": "Llegué",
+    "step_in_progress": "En viaje",
+    "step_completed": "Listo",
+    "action_en_route": "En camino al pasajero",
+    "action_arrived": "Llegué al punto de recogida",
+    "action_start": "Iniciar viaje",
+    "action_complete": "Finalizar viaje"
   },
 
   "earnings": {
@@ -62,7 +77,9 @@
     "no_withdrawals": "Sin retiros aún",
     "amount_error_min": "Ingresa un monto válido mayor a 0",
     "amount_error_max": "El monto excede tu saldo disponible",
-    "redeem_confirm_btn": "Confirmar retiro"
+    "redeem_confirm_btn": "Confirmar retiro",
+    "net_today": "Ganancia neta hoy",
+    "commission_label": "Comisión"
   },
 
   "onboarding": {

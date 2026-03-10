@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
-import type { LedgerTransaction, WalletRedemption } from '@tricigo/types';
+import type { LedgerTransaction, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
-type Tab = 'redemptions' | 'ledger';
+type Tab = 'redemptions' | 'recharges' | 'ledger';
+
+type RechargeRow = WalletRechargeRequest & { user_name: string };
 
 type WalletStats = {
   total_in_circulation: number;
@@ -21,6 +23,7 @@ export default function WalletPage() {
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [tab, setTab] = useState<Tab>('redemptions');
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
+  const [recharges, setRecharges] = useState<RechargeRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -51,6 +54,9 @@ export default function WalletPage() {
         if (tab === 'redemptions') {
           const data = await adminService.getPendingRedemptions(page, PAGE_SIZE);
           if (!cancelled) setRedemptions(data);
+        } else if (tab === 'recharges') {
+          const data = await adminService.getPendingRecharges(page, PAGE_SIZE);
+          if (!cancelled) setRecharges(data as RechargeRow[]);
         } else {
           const data = await adminService.getAdminTransactions(page, PAGE_SIZE);
           if (!cancelled) setTransactions(data);
@@ -102,12 +108,44 @@ export default function WalletPage() {
     }
   }
 
+  async function handleRecharge(id: string, action: 'approved' | 'rejected') {
+    if (action === 'approved') {
+      if (!window.confirm('¿Aprobar esta recarga?')) return;
+    } else {
+      const reason = window.prompt('Motivo del rechazo:');
+      if (reason === null) return;
+      setProcessing(id);
+      try {
+        await adminService.processRecharge(id, 'admin-placeholder', false, reason);
+        setRecharges((prev) => prev.filter((r) => r.id !== id));
+      } catch (err) {
+        console.error('Error processing recharge:', err);
+        window.alert('Error al procesar la recarga');
+      } finally {
+        setProcessing(null);
+      }
+      return;
+    }
+
+    setProcessing(id);
+    try {
+      await adminService.processRecharge(id, 'admin-placeholder', true);
+      setRecharges((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.error('Error processing recharge:', err);
+      window.alert('Error al procesar la recarga');
+    } finally {
+      setProcessing(null);
+    }
+  }
+
   const tabs: { label: string; value: Tab }[] = [
     { label: 'Canjes pendientes', value: 'redemptions' },
+    { label: 'Recargas pendientes', value: 'recharges' },
     { label: 'Ledger', value: 'ledger' },
   ];
 
-  const listData = tab === 'redemptions' ? redemptions : transactions;
+  const listData = tab === 'redemptions' ? redemptions : tab === 'recharges' ? recharges : transactions;
   const canGoPrev = page > 0;
   const canGoNext = listData.length === PAGE_SIZE;
 
@@ -196,6 +234,58 @@ export default function WalletPage() {
                         </button>
                         <button
                           onClick={() => handleRedemption(r.id, 'rejected')}
+                          disabled={processing === r.id}
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        ) : tab === 'recharges' ? (
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 border-b border-neutral-100">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">Usuario</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">Monto</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recharges.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center py-12 text-neutral-400">
+                    {loading ? 'Cargando...' : 'Sin recargas pendientes'}
+                  </td>
+                </tr>
+              ) : (
+                recharges.map((r) => (
+                  <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                    <td className="px-4 py-3 font-medium text-neutral-900">
+                      {r.user_name}
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {formatTriciCoin(r.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-500">
+                      {new Date(r.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRecharge(r.id, 'approved')}
+                          disabled={processing === r.id}
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                        >
+                          Aprobar
+                        </button>
+                        <button
+                          onClick={() => handleRecharge(r.id, 'rejected')}
                           disabled={processing === r.id}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
                         >

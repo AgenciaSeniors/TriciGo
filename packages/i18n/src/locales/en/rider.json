@@ -55,7 +55,20 @@
     "discount": "Discount",
     "final_total": "Final total",
     "sos_confirm": "Are you in danger? An emergency report will be filed.",
-    "sos_call": "Call emergency"
+    "sos_call": "Call emergency",
+    "services": "Services",
+    "back_button": "← Back",
+    "service_label": "Service",
+    "promo_code_label": "Promo code",
+    "searching_wait": "This may take up to 2 minutes",
+    "canceled_by_passenger": "Canceled by passenger",
+    "paid_cash": "Paid in cash",
+    "paid_tricicoin": "Paid with TriciCoin",
+    "discount_applied": "Discount applied",
+    "ride_detail": "Ride detail",
+    "trip_stats": "Trip stats",
+    "driver_info": "Driver info",
+    "timestamps": "Timestamps"
   },
 
   "locations": {

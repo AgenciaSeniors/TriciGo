@@ -43,7 +43,11 @@
     "history": "History",
     "no_transactions": "No transactions yet",
     "coming_soon": "Coming soon",
-    "no_account": "No wallet yet"
+    "no_account": "No wallet yet",
+    "request_recharge": "Request top-up",
+    "recharge_success": "Top-up request submitted successfully",
+    "recharge_amount": "Amount to top up",
+    "pending_recharges": "Pending top-ups"
   },
 
   "profile": {
@@ -77,6 +81,17 @@
     "emergency_relationship": "Relationship",
     "no_emergency_contact": "No emergency contact set",
     "vehicle_info": "Vehicle",
+    "documents": "Documents",
+    "settings_title": "Settings",
+    "help_title": "Help",
+    "about_title": "About TriciGo",
+    "notifications_toggle": "Notifications",
+    "faq_q1": "How does TriciGo work?",
+    "faq_a1": "Request a ride, a nearby driver picks you up and takes you to your destination.",
+    "faq_q2": "How do I pay?",
+    "faq_a2": "You can pay in cash or with TriciCoin from your wallet.",
+    "faq_q3": "How do I contact support?",
+    "faq_a3": "Email us at soporte@tricigo.app or call +53 5XXXXXXX.",
     "spanish": "Spanish",
     "english": "English"
   },

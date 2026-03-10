@@ -14,9 +14,12 @@ import type {
   PricingRule,
   Promotion,
   Ride,
+  RidePricingSnapshot,
+  RideTransition,
   ServiceTypeConfig,
   User,
   Vehicle,
+  WalletRechargeRequest,
   WalletRedemption,
   Zone,
 } from '@tricigo/types';
@@ -638,5 +641,191 @@ export const adminService = {
       .from('feature_flags')
       .insert(flag);
     if (error) throw error;
+  },
+
+  // ==================== RIDE DETAIL ====================
+
+  async getRideDetail(rideId: string) {
+    const supabase = getSupabaseClient();
+
+    const [rideRes, transitionsRes, pricingRes] = await Promise.all([
+      supabase
+        .from('rides')
+        .select('*')
+        .eq('id', rideId)
+        .single(),
+      supabase
+        .from('ride_transitions')
+        .select('*')
+        .eq('ride_id', rideId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('ride_pricing_snapshots')
+        .select('*')
+        .eq('ride_id', rideId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (rideRes.error) throw rideRes.error;
+    const ride = rideRes.data as Ride;
+
+    // Fetch driver info if assigned
+    let driverInfo: { name: string; phone: string } | null = null;
+    if (ride.driver_id) {
+      const { data: dp } = await supabase
+        .from('driver_profiles')
+        .select('user_id')
+        .eq('id', ride.driver_id)
+        .single();
+      if (dp) {
+        const { data: usr } = await supabase
+          .from('users')
+          .select('full_name, phone')
+          .eq('id', dp.user_id)
+          .single();
+        if (usr) driverInfo = { name: usr.full_name, phone: usr.phone };
+      }
+    }
+
+    // Fetch customer info
+    let customerInfo: { name: string; phone: string } | null = null;
+    const { data: cust } = await supabase
+      .from('users')
+      .select('full_name, phone')
+      .eq('id', ride.customer_id)
+      .single();
+    if (cust) customerInfo = { name: cust.full_name, phone: cust.phone };
+
+    return {
+      ride,
+      transitions: (transitionsRes.data as RideTransition[]) ?? [],
+      pricing: (pricingRes.data as RidePricingSnapshot) ?? null,
+      driverInfo,
+      customerInfo,
+    };
+  },
+
+  // ==================== WALLET RECHARGES ====================
+
+  async getPendingRecharges(
+    page = 0,
+    pageSize = 20,
+  ): Promise<(WalletRechargeRequest & { user_name: string })[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('wallet_recharge_requests')
+      .select('*, users!inner(full_name)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const usr = row.users as Record<string, string> | undefined;
+      return {
+        ...(row as unknown as WalletRechargeRequest),
+        user_name: usr?.full_name ?? 'Desconocido',
+      };
+    });
+  },
+
+  async processRecharge(
+    rechargeId: string,
+    adminId: string,
+    approved: boolean,
+    reason?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+
+    if (approved) {
+      // Fetch the request
+      const { data: req, error: reqErr } = await supabase
+        .from('wallet_recharge_requests')
+        .select('*')
+        .eq('id', rechargeId)
+        .eq('status', 'pending')
+        .single();
+      if (reqErr) throw reqErr;
+      const request = req as WalletRechargeRequest;
+
+      // Ensure wallet account
+      const { data: accountId } = await supabase.rpc('ensure_wallet_account', {
+        p_user_id: request.user_id,
+        p_type: 'customer_cash',
+      });
+
+      // Get current balance
+      const { data: acct } = await supabase
+        .from('wallet_accounts')
+        .select('balance')
+        .eq('id', accountId)
+        .single();
+      const currentBalance = acct?.balance ?? 0;
+
+      // Create ledger transaction
+      const { data: txn } = await supabase
+        .from('ledger_transactions')
+        .insert({
+          idempotency_key: `recharge:${rechargeId}`,
+          type: 'recharge',
+          status: 'posted',
+          reference_type: 'recharge_request',
+          reference_id: rechargeId,
+          description: `Recarga wallet #${rechargeId.slice(0, 8)}`,
+          created_by: adminId,
+        })
+        .select('id')
+        .single();
+
+      if (txn) {
+        // Ledger entry
+        await supabase.from('ledger_entries').insert({
+          transaction_id: txn.id,
+          account_id: accountId,
+          amount: request.amount,
+          balance_after: currentBalance + request.amount,
+        });
+
+        // Update wallet balance
+        await supabase
+          .from('wallet_accounts')
+          .update({ balance: currentBalance + request.amount })
+          .eq('id', accountId);
+      }
+
+      // Mark as approved
+      await supabase
+        .from('wallet_recharge_requests')
+        .update({
+          status: 'approved',
+          processed_by: adminId,
+          processed_at: new Date().toISOString(),
+        })
+        .eq('id', rechargeId);
+    } else {
+      // Reject
+      await supabase
+        .from('wallet_recharge_requests')
+        .update({
+          status: 'rejected',
+          processed_by: adminId,
+          processed_at: new Date().toISOString(),
+          rejection_reason: reason ?? null,
+        })
+        .eq('id', rechargeId);
+    }
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: approved ? 'approve_recharge' : 'reject_recharge',
+      target_type: 'wallet_recharge_request',
+      target_id: rechargeId,
+      reason: reason ?? null,
+    });
   },
 };

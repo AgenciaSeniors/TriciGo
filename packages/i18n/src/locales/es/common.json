@@ -43,7 +43,11 @@
     "history": "Historial",
     "no_transactions": "No hay movimientos aún",
     "coming_soon": "Próximamente",
-    "no_account": "No tienes wallet aún"
+    "no_account": "No tienes wallet aún",
+    "request_recharge": "Solicitar recarga",
+    "recharge_success": "Solicitud de recarga enviada correctamente",
+    "recharge_amount": "Monto a recargar",
+    "pending_recharges": "Recargas pendientes"
   },
 
   "profile": {
@@ -77,6 +81,17 @@
     "emergency_relationship": "Relación",
     "no_emergency_contact": "Sin contacto de emergencia",
     "vehicle_info": "Vehículo",
+    "documents": "Documentos",
+    "settings_title": "Configuración",
+    "help_title": "Ayuda",
+    "about_title": "Acerca de TriciGo",
+    "notifications_toggle": "Notificaciones",
+    "faq_q1": "¿Cómo funciona TriciGo?",
+    "faq_a1": "Solicita un viaje, un conductor cercano te recoge y te lleva a tu destino.",
+    "faq_q2": "¿Cómo pago?",
+    "faq_a2": "Puedes pagar en efectivo o con TriciCoin desde tu wallet.",
+    "faq_q3": "¿Cómo contacto soporte?",
+    "faq_a3": "Escríbenos al correo soporte@tricigo.app o llama al +53 5XXXXXXX.",
     "spanish": "Español",
     "english": "Inglés"
   },
