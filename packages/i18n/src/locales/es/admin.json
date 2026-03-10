@@ -107,6 +107,21 @@
     "zones": "Zonas operativas",
     "service_types": "Tipos de servicio",
     "promotions": "Promociones",
-    "feature_flags": "Feature flags"
+    "feature_flags": "Feature flags",
+    "back_to_settings": "Volver a configuración",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "create": "Crear",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "actions": "Acciones",
+    "loading": "Cargando...",
+    "no_data": "Sin datos",
+    "service_types_desc": "Configura los tipos de vehículo y tarifas base",
+    "pricing_desc": "Reglas de tarificación por zona y tipo de servicio",
+    "zones_desc": "Áreas de operación y multiplicadores surge",
+    "promotions_desc": "Códigos promocionales y descuentos",
+    "flags_desc": "Activar o desactivar funcionalidades del sistema"
   }
 }

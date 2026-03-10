@@ -107,6 +107,21 @@
     "zones": "Operational zones",
     "service_types": "Service types",
     "promotions": "Promotions",
-    "feature_flags": "Feature flags"
+    "feature_flags": "Feature flags",
+    "back_to_settings": "Back to settings",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "create": "Create",
+    "active": "Active",
+    "inactive": "Inactive",
+    "actions": "Actions",
+    "loading": "Loading...",
+    "no_data": "No data",
+    "service_types_desc": "Configure vehicle types and base fares",
+    "pricing_desc": "Pricing rules by zone and service type",
+    "zones_desc": "Operational areas and surge multipliers",
+    "promotions_desc": "Promotional codes and discounts",
+    "flags_desc": "Enable or disable system features"
   }
 }

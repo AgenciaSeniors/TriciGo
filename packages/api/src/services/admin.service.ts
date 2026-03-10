@@ -9,11 +9,16 @@ import type {
   DriverDocument,
   DriverProfile,
   DriverProfileWithUser,
+  FeatureFlag,
   LedgerTransaction,
+  PricingRule,
+  Promotion,
   Ride,
+  ServiceTypeConfig,
   User,
   Vehicle,
   WalletRedemption,
+  Zone,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -402,5 +407,183 @@ export const adminService = {
       .range(from, to);
     if (error) throw error;
     return data as LedgerTransaction[];
+  },
+
+  // ==================== SERVICE TYPE CONFIGS ====================
+
+  async getServiceTypeConfigs(): Promise<ServiceTypeConfig[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('service_type_configs')
+      .select('*')
+      .order('slug');
+    if (error) throw error;
+    return data as ServiceTypeConfig[];
+  },
+
+  async updateServiceTypeConfig(
+    id: string,
+    updates: Partial<Pick<ServiceTypeConfig,
+      'name_es' | 'name_en' | 'base_fare_cup' | 'per_km_rate_cup' |
+      'per_minute_rate_cup' | 'min_fare_cup' | 'max_passengers' | 'icon_name' | 'is_active'
+    >>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('service_type_configs')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // ==================== PRICING RULES ====================
+
+  async getPricingRules(page = 0, pageSize = 20): Promise<PricingRule[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('pricing_rules')
+      .select('*')
+      .order('service_type')
+      .range(from, to);
+    if (error) throw error;
+    return data as PricingRule[];
+  },
+
+  async updatePricingRule(
+    id: string,
+    updates: Partial<Pick<PricingRule,
+      'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup' |
+      'surge_threshold' | 'max_surge_multiplier' | 'is_active'
+    >>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('pricing_rules')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async createPricingRule(
+    rule: Pick<PricingRule,
+      'service_type' | 'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup'
+    > & { zone_id?: string | null; is_active?: boolean },
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('pricing_rules')
+      .insert(rule);
+    if (error) throw error;
+  },
+
+  // ==================== ZONES ====================
+
+  async getZones(): Promise<Omit<Zone, 'boundary'>[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('zones')
+      .select('id, name, type, surge_multiplier, is_active, created_at, updated_at')
+      .order('name');
+    if (error) throw error;
+    return data as Omit<Zone, 'boundary'>[];
+  },
+
+  async updateZone(
+    id: string,
+    updates: Partial<Pick<Zone, 'name' | 'surge_multiplier' | 'is_active'>>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('zones')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // ==================== PROMOTIONS ====================
+
+  async getPromotions(page = 0, pageSize = 20): Promise<Promotion[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('promotions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as Promotion[];
+  },
+
+  async createPromotion(
+    promo: Pick<Promotion, 'code' | 'type' | 'is_active' | 'valid_from'> &
+      Partial<Pick<Promotion, 'discount_percent' | 'discount_fixed_cup' | 'max_uses' | 'valid_until'>>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('promotions')
+      .insert({ ...promo, created_by: 'admin-placeholder' });
+    if (error) throw error;
+  },
+
+  async updatePromotion(
+    id: string,
+    updates: Partial<Pick<Promotion,
+      'code' | 'type' | 'discount_percent' | 'discount_fixed_cup' |
+      'max_uses' | 'is_active' | 'valid_from' | 'valid_until'
+    >>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('promotions')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async deletePromotion(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('promotions')
+      .delete()
+      .eq('id', id)
+      .eq('current_uses', 0);
+    if (error) throw error;
+  },
+
+  // ==================== FEATURE FLAGS ====================
+
+  async getFeatureFlags(): Promise<FeatureFlag[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('feature_flags')
+      .select('*')
+      .order('key');
+    if (error) throw error;
+    return data as FeatureFlag[];
+  },
+
+  async updateFeatureFlag(
+    id: string,
+    updates: Partial<Pick<FeatureFlag, 'value' | 'description'>>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('feature_flags')
+      .update(updates)
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async createFeatureFlag(
+    flag: Pick<FeatureFlag, 'key' | 'value' | 'description'>,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('feature_flags')
+      .insert(flag);
+    if (error) throw error;
   },
 };

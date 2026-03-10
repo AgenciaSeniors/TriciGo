@@ -54,7 +54,13 @@
     "reviews_count": "{{count}} reviews",
     "no_reviews": "No reviews yet",
     "request_withdrawal": "Request withdrawal",
-    "withdrawal_info": "Withdrawals are processed by administration"
+    "withdrawal_info": "Withdrawals are processed by administration",
+    "withdrawal_history": "Withdrawal history",
+    "withdrawal_success": "Withdrawal request submitted successfully",
+    "no_withdrawals": "No withdrawals yet",
+    "amount_error_min": "Enter a valid amount greater than 0",
+    "amount_error_max": "Amount exceeds your available balance",
+    "redeem_confirm_btn": "Confirm withdrawal"
   },
 
   "onboarding": {

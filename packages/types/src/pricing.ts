@@ -75,3 +75,11 @@ export interface FareEstimate {
   surge_multiplier: number;
   pricing_rule_id: string;
 }
+
+export interface FeatureFlag {
+  id: string;
+  key: string;
+  value: boolean;
+  description: string;
+  updated_at: string;
+}

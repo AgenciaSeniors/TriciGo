@@ -54,7 +54,13 @@
     "reviews_count": "{{count}} reseñas",
     "no_reviews": "Sin reseñas aún",
     "request_withdrawal": "Solicitar retiro",
-    "withdrawal_info": "Los retiros son procesados por administración"
+    "withdrawal_info": "Los retiros son procesados por administración",
+    "withdrawal_history": "Historial de retiros",
+    "withdrawal_success": "Solicitud de retiro enviada correctamente",
+    "no_withdrawals": "Sin retiros aún",
+    "amount_error_min": "Ingresa un monto válido mayor a 0",
+    "amount_error_max": "El monto excede tu saldo disponible",
+    "redeem_confirm_btn": "Confirmar retiro"
   },
 
   "onboarding": {
