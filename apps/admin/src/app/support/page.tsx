@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supportService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 
@@ -13,12 +14,12 @@ const statusBadge: Record<string, string> = {
   closed: 'bg-neutral-100 text-neutral-500',
 };
 
-const statusLabels: Record<string, string> = {
-  open: 'Abierto',
-  in_progress: 'En progreso',
-  waiting_user: 'Esperando usuario',
-  resolved: 'Resuelto',
-  closed: 'Cerrado',
+const statusLabelKeys: Record<string, string> = {
+  open: 'support.status_open',
+  in_progress: 'support.status_in_progress',
+  waiting_user: 'support.status_waiting_user',
+  resolved: 'support.status_resolved',
+  closed: 'support.status_closed',
 };
 
 const priorityBadge: Record<string, string> = {
@@ -28,15 +29,15 @@ const priorityBadge: Record<string, string> = {
   urgent: 'bg-red-50 text-red-600',
 };
 
-const categoryLabels: Record<string, string> = {
-  ride_issue: 'Problema de viaje',
-  payment_issue: 'Problema de pago',
-  driver_complaint: 'Queja de conductor',
-  passenger_complaint: 'Queja de pasajero',
-  account_issue: 'Problema de cuenta',
-  app_bug: 'Error de app',
-  feature_request: 'Sugerencia',
-  other: 'Otro',
+const categoryLabelKeys: Record<string, string> = {
+  ride_issue: 'support.category_ride_issue',
+  payment_issue: 'support.category_payment_issue',
+  driver_complaint: 'support.category_driver_complaint',
+  passenger_complaint: 'support.category_passenger_complaint',
+  account_issue: 'support.category_account_issue',
+  app_bug: 'support.category_app_bug',
+  feature_request: 'support.category_feature_request',
+  other: 'support.category_other',
 };
 
 function formatDate(d: string): string {
@@ -50,6 +51,7 @@ function formatDate(d: string): string {
 
 export default function SupportPage() {
   const { userId: adminUserId } = useAdminUser();
+  const { t } = useTranslation('admin');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('open');
@@ -131,7 +133,7 @@ export default function SupportPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Tickets de soporte</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('support.title')}</h1>
 
       {/* Filter tabs */}
       <div className="flex gap-2 mb-6">
@@ -145,7 +147,7 @@ export default function SupportPage() {
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
           >
-            {s === 'all' ? 'Todos' : statusLabels[s] ?? s}
+            {s === 'all' ? t('support.filter_all') : (statusLabelKeys[s] ? t(statusLabelKeys[s]) : s)}
           </button>
         ))}
       </div>
@@ -156,7 +158,7 @@ export default function SupportPage() {
           <div className="max-h-[600px] overflow-y-auto">
             {tickets.length === 0 ? (
               <div className="text-center py-12 text-neutral-400">
-                {loading ? 'Cargando...' : 'Sin tickets'}
+                {loading ? t('common.loading') : t('support.no_tickets')}
               </div>
             ) : (
               tickets.map((ticket) => (
@@ -172,12 +174,12 @@ export default function SupportPage() {
                     <span className={`shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                       statusBadge[ticket.status] ?? 'bg-neutral-100'
                     }`}>
-                      {statusLabels[ticket.status] ?? ticket.status}
+                      {statusLabelKeys[ticket.status] ? t(statusLabelKeys[ticket.status]!) : ticket.status}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-neutral-400">
-                      {categoryLabels[ticket.category] ?? ticket.category}
+                      {categoryLabelKeys[ticket.category] ? t(categoryLabelKeys[ticket.category]!) : ticket.category}
                     </span>
                     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                       priorityBadge[ticket.priority] ?? ''
@@ -205,10 +207,10 @@ export default function SupportPage() {
                   <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                     statusBadge[selectedTicket.status] ?? ''
                   }`}>
-                    {statusLabels[selectedTicket.status] ?? selectedTicket.status}
+                    {statusLabelKeys[selectedTicket.status] ? t(statusLabelKeys[selectedTicket.status]!) : selectedTicket.status}
                   </span>
                   <span className="text-xs text-neutral-400">
-                    {categoryLabels[selectedTicket.category] ?? selectedTicket.category}
+                    {categoryLabelKeys[selectedTicket.category] ? t(categoryLabelKeys[selectedTicket.category]!) : selectedTicket.category}
                   </span>
                 </div>
                 {selectedTicket.description && (
@@ -221,7 +223,7 @@ export default function SupportPage() {
                       onClick={() => handleStatusChange(selectedTicket.id, 'resolved')}
                       className="px-3 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200"
                     >
-                      Resolver
+                      {t('support.resolve')}
                     </button>
                   )}
                   {selectedTicket.status !== 'closed' && (
@@ -229,7 +231,7 @@ export default function SupportPage() {
                       onClick={() => handleStatusChange(selectedTicket.id, 'closed')}
                       className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                     >
-                      Cerrar
+                      {t('support.close')}
                     </button>
                   )}
                 </div>
@@ -247,7 +249,7 @@ export default function SupportPage() {
                     }`}
                   >
                     <p className="text-xs text-neutral-400 mb-1">
-                      {msg.is_admin ? 'Soporte' : 'Usuario'} · {formatDate(msg.created_at)}
+                      {msg.is_admin ? t('support.support_label') : t('support.user_label')} · {formatDate(msg.created_at)}
                     </p>
                     <p>{msg.message}</p>
                   </div>
@@ -258,7 +260,7 @@ export default function SupportPage() {
               <div className="flex gap-2">
                 <input
                   className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#FF4D00]"
-                  placeholder="Escribir respuesta..."
+                  placeholder={t('support.reply_placeholder')}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleReply()}
@@ -268,13 +270,13 @@ export default function SupportPage() {
                   disabled={sending || !reply.trim()}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] disabled:opacity-50"
                 >
-                  Enviar
+                  {t('support.send')}
                 </button>
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-[600px] text-neutral-400">
-              Selecciona un ticket para ver los detalles
+              {t('support.select_ticket')}
             </div>
           )}
         </div>

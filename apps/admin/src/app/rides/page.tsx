@@ -4,18 +4,19 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { Ride, RideStatus } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
 const STATUS_FILTERS = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Buscando', value: 'searching' },
-  { label: 'Aceptados', value: 'accepted' },
-  { label: 'En progreso', value: 'in_progress' },
-  { label: 'Completados', value: 'completed' },
-  { label: 'Cancelados', value: 'canceled' },
-  { label: 'En disputa', value: 'disputed' },
+  { labelKey: 'rides.filter_all', value: 'all' },
+  { labelKey: 'rides.filter_searching', value: 'searching' },
+  { labelKey: 'rides.filter_accepted', value: 'accepted' },
+  { labelKey: 'rides.filter_in_progress', value: 'in_progress' },
+  { labelKey: 'rides.filter_completed', value: 'completed' },
+  { labelKey: 'rides.filter_canceled', value: 'canceled' },
+  { labelKey: 'rides.filter_disputed', value: 'disputed' },
 ] as const;
 
 const STATUS_BADGE: Record<string, string> = {
@@ -29,15 +30,15 @@ const STATUS_BADGE: Record<string, string> = {
   disputed: 'bg-orange-100 text-orange-700',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  searching: 'Buscando',
-  accepted: 'Aceptado',
-  driver_en_route: 'En camino',
-  arrived_at_pickup: 'En punto',
-  in_progress: 'En progreso',
-  completed: 'Completado',
-  canceled: 'Cancelado',
-  disputed: 'En disputa',
+const STATUS_LABEL_KEY: Record<string, string> = {
+  searching: 'rides.status_searching',
+  accepted: 'rides.status_accepted',
+  driver_en_route: 'rides.status_driver_en_route',
+  arrived_at_pickup: 'rides.status_arrived_at_pickup',
+  in_progress: 'rides.status_in_progress',
+  completed: 'rides.status_completed',
+  canceled: 'rides.status_canceled',
+  disputed: 'rides.status_disputed',
 };
 
 function truncate(str: string, len: number) {
@@ -46,6 +47,7 @@ function truncate(str: string, len: number) {
 
 export default function RidesPage() {
   const router = useRouter();
+  const { t } = useTranslation('admin');
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -77,7 +79,7 @@ export default function RidesPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Viajes</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('rides.title')}</h1>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -91,7 +93,7 @@ export default function RidesPage() {
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {filter.label}
+            {t(filter.labelKey)}
           </button>
         ))}
       </div>
@@ -101,19 +103,19 @@ export default function RidesPage() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Origen → Destino</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Estado</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Tarifa</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Distancia</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Pago</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_route')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_status')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_fare')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_distance')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_payment')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_date')}</th>
             </tr>
           </thead>
           <tbody>
             {rides.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {loading ? 'Cargando...' : 'No hay viajes registrados'}
+                  {loading ? t('common.loading') : t('rides.no_rides')}
                 </td>
               </tr>
             ) : (
@@ -125,7 +127,7 @@ export default function RidesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ride.status] ?? 'bg-neutral-100 text-neutral-700'}`}>
-                      {STATUS_LABEL[ride.status] ?? ride.status}
+                      {STATUS_LABEL_KEY[ride.status] ? t(STATUS_LABEL_KEY[ride.status]!) : ride.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium">
@@ -139,18 +141,18 @@ export default function RidesPage() {
                         )}
                       </>
                     ) : (
-                      <span className="text-neutral-400">{formatCUP(ride.estimated_fare_cup)} (est.)</span>
+                      <span className="text-neutral-400">{formatCUP(ride.estimated_fare_cup)} ({t('rides.estimated')})</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-500">
                     {ride.actual_distance_m != null
                       ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
                       : ride.estimated_distance_m > 0
-                        ? <span className="text-neutral-400">{(ride.estimated_distance_m / 1000).toFixed(1)} km (est.)</span>
+                        ? <span className="text-neutral-400">{(ride.estimated_distance_m / 1000).toFixed(1)} km ({t('rides.estimated')})</span>
                         : '—'}
                   </td>
                   <td className="px-4 py-3 text-neutral-500">
-                    {ride.payment_method === 'cash' ? 'Efectivo' : 'TriciCoin'}
+                    {ride.payment_method === 'cash' ? t('rides.payment_cash') : t('rides.payment_tricicoin')}
                   </td>
                   <td className="px-4 py-3 text-neutral-500">
                     {new Date(ride.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -169,17 +171,17 @@ export default function RidesPage() {
           disabled={!canGoPrev}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página <strong>{page + 1}</strong>
+          {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

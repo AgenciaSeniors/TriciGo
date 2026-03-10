@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useTranslation('admin');
   const redirect = searchParams.get('redirect') ?? '/';
   const errorParam = searchParams.get('error');
 
@@ -14,7 +16,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(
-    errorParam === 'unauthorized' ? 'No tienes permisos de administrador.' : '',
+    errorParam === 'unauthorized' ? t('login.error_unauthorized') : '',
   );
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -37,7 +39,7 @@ export default function AdminLoginPage() {
       router.push(redirect);
       router.refresh();
     } catch {
-      setError('Error al iniciar sesión. Intenta de nuevo.');
+      setError(t('login.error_generic'));
     } finally {
       setLoading(false);
     }
@@ -53,14 +55,14 @@ export default function AdminLoginPage() {
             alt="TriciGo"
             className="h-10 w-auto mx-auto mb-2"
           />
-          <p className="text-neutral-500 text-sm">Panel de administración</p>
+          <p className="text-neutral-500 text-sm">{t('login.admin_panel')}</p>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="bg-neutral-900 rounded-xl p-6 space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-neutral-300 mb-1">
-              Correo electrónico
+              {t('login.email_label')}
             </label>
             <input
               id="email"
@@ -69,13 +71,13 @@ export default function AdminLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500 text-sm"
-              placeholder="admin@tricigo.app"
+              placeholder={t('login.email_placeholder')}
             />
           </div>
 
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-neutral-300 mb-1">
-              Contraseña
+              {t('login.password_label')}
             </label>
             <input
               id="password"
@@ -84,7 +86,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500 text-sm"
-              placeholder="••••••••"
+              placeholder={t('login.password_placeholder')}
             />
           </div>
 
@@ -97,7 +99,7 @@ export default function AdminLoginPage() {
             disabled={loading}
             className="w-full py-2.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors"
           >
-            {loading ? 'Ingresando...' : 'Ingresar'}
+            {loading ? t('login.logging_in') : t('login.login_button')}
           </button>
         </form>
       </div>

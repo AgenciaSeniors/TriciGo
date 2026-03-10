@@ -3,16 +3,17 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { User } from '@tricigo/types';
 import type { UserRole } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
-const ROLE_FILTERS: { label: string; value: UserRole | 'all' }[] = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Customer', value: 'customer' },
-  { label: 'Driver', value: 'driver' },
-  { label: 'Admin', value: 'admin' },
+const ROLE_FILTERS: { labelKey: string; value: UserRole | 'all' }[] = [
+  { labelKey: 'users.filter_all', value: 'all' },
+  { labelKey: 'users.filter_customer', value: 'customer' },
+  { labelKey: 'users.filter_driver', value: 'driver' },
+  { labelKey: 'users.filter_admin', value: 'admin' },
 ];
 
 const roleBadgeClasses: Record<UserRole, string> = {
@@ -31,6 +32,7 @@ function formatDate(dateString: string): string {
 }
 
 export default function UsersPage() {
+  const { t } = useTranslation('admin');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -74,7 +76,7 @@ export default function UsersPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Usuarios</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('users.title')}</h1>
 
       {/* Role filter buttons */}
       <div className="flex gap-2 mb-6">
@@ -88,7 +90,7 @@ export default function UsersPage() {
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {filter.label}
+            {t(filter.labelKey)}
           </button>
         ))}
       </div>
@@ -99,22 +101,22 @@ export default function UsersPage() {
           <thead>
             <tr className="border-b border-neutral-100">
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Nombre
+                {t('users.col_name')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Teléfono
+                {t('users.col_phone')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Rol
+                {t('users.col_role')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Estado
+                {t('users.col_status')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Registro
+                {t('users.col_registered')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Acciones
+                {t('common.actions')}
               </th>
             </tr>
           </thead>
@@ -125,7 +127,7 @@ export default function UsersPage() {
                   colSpan={6}
                   className="text-center py-12 text-neutral-400"
                 >
-                  Cargando...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : filteredUsers.length === 0 ? (
@@ -134,7 +136,7 @@ export default function UsersPage() {
                   colSpan={6}
                   className="text-center py-12 text-neutral-400"
                 >
-                  No hay usuarios
+                  {t('users.no_users')}
                 </td>
               </tr>
             ) : (
@@ -166,7 +168,7 @@ export default function UsersPage() {
                           : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {user.is_active ? 'Activo' : 'Inactivo'}
+                      {user.is_active ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-neutral-600">
@@ -177,7 +179,7 @@ export default function UsersPage() {
                       href={`/users/${user.id}`}
                       className="text-sm font-medium text-[#FF4D00] hover:text-[#e04400] transition-colors"
                     >
-                      Ver
+                      {t('common.view')}
                     </Link>
                   </td>
                 </tr>
@@ -198,10 +200,10 @@ export default function UsersPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página {page + 1}
+          {t('common.page')} {page + 1}
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
@@ -212,7 +214,7 @@ export default function UsersPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

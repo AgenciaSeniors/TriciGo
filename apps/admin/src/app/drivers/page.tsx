@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { DriverProfileWithUser } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 
@@ -10,13 +11,13 @@ const PAGE_SIZE = 20;
 
 type StatusFilter = DriverStatus | 'all';
 
-const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Pendientes', value: 'pending_verification' },
-  { label: 'En revisión', value: 'under_review' },
-  { label: 'Aprobados', value: 'approved' },
-  { label: 'Rechazados', value: 'rejected' },
-  { label: 'Suspendidos', value: 'suspended' },
+const STATUS_FILTERS: { labelKey: string; value: StatusFilter }[] = [
+  { labelKey: 'drivers.filter_all', value: 'all' },
+  { labelKey: 'drivers.filter_pending', value: 'pending_verification' },
+  { labelKey: 'drivers.filter_in_review', value: 'under_review' },
+  { labelKey: 'drivers.filter_approved', value: 'approved' },
+  { labelKey: 'drivers.filter_rejected', value: 'rejected' },
+  { labelKey: 'drivers.filter_suspended', value: 'suspended' },
 ];
 
 const statusBadgeClasses: Record<DriverStatus, string> = {
@@ -27,12 +28,12 @@ const statusBadgeClasses: Record<DriverStatus, string> = {
   suspended: 'bg-orange-50 text-orange-700',
 };
 
-const statusLabels: Record<DriverStatus, string> = {
-  pending_verification: 'Pendiente',
-  under_review: 'En revisión',
-  approved: 'Aprobado',
-  rejected: 'Rechazado',
-  suspended: 'Suspendido',
+const statusLabelKeys: Record<DriverStatus, string> = {
+  pending_verification: 'drivers.status_pending',
+  under_review: 'drivers.status_in_review',
+  approved: 'drivers.status_approved',
+  rejected: 'drivers.status_rejected',
+  suspended: 'drivers.status_suspended',
 };
 
 function formatDate(dateString: string): string {
@@ -44,6 +45,7 @@ function formatDate(dateString: string): string {
 }
 
 export default function DriversPage() {
+  const { t } = useTranslation('admin');
   const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -79,7 +81,7 @@ export default function DriversPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Conductores</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('drivers.title')}</h1>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -96,7 +98,7 @@ export default function DriversPage() {
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {filter.label}
+            {t(filter.labelKey)}
           </button>
         ))}
       </div>
@@ -106,26 +108,26 @@ export default function DriversPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Nombre</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Teléfono</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Vehículo</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Estado</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Rating</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Registro</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">Acciones</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_name')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_phone')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_vehicle')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_status')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_rating')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_registered')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-neutral-400">
-                  Cargando...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : drivers.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-neutral-400">
-                  No hay conductores registrados aún
+                  {t('drivers.no_drivers')}
                 </td>
               </tr>
             ) : (
@@ -151,7 +153,7 @@ export default function DriversPage() {
                           statusBadgeClasses[driver.status]
                         }`}
                       >
-                        {statusLabels[driver.status]}
+                        {t(statusLabelKeys[driver.status])}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-neutral-600">
@@ -165,7 +167,7 @@ export default function DriversPage() {
                         href={`/drivers/${driver.id}`}
                         className="text-sm font-medium text-[#FF4D00] hover:text-[#e04400] transition-colors"
                       >
-                        Ver detalle
+                        {t('common.view_detail')}
                       </Link>
                     </td>
                   </tr>
@@ -187,9 +189,9 @@ export default function DriversPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Anterior
+          {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">Página {page + 1}</span>
+        <span className="text-sm text-neutral-500">{t('common.page')} {page + 1}</span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
@@ -199,7 +201,7 @@ export default function DriversPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

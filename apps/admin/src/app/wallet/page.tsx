@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import type { LedgerTransaction, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
 
@@ -22,6 +23,7 @@ type RedemptionRow = WalletRedemption & { driver_name: string };
 
 export default function WalletPage() {
   const { userId: adminUserId } = useAdminUser();
+  const { t } = useTranslation('admin');
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [tab, setTab] = useState<Tab>('redemptions');
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
@@ -76,9 +78,9 @@ export default function WalletPage() {
 
   async function handleRedemption(id: string, action: 'approved' | 'rejected') {
     if (action === 'approved') {
-      if (!window.confirm('¿Aprobar este canje?')) return;
+      if (!window.confirm(t('wallet_admin.confirm_approve_redemption'))) return;
     } else {
-      const reason = window.prompt('Motivo del rechazo:');
+      const reason = window.prompt(t('wallet_admin.reject_reason_redemption'));
       if (reason === null) return;
       setProcessing(id);
       try {
@@ -89,7 +91,7 @@ export default function WalletPage() {
         setStats(newStats);
       } catch (err) {
         console.error('Error processing redemption:', err);
-        window.alert('Error al procesar el canje');
+        window.alert(t('wallet_admin.error_processing_redemption'));
       } finally {
         setProcessing(null);
       }
@@ -104,7 +106,7 @@ export default function WalletPage() {
       setStats(newStats);
     } catch (err) {
       console.error('Error processing redemption:', err);
-      window.alert('Error al procesar el canje');
+      window.alert(t('wallet_admin.error_processing_redemption'));
     } finally {
       setProcessing(null);
     }
@@ -112,9 +114,9 @@ export default function WalletPage() {
 
   async function handleRecharge(id: string, action: 'approved' | 'rejected') {
     if (action === 'approved') {
-      if (!window.confirm('¿Aprobar esta recarga?')) return;
+      if (!window.confirm(t('wallet_admin.confirm_approve_recharge'))) return;
     } else {
-      const reason = window.prompt('Motivo del rechazo:');
+      const reason = window.prompt(t('wallet_admin.reject_reason_recharge'));
       if (reason === null) return;
       setProcessing(id);
       try {
@@ -122,7 +124,7 @@ export default function WalletPage() {
         setRecharges((prev) => prev.filter((r) => r.id !== id));
       } catch (err) {
         console.error('Error processing recharge:', err);
-        window.alert('Error al procesar la recarga');
+        window.alert(t('wallet_admin.error_processing_recharge'));
       } finally {
         setProcessing(null);
       }
@@ -135,16 +137,16 @@ export default function WalletPage() {
       setRecharges((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       console.error('Error processing recharge:', err);
-      window.alert('Error al procesar la recarga');
+      window.alert(t('wallet_admin.error_processing_recharge'));
     } finally {
       setProcessing(null);
     }
   }
 
-  const tabs: { label: string; value: Tab }[] = [
-    { label: 'Canjes pendientes', value: 'redemptions' },
-    { label: 'Recargas pendientes', value: 'recharges' },
-    { label: 'Ledger', value: 'ledger' },
+  const tabs: { labelKey: string; value: Tab }[] = [
+    { labelKey: 'wallet_admin.tab_redemptions', value: 'redemptions' },
+    { labelKey: 'wallet_admin.tab_recharges', value: 'recharges' },
+    { labelKey: 'wallet_admin.tab_ledger', value: 'ledger' },
   ];
 
   const listData = tab === 'redemptions' ? redemptions : tab === 'recharges' ? recharges : transactions;
@@ -153,24 +155,24 @@ export default function WalletPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Wallet / Finanzas</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('wallet_admin.title')}</h1>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-          <p className="text-sm text-neutral-500 mb-1">TC en circulación</p>
+          <p className="text-sm text-neutral-500 mb-1">{t('wallet_admin.label_circulation')}</p>
           <p className="text-2xl font-bold text-[#FF4D00]">
             {stats ? formatTriciCoin(stats.total_in_circulation) : '—'}
           </p>
         </div>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-          <p className="text-sm text-neutral-500 mb-1">Canjes pendientes</p>
+          <p className="text-sm text-neutral-500 mb-1">{t('wallet_admin.label_pending_redemptions')}</p>
           <p className="text-2xl font-bold text-yellow-600">
             {stats?.pending_redemptions_count ?? '—'}
           </p>
         </div>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-          <p className="text-sm text-neutral-500 mb-1">Monto pendiente</p>
+          <p className="text-sm text-neutral-500 mb-1">{t('wallet_admin.label_pending_amount')}</p>
           <p className="text-2xl font-bold">
             {stats ? formatTriciCoin(stats.pending_redemptions_amount) : '—'}
           </p>
@@ -179,17 +181,17 @@ export default function WalletPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
-        {tabs.map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t.value}
-            onClick={() => { setTab(t.value); setPage(0); }}
+            key={tb.value}
+            onClick={() => { setTab(tb.value); setPage(0); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.value
+              tab === tb.value
                 ? 'bg-[#FF4D00] text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
-            {t.label}
+            {t(tb.labelKey)}
           </button>
         ))}
       </div>
@@ -200,17 +202,17 @@ export default function WalletPage() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Conductor</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Monto</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_driver')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {redemptions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
-                    {loading ? 'Cargando...' : 'Sin canjes pendientes'}
+                    {loading ? t('common.loading') : t('wallet_admin.no_redemptions')}
                   </td>
                 </tr>
               ) : (
@@ -232,14 +234,14 @@ export default function WalletPage() {
                           disabled={processing === r.id}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                         >
-                          Aprobar
+                          {t('common.approve')}
                         </button>
                         <button
                           onClick={() => handleRedemption(r.id, 'rejected')}
                           disabled={processing === r.id}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
                         >
-                          Rechazar
+                          {t('common.reject')}
                         </button>
                       </div>
                     </td>
@@ -252,17 +254,17 @@ export default function WalletPage() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Usuario</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Monto</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Acciones</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_user')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {recharges.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
-                    {loading ? 'Cargando...' : 'Sin recargas pendientes'}
+                    {loading ? t('common.loading') : t('wallet_admin.no_recharges')}
                   </td>
                 </tr>
               ) : (
@@ -284,14 +286,14 @@ export default function WalletPage() {
                           disabled={processing === r.id}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                         >
-                          Aprobar
+                          {t('common.approve')}
                         </button>
                         <button
                           onClick={() => handleRecharge(r.id, 'rejected')}
                           disabled={processing === r.id}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
                         >
-                          Rechazar
+                          {t('common.reject')}
                         </button>
                       </div>
                     </td>
@@ -304,17 +306,17 @@ export default function WalletPage() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Descripción</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Tipo</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Ref</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">Fecha</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_description')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_type')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_ref')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
               </tr>
             </thead>
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
-                    {loading ? 'Cargando...' : 'Sin movimientos en el ledger'}
+                    {loading ? t('common.loading') : t('wallet_admin.no_ledger')}
                   </td>
                 </tr>
               ) : (
@@ -347,17 +349,17 @@ export default function WalletPage() {
           disabled={!canGoPrev}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página <strong>{page + 1}</strong>
+          {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
+import { useTranslation } from '@tricigo/i18n';
 import type { AdminAction } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
@@ -16,26 +17,27 @@ function formatDateTime(dateString: string): string {
   });
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  approve_driver: 'Aprobar conductor',
-  reject_driver: 'Rechazar conductor',
-  suspend_driver: 'Suspender conductor',
-  approve_redemption: 'Aprobar canje',
-  reject_redemption: 'Rechazar canje',
-  approve_recharge: 'Aprobar recarga',
-  reject_recharge: 'Rechazar recarga',
-  incident_investigating: 'Investigar incidente',
-  incident_resolved: 'Resolver incidente',
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  approve_driver: 'audit.action_approve_driver',
+  reject_driver: 'audit.action_reject_driver',
+  suspend_driver: 'audit.action_suspend_driver',
+  approve_redemption: 'audit.action_approve_redemption',
+  reject_redemption: 'audit.action_reject_redemption',
+  approve_recharge: 'audit.action_approve_recharge',
+  reject_recharge: 'audit.action_reject_recharge',
+  incident_investigating: 'audit.action_investigate_incident',
+  incident_resolved: 'audit.action_resolve_incident',
 };
 
-const TARGET_LABELS: Record<string, string> = {
-  driver_profile: 'Conductor',
-  wallet_redemption: 'Canje wallet',
-  wallet_recharge_request: 'Recarga wallet',
-  incident_report: 'Incidente',
+const TARGET_LABEL_KEYS: Record<string, string> = {
+  driver_profile: 'audit.target_driver',
+  wallet_redemption: 'audit.target_redemption',
+  wallet_recharge_request: 'audit.target_recharge',
+  incident_report: 'audit.target_incident',
 };
 
 export default function AuditPage() {
+  const { t } = useTranslation('admin');
   const [actions, setActions] = useState<AdminAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -85,13 +87,13 @@ export default function AuditPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Auditoría</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('audit.title')}</h1>
 
       {/* Date range filters */}
       <div className="flex flex-wrap items-end gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-neutral-600 mb-1">
-            Desde
+            {t('audit.filter_from')}
           </label>
           <input
             type="date"
@@ -105,7 +107,7 @@ export default function AuditPage() {
         </div>
         <div>
           <label className="block text-sm font-medium text-neutral-600 mb-1">
-            Hasta
+            {t('audit.filter_to')}
           </label>
           <input
             type="date"
@@ -122,7 +124,7 @@ export default function AuditPage() {
             onClick={handleClearFilter}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 transition-colors"
           >
-            Limpiar filtros
+            {t('audit.clear_filters')}
           </button>
         )}
       </div>
@@ -133,19 +135,19 @@ export default function AuditPage() {
           <thead>
             <tr className="border-b border-neutral-100">
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Fecha
+                {t('audit.col_date')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Admin
+                {t('audit.col_admin')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Acción
+                {t('audit.col_action')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Objetivo
+                {t('audit.col_target')}
               </th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
-                Detalles
+                {t('audit.col_details')}
               </th>
             </tr>
           </thead>
@@ -156,7 +158,7 @@ export default function AuditPage() {
                   colSpan={5}
                   className="text-center py-12 text-neutral-400"
                 >
-                  Cargando...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : actions.length === 0 ? (
@@ -165,7 +167,7 @@ export default function AuditPage() {
                   colSpan={5}
                   className="text-center py-12 text-neutral-400"
                 >
-                  No hay acciones registradas
+                  {t('audit.no_actions')}
                 </td>
               </tr>
             ) : (
@@ -182,12 +184,12 @@ export default function AuditPage() {
                   </td>
                   <td className="px-6 py-4">
                     <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                      {ACTION_LABELS[action.action] ?? action.action}
+                      {ACTION_LABEL_KEYS[action.action] ? t(ACTION_LABEL_KEYS[action.action]!) : action.action}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-neutral-600">
                     <span className="text-neutral-500">
-                      {TARGET_LABELS[action.target_type] ?? action.target_type}
+                      {TARGET_LABEL_KEYS[action.target_type] ? t(TARGET_LABEL_KEYS[action.target_type]!) : action.target_type}
                     </span>
                     {action.target_id && (
                       <span className="ml-1 font-mono text-xs text-neutral-400">
@@ -224,10 +226,10 @@ export default function AuditPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Anterior
+          {t('common.previous')}
         </button>
         <span className="text-sm text-neutral-500">
-          Página {page + 1}
+          {t('common.page')} {page + 1}
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
@@ -238,7 +240,7 @@ export default function AuditPage() {
               : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
           }`}
         >
-          Siguiente
+          {t('common.next')}
         </button>
       </div>
     </div>

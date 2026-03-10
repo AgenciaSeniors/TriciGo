@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { Ride, DriverProfileWithUser } from '@tricigo/types';
 
 type DashboardMetrics = {
@@ -25,15 +26,15 @@ const STATUS_BADGE: Record<string, string> = {
   disputed: 'bg-orange-100 text-orange-700',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  searching: 'Buscando',
-  accepted: 'Aceptado',
-  driver_en_route: 'En camino',
-  arrived_at_pickup: 'En punto',
-  in_progress: 'En progreso',
-  completed: 'Completado',
-  canceled: 'Cancelado',
-  disputed: 'En disputa',
+const STATUS_LABEL_KEY: Record<string, string> = {
+  searching: 'dashboard.status_searching',
+  accepted: 'dashboard.status_accepted',
+  driver_en_route: 'dashboard.status_driver_en_route',
+  arrived_at_pickup: 'dashboard.status_arrived_at_pickup',
+  in_progress: 'dashboard.status_in_progress',
+  completed: 'dashboard.status_completed',
+  canceled: 'dashboard.status_canceled',
+  disputed: 'dashboard.status_disputed',
 };
 
 function truncate(str: string, len: number) {
@@ -41,6 +42,7 @@ function truncate(str: string, len: number) {
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation('admin');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentRides, setRecentRides] = useState<Ride[]>([]);
   const [pendingDrivers, setPendingDrivers] = useState<DriverProfileWithUser[]>([]);
@@ -75,17 +77,17 @@ export default function DashboardPage() {
   }, []);
 
   const stats = [
-    { label: 'Viajes activos', value: metrics?.active_rides ?? 0, color: 'text-[#FF4D00]', format: 'number' as const },
-    { label: 'Viajes hoy', value: metrics?.total_rides_today ?? 0, color: 'text-neutral-900', format: 'number' as const },
-    { label: 'Conductores en línea', value: metrics?.online_drivers ?? 0, color: 'text-green-600', format: 'number' as const },
-    { label: 'Ingresos hoy', value: metrics?.total_revenue_today ?? 0, color: 'text-[#FF4D00]', format: 'cup' as const },
-    { label: 'Verificaciones pendientes', value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600', format: 'number' as const },
-    { label: 'Incidentes abiertos', value: metrics?.open_incidents ?? 0, color: 'text-red-600', format: 'number' as const },
+    { label: t('dashboard.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-[#FF4D00]', format: 'number' as const },
+    { label: t('dashboard.total_rides_today'), value: metrics?.total_rides_today ?? 0, color: 'text-neutral-900', format: 'number' as const },
+    { label: t('dashboard.online_drivers'), value: metrics?.online_drivers ?? 0, color: 'text-green-600', format: 'number' as const },
+    { label: t('dashboard.revenue_today'), value: metrics?.total_revenue_today ?? 0, color: 'text-[#FF4D00]', format: 'cup' as const },
+    { label: t('dashboard.pending_verifications'), value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600', format: 'number' as const },
+    { label: t('dashboard.open_incidents'), value: metrics?.open_incidents ?? 0, color: 'text-red-600', format: 'number' as const },
   ];
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+      <h1 className="text-3xl font-bold mb-6">{t('dashboard.title')}</h1>
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -106,9 +108,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent rides */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-          <h2 className="text-lg font-bold mb-4">Viajes recientes</h2>
+          <h2 className="text-lg font-bold mb-4">{t('dashboard.recent_rides')}</h2>
           {recentRides.length === 0 ? (
-            <p className="text-neutral-400">Sin viajes recientes</p>
+            <p className="text-neutral-400">{t('dashboard.no_recent_rides')}</p>
           ) : (
             <div className="space-y-3">
               {recentRides.map((ride) => (
@@ -118,7 +120,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-neutral-500">→ {truncate(ride.dropoff_address, 30)}</p>
                   </div>
                   <span className={`ml-3 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ride.status] ?? 'bg-neutral-100 text-neutral-700'}`}>
-                    {STATUS_LABEL[ride.status] ?? ride.status}
+                    {STATUS_LABEL_KEY[ride.status] ? t(STATUS_LABEL_KEY[ride.status]!) : ride.status}
                   </span>
                 </div>
               ))}
@@ -128,16 +130,16 @@ export default function DashboardPage() {
 
         {/* Pending drivers */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-          <h2 className="text-lg font-bold mb-4">Conductores pendientes</h2>
+          <h2 className="text-lg font-bold mb-4">{t('dashboard.pending_drivers')}</h2>
           {pendingDrivers.length === 0 ? (
-            <p className="text-neutral-400">Sin verificaciones pendientes</p>
+            <p className="text-neutral-400">{t('dashboard.no_pending_drivers')}</p>
           ) : (
             <div className="space-y-3">
               {pendingDrivers.map((driver) => (
                 <div key={driver.id} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
                   <div>
                     <p className="text-sm font-medium text-neutral-900">
-                      {(driver as unknown as { users: { full_name: string } }).users?.full_name ?? 'Sin nombre'}
+                      {(driver as unknown as { users: { full_name: string } }).users?.full_name ?? t('common.no_name')}
                     </p>
                     <p className="text-xs text-neutral-500">
                       {(driver as unknown as { users: { phone: string } }).users?.phone ?? ''}
@@ -147,7 +149,7 @@ export default function DashboardPage() {
                     href={`/drivers/${driver.id}`}
                     className="text-sm text-[#FF4D00] hover:underline"
                   >
-                    Ver detalle
+                    {t('common.view_detail')}
                   </a>
                 </div>
               ))}
