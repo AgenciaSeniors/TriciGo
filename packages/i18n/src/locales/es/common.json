@@ -30,7 +30,10 @@
     "resend_code": "Reenviar código",
     "resend_in": "Reenviar en {{seconds}}s",
     "invalid_phone": "Número de teléfono inválido",
-    "invalid_otp": "Código inválido"
+    "invalid_otp": "Código inválido",
+    "or_continue_with": "o continúa con",
+    "google": "Google",
+    "apple": "Apple"
   },
 
   "wallet": {

@@ -92,4 +92,66 @@ export const authService = {
     const supabase = getSupabaseClient();
     return supabase.auth.onAuthStateChange(callback);
   },
+
+  // ==================== SOCIAL LOGIN ====================
+
+  /**
+   * Sign in with Google OAuth.
+   * Returns the URL to redirect to for Google authentication.
+   */
+  async signInWithGoogle(redirectTo?: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Sign in with Apple OAuth.
+   * Returns the URL to redirect to for Apple authentication.
+   */
+  async signInWithApple(redirectTo?: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo,
+      },
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Link a phone number to the current OAuth account.
+   * Used after social login when user needs to verify their phone.
+   */
+  async linkPhone(phone: string) {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.updateUser({ phone });
+    if (error) throw error;
+  },
+
+  /**
+   * Verify phone link OTP.
+   */
+  async verifyPhoneLink(phone: string, token: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone,
+      token,
+      type: 'phone_change',
+    });
+    if (error) throw error;
+    return data;
+  },
 };

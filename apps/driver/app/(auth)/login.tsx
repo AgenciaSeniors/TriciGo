@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Image } from 'react-native';
+import { View, Image, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -73,6 +73,31 @@ export default function LoginScreen() {
           fullWidth
           size="lg"
         />
+
+        {/* Divider */}
+        <View className="flex-row items-center my-6">
+          <View className="flex-1 h-px bg-neutral-700" />
+          <Text variant="caption" color="inverse" className="mx-4 opacity-50">
+            {t('auth.or_continue_with', { defaultValue: 'o continúa con' })}
+          </Text>
+          <View className="flex-1 h-px bg-neutral-700" />
+        </View>
+
+        {/* Social login */}
+        <View className="flex-row gap-3">
+          <Pressable
+            className="flex-1 flex-row items-center justify-center py-3.5 rounded-xl border border-neutral-600"
+            onPress={() => authService.signInWithGoogle()}
+          >
+            <Text variant="body" color="inverse">Google</Text>
+          </Pressable>
+          <Pressable
+            className="flex-1 flex-row items-center justify-center py-3.5 rounded-xl border border-neutral-600"
+            onPress={() => authService.signInWithApple()}
+          >
+            <Text variant="body" color="inverse">Apple</Text>
+          </Pressable>
+        </View>
       </View>
     </Screen>
   );
