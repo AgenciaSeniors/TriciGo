@@ -13,6 +13,8 @@ const navItems = [
   { href: '/incidents', labelKey: 'sidebar.incidents', icon: '🚨' },
   { href: '/support', labelKey: 'sidebar.support', icon: '🎧' },
   { href: '/fraud', labelKey: 'sidebar.fraud', icon: '🛡️' },
+  { href: '/audit', labelKey: 'sidebar.audit', icon: '📋' },
+  { href: '/reports', labelKey: 'sidebar.reports', icon: '📈' },
   { href: '/settings', labelKey: 'sidebar.settings', icon: '⚙️' },
 ];
 

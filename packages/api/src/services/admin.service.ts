@@ -295,21 +295,33 @@ export const adminService = {
   },
 
   /**
-   * Get admin action history.
+   * Get admin action history with optional date range filter.
    */
   async getAdminActions(
     page = 0,
     pageSize = 50,
+    filters: { dateFrom?: string; dateTo?: string } = {},
   ): Promise<AdminAction[]> {
     const supabase = getSupabaseClient();
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('admin_actions')
       .select('*')
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
+
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      // Add one day so the "to" date is inclusive
+      const toDate = new Date(filters.dateTo);
+      toDate.setDate(toDate.getDate() + 1);
+      query = query.lt('created_at', toDate.toISOString().split('T')[0]);
+    }
+
+    const { data, error } = await query.range(from, to);
     if (error) throw error;
     return data as AdminAction[];
   },
