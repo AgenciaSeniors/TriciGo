@@ -32,7 +32,7 @@ export default function DriverHomeScreen() {
     if (!profile?.id) return;
     driverService.getEligibilityStatus(profile.id).then((status) => {
       setIsIneligible(!status.is_eligible);
-    }).catch(() => {});
+    }).catch((err) => console.warn('[Driver] Failed to check eligibility:', err));
   }, [profile?.id]);
 
   // Init: check for active trip on mount

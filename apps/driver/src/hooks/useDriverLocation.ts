@@ -52,7 +52,7 @@ export function useDriverLocationTracking(
             // Update driver profile location
             driverService
               .updateLocation(driverId!, pos.latitude, pos.longitude, pos.heading ?? undefined)
-              .catch(() => {});
+              .catch(() => { /* best-effort: location broadcast */ });
 
             // Record ride location if active trip
             if (activeRideId) {
@@ -65,7 +65,7 @@ export function useDriverLocationTracking(
                   heading: pos.heading ?? undefined,
                   speed: loc.coords.speed ?? undefined,
                 })
-                .catch(() => {});
+                .catch(() => { /* best-effort: GPS trail recording */ });
             }
           },
         );

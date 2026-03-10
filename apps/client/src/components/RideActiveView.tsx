@@ -59,7 +59,7 @@ export function RideActiveView() {
                 reported_by: userId,
                 against_user_id: activeRide.driver_id ?? undefined,
                 description: 'SOS activado por pasajero durante viaje',
-              }).catch(() => {});
+              }).catch(() => { /* best-effort: SOS report, phone call is primary */ });
             }
             Linking.openURL('tel:106');
           },

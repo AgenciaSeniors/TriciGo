@@ -29,7 +29,7 @@ export default function SavedLocationsScreen() {
     customerService.ensureProfile(user.id).then((cp) => {
       setProfile(cp);
       setLocations(cp.saved_locations ?? []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch((err) => console.warn('[SavedLocations] Failed to load:', err)).finally(() => setLoading(false));
   }, [user]);
 
   const handleAdd = async () => {

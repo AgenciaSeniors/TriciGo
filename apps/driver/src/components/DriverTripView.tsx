@@ -73,7 +73,7 @@ export function DriverTripView() {
                 reported_by: driverProfile.user_id,
                 against_user_id: activeTrip.customer_id,
                 description: 'SOS activado por conductor durante viaje',
-              }).catch(() => {});
+              }).catch(() => { /* best-effort: SOS report, phone call is primary */ });
             }
             Linking.openURL('tel:106');
           },

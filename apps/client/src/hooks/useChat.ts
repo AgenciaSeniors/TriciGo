@@ -14,7 +14,7 @@ export function useChatInit(rideId: string) {
     chatService
       .getMessages(rideId)
       .then(setMessages)
-      .catch(() => {});
+      .catch((err) => console.warn('[Chat] Failed to load messages:', err));
 
     channel = chatService.subscribeToMessages(rideId, addMessage);
 

@@ -63,7 +63,7 @@ function IdleView() {
         await walletService.ensureAccount(user.id);
         const bal = await walletService.getBalance(user.id);
         if (!cancelled) setWalletBalance(bal.available);
-      } catch {}
+      } catch (err) { console.warn('[Home] Failed to load wallet:', err); }
     })();
     return () => { cancelled = true; };
   }, [user?.id]);

@@ -28,7 +28,7 @@ export default function EmergencyContactScreen() {
         setPhone(cp.emergency_contact.phone);
         setRelationship(cp.emergency_contact.relationship);
       }
-    }).catch(() => {});
+    }).catch((err) => console.warn('[EmergencyContact] Failed to load:', err));
   }, [user]);
 
   const handleSave = async () => {

@@ -39,7 +39,7 @@ export default function EditProfileScreen() {
     customerService.ensureProfile(user.id).then((cp) => {
       setCustomerProfile(cp);
       setPaymentMethod(cp.default_payment_method);
-    }).catch(() => {});
+    }).catch((err) => console.warn('[EditProfile] Failed to load:', err));
   }, [user]);
 
   const handleSave = async () => {

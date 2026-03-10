@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Pressable, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -7,15 +7,43 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
+import { notificationService } from '@tricigo/api';
+import { useAuthStore } from '@/stores/auth.store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+
+const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
 export default function SettingsScreen() {
   const { t } = useTranslation('common');
+  const userId = useAuthStore((s) => s.user?.id);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const currentLang = i18n.language ?? 'es';
+
+  useEffect(() => {
+    AsyncStorage.getItem(NOTIF_PREF_KEY).then((val) => {
+      if (val !== null) setNotificationsEnabled(val === 'true');
+    }).catch(() => { /* best-effort: read preference */ });
+  }, []);
 
   const toggleLanguage = () => {
     const next = currentLang === 'es' ? 'en' : 'es';
     i18n.changeLanguage(next);
+  };
+
+  const handleNotificationToggle = async (enabled: boolean) => {
+    setNotificationsEnabled(enabled);
+    await AsyncStorage.setItem(NOTIF_PREF_KEY, String(enabled)).catch(() => {});
+
+    if (!enabled && userId) {
+      // Remove push token when disabling
+      try {
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await notificationService.removePushToken(userId, tokenData.data);
+      } catch {
+        /* best-effort: token removal */
+      }
+    }
   };
 
   return (
@@ -48,7 +76,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
+              onValueChange={handleNotificationToggle}
               trackColor={{ true: '#FF4D00' }}
             />
           </View>

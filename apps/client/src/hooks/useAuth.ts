@@ -24,7 +24,7 @@ export function useAuthInit() {
           const user = await authService.getCurrentUser();
           if (mounted) setUser(user);
           if (user) {
-            customerService.ensureProfile(user.id).catch(() => {});
+            customerService.ensureProfile(user.id).catch((err) => console.warn('[Auth] Failed to ensure profile:', err));
           }
         } else if (mounted) {
           reset();

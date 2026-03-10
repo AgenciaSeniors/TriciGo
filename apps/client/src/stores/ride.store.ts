@@ -23,7 +23,7 @@ function scheduleLocalNotification(status: RideStatus) {
   Notifications.scheduleNotificationAsync({
     content: { title: 'TriciGo', body },
     trigger: null,
-  }).catch(() => {});
+  }).catch(() => { /* best-effort: local notification */ });
 }
 
 export type RideFlowStep =

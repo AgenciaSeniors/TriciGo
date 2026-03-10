@@ -76,7 +76,7 @@ export function useIncomingRequests(isOnline: boolean) {
       for (const ride of rides) {
         addRequest(ride);
       }
-    }).catch(() => {});
+    }).catch((err) => console.warn('[DriverRide] Failed to fetch rides:', err));
 
     // Subscribe to new rides
     channelRef.current = rideService.subscribeToNewRides(

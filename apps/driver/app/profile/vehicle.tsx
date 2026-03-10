@@ -20,7 +20,7 @@ export default function VehicleScreen() {
     driverService
       .getVehicle(driverProfile.id)
       .then(setVehicle)
-      .catch(() => {})
+      .catch((err) => console.warn('[Vehicle] Failed to load:', err))
       .finally(() => setLoading(false));
   }, [driverProfile]);
 

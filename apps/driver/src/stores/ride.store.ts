@@ -29,7 +29,7 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
           body: 'Nueva solicitud de viaje',
         },
         trigger: null,
-      }).catch(() => {});
+      }).catch(() => { /* best-effort: local notification */ });
       return { incomingRequests: [ride, ...s.incomingRequests] };
     }),
 
