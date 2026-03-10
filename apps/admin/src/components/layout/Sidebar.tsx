@@ -10,6 +10,7 @@ const navItems = [
   { href: '/users', label: 'Usuarios', icon: '👥' },
   { href: '/wallet', label: 'Wallet', icon: '💰' },
   { href: '/incidents', label: 'Incidentes', icon: '🚨' },
+  { href: '/fraud', label: 'Fraude', icon: '🛡️' },
   { href: '/settings', label: 'Configuración', icon: '⚙️' },
 ];
 

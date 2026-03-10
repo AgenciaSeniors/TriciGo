@@ -22,6 +22,10 @@ export interface WalletAccount {
   held_balance: number;
   currency: 'TRC';
   is_active: boolean;
+  is_frozen: boolean;
+  frozen_reason: string | null;
+  frozen_at: string | null;
+  frozen_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +90,27 @@ export interface WalletRechargeRequest {
   processed_by: string | null;
   processed_at: string | null;
   rejection_reason: string | null;
+  created_at: string;
+}
+
+export type FraudAlertType =
+  | 'unusual_transfer'
+  | 'rapid_recharges'
+  | 'suspicious_cancellations'
+  | 'velocity_anomaly';
+
+export type FraudSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface FraudAlert {
+  id: string;
+  user_id: string;
+  alert_type: FraudAlertType;
+  severity: FraudSeverity;
+  details: Record<string, unknown> | null;
+  resolved: boolean;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
   created_at: string;
 }
 

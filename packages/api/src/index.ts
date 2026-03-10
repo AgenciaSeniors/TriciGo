@@ -16,4 +16,5 @@ export { incidentService } from './services/incident.service';
 export { notificationService } from './services/notification.service';
 export { locationService } from './services/location.service';
 export { matchingService } from './services/matching.service';
+export { fraudService } from './services/fraud.service';
 export { useFeatureFlag } from './hooks/useFeatureFlag';
