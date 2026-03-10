@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { Alert } from 'react-native';
 import { rideService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
@@ -207,11 +208,22 @@ export function useRideActions() {
 
     setLoading(true);
     try {
-      await rideService.cancelRide(activeRide.id, user?.id, reason);
+      const penalty = await rideService.cancelRide(activeRide.id, user?.id, reason);
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       resetAll();
+
+      // Show penalty info if applicable
+      if (penalty && penalty.penaltyAmount > 0) {
+        const amount = (penalty.penaltyAmount / 100).toFixed(0);
+        Alert.alert(
+          'Cancelación',
+          penalty.isBlocked
+            ? `Se aplicó una penalización de ${amount} CUP. Has sido bloqueado temporalmente por cancelaciones excesivas.`
+            : `Se aplicó una penalización de ${amount} CUP por cancelación.`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cancelar');
     } finally {

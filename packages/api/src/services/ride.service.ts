@@ -249,9 +249,14 @@ export const rideService = {
   },
 
   /**
-   * Cancel a ride.
+   * Cancel a ride with optional penalty.
+   * Returns penalty info if a penalty was applied.
    */
-  async cancelRide(rideId: string, userId?: string, reason?: string): Promise<void> {
+  async cancelRide(
+    rideId: string,
+    userId?: string,
+    reason?: string,
+  ): Promise<{ penaltyAmount: number; isBlocked: boolean } | null> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('rides')
@@ -263,6 +268,28 @@ export const rideService = {
       })
       .eq('id', rideId);
     if (error) throw error;
+
+    // Apply cancellation penalty if user is known
+    if (userId) {
+      try {
+        const { data: penaltyData, error: penaltyErr } = await supabase.rpc(
+          'apply_cancellation_penalty',
+          { p_user_id: userId, p_ride_id: rideId },
+        );
+        if (!penaltyErr && penaltyData) {
+          const row = Array.isArray(penaltyData) ? penaltyData[0] : penaltyData;
+          return {
+            penaltyAmount: row?.penalty_amount ?? 0,
+            isBlocked: row?.is_blocked ?? false,
+          };
+        }
+      } catch {
+        // Penalty is non-critical, ride is already canceled
+        console.error('Failed to apply cancellation penalty');
+      }
+    }
+
+    return null;
   },
 
   /**

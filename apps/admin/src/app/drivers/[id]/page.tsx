@@ -284,6 +284,32 @@ export default function DriverDetailPage() {
         </div>
       </div>
 
+      {/* Financial Eligibility */}
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
+        <h2 className="text-lg font-bold mb-4">Elegibilidad financiera</h2>
+        <div className="flex items-center gap-3">
+          <span
+            className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+              profile.is_financially_eligible !== false
+                ? 'bg-green-50 text-green-700'
+                : 'bg-red-50 text-red-700'
+            }`}
+          >
+            {profile.is_financially_eligible !== false ? 'Elegible' : 'No elegible'}
+          </span>
+          {profile.negative_balance_since && (
+            <span className="text-sm text-neutral-500">
+              Saldo negativo desde: {formatDate(profile.negative_balance_since)}
+            </span>
+          )}
+        </div>
+        {profile.is_financially_eligible === false && (
+          <p className="text-sm text-neutral-500 mt-2">
+            El conductor no puede aceptar viajes hasta que resuelva su saldo negativo.
+          </p>
+        )}
+      </div>
+
       {/* Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
         <h2 className="text-lg font-bold mb-4">Acciones</h2>

@@ -15,6 +15,8 @@ export interface User {
   level: UserLevel;
   total_rides: number;
   total_spent: number;
+  cancellation_count: number;
+  last_cancellation_at: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -11,7 +11,9 @@
     "time_to_respond": "Time to respond: {{seconds}}s",
     "incoming_rides": "Available requests",
     "no_rides_available": "No requests at the moment",
-    "accept_failed": "Another driver already accepted this ride"
+    "accept_failed": "Another driver already accepted this ride",
+    "ineligible_banner": "Your account is suspended due to a negative balance. Recharge your wallet to accept rides.",
+    "ineligible_recharge": "Recharge wallet"
   },
 
   "trip": {

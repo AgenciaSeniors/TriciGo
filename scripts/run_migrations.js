@@ -36,6 +36,7 @@ async function main() {
     '00007_sprint9_payment_pipeline.sql',
     '00008_wallet_recharge_requests.sql',
     '00009_user_levels_p2p.sql',
+    '00010_eligibility_cancellations.sql',
   ];
 
   for (const file of migrations) {

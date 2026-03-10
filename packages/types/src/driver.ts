@@ -23,8 +23,19 @@ export interface DriverProfile {
   approved_at: string | null;
   suspended_at: string | null;
   suspended_reason: string | null;
+  is_financially_eligible: boolean;
+  negative_balance_since: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CancellationPenalty {
+  id: string;
+  user_id: string;
+  ride_id: string | null;
+  amount: number;
+  reason: string | null;
+  created_at: string;
 }
 
 export interface DriverDocument {

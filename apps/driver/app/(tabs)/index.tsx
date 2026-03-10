@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Pressable, FlatList, Alert } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
+import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
 import { HAVANA_CENTER } from '@tricigo/utils';
@@ -23,6 +25,15 @@ export default function DriverHomeScreen() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
   const [toggling, setToggling] = useState(false);
+  const [isIneligible, setIsIneligible] = useState(false);
+
+  // Check financial eligibility on mount and when profile changes
+  useEffect(() => {
+    if (!profile?.id) return;
+    driverService.getEligibilityStatus(profile.id).then((status) => {
+      setIsIneligible(!status.is_eligible);
+    }).catch(() => {});
+  }, [profile?.id]);
 
   // Init: check for active trip on mount
   useDriverRideInit();
@@ -83,6 +94,21 @@ export default function DriverHomeScreen() {
     <Screen bg="dark" statusBarStyle="light-content" padded>
       <View className="pt-4 flex-1">
         <Header isOnline={isOnline} />
+
+        {/* Ineligibility banner */}
+        {isIneligible && (
+          <View className="bg-red-900/80 rounded-xl p-4 mb-4">
+            <Text variant="bodySmall" color="inverse" className="mb-2">
+              {t('home.ineligible_banner')}
+            </Text>
+            <Button
+              title={t('home.ineligible_recharge')}
+              variant="outline"
+              size="sm"
+              onPress={() => router.push('/earnings')}
+            />
+          </View>
+        )}
 
         {/* Online/Offline toggle */}
         <Pressable

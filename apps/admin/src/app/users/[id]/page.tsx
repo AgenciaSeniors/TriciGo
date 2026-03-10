@@ -103,7 +103,7 @@ export default function UserDetailPage() {
     );
   }
 
-  const { user, wallet, transfers } = detail;
+  const { user, wallet, transfers, penalties } = detail;
   const currentLevel = (user.level ?? 'bronce') as UserLevel;
 
   return (
@@ -196,8 +196,8 @@ export default function UserDetailPage() {
               <dd className="text-sm font-medium">{formatCurrency(user.total_spent ?? 0)}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">Referral code</dt>
-              <dd className="text-sm font-medium font-mono">{user.id.slice(0, 8)}</dd>
+              <dt className="text-sm text-neutral-500">Cancelaciones</dt>
+              <dd className="text-sm font-medium">{user.cancellation_count ?? 0}</dd>
             </div>
           </dl>
 
@@ -300,6 +300,39 @@ export default function UserDetailPage() {
           <p className="text-sm text-neutral-400">Sin transferencias</p>
         )}
       </div>
+
+      {/* Cancellation Penalties */}
+      {penalties.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mt-8">
+          <h2 className="text-lg font-bold mb-4">Penalizaciones por cancelación</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-neutral-100">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">Fecha</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">Monto</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {penalties.map((p) => (
+                  <tr key={p.id} className="border-b border-neutral-50">
+                    <td className="px-4 py-3 text-sm text-neutral-600">
+                      {formatDate(p.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-red-600">
+                      {p.amount > 0 ? `-${formatCurrency(p.amount)}` : 'Sin cargo'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-neutral-500">
+                      {p.reason || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@
 import type {
   DriverProfile,
   DriverDocument,
+  CancellationPenalty,
   Vehicle,
   Ride,
   CompleteRideResult,
@@ -295,5 +296,75 @@ export const driverService = {
       .range(from, to);
     if (error) throw error;
     return data as Ride[];
+  },
+
+  // ==================== ELIGIBILITY ====================
+
+  /**
+   * Check and update driver financial eligibility.
+   */
+  async checkEligibility(driverId: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('check_driver_eligibility', {
+      p_driver_id: driverId,
+    });
+    if (error) throw error;
+    return data as boolean;
+  },
+
+  /**
+   * Get eligibility status for the driver.
+   */
+  async getEligibilityStatus(driverId: string): Promise<{
+    is_eligible: boolean;
+    negative_since: string | null;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('is_financially_eligible, negative_balance_since')
+      .eq('id', driverId)
+      .single();
+    if (error) throw error;
+    return {
+      is_eligible: data?.is_financially_eligible ?? true,
+      negative_since: data?.negative_balance_since ?? null,
+    };
+  },
+
+  /**
+   * Accept a ride with eligibility check.
+   */
+  async acceptRideWithEligibility(rideId: string, driverId: string): Promise<Ride> {
+    const supabase = getSupabaseClient();
+
+    // Check eligibility first
+    const { data: eligible } = await supabase.rpc('check_accept_ride_eligibility', {
+      p_driver_id: driverId,
+    });
+
+    if (!eligible) {
+      throw new Error('No puedes aceptar viajes: tu cuenta tiene un saldo negativo pendiente.');
+    }
+
+    return this.acceptRide(rideId, driverId);
+  },
+
+  /**
+   * Get cancellation penalties for a user.
+   */
+  async getCancellationPenalties(
+    userId: string,
+    limit = 10,
+  ): Promise<CancellationPenalty[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('cancellation_penalties')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data as CancellationPenalty[];
   },
 };

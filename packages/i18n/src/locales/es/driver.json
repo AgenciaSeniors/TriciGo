@@ -11,7 +11,9 @@
     "time_to_respond": "Tiempo para responder: {{seconds}}s",
     "incoming_rides": "Solicitudes disponibles",
     "no_rides_available": "No hay solicitudes en este momento",
-    "accept_failed": "Otro conductor aceptó este viaje"
+    "accept_failed": "Otro conductor aceptó este viaje",
+    "ineligible_banner": "Tu cuenta está suspendida por saldo negativo. Recarga tu billetera para poder aceptar viajes.",
+    "ineligible_recharge": "Recargar billetera"
   },
 
   "trip": {

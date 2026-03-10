@@ -651,7 +651,7 @@ export const adminService = {
   async getUserDetail(userId: string) {
     const supabase = getSupabaseClient();
 
-    const [userRes, walletRes, transfersRes] = await Promise.all([
+    const [userRes, walletRes, transfersRes, penaltiesRes] = await Promise.all([
       supabase
         .from('users')
         .select('*')
@@ -669,6 +669,12 @@ export const adminService = {
         .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
         .order('created_at', { ascending: false })
         .limit(20),
+      supabase
+        .from('cancellation_penalties')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(10),
     ]);
 
     if (userRes.error) throw userRes.error;
@@ -687,6 +693,13 @@ export const adminService = {
         to_user_id: string;
         amount: number;
         note: string | null;
+        created_at: string;
+      }>,
+      penalties: (penaltiesRes.data ?? []) as Array<{
+        id: string;
+        ride_id: string | null;
+        amount: number;
+        reason: string | null;
         created_at: string;
       }>,
     };
