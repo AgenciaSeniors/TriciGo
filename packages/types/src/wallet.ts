@@ -59,13 +59,12 @@ export interface LedgerEntry {
 
 export interface WalletTransfer {
   id: string;
-  from_account_id: string;
-  to_account_id: string;
+  from_user_id: string;
+  to_user_id: string;
   /** Amount in centavos */
   amount: number;
   transaction_id: string;
   note: string | null;
-  created_by: string;
   created_at: string;
 }
 

@@ -1,6 +1,22 @@
 'use client';
 
+import { useAdminUser } from '@/lib/useAdminUser';
+import { createBrowserClient } from '@/lib/supabase-server';
+import { useRouter } from 'next/navigation';
+
 export function Header() {
+  const { email, loading } = useAdminUser();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
+
+  const initial = email.charAt(0).toUpperCase();
+
   return (
     <header className="h-16 bg-white border-b border-neutral-100 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
@@ -19,12 +35,25 @@ export function Header() {
           </svg>
         </button>
 
-        {/* Admin avatar */}
+        {/* Admin avatar + logout */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">A</span>
+            <span className="text-white text-sm font-bold">
+              {loading ? '...' : initial}
+            </span>
           </div>
-          <span className="text-sm font-medium text-neutral-700">Admin</span>
+          <span className="text-sm font-medium text-neutral-700">
+            {loading ? '...' : email}
+          </span>
+          <button
+            onClick={handleLogout}
+            className="ml-2 p-1.5 text-neutral-400 hover:text-red-500 transition-colors"
+            title="Cerrar sesión"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
       </div>
     </header>

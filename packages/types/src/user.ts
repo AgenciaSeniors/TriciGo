@@ -48,9 +48,7 @@ export interface CustomerProfile {
 export interface UserDevice {
   id: string;
   user_id: string;
-  device_token: string | null;
+  push_token: string | null;
   platform: 'ios' | 'android' | 'web';
-  app_version: string | null;
-  last_active_at: string;
   created_at: string;
 }

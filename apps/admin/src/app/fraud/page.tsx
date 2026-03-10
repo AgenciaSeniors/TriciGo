@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fraudService } from '@tricigo/api';
 import type { FraudAlert } from '@tricigo/types';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 const severityBadge: Record<string, string> = {
   low: 'bg-blue-50 text-blue-700',
@@ -29,6 +30,7 @@ function formatDate(dateString: string): string {
 }
 
 export default function FraudAlertsPage() {
+  const { userId: adminUserId } = useAdminUser();
   const [alerts, setAlerts] = useState<FraudAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'unresolved' | 'all'>('unresolved');
@@ -58,7 +60,7 @@ export default function FraudAlertsPage() {
   const handleResolve = async (alertId: string) => {
     setResolving(alertId);
     try {
-      await fraudService.resolveAlert(alertId, 'admin-placeholder', resolutionNote || undefined);
+      await fraudService.resolveAlert(alertId, adminUserId, resolutionNote || undefined);
       setAlerts((prev) =>
         prev.map((a) => (a.id === alertId ? { ...a, resolved: true, resolved_at: new Date().toISOString() } : a)),
       );

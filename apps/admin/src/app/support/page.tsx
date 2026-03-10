@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supportService } from '@tricigo/api';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 const statusBadge: Record<string, string> = {
   open: 'bg-blue-50 text-blue-700',
@@ -48,6 +49,7 @@ function formatDate(d: string): string {
 }
 
 export default function SupportPage() {
+  const { userId: adminUserId } = useAdminUser();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('open');
@@ -91,7 +93,7 @@ export default function SupportPage() {
     try {
       const msg = await supportService.sendMessage({
         ticket_id: selectedTicket.id,
-        sender_id: 'admin-placeholder',
+        sender_id: adminUserId,
         message: reply.trim(),
         is_admin: true,
       });

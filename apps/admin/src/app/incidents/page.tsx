@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 const PAGE_SIZE = 20;
 
@@ -47,6 +48,7 @@ interface Incident {
 }
 
 export default function IncidentsPage() {
+  const { userId: adminUserId } = useAdminUser();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -71,7 +73,7 @@ export default function IncidentsPage() {
 
   const handleStatusChange = async (incidentId: string, newStatus: string) => {
     try {
-      await adminService.updateIncidentStatus(incidentId, newStatus, 'admin-placeholder');
+      await adminService.updateIncidentStatus(incidentId, newStatus, adminUserId);
       setIncidents((prev) =>
         prev.map((i) => (i.id === incidentId ? { ...i, status: newStatus } : i)),
       );

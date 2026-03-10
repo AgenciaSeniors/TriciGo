@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus } from '@tricigo/types';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 type DriverDetail = {
   profile: DriverProfile & { users: { full_name: string; phone: string; email: string | null } };
@@ -53,6 +54,7 @@ function formatDate(dateString: string): string {
 }
 
 export default function DriverDetailPage() {
+  const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [driver, setDriver] = useState<DriverDetail | null>(null);
@@ -105,7 +107,7 @@ export default function DriverDetailPage() {
     if (!id) return;
     setActionLoading(true);
     try {
-      await adminService.approveDriver(id, 'admin-placeholder');
+      await adminService.approveDriver(id, adminUserId);
       await refreshDriver();
     } catch (err) {
       console.error('Error approving driver:', err);
@@ -119,9 +121,9 @@ export default function DriverDetailPage() {
     setActionLoading(true);
     try {
       if (showReasonModal === 'reject') {
-        await adminService.rejectDriver(id, 'admin-placeholder', reason);
+        await adminService.rejectDriver(id, adminUserId, reason);
       } else {
-        await adminService.suspendDriver(id, 'admin-placeholder', reason);
+        await adminService.suspendDriver(id, adminUserId, reason);
       }
       await refreshDriver();
       setShowReasonModal(null);

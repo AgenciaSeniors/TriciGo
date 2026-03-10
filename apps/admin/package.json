@@ -10,6 +10,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-query": "^5.66.0",
     "@tricigo/api": "workspace:*",

@@ -535,11 +535,12 @@ export const adminService = {
   async createPromotion(
     promo: Pick<Promotion, 'code' | 'type' | 'is_active' | 'valid_from'> &
       Partial<Pick<Promotion, 'discount_percent' | 'discount_fixed_cup' | 'max_uses' | 'valid_until'>>,
+    adminId: string,
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('promotions')
-      .insert({ ...promo, created_by: 'admin-placeholder' });
+      .insert({ ...promo, created_by: adminId });
     if (error) throw error;
   },
 

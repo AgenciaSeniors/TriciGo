@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
+import { useAdminUser } from '@/lib/useAdminUser';
 import type { LedgerTransaction, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
@@ -20,6 +21,7 @@ type WalletStats = {
 type RedemptionRow = WalletRedemption & { driver_name: string };
 
 export default function WalletPage() {
+  const { userId: adminUserId } = useAdminUser();
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [tab, setTab] = useState<Tab>('redemptions');
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
@@ -80,7 +82,7 @@ export default function WalletPage() {
       if (reason === null) return;
       setProcessing(id);
       try {
-        await adminService.processRedemption(id, 'admin-placeholder', action, reason);
+        await adminService.processRedemption(id, adminUserId, action, reason);
         setRedemptions((prev) => prev.filter((r) => r.id !== id));
         // Refresh stats
         const newStats = await adminService.getWalletStats();
@@ -96,7 +98,7 @@ export default function WalletPage() {
 
     setProcessing(id);
     try {
-      await adminService.processRedemption(id, 'admin-placeholder', action);
+      await adminService.processRedemption(id, adminUserId, action);
       setRedemptions((prev) => prev.filter((r) => r.id !== id));
       const newStats = await adminService.getWalletStats();
       setStats(newStats);
@@ -116,7 +118,7 @@ export default function WalletPage() {
       if (reason === null) return;
       setProcessing(id);
       try {
-        await adminService.processRecharge(id, 'admin-placeholder', false, reason);
+        await adminService.processRecharge(id, adminUserId, false, reason);
         setRecharges((prev) => prev.filter((r) => r.id !== id));
       } catch (err) {
         console.error('Error processing recharge:', err);
@@ -129,7 +131,7 @@ export default function WalletPage() {
 
     setProcessing(id);
     try {
-      await adminService.processRecharge(id, 'admin-placeholder', true);
+      await adminService.processRecharge(id, adminUserId, true);
       setRecharges((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       console.error('Error processing recharge:', err);

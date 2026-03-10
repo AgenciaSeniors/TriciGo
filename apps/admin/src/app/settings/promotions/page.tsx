@@ -6,6 +6,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import type { Promotion } from '@tricigo/types';
 import type { PromotionType } from '@tricigo/types';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +43,7 @@ const emptyForm: CreateForm = {
 };
 
 export default function PromotionsPage() {
+  const { userId: adminUserId } = useAdminUser();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -95,7 +97,7 @@ export default function PromotionsPage() {
       if (form.valid_until) {
         payload.valid_until = new Date(form.valid_until).toISOString();
       }
-      await adminService.createPromotion(payload);
+      await adminService.createPromotion(payload, adminUserId);
       const data = await adminService.getPromotions(page, PAGE_SIZE);
       setPromotions(data);
       setForm(emptyForm);
