@@ -297,6 +297,34 @@ importers:
         specifier: ~5.7.0
         version: 5.7.3
 
+  apps/web:
+    dependencies:
+      '@tricigo/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@tricigo/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      next:
+        specifier: 15.5.12
+        version: 15.5.12(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.4(react@19.2.4)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.14)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   packages/api:
     dependencies:
       '@supabase/supabase-js':
@@ -315,10 +343,10 @@ importers:
     dependencies:
       i18next:
         specifier: ^24.2.2
-        version: 24.2.3(typescript@5.7.3)
+        version: 24.2.3(typescript@5.9.3)
       react-i18next:
         specifier: ^15.4.1
-        version: 15.7.4(i18next@24.2.3(typescript@5.7.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.7.3)
+        version: 15.7.4(i18next@24.2.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
 
   packages/theme: {}
 
@@ -4354,6 +4382,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   ua-parser-js@1.0.41:
     resolution: {integrity: sha512-LbBDqdIC5s8iROCUjMbW1f5dJQTEFB1+KO9ogbvlb3nm9n4YHa5p4KTvFPWvh2Hs8gZMBuiB1/8+pdfe/tDPug==}
     hasBin: true
@@ -7790,6 +7823,12 @@ snapshots:
     optionalDependencies:
       typescript: 5.7.3
 
+  i18next@24.2.3(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.28.6
+    optionalDependencies:
+      typescript: 5.9.3
+
   iceberg-js@0.8.1: {}
 
   ieee754@1.2.1: {}
@@ -8795,6 +8834,16 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
       typescript: 5.7.3
 
+  react-i18next@15.7.4(i18next@24.2.3(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.28.6
+      html-parse-stringify: 3.0.1
+      i18next: 24.2.3(typescript@5.9.3)
+      react: 19.2.4
+    optionalDependencies:
+      react-dom: 19.2.4(react@19.2.4)
+      typescript: 5.9.3
+
   react-is@16.13.1: {}
 
   react-is@18.3.1: {}
@@ -9422,6 +9471,8 @@ snapshots:
   type-fest@0.7.1: {}
 
   typescript@5.7.3: {}
+
+  typescript@5.9.3: {}
 
   ua-parser-js@1.0.41: {}
 
