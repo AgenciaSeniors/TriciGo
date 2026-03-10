@@ -4,7 +4,7 @@ export default function HomePage() {
   return (
     <main
       style={{
-        minHeight: '100vh',
+        minHeight: 'calc(100vh - 140px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -85,18 +85,6 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* Footer */}
-      <footer
-        style={{
-          marginTop: '4rem',
-          paddingTop: '2rem',
-          borderTop: '1px solid #eee',
-          color: '#999',
-          fontSize: '0.8rem',
-        }}
-      >
-        TriciGo © {new Date().getFullYear()} · La Habana, Cuba
-      </footer>
     </main>
   );
 }

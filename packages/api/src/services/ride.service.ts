@@ -481,6 +481,25 @@ export const rideService = {
       .subscribe();
   },
 
+  // ==================== PUBLIC / SHARE TOKEN ====================
+
+  /**
+   * Get a ride by its public share token (no auth required).
+   */
+  async getRideByShareToken(token: string): Promise<RideWithDriver | null> {
+    const supabase = getSupabaseClient();
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('share_token', token)
+      .maybeSingle();
+    if (error) throw error;
+    if (!ride) return null;
+
+    // Reuse getRideWithDriver logic for driver details
+    return this.getRideWithDriver((ride as Ride).id);
+  },
+
   // ==================== TIPS ====================
 
   /**
