@@ -26,4 +26,5 @@ export {
   executeOrQueue,
   getPendingCount,
 } from './lib/offlineQueue';
+export { registerAllOfflineMutations } from './lib/offlineMutations';
 export { useFeatureFlag } from './hooks/useFeatureFlag';
