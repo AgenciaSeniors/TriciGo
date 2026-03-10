@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -38,10 +38,12 @@ export default function LoginScreen() {
   return (
     <Screen scroll bg="white">
       <View className="flex-1 justify-center px-2">
-        <Text variant="h2" className="mb-2">
-          Trici
-          <Text variant="h2" color="accent">Go</Text>
-        </Text>
+        <Image
+          source={require('../../assets/logo-wordmark.png')}
+          style={{ width: 220, height: 52 }}
+          resizeMode="contain"
+          className="mb-2"
+        />
         <Text variant="body" color="secondary" className="mb-8">
           {t('auth.phone_label')}
         </Text>

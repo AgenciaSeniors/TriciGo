@@ -9,24 +9,34 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/splash-logo.png",
       "backgroundColor": "#111111",
       "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.driver",
+      "config": {
+        "googleMapsApiKey": "GOOGLE_MAPS_API_KEY_HERE"
+      },
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para mostrar viajes cercanos",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo necesita tu ubicación para el seguimiento de viajes activos",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": ["location", "remote-notification"]
       }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111111"
       },
       "package": "app.tricigo.driver",
+      "config": {
+        "googleMaps": {
+          "apiKey": "GOOGLE_MAPS_API_KEY_HERE"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -34,6 +44,30 @@
         "FOREGROUND_SERVICE"
       ]
     },
-    "plugins": ["expo-router", "expo-localization"]
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#111111"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "TriciGo necesita tu ubicación para el seguimiento de viajes activos.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
+        }
+      ]
+    ]
   }
 }

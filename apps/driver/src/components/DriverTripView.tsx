@@ -14,26 +14,34 @@ import { RideMapView } from '@/components/RideMapView';
 import { useDriverStore } from '@/stores/driver.store';
 import type { RideStatus } from '@tricigo/types';
 
-const TRIP_STEPS = [
-  { key: 'accepted', label: 'Aceptado' },
-  { key: 'driver_en_route', label: 'En camino' },
-  { key: 'arrived_at_pickup', label: 'Llegué' },
-  { key: 'in_progress', label: 'En viaje' },
-  { key: 'completed', label: 'Listo' },
-];
+function useTripSteps() {
+  const { t } = useTranslation('driver');
+  return [
+    { key: 'accepted', label: t('trip.step_accepted', { defaultValue: 'Aceptado' }) },
+    { key: 'driver_en_route', label: t('trip.step_en_route', { defaultValue: 'En camino' }) },
+    { key: 'arrived_at_pickup', label: t('trip.step_arrived', { defaultValue: 'Llegué' }) },
+    { key: 'in_progress', label: t('trip.step_in_progress', { defaultValue: 'En viaje' }) },
+    { key: 'completed', label: t('trip.step_completed', { defaultValue: 'Listo' }) },
+  ];
+}
 
-const ACTION_LABELS: Partial<Record<RideStatus, string>> = {
-  accepted: 'En camino al pasajero',
-  driver_en_route: 'Llegué al punto de recogida',
-  arrived_at_pickup: 'Iniciar viaje',
-  in_progress: 'Finalizar viaje',
-};
+function useActionLabels(): Partial<Record<RideStatus, string>> {
+  const { t } = useTranslation('driver');
+  return {
+    accepted: t('trip.action_en_route', { defaultValue: 'En camino al pasajero' }),
+    driver_en_route: t('trip.action_arrived', { defaultValue: 'Llegué al punto de recogida' }),
+    arrived_at_pickup: t('trip.action_start', { defaultValue: 'Iniciar viaje' }),
+    in_progress: t('trip.action_finish', { defaultValue: 'Finalizar viaje' }),
+  };
+}
 
 export function DriverTripView() {
   const { t } = useTranslation('driver');
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverProfile = useDriverStore((s) => s.profile);
   const { advanceStatus, cancelTrip, clearCompletedTrip } = useDriverRideActions();
+  const TRIP_STEPS = useTripSteps();
+  const ACTION_LABELS = useActionLabels();
 
   if (!activeTrip) return null;
 
@@ -227,7 +235,7 @@ function TripCompleteView() {
       <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" color="inverse" className="opacity-60">
-            Tarifa total
+            {t('trip.total_fare', { defaultValue: 'Tarifa total' })}
           </Text>
           <Text variant="bodySmall" color="inverse">
             {formatCUP(fare)}
@@ -235,7 +243,7 @@ function TripCompleteView() {
         </View>
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" color="inverse" className="opacity-60">
-            Comisión plataforma (15%)
+            {t('trip.platform_commission', { defaultValue: 'Comisión plataforma (15%)' })}
           </Text>
           <Text variant="bodySmall" className="text-red-400">
             -{formatCUP(commissionAmount)}
@@ -244,7 +252,7 @@ function TripCompleteView() {
         <View className="h-px bg-neutral-600 my-2" />
         <View className="flex-row justify-between">
           <Text variant="body" color="inverse" className="font-bold">
-            {isCash ? 'Cobras en efectivo' : 'Ganancia neta'}
+            {isCash ? t('trip.collect_cash', { defaultValue: 'Cobras en efectivo' }) : t('trip.net_earnings', { defaultValue: 'Ganancia neta' })}
           </Text>
           <Text variant="body" color="accent" className="font-bold">
             {formatCUP(netEarnings)}
@@ -252,7 +260,7 @@ function TripCompleteView() {
         </View>
         {isCash && (
           <Text variant="caption" color="inverse" className="opacity-40 mt-1">
-            La comisión se descuenta de tu saldo
+            {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
           </Text>
         )}
       </Card>

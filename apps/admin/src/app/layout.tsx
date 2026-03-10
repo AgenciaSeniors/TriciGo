@@ -6,6 +6,10 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'TriciGo Admin',
   description: 'Panel de administración de TriciGo',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/icon-192.png',
+  },
 };
 
 export default function RootLayout({

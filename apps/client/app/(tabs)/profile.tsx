@@ -8,6 +8,13 @@ import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@tricigo/api';
 import { router } from 'expo-router';
+import type { UserLevel } from '@tricigo/types';
+
+const LEVEL_COLORS: Record<UserLevel, { bg: string; text: string }> = {
+  bronce: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  plata: { bg: 'bg-neutral-200', text: 'text-neutral-600' },
+  oro: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+};
 
 export default function ProfileScreen() {
   const { t } = useTranslation('common');
@@ -51,7 +58,16 @@ export default function ProfileScreen() {
             </Text>
           </View>
           <View className="flex-1">
-            <Text variant="h4">{user?.full_name ?? 'Usuario'}</Text>
+            <View className="flex-row items-center gap-2">
+              <Text variant="h4">{user?.full_name ?? 'Usuario'}</Text>
+              {user?.level && (
+                <View className={`px-2 py-0.5 rounded-full ${LEVEL_COLORS[user.level].bg}`}>
+                  <Text variant="caption" className={LEVEL_COLORS[user.level].text}>
+                    {t(`profile.level_${user.level}`)}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text variant="bodySmall" color="secondary">
               {user?.phone ?? '+53 5XXXXXXX'}
             </Text>

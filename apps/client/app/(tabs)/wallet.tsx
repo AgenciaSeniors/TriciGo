@@ -7,7 +7,7 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone } from '@tricigo/utils';
 import type { LedgerTransaction } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -31,14 +31,24 @@ export default function WalletScreen() {
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Recharge state
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
 
+  // Transfer state
+  const [transferSheetVisible, setTransferSheetVisible] = useState(false);
+  const [transferPhone, setTransferPhone] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferNote, setTransferNote] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string } | null>(null);
+  const [transferSearching, setTransferSearching] = useState(false);
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      // Ensure wallet account exists before fetching
       await walletService.ensureAccount(userId);
       const [balanceData, account] = await Promise.all([
         walletService.getBalance(userId),
@@ -76,6 +86,7 @@ export default function WalletScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
+  // Recharge handlers
   const handleRecharge = () => {
     setRechargeAmount('');
     setRechargeSheetVisible(true);
@@ -86,7 +97,7 @@ export default function WalletScreen() {
     if (!amountNum || amountNum <= 0 || !userId) return;
     setRechargeSubmitting(true);
     try {
-      await walletService.requestRecharge(userId, amountNum * 100); // centavos
+      await walletService.requestRecharge(userId, amountNum * 100);
       setRechargeSheetVisible(false);
       Alert.alert(t('wallet.recharge'), t('wallet.recharge_success'));
     } catch (err) {
@@ -97,8 +108,64 @@ export default function WalletScreen() {
     }
   };
 
+  // Transfer handlers
   const handleTransfer = () => {
-    Alert.alert(t('wallet.transfer'), t('wallet.coming_soon'));
+    setTransferPhone('');
+    setTransferAmount('');
+    setTransferNote('');
+    setTransferRecipient(null);
+    setTransferSheetVisible(true);
+  };
+
+  const searchRecipient = async () => {
+    if (!isValidCubanPhone(transferPhone)) return;
+    setTransferSearching(true);
+    setTransferRecipient(null);
+    try {
+      const normalized = normalizeCubanPhone(transferPhone);
+      const user = await walletService.findUserByPhone(normalized);
+      if (user && user.id !== userId) {
+        setTransferRecipient({ id: user.id, full_name: user.full_name });
+      } else if (user && user.id === userId) {
+        Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
+      } else {
+        Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
+      }
+    } catch {
+      Alert.alert(t('error'), t('errors.generic'));
+    } finally {
+      setTransferSearching(false);
+    }
+  };
+
+  const submitTransfer = async () => {
+    if (!transferRecipient || !userId) return;
+    const amountNum = parseInt(transferAmount, 10);
+    if (!amountNum || amountNum <= 0) return;
+
+    const amountCentavos = amountNum * 100;
+    if (amountCentavos > balance.available) {
+      Alert.alert(t('error'), t('wallet.transfer_insufficient'));
+      return;
+    }
+
+    setTransferSubmitting(true);
+    try {
+      await walletService.transferP2P(
+        userId,
+        transferRecipient.id,
+        amountCentavos,
+        transferNote || undefined,
+      );
+      setTransferSheetVisible(false);
+      Alert.alert(t('wallet.transfer'), t('wallet.transfer_success'));
+      await fetchData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('errors.generic');
+      Alert.alert(t('error'), message);
+    } finally {
+      setTransferSubmitting(false);
+    }
   };
 
   const renderTransaction = ({ item }: { item: LedgerTransaction }) => (
@@ -173,6 +240,7 @@ export default function WalletScreen() {
         />
       </View>
 
+      {/* Recharge BottomSheet */}
       <BottomSheet
         visible={rechargeSheetVisible}
         onClose={() => setRechargeSheetVisible(false)}
@@ -196,6 +264,90 @@ export default function WalletScreen() {
             onPress={submitRecharge}
             loading={rechargeSubmitting}
             disabled={!rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
+          />
+        </View>
+      </BottomSheet>
+
+      {/* Transfer BottomSheet */}
+      <BottomSheet
+        visible={transferSheetVisible}
+        onClose={() => setTransferSheetVisible(false)}
+      >
+        <View className="px-4 pb-6">
+          <Text variant="h4" className="mb-4">{t('wallet.transfer_title')}</Text>
+
+          {/* Phone input + search */}
+          <Text variant="bodySmall" color="secondary" className="mb-2">
+            {t('wallet.transfer_phone')}
+          </Text>
+          <View className="flex-row gap-2 mb-3">
+            <TextInput
+              className="flex-1 border border-neutral-200 rounded-lg p-3 text-neutral-900"
+              placeholder="+53 5XXXXXXX"
+              value={transferPhone}
+              onChangeText={(text) => {
+                setTransferPhone(text);
+                setTransferRecipient(null);
+              }}
+              keyboardType="phone-pad"
+            />
+            <Button
+              title={t('search')}
+              variant="outline"
+              size="md"
+              onPress={searchRecipient}
+              loading={transferSearching}
+              disabled={!isValidCubanPhone(transferPhone)}
+            />
+          </View>
+
+          {/* Recipient info */}
+          {transferRecipient && (
+            <View className="bg-green-50 rounded-lg p-3 mb-3">
+              <Text variant="bodySmall" color="primary">
+                {t('wallet.transfer_to', { name: transferRecipient.full_name })}
+              </Text>
+            </View>
+          )}
+
+          {/* Amount */}
+          <Text variant="bodySmall" color="secondary" className="mb-2">
+            {t('wallet.transfer_amount')} (CUP)
+          </Text>
+          <TextInput
+            className="border border-neutral-200 rounded-lg p-3 mb-3 text-neutral-900 text-lg"
+            placeholder="100"
+            value={transferAmount}
+            onChangeText={setTransferAmount}
+            keyboardType="numeric"
+          />
+
+          {/* Note */}
+          <Text variant="bodySmall" color="secondary" className="mb-2">
+            {t('wallet.transfer_note')}
+          </Text>
+          <TextInput
+            className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
+            placeholder="..."
+            value={transferNote}
+            onChangeText={setTransferNote}
+          />
+
+          <Text variant="caption" color="tertiary" className="mb-3 text-center">
+            {t('wallet.balance')}: {formatTriciCoin(balance.available)}
+          </Text>
+
+          <Button
+            title={t('wallet.transfer_confirm')}
+            size="lg"
+            fullWidth
+            onPress={submitTransfer}
+            loading={transferSubmitting}
+            disabled={
+              !transferRecipient ||
+              !transferAmount ||
+              parseInt(transferAmount, 10) <= 0
+            }
           />
         </View>
       </BottomSheet>

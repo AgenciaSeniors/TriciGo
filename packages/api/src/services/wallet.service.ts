@@ -10,6 +10,7 @@ import type {
   WalletSummary,
   WalletRedemption,
   WalletRechargeRequest,
+  WalletTransfer,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
@@ -168,5 +169,58 @@ export const walletService = {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data as WalletRechargeRequest[];
+  },
+
+  // ==================== P2P TRANSFERS ====================
+
+  /**
+   * Transfer TriciCoin to another user via phone number.
+   * Calls the transfer_wallet_p2p SECURITY DEFINER function.
+   */
+  async transferP2P(
+    fromUserId: string,
+    toUserId: string,
+    amount: number,
+    note?: string,
+  ): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('transfer_wallet_p2p', {
+      p_from_user_id: fromUserId,
+      p_to_user_id: toUserId,
+      p_amount: amount,
+      p_note: note ?? null,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * Find a user by phone number (for transfer recipient).
+   */
+  async findUserByPhone(
+    phone: string,
+  ): Promise<{ id: string; full_name: string; phone: string } | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('find_user_by_phone', {
+      p_phone: phone,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row as { id: string; full_name: string; phone: string }) ?? null;
+  },
+
+  /**
+   * Get P2P transfer history for a user.
+   */
+  async getTransfers(userId: string): Promise<WalletTransfer[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_transfers')
+      .select('*')
+      .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return data as WalletTransfer[];
   },
 };

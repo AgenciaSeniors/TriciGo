@@ -643,6 +643,70 @@ export const adminService = {
     if (error) throw error;
   },
 
+  // ==================== USER DETAIL ====================
+
+  /**
+   * Get full user detail: user + wallet + transfers.
+   */
+  async getUserDetail(userId: string) {
+    const supabase = getSupabaseClient();
+
+    const [userRes, walletRes, transfersRes] = await Promise.all([
+      supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single(),
+      supabase
+        .from('wallet_accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('account_type', 'customer_cash')
+        .maybeSingle(),
+      supabase
+        .from('wallet_transfers')
+        .select('*')
+        .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+    if (userRes.error) throw userRes.error;
+
+    return {
+      user: userRes.data as User,
+      wallet: walletRes.data as {
+        id: string;
+        balance: number;
+        held_balance: number;
+        is_active: boolean;
+      } | null,
+      transfers: (transfersRes.data ?? []) as Array<{
+        id: string;
+        from_user_id: string;
+        to_user_id: string;
+        amount: number;
+        note: string | null;
+        created_at: string;
+      }>,
+    };
+  },
+
+  /**
+   * Update user level (admin override).
+   */
+  async updateUserLevel(
+    userId: string,
+    level: 'bronce' | 'plata' | 'oro',
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('users')
+      .update({ level })
+      .eq('id', userId);
+    if (error) throw error;
+  },
+
   // ==================== RIDE DETAIL ====================
 
   async getRideDetail(rideId: string) {

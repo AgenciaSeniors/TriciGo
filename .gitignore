@@ -41,6 +41,11 @@ coverage/
 supabase/.branches/
 supabase/.temp/
 
+# Firebase / Google Services
+google-services.json
+GoogleService-Info.plist
+google-service-account.json
+
 # Misc
 *.log
 npm-debug.log*

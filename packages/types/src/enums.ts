@@ -89,4 +89,6 @@ export type ZoneType = 'operational' | 'surge' | 'restricted';
 
 export type Language = 'es' | 'en';
 
+export type UserLevel = 'bronce' | 'plata' | 'oro';
+
 export type PricingSnapshotType = 'estimate' | 'final';

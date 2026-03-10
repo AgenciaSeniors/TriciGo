@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, Linking } from 'react-native';
+import { View, Pressable, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -23,9 +23,11 @@ export default function AboutScreen() {
         </View>
 
         <View className="items-center mb-8">
-          <View className="w-20 h-20 rounded-2xl bg-primary-500 items-center justify-center mb-3">
-            <Text variant="h2" color="inverse">T</Text>
-          </View>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={{ width: 80, height: 80, borderRadius: 16 }}
+            className="mb-3"
+          />
           <Text variant="h4">{t('app_name')}</Text>
           <Text variant="bodySmall" color="secondary">
             {t('profile.version', { version: APP_VERSION })}

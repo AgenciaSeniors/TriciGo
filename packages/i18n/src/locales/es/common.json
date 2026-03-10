@@ -47,7 +47,19 @@
     "request_recharge": "Solicitar recarga",
     "recharge_success": "Solicitud de recarga enviada correctamente",
     "recharge_amount": "Monto a recargar",
-    "pending_recharges": "Recargas pendientes"
+    "pending_recharges": "Recargas pendientes",
+    "transfer_title": "Transferir TriciCoin",
+    "transfer_phone": "Teléfono del destinatario",
+    "transfer_amount": "Monto a transferir",
+    "transfer_note": "Nota (opcional)",
+    "transfer_confirm": "Confirmar transferencia",
+    "transfer_success": "Transferencia enviada exitosamente",
+    "transfer_to": "Enviar a: {{name}}",
+    "transfer_insufficient": "Saldo insuficiente",
+    "transfer_user_not_found": "Usuario no encontrado",
+    "transfer_searching": "Buscando usuario...",
+    "transfer_sent": "Enviado",
+    "transfer_received": "Recibido"
   },
 
   "profile": {
@@ -93,7 +105,13 @@
     "faq_q3": "¿Cómo contacto soporte?",
     "faq_a3": "Escríbenos al correo soporte@tricigo.app o llama al +53 5XXXXXXX.",
     "spanish": "Español",
-    "english": "Inglés"
+    "english": "Inglés",
+    "level": "Nivel",
+    "level_bronce": "Bronce",
+    "level_plata": "Plata",
+    "level_oro": "Oro",
+    "rides_completed": "{{count}} viajes",
+    "total_spent_label": "Total gastado"
   },
 
   "network": {

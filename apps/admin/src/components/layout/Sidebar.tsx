@@ -20,10 +20,11 @@ export function Sidebar() {
     <aside className="w-64 bg-neutral-950 text-white flex flex-col">
       {/* Logo */}
       <div className="px-6 py-6 border-b border-neutral-800">
-        <h1 className="text-2xl font-extrabold">
-          <span className="text-white">Trici</span>
-          <span className="text-primary-500">Go</span>
-        </h1>
+        <img
+          src="/logo-wordmark-white.png"
+          alt="TriciGo"
+          className="h-8 w-auto"
+        />
         <p className="text-xs text-neutral-500 mt-1">Panel de administración</p>
       </div>
 

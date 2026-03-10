@@ -9,22 +9,53 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "backgroundColor": "#111111",
+      "image": "./assets/splash-logo.png",
+      "backgroundColor": "#FFFFFF",
       "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.client",
+      "config": {
+        "googleMapsApiKey": "GOOGLE_MAPS_API_KEY_HERE"
+      },
       "infoPlist": {
-        "CFBundleAllowMixedLocalizations": true
+        "CFBundleAllowMixedLocalizations": true,
+        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos"
       }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF4D00"
       },
-      "package": "app.tricigo.client"
+      "package": "app.tricigo.client",
+      "config": {
+        "googleMaps": {
+          "apiKey": "GOOGLE_MAPS_API_KEY_HERE"
+        }
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
-    "plugins": ["expo-router", "expo-localization"]
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF4D00"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "TriciGo necesita tu ubicación para encontrar conductores cercanos."
+        }
+      ]
+    ]
   }
 }

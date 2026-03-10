@@ -2,7 +2,7 @@
 // TriciGo — User & Customer Types
 // ============================================================
 
-import type { Language, PaymentMethod, UserRole } from './enums';
+import type { Language, PaymentMethod, UserLevel, UserRole } from './enums';
 
 export interface User {
   id: string;
@@ -12,6 +12,9 @@ export interface User {
   role: UserRole;
   avatar_url: string | null;
   preferred_language: Language;
+  level: UserLevel;
+  total_rides: number;
+  total_spent: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
