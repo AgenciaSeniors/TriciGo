@@ -20,3 +20,29 @@ body {
   color: var(--text);
   background: var(--bg);
 }
+
+/* Responsive nav utilities */
+.nav-desktop {
+  display: flex;
+}
+
+.nav-mobile-toggle {
+  display: none;
+}
+
+.nav-mobile-menu {
+  display: none;
+  flex-direction: column;
+}
+
+@media (max-width: 768px) {
+  .nav-desktop {
+    display: none !important;
+  }
+  .nav-mobile-toggle {
+    display: block !important;
+  }
+  .nav-mobile-menu {
+    display: flex !important;
+  }
+}

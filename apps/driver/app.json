@@ -23,7 +23,10 @@
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para mostrar viajes cercanos",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo necesita tu ubicación para el seguimiento de viajes activos",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -38,10 +41,12 @@
         }
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -67,7 +72,23 @@
         {
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "tricigo",
+          "project": "tricigo-driver"
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "4f32a103-ff3b-4222-b5f6-22da581f5fc5"
+      }
+    },
+    "owner": "edua2005"
   }
 }

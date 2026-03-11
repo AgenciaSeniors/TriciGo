@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { View, Pressable, TextInput, Share, Alert } from 'react-native';
+import { View, Pressable, Share, Alert } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatCUP } from '@tricigo/utils';
+import { formatTRC, formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { rideService } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { Input } from '@tricigo/ui/Input';
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
@@ -26,7 +28,8 @@ export function RideCompleteView() {
 
   if (!activeRide) return null;
 
-  const fare = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
+  const fareTrc = activeRide.final_fare_trc ?? activeRide.estimated_fare_trc;
+  const fareCup = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
   const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;
 
   const handleTip = async (amount: number) => {
@@ -35,7 +38,7 @@ export function RideCompleteView() {
     try {
       await rideService.addTip(activeRide.id, userId, amount);
       setTipSent(true);
-      Alert.alert(t('ride.tip_sent', { amount: formatCUP(amount) }));
+      Alert.alert(t('ride.tip_sent', { amount: formatTRC(amount) }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error';
       Alert.alert('Error', msg);
@@ -84,7 +87,9 @@ export function RideCompleteView() {
       <Text variant="h3" className="mb-2">{t('ride.completed')}</Text>
 
       {/* Fare */}
-      <Text variant="h2" color="accent" className="mb-2">{formatCUP(fare)}</Text>
+      <Text variant="h2" color="accent" className="mb-2">
+        {fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}
+      </Text>
       {activeRide.actual_distance_m != null && (
         <View className="flex-row gap-4 mb-2">
           <Text variant="caption" color="secondary">
@@ -107,20 +112,12 @@ export function RideCompleteView() {
 
       {/* Route summary */}
       <Card variant="outlined" padding="md" className="w-full mb-6">
-        <View className="flex-row items-start mb-3">
-          <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="secondary">{t('ride.pickup')}</Text>
-            <Text variant="bodySmall">{activeRide.pickup_address}</Text>
-          </View>
-        </View>
-        <View className="flex-row items-start">
-          <View className="w-3 h-3 rounded-full bg-neutral-800 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="secondary">{t('ride.dropoff')}</Text>
-            <Text variant="bodySmall">{activeRide.dropoff_address}</Text>
-          </View>
-        </View>
+        <RouteSummary
+          pickupAddress={activeRide.pickup_address}
+          dropoffAddress={activeRide.dropoff_address}
+          pickupLabel={t('ride.pickup')}
+          dropoffLabel={t('ride.dropoff')}
+        />
       </Card>
 
       {/* Share ride */}
@@ -149,7 +146,7 @@ export function RideCompleteView() {
                 onPress={() => handleTip(amount)}
                 disabled={sendingTip}
               >
-                <Text variant="bodySmall">{formatCUP(amount)}</Text>
+                <Text variant="bodySmall">{formatTRC(amount)}</Text>
               </Pressable>
             ))}
           </View>
@@ -185,15 +182,16 @@ export function RideCompleteView() {
           </Text>
 
           {selectedRating && (
-            <TextInput
-              className="w-full border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
-              placeholder={t('ride.your_comment')}
-              value={comment}
-              onChangeText={setComment}
-              multiline
-              numberOfLines={3}
-              style={{ textAlignVertical: 'top', minHeight: 80 }}
-            />
+            <View className="w-full">
+              <Input
+                placeholder={t('ride.your_comment')}
+                value={comment}
+                onChangeText={setComment}
+                multiline
+                numberOfLines={3}
+                style={{ minHeight: 80 }}
+              />
+            </View>
           )}
 
           <Button

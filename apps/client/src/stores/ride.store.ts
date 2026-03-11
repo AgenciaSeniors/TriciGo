@@ -39,11 +39,29 @@ interface LocationDraft {
   location: GeoPoint;
 }
 
+interface DeliveryDraft {
+  packageDescription: string;
+  recipientName: string;
+  recipientPhone: string;
+  estimatedWeightKg: string;
+  specialInstructions: string;
+}
+
+const defaultDelivery: DeliveryDraft = {
+  packageDescription: '',
+  recipientName: '',
+  recipientPhone: '',
+  estimatedWeightKg: '',
+  specialInstructions: '',
+};
+
 interface RideRequestDraft {
   pickup: LocationDraft | null;
   dropoff: LocationDraft | null;
   serviceType: ServiceTypeSlug;
   paymentMethod: PaymentMethod;
+  scheduledAt: Date | null;
+  delivery: DeliveryDraft;
 }
 
 const defaultDraft: RideRequestDraft = {
@@ -51,6 +69,8 @@ const defaultDraft: RideRequestDraft = {
   dropoff: null,
   serviceType: 'triciclo_basico',
   paymentMethod: 'cash',
+  scheduledAt: null,
+  delivery: { ...defaultDelivery },
 };
 
 interface PromoResult {
@@ -78,6 +98,7 @@ interface RideState {
   setDropoff: (address: string, location: GeoPoint) => void;
   setServiceType: (type: ServiceTypeSlug) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
+  setScheduledAt: (date: Date | null) => void;
   setFareEstimate: (estimate: FareEstimate | null) => void;
   setActiveRide: (ride: Ride | null) => void;
   setRideWithDriver: (ride: RideWithDriver | null) => void;
@@ -86,6 +107,7 @@ interface RideState {
   setError: (error: string | null) => void;
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
+  setDeliveryField: (field: keyof DeliveryDraft, value: string) => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -114,6 +136,9 @@ export const useRideStore = create<RideState>((set, get) => ({
 
   setPaymentMethod: (paymentMethod) =>
     set((s) => ({ draft: { ...s.draft, paymentMethod } })),
+
+  setScheduledAt: (scheduledAt) =>
+    set((s) => ({ draft: { ...s.draft, scheduledAt } })),
 
   setFareEstimate: (fareEstimate) => set({ fareEstimate }),
 
@@ -153,6 +178,8 @@ export const useRideStore = create<RideState>((set, get) => ({
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
+  setDeliveryField: (field, value) =>
+    set((s) => ({ draft: { ...s.draft, delivery: { ...s.draft.delivery, [field]: value } } })),
 
   resetDraft: () =>
     set({ draft: { ...defaultDraft }, fareEstimate: null, error: null, promoCode: '', promoResult: null }),

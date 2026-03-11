@@ -9,6 +9,7 @@
     "dev:client": "turbo run dev --filter=@tricigo/client",
     "dev:driver": "turbo run dev --filter=@tricigo/driver",
     "dev:admin": "turbo run dev --filter=@tricigo/admin",
+    "dev:web": "turbo run dev --filter=@tricigo/web",
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
@@ -17,8 +18,6 @@
   },
   "devDependencies": {
     "prettier": "^3.4.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "sharp": "^0.34.5",
     "turbo": "^2.7.0",
     "vitest": "^4.0.18"

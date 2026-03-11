@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -8,6 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidOTP } from '@tricigo/utils';
+import { colors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 
 export default function VerifyOTPScreen() {
@@ -58,8 +60,13 @@ export default function VerifyOTPScreen() {
   };
 
   return (
-    <Screen scroll bg="white">
-      <View className="flex-1 justify-center px-2">
+    <Screen bg="white" padded={false}>
+      <View className="flex-1 justify-center px-6">
+        {/* Decorative icon */}
+        <View className="w-20 h-20 rounded-full bg-primary-50 items-center justify-center mb-6">
+          <Ionicons name="shield-checkmark-outline" size={40} color={colors.brand.orange} />
+        </View>
+
         <Text variant="h3" className="mb-2">
           {t('auth.otp_title')}
         </Text>
@@ -74,6 +81,7 @@ export default function VerifyOTPScreen() {
           maxLength={6}
           value={code}
           onChangeText={setCode}
+          leftIcon={<Ionicons name="keypad-outline" size={20} color={colors.neutral[400]} />}
           autoFocus
         />
 

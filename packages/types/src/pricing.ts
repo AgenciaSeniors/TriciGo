@@ -24,13 +24,13 @@ export interface PricingRule {
   id: string;
   zone_id: string | null;
   service_type: ServiceTypeSlug;
-  /** Base fare in centavos */
+  /** Base fare in CUP whole pesos */
   base_fare_cup: number;
-  /** Rate per km in centavos */
+  /** Rate per km in CUP whole pesos */
   per_km_rate_cup: number;
-  /** Rate per minute in centavos */
+  /** Rate per minute in CUP whole pesos */
   per_minute_rate_cup: number;
-  /** Minimum fare in centavos */
+  /** Minimum fare in CUP whole pesos */
   min_fare_cup: number;
   /** Demand/supply ratio that triggers surge pricing */
   surge_threshold: number | null;
@@ -66,14 +66,24 @@ export interface ServiceTypeConfig {
   updated_at: string;
 }
 
+export type SurgeType = 'none' | 'time_based' | 'demand' | 'combined';
+
 /** Fare estimate returned to the client before ride request */
 export interface FareEstimate {
   service_type: ServiceTypeSlug;
+  /** Fare in CUP whole pesos */
   estimated_fare_cup: number;
+  /** Fare in TRC centavos (CUP converted at exchange rate) */
+  estimated_fare_trc: number;
   estimated_distance_m: number;
   estimated_duration_s: number;
   surge_multiplier: number;
+  surge_type: SurgeType;
   pricing_rule_id: string;
+  /** Effective per-km rate used (CUP whole pesos) */
+  per_km_rate_cup: number;
+  /** Exchange rate used: 1 USD = X CUP */
+  exchange_rate_usd_cup: number;
 }
 
 export interface FeatureFlag {

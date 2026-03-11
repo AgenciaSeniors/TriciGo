@@ -5,7 +5,9 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -49,17 +51,12 @@ export default function SettingsScreen() {
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#171717" />
-          </Pressable>
-          <Text variant="h3">{t('profile.settings_title')}</Text>
-        </View>
+        <ScreenHeader title={t('profile.settings_title')} onBack={() => router.back()} />
 
         <Card variant="outlined" padding="md" className="mb-4">
           <Pressable onPress={toggleLanguage} className="flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Ionicons name="language-outline" size={22} color="#525252" />
+              <Ionicons name="language-outline" size={22} color={colors.neutral[600]} />
               <Text variant="body" className="ml-3">{t('profile.preferred_language')}</Text>
             </View>
             <Text variant="body" color="primary">
@@ -71,13 +68,13 @@ export default function SettingsScreen() {
         <Card variant="outlined" padding="md" className="mb-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Ionicons name="notifications-outline" size={22} color="#525252" />
+              <Ionicons name="notifications-outline" size={22} color={colors.neutral[600]} />
               <Text variant="body" className="ml-3">{t('profile.notifications_toggle')}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ true: '#FF4D00' }}
+              trackColor={{ true: colors.brand.orange }}
             />
           </View>
         </Card>
@@ -85,7 +82,7 @@ export default function SettingsScreen() {
         <Card variant="outlined" padding="md" className="mb-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Ionicons name="card-outline" size={22} color="#525252" />
+              <Ionicons name="card-outline" size={22} color={colors.neutral[600]} />
               <Text variant="body" className="ml-3">{t('profile.payment_method')}</Text>
             </View>
             <Text variant="body" color="secondary">{t('profile.payment_cash')}</Text>

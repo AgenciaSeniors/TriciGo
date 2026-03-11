@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 
 export default function TabLayout() {
@@ -10,11 +11,11 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#FF4D00',
-        tabBarInactiveTintColor: '#737373',
+        tabBarActiveTintColor: colors.brand.orange,
+        tabBarInactiveTintColor: colors.neutral[500],
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E4E4E4',
+          backgroundColor: colors.background.primary,
+          borderTopColor: colors.neutral[200],
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,

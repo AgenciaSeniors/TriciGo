@@ -77,10 +77,10 @@ export default function DashboardPage() {
   }, []);
 
   const stats = [
-    { label: t('dashboard.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-[#FF4D00]', format: 'number' as const },
+    { label: t('dashboard.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-primary-500', format: 'number' as const },
     { label: t('dashboard.total_rides_today'), value: metrics?.total_rides_today ?? 0, color: 'text-neutral-900', format: 'number' as const },
     { label: t('dashboard.online_drivers'), value: metrics?.online_drivers ?? 0, color: 'text-green-600', format: 'number' as const },
-    { label: t('dashboard.revenue_today'), value: metrics?.total_revenue_today ?? 0, color: 'text-[#FF4D00]', format: 'cup' as const },
+    { label: t('dashboard.revenue_today'), value: metrics?.total_revenue_today ?? 0, color: 'text-primary-500', format: 'cup' as const },
     { label: t('dashboard.pending_verifications'), value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600', format: 'number' as const },
     { label: t('dashboard.open_incidents'), value: metrics?.open_incidents ?? 0, color: 'text-red-600', format: 'number' as const },
   ];
@@ -96,10 +96,19 @@ export default function DashboardPage() {
             key={stat.label}
             className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100"
           >
-            <p className="text-sm text-neutral-500 mb-1">{stat.label}</p>
-            <p className={`text-3xl font-bold ${stat.color}`}>
-              {loading ? '—' : stat.format === 'cup' ? formatCUP(stat.value) : stat.value}
-            </p>
+            {loading ? (
+              <>
+                <div className="h-4 w-24 bg-neutral-200 rounded animate-pulse mb-3" />
+                <div className="h-8 w-20 bg-neutral-200 rounded animate-pulse" />
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-neutral-500 mb-1">{stat.label}</p>
+                <p className={`text-3xl font-bold ${stat.color}`}>
+                  {stat.format === 'cup' ? formatCUP(stat.value) : stat.value}
+                </p>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -109,7 +118,19 @@ export default function DashboardPage() {
         {/* Recent rides */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <h2 className="text-lg font-bold mb-4">{t('dashboard.recent_rides')}</h2>
-          {recentRides.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-48 bg-neutral-200 rounded animate-pulse mb-1" />
+                    <div className="h-3 w-36 bg-neutral-200 rounded animate-pulse" />
+                  </div>
+                  <div className="ml-3 h-5 w-16 bg-neutral-200 rounded-full animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : recentRides.length === 0 ? (
             <p className="text-neutral-400">{t('dashboard.no_recent_rides')}</p>
           ) : (
             <div className="space-y-3">
@@ -131,7 +152,19 @@ export default function DashboardPage() {
         {/* Pending drivers */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <h2 className="text-lg font-bold mb-4">{t('dashboard.pending_drivers')}</h2>
-          {pendingDrivers.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
+                  <div>
+                    <div className="h-4 w-32 bg-neutral-200 rounded animate-pulse mb-1" />
+                    <div className="h-3 w-24 bg-neutral-200 rounded animate-pulse" />
+                  </div>
+                  <div className="h-4 w-14 bg-neutral-200 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : pendingDrivers.length === 0 ? (
             <p className="text-neutral-400">{t('dashboard.no_pending_drivers')}</p>
           ) : (
             <div className="space-y-3">
@@ -147,7 +180,7 @@ export default function DashboardPage() {
                   </div>
                   <a
                     href={`/drivers/${driver.id}`}
-                    className="text-sm text-[#FF4D00] hover:underline"
+                    className="text-sm text-primary-500 hover:underline"
                   >
                     {t('common.view_detail')}
                   </a>

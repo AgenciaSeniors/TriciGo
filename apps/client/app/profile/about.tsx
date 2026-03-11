@@ -5,7 +5,9 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -15,12 +17,7 @@ export default function AboutScreen() {
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#171717" />
-          </Pressable>
-          <Text variant="h3">{t('profile.about_title')}</Text>
-        </View>
+        <ScreenHeader title={t('profile.about_title')} onBack={() => router.back()} />
 
         <View className="items-center mb-8">
           <Image
@@ -44,18 +41,18 @@ export default function AboutScreen() {
           className="flex-row items-center py-4 border-b border-neutral-100"
           onPress={() => Linking.openURL('https://tricigo.app/terms')}
         >
-          <Ionicons name="document-text-outline" size={22} color="#525252" />
+          <Ionicons name="document-text-outline" size={22} color={colors.neutral[600]} />
           <Text variant="body" className="ml-3 flex-1">Términos de servicio</Text>
-          <Ionicons name="open-outline" size={18} color="#A3A3A3" />
+          <Ionicons name="open-outline" size={18} color={colors.neutral[400]} />
         </Pressable>
 
         <Pressable
           className="flex-row items-center py-4 border-b border-neutral-100"
           onPress={() => Linking.openURL('https://tricigo.app/privacy')}
         >
-          <Ionicons name="shield-outline" size={22} color="#525252" />
+          <Ionicons name="shield-outline" size={22} color={colors.neutral[600]} />
           <Text variant="body" className="ml-3 flex-1">Política de privacidad</Text>
-          <Ionicons name="open-outline" size={18} color="#A3A3A3" />
+          <Ionicons name="open-outline" size={18} color={colors.neutral[400]} />
         </Pressable>
       </View>
     </Screen>

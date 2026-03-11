@@ -73,7 +73,7 @@ export default function ReportsPage() {
     {
       label: t('reports.active_rides'),
       value: loading ? '—' : String(metrics?.active_rides ?? 0),
-      color: 'text-[#FF4D00]',
+      color: 'text-primary-500',
       description: t('reports.desc_active_rides'),
     },
     {
@@ -91,7 +91,7 @@ export default function ReportsPage() {
     {
       label: t('reports.revenue_today'),
       value: loading ? '—' : formatCUP(metrics?.total_revenue_today ?? 0),
-      color: 'text-[#FF4D00]',
+      color: 'text-primary-500',
       description: t('reports.desc_revenue_today'),
     },
     {
@@ -119,7 +119,7 @@ export default function ReportsPage() {
       value: loading
         ? '—'
         : formatTriciCoin(walletStats?.total_in_circulation ?? 0),
-      color: 'text-[#FF4D00]',
+      color: 'text-primary-500',
       description: t('reports.desc_circulation'),
     },
     {
@@ -142,7 +142,7 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('reports.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('reports.title')}</h1>
 
       {/* Operations section */}
       <section className="mb-8">
@@ -172,7 +172,7 @@ export default function ReportsPage() {
         <h2 className="text-lg font-bold text-neutral-800 mb-4">
           {t('reports.section_finance')}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {walletCards.map((card) => (
             <div
               key={card.label}

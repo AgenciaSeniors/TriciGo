@@ -6,6 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -77,7 +78,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ true: '#FF4D00' }}
+              trackColor={{ true: colors.brand.orange }}
             />
           </View>
         </Card>

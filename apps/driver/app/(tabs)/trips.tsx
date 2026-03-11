@@ -9,6 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
 import { formatCUP } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
+import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 
 const PAGE_SIZE = 20;
@@ -122,7 +123,7 @@ export default function TripsScreen() {
 
         {loading && page === 0 ? (
           <View className="items-center py-20">
-            <ActivityIndicator size="large" color="#FF4D00" />
+            <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>
         ) : (
           <FlatList

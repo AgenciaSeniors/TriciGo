@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Pressable, FlatList, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { IconButton } from '@tricigo/ui/IconButton';
+import { Input } from '@tricigo/ui/Input';
+import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -114,19 +118,14 @@ export default function TicketDetailScreen() {
         <View className="flex-1">
           {/* Header */}
           <View className="px-5 pt-4 pb-3 border-b border-neutral-100">
-            <View className="flex-row items-center">
-              <Pressable onPress={() => router.back()} className="mr-3">
-                <Ionicons name="arrow-back" size={24} color="#171717" />
-              </Pressable>
-              <View className="flex-1">
-                <Text variant="body" className="font-semibold" numberOfLines={1}>
-                  {ticket?.subject ?? 'Ticket'}
-                </Text>
-                <Text variant="caption" color="tertiary">
-                  {STATUS_LABELS[ticket?.status ?? 'open'] ?? ticket?.status}
-                </Text>
-              </View>
-            </View>
+            <ScreenHeader
+              title={ticket?.subject ?? 'Ticket'}
+              onBack={() => router.back()}
+              className="mb-0"
+            />
+            <Text variant="caption" color="tertiary" className="ml-13">
+              {STATUS_LABELS[ticket?.status ?? 'open'] ?? ticket?.status}
+            </Text>
           </View>
 
           {/* Messages */}
@@ -155,26 +154,22 @@ export default function TicketDetailScreen() {
           {/* Input bar */}
           {!isClosed ? (
             <View className="flex-row items-end px-4 py-3 border-t border-neutral-100 bg-white">
-              <TextInput
-                className="flex-1 border border-neutral-200 rounded-2xl px-4 py-2.5 mr-2 text-neutral-900 max-h-24"
-                placeholder="Escribe un mensaje..."
-                value={messageText}
-                onChangeText={setMessageText}
-                multiline
-              />
-              <Pressable
+              <View className="flex-1 mr-2">
+                <Input
+                  placeholder="Escribe un mensaje..."
+                  value={messageText}
+                  onChangeText={setMessageText}
+                  multiline
+                  className="mb-0"
+                />
+              </View>
+              <IconButton
+                icon="send"
+                variant={messageText.trim() ? 'primary' : 'secondary'}
+                size="md"
                 onPress={handleSend}
                 disabled={!messageText.trim() || sending}
-                className={`w-10 h-10 rounded-full items-center justify-center ${
-                  messageText.trim() ? 'bg-primary-500' : 'bg-neutral-200'
-                }`}
-              >
-                <Ionicons
-                  name="send"
-                  size={18}
-                  color={messageText.trim() ? '#FFFFFF' : '#A3A3A3'}
-                />
-              </Pressable>
+              />
             </View>
           ) : (
             <View className="px-4 py-3 border-t border-neutral-100 bg-neutral-50">

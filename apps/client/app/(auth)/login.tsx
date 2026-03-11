@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Image, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -8,6 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
+import { colors } from '@tricigo/theme';
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
@@ -36,24 +38,30 @@ export default function LoginScreen() {
   };
 
   return (
-    <Screen scroll bg="white">
-      <View className="flex-1 justify-center px-2">
+    <Screen bg="white" padded={false}>
+      {/* Top decorative accent */}
+      <View className="absolute top-0 left-0 right-0 h-48 bg-primary-50 rounded-b-3xl opacity-60" />
+
+      <View className="flex-1 justify-center px-6">
+        {/* Logo + Tagline */}
         <Image
           source={require('../../assets/logo-wordmark.png')}
-          style={{ width: 220, height: 52 }}
+          style={{ width: 260, height: 62 }}
           resizeMode="contain"
-          className="mb-2"
+          className="mb-3"
         />
-        <Text variant="body" color="secondary" className="mb-8">
-          {t('auth.phone_label')}
+        <Text variant="bodySmall" color="secondary" className="mb-10">
+          {t('auth.tagline', { defaultValue: 'Tu plataforma de movilidad en La Habana' })}
         </Text>
 
+        {/* Phone input */}
         <Input
-          label={t('auth.phone_placeholder')}
+          label={t('auth.phone_label')}
           placeholder="+53 5XXXXXXX"
           keyboardType="phone-pad"
           value={phone}
           onChangeText={setPhone}
+          leftIcon={<Ionicons name="call-outline" size={20} color={colors.neutral[400]} />}
           autoFocus
         />
 
@@ -73,7 +81,7 @@ export default function LoginScreen() {
         />
 
         {/* Divider */}
-        <View className="flex-row items-center my-6">
+        <View className="flex-row items-center my-8">
           <View className="flex-1 h-px bg-neutral-200" />
           <Text variant="caption" color="tertiary" className="mx-4">
             {t('auth.or_continue_with', { defaultValue: 'o continúa con' })}
@@ -84,18 +92,25 @@ export default function LoginScreen() {
         {/* Social login */}
         <View className="flex-row gap-3">
           <Pressable
-            className="flex-1 flex-row items-center justify-center py-3.5 rounded-xl border border-neutral-200"
+            className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-xl border border-neutral-200 bg-neutral-50 active:bg-neutral-100"
             onPress={() => authService.signInWithGoogle()}
           >
-            <Text variant="body">Google</Text>
+            <Ionicons name="logo-google" size={20} color={colors.neutral[700]} />
+            <Text variant="body" className="font-medium">Google</Text>
           </Pressable>
           <Pressable
-            className="flex-1 flex-row items-center justify-center py-3.5 rounded-xl border border-neutral-200"
+            className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-xl border border-neutral-200 bg-neutral-50 active:bg-neutral-100"
             onPress={() => authService.signInWithApple()}
           >
-            <Text variant="body">Apple</Text>
+            <Ionicons name="logo-apple" size={20} color={colors.neutral[700]} />
+            <Text variant="body" className="font-medium">Apple</Text>
           </Pressable>
         </View>
+
+        {/* Legal text */}
+        <Text variant="caption" color="tertiary" className="text-center mt-8 pb-8">
+          {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros Términos de Servicio y Política de Privacidad' })}
+        </Text>
       </View>
     </Screen>
   );

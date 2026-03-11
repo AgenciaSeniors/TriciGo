@@ -158,10 +158,30 @@
 
   "trips_history": {
     "title": "Mis viajes",
-    "no_trips": "Aún no tienes viajes",
+    "no_trips": "A\u00fan no tienes viajes",
     "completed": "Completado",
     "canceled": "Cancelado",
-    "load_more": "Cargar más",
+    "load_more": "Cargar m\u00e1s",
     "fare": "Ganancia"
+  },
+
+  "pricing": {
+    "title": "Mi tarifa por km",
+    "explanation": "Configura cu\u00e1nto cobras por kil\u00f3metro. Los pasajeros ver\u00e1n tu tarifa al solicitar un viaje.",
+    "default_rate": "Tarifa por defecto",
+    "max_rate": "Tarifa m\u00e1xima",
+    "current_rate": "Tu tarifa actual",
+    "custom_label": "Personalizada",
+    "set_rate": "Nueva tarifa (CUP/km)",
+    "trc_equivalent": "~ {{amount}} TRC/km",
+    "save": "Guardar tarifa",
+    "saving": "Guardando...",
+    "saved": "Tarifa guardada correctamente",
+    "reset_default": "Restablecer tarifa por defecto",
+    "error_loading": "No se pudo cargar la configuraci\u00f3n",
+    "error_saving": "No se pudo guardar la tarifa",
+    "error_invalid": "Ingresa un n\u00famero v\u00e1lido",
+    "error_below_min": "La tarifa no puede ser menor a {{min}}",
+    "error_above_max": "La tarifa no puede superar {{max}}"
   }
 }

@@ -9,12 +9,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@tricigo/api';
 import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
-
-const LEVEL_COLORS: Record<UserLevel, { bg: string; text: string }> = {
-  bronce: { bg: 'bg-amber-100', text: 'text-amber-700' },
-  plata: { bg: 'bg-neutral-200', text: 'text-neutral-600' },
-  oro: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-};
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { colors } from '@tricigo/theme';
 
 export default function ProfileScreen() {
   const { t } = useTranslation('common');
@@ -62,11 +58,10 @@ export default function ProfileScreen() {
             <View className="flex-row items-center gap-2">
               <Text variant="h4">{user?.full_name ?? 'Usuario'}</Text>
               {user?.level && (
-                <View className={`px-2 py-0.5 rounded-full ${LEVEL_COLORS[user.level].bg}`}>
-                  <Text variant="caption" className={LEVEL_COLORS[user.level].text}>
-                    {t(`profile.level_${user.level}`)}
-                  </Text>
-                </View>
+                <StatusBadge
+                  label={t(`profile.level_${user.level}`)}
+                  variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
+                />
               )}
             </View>
             <Text variant="bodySmall" color="secondary">
@@ -82,11 +77,11 @@ export default function ProfileScreen() {
             className="flex-row items-center py-4 border-b border-neutral-100"
             onPress={item.onPress}
           >
-            <Ionicons name={item.icon} size={22} color="#525252" />
+            <Ionicons name={item.icon} size={22} color={colors.neutral[600]} />
             <Text variant="body" className="ml-3 flex-1">
               {item.label}
             </Text>
-            <Ionicons name="chevron-forward" size={20} color="#A3A3A3" />
+            <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
           </Pressable>
         ))}
 
@@ -96,7 +91,7 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           disabled={loggingOut}
         >
-          <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+          <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
           <Text variant="body" color="error" className="ml-3">
             {loggingOut ? t('auth.logging_out') : t('auth.logout')}
           </Text>

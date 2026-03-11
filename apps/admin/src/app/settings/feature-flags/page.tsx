@@ -66,14 +66,14 @@ export default function FeatureFlagsPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
+      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('feature_flags.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500]"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600"
         >
           {t('feature_flags.add_flag')}
         </button>
@@ -103,7 +103,7 @@ export default function FeatureFlagsPage() {
             <button
               onClick={handleCreate}
               disabled={creating || !newKey.trim()}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
             >
               {t('common.create')}
             </button>
@@ -137,7 +137,7 @@ export default function FeatureFlagsPage() {
               <button
                 onClick={() => handleToggle(flag)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
-                  flag.value ? 'bg-[#FF4D00]' : 'bg-neutral-300'
+                  flag.value ? 'bg-primary-500' : 'bg-neutral-300'
                 }`}
               >
                 <span

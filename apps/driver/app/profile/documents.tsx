@@ -6,6 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api/services/driver';
 import { useDriverStore } from '@/stores/driver.store';
 import type { DriverDocument } from '@tricigo/types';
@@ -55,7 +56,7 @@ export default function DocumentsScreen() {
 
         {loading ? (
           <View className="items-center py-20">
-            <ActivityIndicator size="large" color="#FF4D00" />
+            <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>
         ) : documents.length === 0 ? (
           <View className="items-center py-20">
@@ -68,7 +69,7 @@ export default function DocumentsScreen() {
             <Card key={doc.id} variant="filled" padding="md" className="mb-3 bg-neutral-800">
               <View className="flex-row items-center">
                 <View className="w-10 h-10 rounded-lg bg-neutral-700 items-center justify-center mr-3">
-                  <Ionicons name="document-text" size={20} color="#FF4D00" />
+                  <Ionicons name="document-text" size={20} color={colors.brand.orange} />
                 </View>
                 <View className="flex-1">
                   <Text variant="body" color="inverse">

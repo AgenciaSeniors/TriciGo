@@ -10,17 +10,21 @@ import type {
   RideTransition,
   FareEstimate,
   ServiceTypeConfig,
+  PricingRule,
   Promotion,
   Tip,
   SurgeZone,
+  SurgeType,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
   haversineDistance,
   estimateRoadDistance,
   estimateDuration,
+  cupToTrcCentavos,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { exchangeRateService } from './exchange-rate.service';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -53,7 +57,7 @@ export const rideService = {
   }): Promise<FareEstimate> {
     const supabase = getSupabaseClient();
 
-    // Fetch the service config for pricing
+    // Fetch the service config for pricing (default rates)
     const { data: config, error } = await supabase
       .from('service_type_configs')
       .select('*')
@@ -63,6 +67,51 @@ export const rideService = {
     if (error) throw error;
 
     const svcConfig = config as ServiceTypeConfig;
+
+    // Check for time-based pricing rules
+    const now = new Date();
+    const currentHour = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentDay = now.getDay(); // 0=Sun, 6=Sat
+
+    const { data: pricingRules } = await supabase
+      .from('pricing_rules')
+      .select('*')
+      .eq('service_type', params.service_type)
+      .eq('is_active', true);
+
+    // Find matching time-based rule
+    let baseFare = svcConfig.base_fare_cup;
+    let perKmRate = svcConfig.per_km_rate_cup;
+    let perMinRate = svcConfig.per_minute_rate_cup;
+    let minFare = svcConfig.min_fare_cup;
+    let ruleId = svcConfig.id;
+
+    if (pricingRules && pricingRules.length > 0) {
+      const matchingRule = (pricingRules as PricingRule[]).find((rule) => {
+        // Check time window
+        if (rule.time_window_start && rule.time_window_end) {
+          if (currentHour < rule.time_window_start || currentHour >= rule.time_window_end) {
+            return false;
+          }
+        }
+        // Check day of week
+        if (rule.day_of_week && rule.day_of_week.length > 0) {
+          if (!rule.day_of_week.includes(currentDay)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (matchingRule) {
+        baseFare = matchingRule.base_fare_cup;
+        perKmRate = matchingRule.per_km_rate_cup;
+        perMinRate = matchingRule.per_minute_rate_cup;
+        minFare = matchingRule.min_fare_cup;
+        ruleId = matchingRule.id;
+      }
+    }
+
     const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };
     const dropoff = { latitude: params.dropoff_lat, longitude: params.dropoff_lng };
 
@@ -74,20 +123,55 @@ export const rideService = {
     const durationMin = duration / 60;
 
     const fare = Math.round(
-      svcConfig.base_fare_cup +
-      distanceKm * svcConfig.per_km_rate_cup +
-      durationMin * svcConfig.per_minute_rate_cup,
+      baseFare +
+      distanceKm * perKmRate +
+      durationMin * perMinRate,
     );
 
-    const finalFare = Math.max(fare, svcConfig.min_fare_cup);
+    const baseFinalFare = Math.max(fare, minFare);
+
+    // ─── Dynamic Surge ───
+    let surgeMultiplier = 1.0;
+    let surgeType: SurgeType = 'none';
+
+    try {
+      const { data: surgeData } = await supabase.rpc('calculate_dynamic_surge', {
+        p_zone_id: null,
+        p_lat: params.pickup_lat,
+        p_lng: params.pickup_lng,
+        p_radius_m: 3000,
+      });
+      if (typeof surgeData === 'number' && surgeData > 1.0) {
+        surgeMultiplier = surgeData;
+        // Determine surge type based on context
+        // If there's a matching time-based rule, it's at least time_based
+        const hasTimeRule = pricingRules && (pricingRules as PricingRule[]).some(
+          (r) => r.time_window_start && r.time_window_end,
+        );
+        surgeType = hasTimeRule ? 'combined' : 'demand';
+      }
+    } catch {
+      // Surge is non-critical, default to 1.0x
+      console.warn('calculate_dynamic_surge failed, defaulting to 1.0x');
+    }
+
+    const surgedFare = Math.round(baseFinalFare * surgeMultiplier);
+
+    // ─── Exchange Rate: convert CUP → TRC ───
+    const exchangeRate = await exchangeRateService.getUsdCupRate();
+    const estimatedFareTrc = cupToTrcCentavos(surgedFare, exchangeRate);
 
     return {
       service_type: params.service_type,
-      estimated_fare_cup: finalFare,
+      estimated_fare_cup: surgedFare,
+      estimated_fare_trc: estimatedFareTrc,
       estimated_distance_m: Math.round(roadDistance),
       estimated_duration_s: duration,
-      surge_multiplier: 1.0,
-      pricing_rule_id: svcConfig.id,
+      surge_multiplier: surgeMultiplier,
+      surge_type: surgeType,
+      pricing_rule_id: ruleId,
+      per_km_rate_cup: perKmRate,
+      exchange_rate_usd_cup: exchangeRate,
     };
   },
 
@@ -115,6 +199,12 @@ export const rideService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Snapshot exchange rate at ride creation for consistent pricing
+    const exchangeRate = await exchangeRateService.getUsdCupRate();
+    const estimatedFareTrc = params.estimated_fare_cup
+      ? cupToTrcCentavos(params.estimated_fare_cup, exchangeRate)
+      : 0;
+
     const { data, error } = await supabase
       .from('rides')
       .insert({
@@ -126,6 +216,8 @@ export const rideService = {
         dropoff_location: `POINT(${params.dropoff_longitude} ${params.dropoff_latitude})`,
         dropoff_address: params.dropoff_address,
         estimated_fare_cup: params.estimated_fare_cup ?? 0,
+        estimated_fare_trc: estimatedFareTrc,
+        exchange_rate_usd_cup: exchangeRate,
         estimated_distance_m: params.estimated_distance_m ?? 0,
         estimated_duration_s: params.estimated_duration_s ?? 0,
         scheduled_at: params.scheduled_at ?? null,

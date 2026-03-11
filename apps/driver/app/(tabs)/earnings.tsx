@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -13,6 +13,7 @@ import { driverService } from '@tricigo/api/services/driver';
 import { reviewService } from '@tricigo/api/services/review';
 import { formatCUP, formatTriciCoin, centavosToUnits } from '@tricigo/utils';
 import type { WalletRedemption } from '@tricigo/types';
+import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -155,6 +156,12 @@ export default function EarningsScreen() {
             {t('earnings.title')}
           </Text>
 
+          {loading ? (
+            <View className="items-center justify-center py-20">
+              <ActivityIndicator size="large" color={colors.brand.orange} />
+            </View>
+          ) : (
+          <>
           <BalanceBadge
             balance={balance}
             size="lg"
@@ -208,6 +215,7 @@ export default function EarningsScreen() {
             variant="outline"
             size="lg"
             fullWidth
+            loading={submitting}
             disabled={balance <= 0}
             onPress={handleRedeem}
           />
@@ -252,6 +260,8 @@ export default function EarningsScreen() {
               })}
             </View>
           )}
+          </>
+          )}
         </View>
       </ScrollView>
 
@@ -267,11 +277,12 @@ export default function EarningsScreen() {
           hint={`${t('earnings.balance')}: ${formatTriciCoin(balance)}`}
         />
         <Button
-          title={submitting ? '...' : t('earnings.redeem_confirm_btn')}
+          title={t('earnings.redeem_confirm_btn')}
           variant="primary"
           size="lg"
           fullWidth
-          disabled={submitting || !redeemAmount.trim()}
+          loading={submitting}
+          disabled={!redeemAmount.trim()}
           onPress={handleConfirmRedeem}
         />
       </BottomSheet>

@@ -19,6 +19,9 @@ export { matchingService } from './services/matching.service';
 export { fraudService } from './services/fraud.service';
 export { supportService } from './services/support.service';
 export { referralService } from './services/referral.service';
+export { deliveryService } from './services/delivery.service';
+export { nearbyService } from './services/nearby.service';
+export { exchangeRateService } from './services/exchange-rate.service';
 export {
   initOfflineQueue,
   registerOfflineMutation,

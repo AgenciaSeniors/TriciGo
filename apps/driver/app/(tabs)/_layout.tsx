@@ -2,6 +2,7 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 
 export default function TabLayout() {
   const { t } = useTranslation('driver');
@@ -10,7 +11,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#FF4D00',
+        tabBarActiveTintColor: colors.brand.orange,
         tabBarInactiveTintColor: '#737373',
         tabBarStyle: {
           backgroundColor: '#111111',

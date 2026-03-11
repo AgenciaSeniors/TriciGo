@@ -148,14 +148,14 @@ export default function PromotionsPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
+      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('promotions.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500]"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600"
         >
           {t('promotions.create_promotion')}
         </button>
@@ -249,7 +249,7 @@ export default function PromotionsPage() {
             <button
               onClick={handleCreate}
               disabled={saving || !form.code.trim()}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
             >
               {t('common.create')}
             </button>
@@ -271,7 +271,7 @@ export default function PromotionsPage() {
             onClick={() => setFilter(tab.value)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >

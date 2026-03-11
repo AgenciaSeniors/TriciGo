@@ -5,7 +5,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatCUP } from '@tricigo/utils';
+import { formatTRC } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { incidentService } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
@@ -13,6 +13,8 @@ import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
 import { RideMapView } from '@/components/RideMapView';
 import { useDriverPosition } from '@/hooks/useDriverPosition';
+import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { IconButton } from '@tricigo/ui/IconButton';
 
 const RIDE_STEPS = [
   { key: 'accepted', label: 'Aceptado' },
@@ -138,26 +140,29 @@ export function RideActiveView() {
             </View>
 
             <View className="flex-row gap-2">
-              <Pressable
-                className="bg-neutral-200 w-12 h-12 rounded-full items-center justify-center"
+              <IconButton
+                icon="chatbubble-outline"
+                variant="secondary"
+                size="lg"
                 onPress={() => router.push(`/chat/${activeRide.id}`)}
-              >
-                <Text variant="h4">💬</Text>
-              </Pressable>
+                label="Chat"
+              />
               {rideWithDriver.driver_phone && (
-                <Pressable
-                  className="bg-primary-500 w-12 h-12 rounded-full items-center justify-center"
+                <IconButton
+                  icon="call-outline"
+                  variant="primary"
+                  size="lg"
                   onPress={handleCall}
-                >
-                  <Text variant="h4" color="inverse">📞</Text>
-                </Pressable>
+                  label="Llamar"
+                />
               )}
-              <Pressable
-                className="bg-red-600 w-12 h-12 rounded-full items-center justify-center"
+              <IconButton
+                icon="warning-outline"
+                variant="danger"
+                size="lg"
                 onPress={handleSOS}
-              >
-                <Text variant="caption" color="inverse" className="font-bold">SOS</Text>
-              </Pressable>
+                label="SOS"
+              />
             </View>
           </View>
         </Card>
@@ -165,27 +170,19 @@ export function RideActiveView() {
 
       {/* Route info */}
       <Card variant="outlined" padding="md" className="mb-4">
-        <View className="flex-row items-start mb-3">
-          <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="secondary">{t('ride.pickup')}</Text>
-            <Text variant="bodySmall">{activeRide.pickup_address}</Text>
-          </View>
-        </View>
-        <View className="flex-row items-start">
-          <View className="w-3 h-3 rounded-full bg-neutral-800 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="secondary">{t('ride.dropoff')}</Text>
-            <Text variant="bodySmall">{activeRide.dropoff_address}</Text>
-          </View>
-        </View>
+        <RouteSummary
+          pickupAddress={activeRide.pickup_address}
+          dropoffAddress={activeRide.dropoff_address}
+          pickupLabel={t('ride.pickup')}
+          dropoffLabel={t('ride.dropoff')}
+        />
       </Card>
 
       {/* Fare */}
       <View className="flex-row justify-between items-center mb-6 px-2">
         <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
         <Text variant="h4" color="accent">
-          {formatCUP(activeRide.estimated_fare_cup)}
+          {formatTRC(activeRide.estimated_fare_trc ?? activeRide.estimated_fare_cup)}
         </Text>
       </View>
 

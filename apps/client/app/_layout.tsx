@@ -1,32 +1,41 @@
-import React from 'react';
-import { Stack, Redirect, useSegments } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
+import { colors } from '@tricigo/theme';
+import { initSentry, Sentry } from '@/lib/sentry';
 import '../global.css';
+
+// Initialize Sentry as early as possible
+initSentry();
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const segments = useSegments();
+  const router = useRouter();
+  const navRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    if (isLoading || !navRef.isReady()) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, segments]);
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-        <ActivityIndicator size="large" color="#FF4D00" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary }}>
+        <ActivityIndicator size="large" color={colors.brand.orange} />
       </View>
     );
-  }
-
-  const inAuthGroup = segments[0] === '(auth)';
-
-  if (!isAuthenticated && !inAuthGroup) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
-  if (isAuthenticated && inAuthGroup) {
-    return <Redirect href="/(tabs)" />;
   }
 
   return (
@@ -41,7 +50,7 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+function RootLayoutInner() {
   return (
     <ErrorBoundary>
       <AppProviders>
@@ -50,3 +59,5 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayoutInner);

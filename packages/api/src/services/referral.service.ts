@@ -1,12 +1,12 @@
 // ============================================================
 // TriciGo — Referral Service
-// Manages referral codes, applications, and history.
+// Manages referral codes, applications, history, and admin ops.
 // ============================================================
 
-import type { Referral } from '@tricigo/types';
+import type { Referral, ReferralStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
-const DEFAULT_BONUS_CENTAVOS = 50000; // 500 CUP
+const DEFAULT_BONUS_CUP = 500; // 500 CUP whole pesos
 
 export const referralService = {
   /**
@@ -74,7 +74,7 @@ export const referralService = {
         referee_id: refereeId,
         code: normalizedCode,
         status: 'pending',
-        bonus_amount: DEFAULT_BONUS_CENTAVOS,
+        bonus_amount: DEFAULT_BONUS_CUP,
       })
       .select()
       .single();
@@ -108,5 +108,94 @@ export const referralService = {
       .eq('referee_id', userId)
       .limit(1);
     return (data?.length ?? 0) > 0;
+  },
+
+  // ==================== ADMIN OPERATIONS ====================
+
+  /**
+   * Get all referrals with pagination and optional status filter.
+   */
+  async getAllReferrals(
+    page = 0,
+    pageSize = 20,
+    statusFilter?: ReferralStatus,
+  ): Promise<{ data: Referral[]; total: number }> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('referrals')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (statusFilter) {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    return { data: data as Referral[], total: count ?? 0 };
+  },
+
+  /**
+   * Get referral stats for admin dashboard.
+   */
+  async getReferralStats(): Promise<{
+    total: number;
+    pending: number;
+    rewarded: number;
+    invalidated: number;
+    total_bonus_paid_cup: number;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('referrals')
+      .select('status, bonus_amount');
+    if (error) throw error;
+
+    const referrals = data as { status: string; bonus_amount: number }[];
+    const stats = {
+      total: referrals.length,
+      pending: 0,
+      rewarded: 0,
+      invalidated: 0,
+      total_bonus_paid_cup: 0,
+    };
+
+    for (const r of referrals) {
+      if (r.status === 'pending') stats.pending++;
+      else if (r.status === 'rewarded') {
+        stats.rewarded++;
+        stats.total_bonus_paid_cup += r.bonus_amount;
+      } else if (r.status === 'invalidated') stats.invalidated++;
+    }
+
+    return stats;
+  },
+
+  /**
+   * Admin: manually reward a pending referral.
+   * Uses the admin_reward_referral RPC function.
+   */
+  async rewardReferral(referralId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('admin_reward_referral', {
+      p_referral_id: referralId,
+    });
+    if (error) throw error;
+  },
+
+  /**
+   * Admin: invalidate a pending referral.
+   * Uses the admin_invalidate_referral RPC function.
+   */
+  async invalidateReferral(referralId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('admin_invalidate_referral', {
+      p_referral_id: referralId,
+    });
+    if (error) throw error;
   },
 };

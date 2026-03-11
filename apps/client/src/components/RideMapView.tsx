@@ -12,6 +12,8 @@ try {
   Marker = null;
 }
 
+import { colors } from '@tricigo/theme';
+
 interface GeoPoint {
   latitude: number;
   longitude: number;
@@ -53,9 +55,9 @@ export function RideMapView({
   if (!MapView) {
     return (
       <View
-        style={{ height, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', borderRadius: 12 }}
+        style={{ height, backgroundColor: colors.neutral[100], justifyContent: 'center', alignItems: 'center', borderRadius: 12 }}
       >
-        <Text style={{ color: '#737373' }}>Mapa no disponible</Text>
+        <Text style={{ color: colors.neutral[500] }}>Mapa no disponible</Text>
       </View>
     );
   }
@@ -75,7 +77,7 @@ export function RideMapView({
           <Marker
             identifier="pickup"
             coordinate={pickupLocation}
-            pinColor="#22C55E"
+            pinColor={colors.success.DEFAULT}
             title="Recogida"
           />
         )}
@@ -83,7 +85,7 @@ export function RideMapView({
           <Marker
             identifier="dropoff"
             coordinate={dropoffLocation}
-            pinColor="#EF4444"
+            pinColor={colors.error.DEFAULT}
             title="Destino"
           />
         )}
@@ -91,7 +93,7 @@ export function RideMapView({
           <Marker
             identifier="driver"
             coordinate={driverLocation}
-            pinColor="#3B82F6"
+            pinColor={colors.info.DEFAULT}
             title="Conductor"
           />
         )}

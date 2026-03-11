@@ -38,7 +38,36 @@
     "incidents": "Incidentes",
     "support": "Soporte",
     "fraud": "Fraude",
+    "referrals": "Referidos",
     "admin_panel": "Panel de administración"
+  },
+
+  "referrals": {
+    "title": "Gestión de Referidos",
+    "total": "Total referidos",
+    "pending": "Pendientes",
+    "rewarded": "Recompensados",
+    "invalidated": "Invalidados",
+    "total_bonus_paid": "Bonos pagados",
+    "filter_all": "Todos",
+    "filter_pending": "Pendientes",
+    "filter_rewarded": "Recompensados",
+    "filter_invalidated": "Invalidados",
+    "col_referrer": "Referidor",
+    "col_referee": "Referido",
+    "col_code": "Código",
+    "col_status": "Estado",
+    "col_bonus": "Bono",
+    "col_date": "Fecha",
+    "col_actions": "Acciones",
+    "reward": "Recompensar",
+    "invalidate": "Invalidar",
+    "reward_confirm": "¿Recompensar este referido manualmente? Se acreditará el bono al referidor.",
+    "invalidate_confirm": "¿Invalidar este referido? No se podrá revertir.",
+    "reward_success": "Referido recompensado exitosamente",
+    "invalidate_success": "Referido invalidado exitosamente",
+    "no_referrals": "No hay referidos registrados",
+    "conversion_rate": "Tasa de conversión"
   },
 
   "dashboard": {
@@ -465,6 +494,7 @@
     "filter_triciclo": "Triciclo Básico",
     "filter_moto": "Moto",
     "filter_auto": "Auto",
+    "filter_mensajeria": "Mensajeria",
     "col_zone": "Zona",
     "col_service": "Servicio",
     "col_base": "Base",
@@ -602,5 +632,47 @@
     "resolved": "Resuelto",
     "previous": "Anterior",
     "next": "Siguiente"
+  },
+
+  "platform_config": {
+    "title": "Configuraci\u00f3n de plataforma",
+    "subtitle": "Par\u00e1metros globales del sistema",
+    "key": "Clave",
+    "value": "Valor",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "saved": "Guardado correctamente",
+    "error_saving": "Error al guardar",
+    "max_driver_rate_multiplier": "Multiplicador m\u00e1ximo tarifa conductor",
+    "max_driver_rate_multiplier_help": "L\u00edmite superior para tarifas personalizadas (ej: 2.0 = 2x el default)",
+    "default_per_km_rate_cup": "Tarifa por km por defecto (CUP)",
+    "default_per_km_rate_cup_help": "Tarifa base por kil\u00f3metro en CUP para todos los conductores",
+    "commission_rate": "Tasa de comisi\u00f3n",
+    "commission_rate_help": "Porcentaje que cobra la plataforma por viaje (ej: 0.15 = 15%)",
+    "exchange_rate_fallback_cup": "Tasa de cambio de respaldo (CUP)",
+    "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada"
+  },
+
+  "exchange_rate": {
+    "title": "Tasa de cambio",
+    "subtitle": "Tasa de cambio USD/CUP desde ElToque",
+    "current_rate": "Tasa actual",
+    "source": "Fuente",
+    "manual": "Manual",
+    "updated_at": "Actualizado",
+    "no_rate": "No hay tasa de cambio configurada",
+    "manual_override": "Ajuste manual",
+    "manual_override_desc": "Establece una tasa USD/CUP manual. Esto sobreescribe la tasa autom\u00e1tica de ElToque.",
+    "set_rate": "Establecer tasa",
+    "rate_saved": "Tasa de cambio actualizada correctamente",
+    "error_invalid_rate": "Ingresa una tasa v\u00e1lida mayor a 0",
+    "error_saving": "Error al actualizar la tasa de cambio",
+    "history": "Historial de tasas",
+    "no_history": "Sin historial de tasas a\u00fan",
+    "col_date": "Fecha",
+    "col_rate": "Tasa (CUP/USD)",
+    "col_source": "Fuente",
+    "col_status": "Estado",
+    "active": "Actual"
   }
 }

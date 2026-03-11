@@ -14,7 +14,10 @@ const SERVICE_TAB_KEYS = [
   { labelKey: 'pricing.filter_triciclo', value: 'triciclo_basico' },
   { labelKey: 'pricing.filter_moto', value: 'moto_standard' },
   { labelKey: 'pricing.filter_auto', value: 'auto_standard' },
+  { labelKey: 'pricing.filter_mensajeria', value: 'mensajeria' },
 ] as const;
+
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 type ZoneRow = Omit<Zone, 'boundary'>;
 
@@ -63,6 +66,9 @@ export default function PricingPage() {
       min_fare_cup: rule.min_fare_cup,
       surge_threshold: rule.surge_threshold,
       max_surge_multiplier: rule.max_surge_multiplier,
+      time_window_start: rule.time_window_start,
+      time_window_end: rule.time_window_end,
+      day_of_week: rule.day_of_week,
     });
   }
 
@@ -120,7 +126,7 @@ export default function PricingPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
+      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-6">{t('pricing.title')}</h1>
@@ -133,7 +139,7 @@ export default function PricingPage() {
             onClick={() => { setFilter(tab.value); setPage(0); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
@@ -142,8 +148,8 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_zone')}</th>
@@ -153,6 +159,7 @@ export default function PricingPage() {
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_min')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_min')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_surge')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 hidden lg:table-cell">{t('pricing.col_time_window', { defaultValue: 'Horario' })}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_active')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
@@ -160,7 +167,7 @@ export default function PricingPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-neutral-400">
+                <td colSpan={10} className="text-center py-12 text-neutral-400">
                   {loading ? t('common.loading') : t('pricing.no_rules')}
                 </td>
               </tr>
@@ -193,6 +200,61 @@ export default function PricingPage() {
                       r.max_surge_multiplier ? `${r.max_surge_multiplier}x` : '—'
                     )}
                   </td>
+                  <td className="px-4 py-3 text-xs hidden lg:table-cell">
+                    {editingId === r.id ? (
+                      <div className="space-y-1">
+                        <div className="flex gap-1 items-center">
+                          <input
+                            type="time"
+                            className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
+                            value={editForm.time_window_start ?? ''}
+                            onChange={(e) => setEditForm((f) => ({ ...f, time_window_start: e.target.value || null }))}
+                          />
+                          <span>-</span>
+                          <input
+                            type="time"
+                            className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
+                            value={editForm.time_window_end ?? ''}
+                            onChange={(e) => setEditForm((f) => ({ ...f, time_window_end: e.target.value || null }))}
+                          />
+                        </div>
+                        <div className="flex gap-0.5 flex-wrap">
+                          {DAY_LABELS.map((label, idx) => {
+                            const selected = editForm.day_of_week?.includes(idx);
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                className={`px-1 py-0.5 rounded text-[10px] ${
+                                  selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
+                                }`}
+                                onClick={() => {
+                                  const current = editForm.day_of_week ?? [];
+                                  const next = selected ? current.filter((d) => d !== idx) : [...current, idx];
+                                  setEditForm((f) => ({ ...f, day_of_week: next.length > 0 ? next : null }));
+                                }}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        {r.time_window_start && r.time_window_end ? (
+                          <span>{r.time_window_start} - {r.time_window_end}</span>
+                        ) : (
+                          <span className="text-neutral-400">24h</span>
+                        )}
+                        {r.day_of_week && r.day_of_week.length > 0 && (
+                          <div className="text-neutral-400 mt-0.5">
+                            {r.day_of_week.map((d) => DAY_LABELS[d]).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(r)}
@@ -209,7 +271,7 @@ export default function PricingPage() {
                         <button
                           onClick={handleSave}
                           disabled={saving}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
                         >
                           {t('common.save')}
                         </button>
@@ -223,7 +285,7 @@ export default function PricingPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(r)}
-                        className="text-sm text-[#FF4D00] hover:underline"
+                        className="text-sm text-primary-500 hover:underline"
                       >
                         {t('common.edit')}
                       </button>

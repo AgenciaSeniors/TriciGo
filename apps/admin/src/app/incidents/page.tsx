@@ -83,10 +83,10 @@ export default function IncidentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">{t('incidents.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('incidents.title')}</h1>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {STATUS_FILTER_KEYS.map((f) => (
           <button
             key={f.value}
@@ -104,16 +104,17 @@ export default function IncidentsPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="bg-neutral-50 border-b">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_type')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_severity')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_status')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_ride')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_description')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_date')}</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase">{t('incidents.col_actions')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap">{t('incidents.col_type')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap">{t('incidents.col_severity')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap">{t('incidents.col_status')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap hidden lg:table-cell">{t('incidents.col_ride')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap hidden lg:table-cell">{t('incidents.col_description')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap hidden lg:table-cell">{t('incidents.col_date')}</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap">{t('incidents.col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -145,13 +146,13 @@ export default function IncidentsPage() {
                       {incident.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-neutral-500 font-mono">
+                  <td className="px-4 py-3 text-sm text-neutral-500 font-mono hidden lg:table-cell">
                     {incident.ride_id ? incident.ride_id.slice(0, 8) + '…' : '—'}
                   </td>
-                  <td className="px-4 py-3 text-sm max-w-xs truncate">
+                  <td className="px-4 py-3 text-sm max-w-xs truncate hidden lg:table-cell">
                     {incident.description}
                   </td>
-                  <td className="px-4 py-3 text-sm text-neutral-500">
+                  <td className="px-4 py-3 text-sm text-neutral-500 hidden lg:table-cell">
                     {new Date(incident.created_at).toLocaleDateString('es-CU', {
                       day: 'numeric',
                       month: 'short',
@@ -185,6 +186,7 @@ export default function IncidentsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

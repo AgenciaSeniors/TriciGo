@@ -7,13 +7,13 @@ import { rideService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 
-const STATUS_STEPS: { key: RideStatus; label: string; icon: string }[] = [
-  { key: 'searching', label: 'Buscando conductor', icon: '🔍' },
-  { key: 'accepted', label: 'Conductor asignado', icon: '✅' },
-  { key: 'driver_en_route', label: 'En camino a recogerte', icon: '🚗' },
-  { key: 'arrived_at_pickup', label: 'Llegó al punto', icon: '📍' },
-  { key: 'in_progress', label: 'Viaje en curso', icon: '🛣️' },
-  { key: 'completed', label: 'Viaje completado', icon: '🏁' },
+const STATUS_STEPS: { key: RideStatus; label: string; stepNumber: number }[] = [
+  { key: 'searching', label: 'Buscando conductor', stepNumber: 1 },
+  { key: 'accepted', label: 'Conductor asignado', stepNumber: 2 },
+  { key: 'driver_en_route', label: 'En camino a recogerte', stepNumber: 3 },
+  { key: 'arrived_at_pickup', label: 'Llegó al punto', stepNumber: 4 },
+  { key: 'in_progress', label: 'Viaje en curso', stepNumber: 5 },
+  { key: 'completed', label: 'Viaje completado', stepNumber: 6 },
 ];
 
 function getStepIndex(status: RideStatus): number {
@@ -68,7 +68,7 @@ export default function TrackRidePage() {
   if (error || !ride) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <p style={{ color: '#e04400', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'Viaje no encontrado.'}</p>
+        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'Viaje no encontrado.'}</p>
         <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>← Volver al inicio</Link>
       </main>
     );
@@ -107,7 +107,7 @@ export default function TrackRidePage() {
         {/* Status stepper */}
         {isCanceled ? (
           <div style={{ padding: '1rem', background: '#FEE', borderRadius: '0.75rem', textAlign: 'center', marginBottom: '1.5rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>❌</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#EF4444' }}>✕</span>
             <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje cancelado</p>
             {ride.cancellation_reason && (
               <p style={{ color: '#888', fontSize: '0.8rem', marginTop: '0.25rem' }}>{ride.cancellation_reason}</p>
@@ -115,7 +115,7 @@ export default function TrackRidePage() {
           </div>
         ) : isDisputed ? (
           <div style={{ padding: '1rem', background: '#FFF3E0', borderRadius: '0.75rem', textAlign: 'center', marginBottom: '1.5rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#F59E0B' }}>!</span>
             <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje en disputa</p>
           </div>
         ) : (
@@ -149,7 +149,7 @@ export default function TrackRidePage() {
                       flexShrink: 0,
                     }}
                   >
-                    {isDone ? '✓' : step.icon}
+                    {isDone ? '✓' : step.stepNumber}
                   </span>
                   <span style={{ fontWeight: isActive ? 700 : 400, fontSize: '0.9rem' }}>
                     {step.label}
@@ -218,7 +218,7 @@ export default function TrackRidePage() {
                   width: 48,
                   height: 48,
                   borderRadius: '50%',
-                  background: '#FF4D00',
+                  background: 'var(--primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -250,7 +250,7 @@ export default function TrackRidePage() {
         {/* Live indicator */}
         {!isTerminal && (
           <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#888', marginTop: '1rem' }}>
-            🟢 Actualizando en tiempo real
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 6 }} />Actualizando en tiempo real
           </p>
         )}
       </div>

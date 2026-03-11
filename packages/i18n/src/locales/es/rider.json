@@ -78,7 +78,19 @@
     "tip_title": "¿Dejar propina?",
     "tip_custom": "Otra cantidad",
     "tip_sent": "¡Propina de {{amount}} enviada!",
-    "tip_skip": "No, gracias"
+    "tip_skip": "No, gracias",
+    "schedule_ride": "Programar viaje",
+    "schedule_confirm": "Programar viaje",
+    "scheduled_for": "Programado",
+    "scheduled_rides": "Viajes programados",
+    "no_scheduled_rides": "No tienes viajes programados",
+    "scheduled_badge": "Programado para {{date}}",
+    "delivery_details": "Detalles del envio",
+    "package_description": "Descripcion del paquete",
+    "recipient_name": "Nombre del destinatario",
+    "recipient_phone": "Telefono del destinatario",
+    "estimated_weight": "Peso estimado (kg)",
+    "special_instructions": "Instrucciones especiales"
   },
 
   "locations": {
@@ -89,7 +101,8 @@
     "triciclo_basico": "Triciclo Básico",
     "triciclo_premium": "Triciclo Premium",
     "moto_standard": "Moto",
-    "auto_standard": "Auto"
+    "auto_standard": "Auto",
+    "mensajeria": "Mensajeria"
   },
 
   "payment": {
@@ -109,12 +122,22 @@
 
   "rides_history": {
     "title": "Mis viajes",
-    "no_rides": "Aún no tienes viajes",
+    "no_rides": "A\u00fan no tienes viajes",
     "completed": "Completado",
     "canceled": "Cancelado",
-    "load_more": "Cargar más",
+    "load_more": "Cargar m\u00e1s",
     "fare": "Tarifa",
-    "payment_method": "Método de pago",
+    "payment_method": "M\u00e9todo de pago",
     "date": "Fecha"
+  },
+
+  "nearby": {
+    "vehicles_count": "{{count}} veh\u00edculos cerca",
+    "no_vehicles": "No hay veh\u00edculos cerca",
+    "surge_active": "Tarifa din\u00e1mica {{multiplier}}x activa"
+  },
+
+  "exchange_rate": {
+    "info": "Tasa: 1 USD = {{rate}} CUP"
   }
 }

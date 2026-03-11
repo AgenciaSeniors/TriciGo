@@ -87,10 +87,10 @@ export default function AuditPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('audit.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('audit.title')}</h1>
 
       {/* Date range filters */}
-      <div className="flex flex-wrap items-end gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-end gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-neutral-600 mb-1">
             {t('audit.filter_from')}
@@ -102,7 +102,7 @@ export default function AuditPage() {
               setDateFrom(e.target.value);
               setPage(0);
             }}
-            className="px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF4D00]/30 focus:border-[#FF4D00]"
+            className="px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
           />
         </div>
         <div>
@@ -116,7 +116,7 @@ export default function AuditPage() {
               setDateTo(e.target.value);
               setPage(0);
             }}
-            className="px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF4D00]/30 focus:border-[#FF4D00]"
+            className="px-3 py-2 rounded-lg border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
           />
         </div>
         {(dateFrom || dateTo) && (
@@ -131,22 +131,23 @@ export default function AuditPage() {
 
       {/* Actions table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('audit.col_date')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
                 {t('audit.col_admin')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('audit.col_action')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('audit.col_target')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
                 {t('audit.col_details')}
               </th>
             </tr>
@@ -179,7 +180,7 @@ export default function AuditPage() {
                   <td className="px-6 py-4 text-sm text-neutral-600">
                     {formatDateTime(action.created_at)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600 font-mono">
+                  <td className="px-6 py-4 text-sm text-neutral-600 font-mono hidden lg:table-cell">
                     {action.admin_id.slice(0, 8)}...
                   </td>
                   <td className="px-6 py-4">
@@ -197,7 +198,7 @@ export default function AuditPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-neutral-500">
+                  <td className="px-6 py-4 text-sm text-neutral-500 hidden lg:table-cell">
                     {action.reason ? (
                       <span title={action.reason}>
                         {action.reason.length > 40
@@ -213,6 +214,7 @@ export default function AuditPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

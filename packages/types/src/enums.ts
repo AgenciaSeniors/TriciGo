@@ -30,7 +30,8 @@ export type ServiceTypeSlug =
   | 'triciclo_basico'
   | 'triciclo_premium'
   | 'moto_standard'
-  | 'auto_standard';
+  | 'auto_standard'
+  | 'mensajeria';
 
 export type WalletAccountType =
   | 'customer_cash'

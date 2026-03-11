@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Alert } from 'react-native';
-import { rideService } from '@tricigo/api';
+import { rideService, deliveryService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -156,7 +156,26 @@ export function useRideActions() {
         estimated_duration_s: fareEstimate?.estimated_duration_s,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         discount_amount_cup: promoResult?.valid ? promoResult.discountAmount : undefined,
+        scheduled_at: d.scheduledAt ? d.scheduledAt.toISOString() : undefined,
       });
+
+      // Save delivery details if mensajeria
+      if (d.serviceType === 'mensajeria' && d.delivery.packageDescription.trim()) {
+        try {
+          await deliveryService.createDeliveryDetails({
+            ride_id: ride.id,
+            package_description: d.delivery.packageDescription,
+            recipient_name: d.delivery.recipientName,
+            recipient_phone: d.delivery.recipientPhone,
+            estimated_weight_kg: d.delivery.estimatedWeightKg
+              ? parseFloat(d.delivery.estimatedWeightKg)
+              : undefined,
+            special_instructions: d.delivery.specialInstructions || undefined,
+          });
+        } catch {
+          // Best effort — ride is already created
+        }
+      }
 
       setActiveRide(ride);
       setFlowStep('searching');

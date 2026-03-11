@@ -12,12 +12,20 @@
     "./Text": "./src/Text.tsx",
     "./StatusStepper": "./src/StatusStepper.tsx",
     "./BottomSheet": "./src/BottomSheet.tsx",
-    "./ErrorBoundary": "./src/ErrorBoundary.tsx"
+    "./ErrorBoundary": "./src/ErrorBoundary.tsx",
+    "./StatusBadge": "./src/StatusBadge.tsx",
+    "./RouteSummary": "./src/RouteSummary.tsx",
+    "./EmptyState": "./src/EmptyState.tsx",
+    "./ScreenHeader": "./src/ScreenHeader.tsx",
+    "./IconButton": "./src/IconButton.tsx",
+    "./hooks/useResponsive": "./src/hooks/useResponsive.ts"
   },
   "dependencies": {
+    "@tricigo/theme": "workspace:*",
     "@tricigo/utils": "workspace:*"
   },
   "peerDependencies": {
+    "@expo/vector-icons": ">=14",
     "react": "^18.2.0",
     "react-native": ">=0.74",
     "nativewind": ">=4"

@@ -4,8 +4,13 @@ import { View, ActivityIndicator } from 'react-native';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
+import { initSentry, Sentry } from '@/lib/sentry';
 import '../global.css';
+
+// Initialize Sentry as early as possible
+initSentry();
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -16,7 +21,7 @@ function RootNavigator() {
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111111' }}>
-        <ActivityIndicator size="large" color="#FF4D00" />
+        <ActivityIndicator size="large" color={colors.brand.orange} />
       </View>
     );
   }
@@ -73,7 +78,7 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+function RootLayoutInner() {
   return (
     <ErrorBoundary>
       <AppProviders>
@@ -82,3 +87,5 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(RootLayoutInner);

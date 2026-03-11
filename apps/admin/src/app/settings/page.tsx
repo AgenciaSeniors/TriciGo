@@ -2,46 +2,67 @@
 
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
+import { Car, DollarSign, Map, Zap, Gift, Flag, Sliders, ArrowLeftRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+type Section = {
+  href: string;
+  titleKey: string;
+  descKey: string;
+  icon: LucideIcon;
+};
 
 export default function SettingsPage() {
   const { t } = useTranslation('admin');
 
-  const sections = [
+  const sections: Section[] = [
     {
       href: '/settings/service-types',
       titleKey: 'settings.service_types',
       descKey: 'settings.service_types_desc',
-      icon: '🛺',
+      icon: Car,
     },
     {
       href: '/settings/pricing',
       titleKey: 'settings.pricing_rules',
       descKey: 'settings.pricing_desc',
-      icon: '💰',
+      icon: DollarSign,
     },
     {
       href: '/settings/zones',
       titleKey: 'settings.zones',
       descKey: 'settings.zones_desc',
-      icon: '🗺️',
+      icon: Map,
     },
     {
       href: '/settings/surge-zones',
       titleKey: 'settings.surge_zones',
       descKey: 'settings.surge_zones_desc',
-      icon: '⚡',
+      icon: Zap,
     },
     {
       href: '/settings/promotions',
       titleKey: 'settings.promotions',
       descKey: 'settings.promotions_desc',
-      icon: '🎁',
+      icon: Gift,
     },
     {
       href: '/settings/feature-flags',
       titleKey: 'settings.feature_flags',
       descKey: 'settings.flags_desc',
-      icon: '🚩',
+      icon: Flag,
+    },
+    {
+      href: '/settings/exchange-rate',
+      titleKey: 'exchange_rate.title',
+      descKey: 'exchange_rate.subtitle',
+      icon: ArrowLeftRight,
+    },
+    {
+      href: '/settings/platform-config',
+      titleKey: 'platform_config.title',
+      descKey: 'platform_config.subtitle',
+      icon: Sliders,
     },
   ];
 
@@ -54,10 +75,10 @@ export default function SettingsPage() {
           <Link
             key={section.href}
             href={section.href}
-            className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 flex items-center justify-between hover:border-[#FF4D00]/30 transition-colors block"
+            className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 flex items-center justify-between hover:border-primary-500/30 transition-colors block"
           >
             <div className="flex items-center gap-4">
-              <span className="text-2xl">{section.icon}</span>
+              <section.icon className="w-6 h-6 text-primary-500" />
               <div>
                 <h3 className="font-bold text-lg">{t(section.titleKey)}</h3>
                 <p className="text-sm text-neutral-500 mt-1">{t(section.descKey)}</p>

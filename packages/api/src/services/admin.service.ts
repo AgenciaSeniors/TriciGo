@@ -9,6 +9,7 @@ import type {
   DriverDocument,
   DriverProfile,
   DriverProfileWithUser,
+  ExchangeRate,
   FeatureFlag,
   LedgerTransaction,
   PricingRule,
@@ -27,6 +28,7 @@ import type {
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { exchangeRateService } from './exchange-rate.service';
 
 export const adminService = {
   /**
@@ -983,6 +985,55 @@ export const adminService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+  },
+
+  // ==================== PLATFORM CONFIG ====================
+
+  /**
+   * Get all platform config key/value pairs.
+   */
+  async getPlatformConfig(): Promise<Array<{ key: string; value: string }>> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('platform_config')
+      .select('key, value')
+      .order('key');
+    if (error) throw error;
+    return (data ?? []) as Array<{ key: string; value: string }>;
+  },
+
+  /**
+   * Update a platform config value (upsert).
+   */
+  async updatePlatformConfig(key: string, value: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('platform_config')
+      .upsert({ key, value }, { onConflict: 'key' });
+    if (error) throw error;
+  },
+
+  // ==================== EXCHANGE RATE ====================
+
+  /**
+   * Get current exchange rate with metadata.
+   */
+  async getExchangeRate(): Promise<ExchangeRate> {
+    return exchangeRateService.getCurrentRate();
+  },
+
+  /**
+   * Get exchange rate history.
+   */
+  async getExchangeRateHistory(limit = 50): Promise<ExchangeRate[]> {
+    return exchangeRateService.getRateHistory(limit);
+  },
+
+  /**
+   * Set a manual exchange rate (admin override).
+   */
+  async setManualExchangeRate(usdCupRate: number): Promise<void> {
+    return exchangeRateService.setManualRate(usdCupRate);
   },
 
   // ==================== DRIVER SCORE ====================

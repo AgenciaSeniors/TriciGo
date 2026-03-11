@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   type PressableProps,
 } from 'react-native';
+import { colors } from '@tricigo/theme';
 
 export interface ButtonProps extends Omit<PressableProps, 'children'> {
   title: string;
@@ -71,7 +72,7 @@ export function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'outline' || variant === 'ghost' ? '#FF4D00' : '#FFFFFF'}
+          color={variant === 'outline' || variant === 'ghost' ? colors.brand.orange : colors.brand.white}
           size="small"
           className="mr-2"
         />

@@ -215,7 +215,7 @@ export default function UserDetailPage() {
               <select
                 value={selectedLevel}
                 onChange={(e) => setSelectedLevel(e.target.value as UserLevel)}
-                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
               >
                 <option value="bronce">{t('users.level_bronze')}</option>
                 <option value="plata">{t('users.level_silver')}</option>
@@ -224,7 +224,7 @@ export default function UserDetailPage() {
               <button
                 onClick={handleLevelChange}
                 disabled={levelUpdating || selectedLevel === currentLevel}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
               >
                 {levelUpdating ? t('common.saving') : t('common.save')}
               </button>
@@ -240,7 +240,7 @@ export default function UserDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-neutral-50 rounded-lg p-4">
               <p className="text-xs text-neutral-500 mb-1">{t('users.label_available_balance')}</p>
-              <p className="text-lg font-bold text-[#FF4D00]">{formatCurrency(wallet.balance)}</p>
+              <p className="text-lg font-bold text-primary-500">{formatCurrency(wallet.balance)}</p>
             </div>
             <div className="bg-neutral-50 rounded-lg p-4">
               <p className="text-xs text-neutral-500 mb-1">{t('users.label_held_balance')}</p>

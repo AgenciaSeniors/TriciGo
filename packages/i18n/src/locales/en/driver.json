@@ -163,5 +163,25 @@
     "canceled": "Canceled",
     "load_more": "Load more",
     "fare": "Earning"
+  },
+
+  "pricing": {
+    "title": "My per-km rate",
+    "explanation": "Set how much you charge per kilometer. Passengers will see your rate when requesting a ride.",
+    "default_rate": "Default rate",
+    "max_rate": "Maximum rate",
+    "current_rate": "Your current rate",
+    "custom_label": "Custom",
+    "set_rate": "New rate (CUP/km)",
+    "trc_equivalent": "~ {{amount}} TRC/km",
+    "save": "Save rate",
+    "saving": "Saving...",
+    "saved": "Rate saved successfully",
+    "reset_default": "Reset to default rate",
+    "error_loading": "Could not load configuration",
+    "error_saving": "Could not save rate",
+    "error_invalid": "Enter a valid number",
+    "error_below_min": "Rate cannot be below {{min}}",
+    "error_above_max": "Rate cannot exceed {{max}}"
   }
 }

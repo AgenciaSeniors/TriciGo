@@ -19,12 +19,14 @@
     "@tricigo/types": "workspace:*",
     "@tricigo/utils": "workspace:*",
     "i18next": "^24.2.2",
+    "lucide-react": "^0.460.0",
     "next": "15.5.12",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-i18next": "^15.4.1"
   },
   "devDependencies": {
+    "@sentry/nextjs": "^10.43.0",
     "@tricigo/config": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

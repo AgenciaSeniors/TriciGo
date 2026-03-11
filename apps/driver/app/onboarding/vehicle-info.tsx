@@ -8,6 +8,7 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { isValidPlateNumber, sanitizeText } from '@tricigo/utils';
 import type { VehicleType } from '@tricigo/types';
@@ -101,7 +102,7 @@ export default function VehicleInfoScreen() {
               <Ionicons
                 name={vt.icon as any}
                 size={28}
-                color={vehicleType === vt.value ? '#FF4D00' : '#737373'}
+                color={vehicleType === vt.value ? colors.brand.orange : '#737373'}
               />
               <Text
                 variant="label"

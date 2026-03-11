@@ -5,7 +5,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { driverService } from '@tricigo/api';
+import { driverService, getSupabaseClient } from '@tricigo/api';
 import { HAVANA_CENTER } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -26,6 +26,24 @@ export default function DriverHomeScreen() {
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
   const [toggling, setToggling] = useState(false);
   const [isIneligible, setIsIneligible] = useState(false);
+  const [serviceConfigs, setServiceConfigs] = useState<Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }>>({});
+
+  // Fetch service type configs once for fare calculation
+  useEffect(() => {
+    getSupabaseClient()
+      .from('service_type_configs')
+      .select('slug, base_fare_cup, per_km_rate_cup, per_minute_rate_cup, min_fare_cup')
+      .eq('is_active', true)
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }> = {};
+          for (const c of data) {
+            map[c.slug] = { base_fare_cup: c.base_fare_cup, per_km_rate_cup: c.per_km_rate_cup, per_minute_rate_cup: c.per_minute_rate_cup, min_fare_cup: c.min_fare_cup };
+          }
+          setServiceConfigs(map);
+        }
+      });
+  }, []);
 
   // Check financial eligibility on mount and when profile changes
   useEffect(() => {
@@ -73,9 +91,14 @@ export default function DriverHomeScreen() {
 
   const renderRequest = useCallback(
     ({ item }: { item: Ride }) => (
-      <IncomingRideCard ride={item} onAccept={handleAccept} />
+      <IncomingRideCard
+        ride={item}
+        onAccept={handleAccept}
+        driverCustomRateCup={profile?.custom_per_km_rate_cup ?? null}
+        serviceConfig={serviceConfigs[item.service_type] ?? null}
+      />
     ),
-    [handleAccept],
+    [handleAccept, profile?.custom_per_km_rate_cup, serviceConfigs],
   );
 
   // Active trip view

@@ -79,7 +79,7 @@ export default function RidesPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('rides.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('rides.title')}</h1>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -89,7 +89,7 @@ export default function RidesPage() {
             onClick={() => { setStatusFilter(filter.value); setPage(0); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === filter.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
@@ -100,15 +100,16 @@ export default function RidesPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_route')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_status')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_fare')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_distance')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_payment')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('rides.col_date')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_route')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_status')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_fare')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_distance')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_payment')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_date')}</th>
             </tr>
           </thead>
           <tbody>
@@ -144,17 +145,17 @@ export default function RidesPage() {
                       <span className="text-neutral-400">{formatCUP(ride.estimated_fare_cup)} ({t('rides.estimated')})</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                     {ride.actual_distance_m != null
                       ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
                       : ride.estimated_distance_m > 0
                         ? <span className="text-neutral-400">{(ride.estimated_distance_m / 1000).toFixed(1)} km ({t('rides.estimated')})</span>
                         : '—'}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                     {ride.payment_method === 'cash' ? t('rides.payment_cash') : t('rides.payment_tricicoin')}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                     {new Date(ride.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
                 </tr>
@@ -162,6 +163,7 @@ export default function RidesPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

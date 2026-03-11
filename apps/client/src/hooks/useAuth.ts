@@ -1,13 +1,35 @@
 import { useEffect } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 
-const adapter = createStorageAdapter({
-  get: (key) => SecureStore.getItemAsync(key),
-  set: (key, value) => SecureStore.setItemAsync(key, value),
-  remove: (key) => SecureStore.deleteItemAsync(key),
-});
+// Use SecureStore on native, localStorage on web
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const localStorage: any;
+
+const storageOps =
+  Platform.OS === 'web'
+    ? {
+        get: (key: string) => Promise.resolve(localStorage.getItem(key)),
+        set: (key: string, value: string) => {
+          localStorage.setItem(key, value);
+          return Promise.resolve();
+        },
+        remove: (key: string) => {
+          localStorage.removeItem(key);
+          return Promise.resolve();
+        },
+      }
+    : (() => {
+        const SecureStore = require('expo-secure-store');
+        return {
+          get: (key: string) => SecureStore.getItemAsync(key),
+          set: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+          remove: (key: string) => SecureStore.deleteItemAsync(key),
+        };
+      })();
+
+const adapter = createStorageAdapter(storageOps);
 configureStorage(adapter);
 
 export function useAuthInit() {

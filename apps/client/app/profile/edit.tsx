@@ -5,6 +5,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
 import { authService, customerService } from '@tricigo/api';
@@ -71,11 +72,7 @@ export default function EditProfileScreen() {
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
-        <Pressable onPress={() => router.back()} className="mb-2">
-          <Text variant="body" color="accent">{t('back')}</Text>
-        </Pressable>
-
-        <Text variant="h3" className="mb-6">{t('profile.edit_profile')}</Text>
+        <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
 
         <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} />
         <Input label={t('profile.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />

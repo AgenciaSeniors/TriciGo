@@ -78,7 +78,19 @@
     "tip_title": "Leave a tip?",
     "tip_custom": "Custom amount",
     "tip_sent": "Tip of {{amount}} sent!",
-    "tip_skip": "No thanks"
+    "tip_skip": "No thanks",
+    "schedule_ride": "Schedule ride",
+    "schedule_confirm": "Schedule ride",
+    "scheduled_for": "Scheduled",
+    "scheduled_rides": "Scheduled rides",
+    "no_scheduled_rides": "No scheduled rides",
+    "scheduled_badge": "Scheduled for {{date}}",
+    "delivery_details": "Delivery details",
+    "package_description": "Package description",
+    "recipient_name": "Recipient name",
+    "recipient_phone": "Recipient phone",
+    "estimated_weight": "Estimated weight (kg)",
+    "special_instructions": "Special instructions"
   },
 
   "locations": {
@@ -89,7 +101,8 @@
     "triciclo_basico": "Basic Tricycle",
     "triciclo_premium": "Premium Tricycle",
     "moto_standard": "Motorcycle",
-    "auto_standard": "Car"
+    "auto_standard": "Car",
+    "mensajeria": "Delivery"
   },
 
   "payment": {
@@ -116,5 +129,15 @@
     "fare": "Fare",
     "payment_method": "Payment method",
     "date": "Date"
+  },
+
+  "nearby": {
+    "vehicles_count": "{{count}} vehicles nearby",
+    "no_vehicles": "No vehicles nearby",
+    "surge_active": "Surge pricing {{multiplier}}x active"
+  },
+
+  "exchange_rate": {
+    "info": "Rate: 1 USD = {{rate}} CUP"
   }
 }

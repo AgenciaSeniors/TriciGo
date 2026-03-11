@@ -38,7 +38,36 @@
     "incidents": "Incidents",
     "support": "Support",
     "fraud": "Fraud",
+    "referrals": "Referrals",
     "admin_panel": "Admin Panel"
+  },
+
+  "referrals": {
+    "title": "Referral Management",
+    "total": "Total referrals",
+    "pending": "Pending",
+    "rewarded": "Rewarded",
+    "invalidated": "Invalidated",
+    "total_bonus_paid": "Total bonus paid",
+    "filter_all": "All",
+    "filter_pending": "Pending",
+    "filter_rewarded": "Rewarded",
+    "filter_invalidated": "Invalidated",
+    "col_referrer": "Referrer",
+    "col_referee": "Referee",
+    "col_code": "Code",
+    "col_status": "Status",
+    "col_bonus": "Bonus",
+    "col_date": "Date",
+    "col_actions": "Actions",
+    "reward": "Reward",
+    "invalidate": "Invalidate",
+    "reward_confirm": "Manually reward this referral? The bonus will be credited to the referrer.",
+    "invalidate_confirm": "Invalidate this referral? This cannot be undone.",
+    "reward_success": "Referral rewarded successfully",
+    "invalidate_success": "Referral invalidated successfully",
+    "no_referrals": "No referrals found",
+    "conversion_rate": "Conversion rate"
   },
 
   "dashboard": {
@@ -465,6 +494,7 @@
     "filter_triciclo": "Triciclo Basic",
     "filter_moto": "Moto",
     "filter_auto": "Auto",
+    "filter_mensajeria": "Delivery",
     "col_zone": "Zone",
     "col_service": "Service",
     "col_base": "Base",
@@ -602,5 +632,47 @@
     "resolved": "Resolved",
     "previous": "Previous",
     "next": "Next"
+  },
+
+  "platform_config": {
+    "title": "Platform Configuration",
+    "subtitle": "Global system parameters",
+    "key": "Key",
+    "value": "Value",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved successfully",
+    "error_saving": "Error saving",
+    "max_driver_rate_multiplier": "Max driver rate multiplier",
+    "max_driver_rate_multiplier_help": "Upper limit for custom driver rates (e.g., 2.0 = 2x default)",
+    "default_per_km_rate_cup": "Default per-km rate (CUP)",
+    "default_per_km_rate_cup_help": "Base per-kilometer rate in CUP for all drivers",
+    "commission_rate": "Commission rate",
+    "commission_rate_help": "Platform fee percentage per ride (e.g., 0.15 = 15%)",
+    "exchange_rate_fallback_cup": "Exchange rate fallback (CUP)",
+    "exchange_rate_fallback_cup_help": "Fallback USD/CUP rate if no current rate is set"
+  },
+
+  "exchange_rate": {
+    "title": "Exchange Rate",
+    "subtitle": "USD/CUP exchange rate from ElToque",
+    "current_rate": "Current rate",
+    "source": "Source",
+    "manual": "Manual",
+    "updated_at": "Updated",
+    "no_rate": "No exchange rate configured",
+    "manual_override": "Manual override",
+    "manual_override_desc": "Set a manual USD/CUP exchange rate. This overrides the automatic ElToque rate.",
+    "set_rate": "Set rate",
+    "rate_saved": "Exchange rate updated successfully",
+    "error_invalid_rate": "Enter a valid rate greater than 0",
+    "error_saving": "Error updating exchange rate",
+    "history": "Rate history",
+    "no_history": "No rate history yet",
+    "col_date": "Date",
+    "col_rate": "Rate (CUP/USD)",
+    "col_source": "Source",
+    "col_status": "Status",
+    "active": "Current"
   }
 }

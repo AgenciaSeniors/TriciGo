@@ -76,17 +76,17 @@ export default function UsersPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('users.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('users.title')}</h1>
 
       {/* Role filter buttons */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {ROLE_FILTERS.map((filter) => (
           <button
             key={filter.value}
             onClick={() => setRoleFilter(filter.value)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               roleFilter === filter.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
@@ -97,25 +97,26 @@ export default function UsersPage() {
 
       {/* Users table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('users.col_name')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
                 {t('users.col_phone')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('users.col_role')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('users.col_status')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
                 {t('users.col_registered')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('common.actions')}
               </th>
             </tr>
@@ -148,7 +149,7 @@ export default function UsersPage() {
                   <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
                     {user.full_name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600">
+                  <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                     {user.phone}
                   </td>
                   <td className="px-6 py-4">
@@ -171,13 +172,13 @@ export default function UsersPage() {
                       {user.is_active ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600">
+                  <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                     {formatDate(user.created_at)}
                   </td>
                   <td className="px-6 py-4">
                     <Link
                       href={`/users/${user.id}`}
-                      className="text-sm font-medium text-[#FF4D00] hover:text-[#e04400] transition-colors"
+                      className="text-sm font-medium text-primary-500 hover:text-primary-600 transition-colors"
                     >
                       {t('common.view')}
                     </Link>
@@ -187,6 +188,7 @@ export default function UsersPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

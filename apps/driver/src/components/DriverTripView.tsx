@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Pressable, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, formatTRC } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { incidentService, walletService } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { RideMapView } from '@/components/RideMapView';
 import { useDriverStore } from '@/stores/driver.store';
+import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import type { RideStatus } from '@tricigo/types';
 
 function useTripSteps() {
@@ -37,6 +39,7 @@ function useActionLabels(): Partial<Record<RideStatus, string>> {
 
 export function DriverTripView() {
   const { t } = useTranslation('driver');
+  const { isTablet } = useResponsive();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverProfile = useDriverStore((s) => s.profile);
   const { advanceStatus, cancelTrip, clearCompletedTrip } = useDriverRideActions();
@@ -103,7 +106,7 @@ export function DriverTripView() {
       <RideMapView
         pickupLocation={activeTrip.pickup_location}
         dropoffLocation={activeTrip.dropoff_location}
-        height={180}
+        height={isTablet ? 300 : 180}
       />
       <View className="h-3" />
 
@@ -147,7 +150,10 @@ export function DriverTripView() {
           className="bg-neutral-700 px-6 py-3 rounded-full flex-row items-center"
           onPress={() => router.push(`/chat/${activeTrip.id}`)}
         >
-          <Text variant="body" color="inverse">💬  {t('chat.title', { defaultValue: 'Chat' })}</Text>
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="chatbubble-outline" size={18} color="white" />
+            <Text variant="body" color="inverse">{t('chat.title', { defaultValue: 'Chat' })}</Text>
+          </View>
         </Pressable>
         <Pressable
           className="bg-red-600 w-12 h-12 rounded-full items-center justify-center"
@@ -162,9 +168,16 @@ export function DriverTripView() {
         <Text variant="bodySmall" color="inverse" className="opacity-50">
           {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
         </Text>
-        <Text variant="h4" color="accent">
-          {formatCUP(activeTrip.estimated_fare_cup)}
-        </Text>
+        <View className="items-end">
+          <Text variant="h4" color="accent">
+            {formatCUP(activeTrip.estimated_fare_cup)}
+          </Text>
+          {activeTrip.estimated_fare_trc != null && (
+            <Text variant="caption" color="inverse" className="opacity-50">
+              ~{formatTRC(activeTrip.estimated_fare_trc)}
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* Main action button */}
@@ -219,7 +232,7 @@ function TripCompleteView() {
   return (
     <View className="flex-1 pt-8 items-center">
       <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
-        <Text variant="h1" color="inverse">✓</Text>
+        <Ionicons name="checkmark" size={40} color="white" />
       </View>
 
       <Text variant="h3" color="inverse" className="mb-2">
@@ -280,9 +293,12 @@ function TripCompleteView() {
       {(activeTrip.tip_amount ?? 0) > 0 && (
         <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
           <View className="flex-row justify-between items-center">
-            <Text variant="body" color="inverse">🎉 {t('trip.tip_received', { amount: formatCUP(activeTrip.tip_amount!), defaultValue: '¡Recibiste una propina!' })}</Text>
+            <View className="flex-row items-center gap-1">
+              <Ionicons name="gift-outline" size={16} color="white" />
+              <Text variant="body" color="inverse">{t('trip.tip_received', { amount: formatTRC(activeTrip.tip_amount!), defaultValue: '¡Recibiste una propina!' })}</Text>
+            </View>
             <Text variant="body" color="accent" className="font-bold">
-              +{formatCUP(activeTrip.tip_amount!)}
+              +{formatTRC(activeTrip.tip_amount!)}
             </Text>
           </View>
         </Card>

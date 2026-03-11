@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, TextInput } from 'react-native';
+import { View, Pressable, FlatList, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,6 +7,11 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { Input } from '@tricigo/ui/Input';
+import { EmptyState } from '@tricigo/ui/EmptyState';
+import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -109,11 +114,10 @@ export default function HelpScreen() {
                 })}
               </Text>
             </View>
-            <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>
-              <Text className={`text-xs font-medium ${status.text}`}>
-                {t(status.key)}
-              </Text>
-            </View>
+            <StatusBadge
+              label={t(status.key)}
+              variant={item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'neutral' : item.status === 'in_progress' ? 'info' : item.status === 'waiting_user' ? 'warning' : 'warning'}
+            />
           </View>
         </Card>
       </Pressable>
@@ -123,12 +127,7 @@ export default function HelpScreen() {
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#171717" />
-          </Pressable>
-          <Text variant="h3">{t('profile.help_title')}</Text>
-        </View>
+        <ScreenHeader title={t('profile.help_title')} onBack={() => router.back()} />
 
         <FlatList
           data={tickets}
@@ -152,7 +151,7 @@ export default function HelpScreen() {
                       <Ionicons
                         name={isExpanded ? 'chevron-up' : 'chevron-down'}
                         size={20}
-                        color="#A3A3A3"
+                        color={colors.neutral[400]}
                       />
                     </Pressable>
                     {isExpanded && (
@@ -168,11 +167,11 @@ export default function HelpScreen() {
               <Card variant="outlined" padding="md" className="mt-1 mb-6">
                 <Text variant="body" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
-                  <Ionicons name="mail-outline" size={18} color="#525252" />
+                  <Ionicons name="mail-outline" size={18} color={colors.neutral[600]} />
                   <Text variant="bodySmall" color="secondary" className="ml-2">soporte@tricigo.app</Text>
                 </View>
                 <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color="#525252" />
+                  <Ionicons name="call-outline" size={18} color={colors.neutral[600]} />
                   <Text variant="bodySmall" color="secondary" className="ml-2">+53 5XXXXXXX</Text>
                 </View>
               </Card>
@@ -195,11 +194,10 @@ export default function HelpScreen() {
           }
           ListEmptyComponent={
             !loadingTickets ? (
-              <View className="items-center py-6">
-                <Text variant="bodySmall" color="tertiary">
-                  {t('profile.help_no_tickets')}
-                </Text>
-              </View>
+              <EmptyState
+                icon="chatbubble-ellipses-outline"
+                title={t('profile.help_no_tickets')}
+              />
             ) : null
           }
         />
@@ -235,8 +233,7 @@ export default function HelpScreen() {
 
           {/* Subject */}
           <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_subject_label')}</Text>
-          <TextInput
-            className="border border-neutral-200 rounded-lg p-3 mb-3 text-neutral-900"
+          <Input
             placeholder={t('profile.help_subject_placeholder')}
             value={subject}
             onChangeText={setSubject}
@@ -245,14 +242,12 @@ export default function HelpScreen() {
 
           {/* Description */}
           <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_description_label')}</Text>
-          <TextInput
-            className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
+          <Input
             placeholder={t('profile.help_description_placeholder')}
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
-            textAlignVertical="top"
             style={{ minHeight: 100 }}
           />
 

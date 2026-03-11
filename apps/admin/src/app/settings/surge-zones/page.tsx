@@ -93,14 +93,14 @@ export default function SurgeZonesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
+      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('surge_zones.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
         >
           {showCreate ? t('common.cancel') : t('surge_zones.create_rule')}
         </button>
@@ -114,7 +114,7 @@ export default function SurgeZonesPage() {
             <div>
               <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_zone_id')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 placeholder={t('surge_zones.zone_placeholder')}
                 value={form.zone_id}
                 onChange={(e) => setForm((f) => ({ ...f, zone_id: e.target.value }))}
@@ -124,7 +124,7 @@ export default function SurgeZonesPage() {
               <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_multiplier')}</label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.multiplier}
                 onChange={(e) => setForm((f) => ({ ...f, multiplier: parseFloat(e.target.value) || 1 }))}
                 step="0.1"
@@ -135,7 +135,7 @@ export default function SurgeZonesPage() {
             <div>
               <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_reason')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 placeholder={t('surge_zones.reason_placeholder')}
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
@@ -145,7 +145,7 @@ export default function SurgeZonesPage() {
               <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_start')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.starts_at}
                 onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
               />
@@ -154,7 +154,7 @@ export default function SurgeZonesPage() {
               <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_end')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-[#FF4D00]"
+                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.ends_at}
                 onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}
               />
@@ -163,7 +163,7 @@ export default function SurgeZonesPage() {
           <button
             onClick={handleCreate}
             disabled={creating || !form.zone_id}
-            className="px-6 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors disabled:opacity-50"
+            className="px-6 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
           >
             {creating ? t('surge_zones.creating') : t('surge_zones.create_rule_btn')}
           </button>

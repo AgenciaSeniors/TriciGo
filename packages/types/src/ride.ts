@@ -60,6 +60,14 @@ export interface Ride {
   surge_multiplier: number;
   tip_amount: number;
 
+  // Exchange rate snapshot (1 USD = X CUP at ride creation)
+  exchange_rate_usd_cup: number | null;
+  // Fare in TRC centavos
+  estimated_fare_trc: number | null;
+  final_fare_trc: number | null;
+  // Driver custom rate at time of assignment (CUP whole pesos)
+  driver_custom_rate_cup: number | null;
+
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +131,8 @@ export interface RidePricingSnapshot {
   commission_amount: number;
   total: number;
   pricing_rule_id: string | null;
+  exchange_rate_usd_cup: number | null;
+  total_trc: number | null;
   created_at: string;
 }
 
@@ -136,10 +146,14 @@ export interface RideValidTransition {
 /** Result from complete_ride_and_pay RPC */
 export interface CompleteRideResult {
   final_fare_cup: number;
+  final_fare_trc: number;
+  exchange_rate_usd_cup: number;
   commission_amount: number;
   driver_earnings: number;
   payment_method: string;
   share_token: string;
+  surge_multiplier: number;
+  driver_custom_rate_cup: number | null;
 }
 
 /** Ride with joined driver info for client display */

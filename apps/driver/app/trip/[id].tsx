@@ -5,6 +5,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { rideService } from '@tricigo/api/services/ride';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot } from '@tricigo/types';
@@ -47,7 +48,7 @@ export default function TripDetailScreen() {
     return (
       <Screen bg="dark" statusBarStyle="light-content" padded>
         <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator size="large" color="#FF4D00" />
+          <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
       </Screen>
     );

@@ -5,6 +5,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -53,11 +54,7 @@ export default function EmergencyContactScreen() {
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
-        <Pressable onPress={() => router.back()} className="mb-2">
-          <Text variant="body" color="accent">{t('back')}</Text>
-        </Pressable>
-
-        <Text variant="h3" className="mb-6">{t('profile.emergency_contact_title')}</Text>
+        <ScreenHeader title={t('profile.emergency_contact_title')} onBack={() => router.back()} />
 
         <Input
           label={t('profile.emergency_name')}

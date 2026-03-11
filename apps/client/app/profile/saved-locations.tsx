@@ -8,7 +8,9 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
 import { HAVANA_PRESETS } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -79,11 +81,7 @@ export default function SavedLocationsScreen() {
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <Pressable onPress={() => router.back()} className="mb-2">
-          <Text variant="body" color="accent">{t('back')}</Text>
-        </Pressable>
-
-        <Text variant="h3" className="mb-6">{t('profile.saved_locations_title')}</Text>
+        <ScreenHeader title={t('profile.saved_locations_title')} onBack={() => router.back()} />
 
         <FlatList
           data={locations}
@@ -96,7 +94,7 @@ export default function SavedLocationsScreen() {
                   <Text variant="bodySmall" color="secondary">{item.address}</Text>
                 </View>
                 <Pressable onPress={() => handleDelete(index)}>
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  <Ionicons name="trash-outline" size={20} color={colors.error.DEFAULT} />
                 </Pressable>
               </View>
             </Card>

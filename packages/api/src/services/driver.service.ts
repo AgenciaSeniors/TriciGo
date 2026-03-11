@@ -12,7 +12,9 @@ import type {
   CompleteRideResult,
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
+import { cupToTrcCentavos } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { exchangeRateService } from './exchange-rate.service';
 
 export const driverService = {
   /**
@@ -184,15 +186,76 @@ export const driverService = {
 
   /**
    * Accept a ride request.
+   * Snapshots the driver's custom per-km rate and recalculates the fare
+   * using the driver's rate (or platform default if not set).
    */
   async acceptRide(rideId: string, driverId: string): Promise<Ride> {
     const supabase = getSupabaseClient();
+
+    // 1. Fetch the driver's custom rate
+    const { data: driverProfile, error: dpErr } = await supabase
+      .from('driver_profiles')
+      .select('custom_per_km_rate_cup')
+      .eq('id', driverId)
+      .single();
+    if (dpErr) throw dpErr;
+
+    const driverCustomRate: number | null = driverProfile?.custom_per_km_rate_cup ?? null;
+
+    // 2. Fetch the ride to get service_type, distance, duration, exchange_rate
+    const { data: rideData, error: rideErr } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('id', rideId)
+      .eq('status', 'searching')
+      .single();
+    if (rideErr) throw rideErr;
+    const ride = rideData as Ride;
+
+    // 3. Fetch service config for base_fare, per_km_rate (fallback), per_minute_rate, min_fare
+    const { data: svcConfig, error: svcErr } = await supabase
+      .from('service_type_configs')
+      .select('base_fare_cup, per_km_rate_cup, per_minute_rate_cup, min_fare_cup')
+      .eq('slug', ride.service_type)
+      .eq('is_active', true)
+      .single();
+    if (svcErr) throw svcErr;
+
+    // 4. Recalculate fare using driver's rate (or platform default)
+    const effectivePerKmRate = driverCustomRate ?? svcConfig.per_km_rate_cup;
+    const distanceKm = ride.estimated_distance_m / 1000;
+    const durationMin = ride.estimated_duration_s / 60;
+
+    const rawFare = Math.round(
+      svcConfig.base_fare_cup +
+      distanceKm * effectivePerKmRate +
+      durationMin * svcConfig.per_minute_rate_cup,
+    );
+    const baseFare = Math.max(rawFare, svcConfig.min_fare_cup);
+
+    // Apply surge multiplier
+    const surgeMultiplier = ride.surge_multiplier ?? 1.0;
+    const fareAfterSurge = Math.round(baseFare * surgeMultiplier);
+
+    // Apply discount
+    const discount = ride.discount_amount_cup ?? 0;
+    const estimatedFareCup = Math.max(fareAfterSurge - discount, 0);
+
+    // Convert CUP to TRC
+    const exchangeRate = ride.exchange_rate_usd_cup
+      ?? await exchangeRateService.getUsdCupRate();
+    const estimatedFareTrc = cupToTrcCentavos(estimatedFareCup, exchangeRate);
+
+    // 5. Update ride atomically with driver rate + recalculated fare
     const { data, error } = await supabase
       .from('rides')
       .update({
         driver_id: driverId,
         status: 'accepted' as RideStatus,
         accepted_at: new Date().toISOString(),
+        driver_custom_rate_cup: driverCustomRate,
+        estimated_fare_cup: estimatedFareCup,
+        estimated_fare_trc: estimatedFareTrc,
       })
       .eq('id', rideId)
       .eq('status', 'searching')
@@ -348,6 +411,88 @@ export const driverService = {
     }
 
     return this.acceptRide(rideId, driverId);
+  },
+
+  // ==================== CUSTOM PRICING ====================
+
+  /**
+   * Get the driver's custom rate configuration.
+   * Returns current rate in CUP, default rate, max multiplier, and exchange rate.
+   */
+  async getCustomRateConfig(driverId: string): Promise<{
+    currentRate: number | null;
+    defaultRate: number;
+    maxMultiplier: number;
+    exchangeRate: number;
+  }> {
+    const supabase = getSupabaseClient();
+
+    // Fetch driver's custom rate
+    const { data: profile, error: profileErr } = await supabase
+      .from('driver_profiles')
+      .select('custom_per_km_rate_cup')
+      .eq('id', driverId)
+      .single();
+    if (profileErr) throw profileErr;
+
+    // Fetch platform config for defaults
+    const { data: configs, error: configErr } = await supabase
+      .from('platform_config')
+      .select('key, value')
+      .in('key', ['default_per_km_rate_cup', 'max_driver_rate_multiplier']);
+    if (configErr) throw configErr;
+
+    const configMap = Object.fromEntries(
+      (configs ?? []).map((c: { key: string; value: string }) => [c.key, c.value]),
+    );
+
+    // Fetch current exchange rate
+    let exchangeRate = 520;
+    try {
+      const { data: rateRow } = await supabase
+        .from('exchange_rates')
+        .select('usd_cup_rate')
+        .eq('is_current', true)
+        .single();
+      if (rateRow) exchangeRate = Number(rateRow.usd_cup_rate);
+    } catch { /* fallback */ }
+
+    return {
+      currentRate: profile?.custom_per_km_rate_cup ?? null,
+      defaultRate: Number(configMap.default_per_km_rate_cup ?? '150'),
+      maxMultiplier: Number(configMap.max_driver_rate_multiplier ?? '2.0'),
+      exchangeRate,
+    };
+  },
+
+  /**
+   * Update the driver's custom per-km rate (in CUP whole pesos).
+   * Validates against platform limits before saving.
+   */
+  async updateCustomRate(
+    driverId: string,
+    customPerKmRate: number | null,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+
+    // If setting a custom rate, validate against platform limits
+    if (customPerKmRate !== null) {
+      const config = await this.getCustomRateConfig(driverId);
+      const maxRate = Math.round(config.defaultRate * config.maxMultiplier);
+
+      if (customPerKmRate < config.defaultRate) {
+        throw new Error('Rate cannot be below the minimum default rate');
+      }
+      if (customPerKmRate > maxRate) {
+        throw new Error(`Rate cannot exceed ${maxRate} (${config.maxMultiplier}x default)`);
+      }
+    }
+
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update({ custom_per_km_rate_cup: customPerKmRate })
+      .eq('id', driverId);
+    if (error) throw error;
   },
 
   /**

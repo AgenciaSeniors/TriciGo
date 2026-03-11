@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator, Alert, RefreshControl, TextInput } from 'react-native';
+import { View, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -10,6 +10,8 @@ import { walletService } from '@tricigo/api/services/wallet';
 import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone } from '@tricigo/utils';
 import type { LedgerTransaction } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
+import { Input } from '@tricigo/ui/Input';
+import { colors } from '@tricigo/theme';
 
 type TransactionWithAmount = LedgerTransaction & {
   ledger_entries: { account_id: string; amount: number }[];
@@ -195,7 +197,7 @@ export default function WalletScreen() {
     return (
       <Screen bg="white" padded>
         <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator size="large" color="#FF4D00" />
+          <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
       </Screen>
     );
@@ -242,7 +244,7 @@ export default function WalletScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderTransaction}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF4D00" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />
           }
           ListEmptyComponent={
             <View className="items-center py-10">
@@ -264,8 +266,7 @@ export default function WalletScreen() {
           <Text variant="bodySmall" color="secondary" className="mb-3">
             {t('wallet.recharge_amount')} (CUP)
           </Text>
-          <TextInput
-            className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900 text-lg"
+          <Input
             placeholder="500"
             value={rechargeAmount}
             onChangeText={setRechargeAmount}
@@ -295,16 +296,18 @@ export default function WalletScreen() {
             {t('wallet.transfer_phone')}
           </Text>
           <View className="flex-row gap-2 mb-3">
-            <TextInput
-              className="flex-1 border border-neutral-200 rounded-lg p-3 text-neutral-900"
-              placeholder="+53 5XXXXXXX"
-              value={transferPhone}
-              onChangeText={(text) => {
-                setTransferPhone(text);
-                setTransferRecipient(null);
-              }}
-              keyboardType="phone-pad"
-            />
+            <View className="flex-1">
+              <Input
+                placeholder="+53 5XXXXXXX"
+                value={transferPhone}
+                onChangeText={(text: string) => {
+                  setTransferPhone(text);
+                  setTransferRecipient(null);
+                }}
+                keyboardType="phone-pad"
+                className="mb-0"
+              />
+            </View>
             <Button
               title={t('search')}
               variant="outline"
@@ -328,8 +331,7 @@ export default function WalletScreen() {
           <Text variant="bodySmall" color="secondary" className="mb-2">
             {t('wallet.transfer_amount')} (CUP)
           </Text>
-          <TextInput
-            className="border border-neutral-200 rounded-lg p-3 mb-3 text-neutral-900 text-lg"
+          <Input
             placeholder="100"
             value={transferAmount}
             onChangeText={setTransferAmount}
@@ -340,8 +342,7 @@ export default function WalletScreen() {
           <Text variant="bodySmall" color="secondary" className="mb-2">
             {t('wallet.transfer_note')}
           </Text>
-          <TextInput
-            className="border border-neutral-200 rounded-lg p-3 mb-4 text-neutral-900"
+          <Input
             placeholder="..."
             value={transferNote}
             onChangeText={setTransferNote}

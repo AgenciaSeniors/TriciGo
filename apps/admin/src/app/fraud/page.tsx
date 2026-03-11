@@ -77,9 +77,9 @@ export default function FraudAlertsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-3xl font-bold">{t('fraud.title')}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{t('fraud.title')}</h1>
           {unresolvedCount > 0 && (
             <p className="text-sm text-red-500 mt-1">{t('fraud.unresolved_count', { count: unresolvedCount })}</p>
           )}
@@ -89,7 +89,7 @@ export default function FraudAlertsPage() {
             onClick={() => setFilter('unresolved')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === 'unresolved'
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
           >
@@ -99,7 +99,7 @@ export default function FraudAlertsPage() {
             onClick={() => setFilter('all')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === 'all'
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
           >
@@ -109,15 +109,16 @@ export default function FraudAlertsPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_date')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_type')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_severity')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_details')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_status')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('fraud.col_actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('fraud.col_date')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('fraud.col_type')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('fraud.col_severity')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('fraud.col_details')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('fraud.col_status')}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('fraud.col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -130,7 +131,7 @@ export default function FraudAlertsPage() {
             ) : (
               alerts.map((alert) => (
                 <tr key={alert.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-                  <td className="px-4 py-3 text-neutral-600 text-xs">
+                  <td className="px-4 py-3 text-neutral-600 text-xs hidden lg:table-cell">
                     {formatDate(alert.created_at)}
                   </td>
                   <td className="px-4 py-3 font-medium">
@@ -143,7 +144,7 @@ export default function FraudAlertsPage() {
                       {alert.severity}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-neutral-500 max-w-xs truncate">
+                  <td className="px-4 py-3 text-xs text-neutral-500 max-w-xs truncate hidden lg:table-cell">
                     {alert.details ? JSON.stringify(alert.details) : '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -159,7 +160,7 @@ export default function FraudAlertsPage() {
                     {!alert.resolved && (
                       <button
                         onClick={() => setShowResolveModal(alert.id)}
-                        className="text-sm text-[#FF4D00] hover:underline"
+                        className="text-sm text-primary-500 hover:underline"
                       >
                         {t('fraud.resolve')}
                       </button>
@@ -170,6 +171,7 @@ export default function FraudAlertsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Resolve modal */}
@@ -178,7 +180,7 @@ export default function FraudAlertsPage() {
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-bold mb-4">{t('fraud.resolve_title')}</h3>
             <textarea
-              className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF4D00]"
+              className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500"
               rows={3}
               value={resolutionNote}
               onChange={(e) => setResolutionNote(e.target.value)}
@@ -197,7 +199,7 @@ export default function FraudAlertsPage() {
               <button
                 onClick={() => handleResolve(showResolveModal)}
                 disabled={resolving === showResolveModal}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
               >
                 {resolving ? t('fraud.resolving') : t('fraud.mark_resolved')}
               </button>

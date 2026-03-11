@@ -1,6 +1,7 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '@tricigo/theme';
 
 export interface ErrorBoundaryProps {
   /** Custom fallback UI to render when an error occurs */
@@ -37,11 +38,23 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }
 
       return (
-        <View style={styles.container}>
-          <Ionicons name="warning-outline" size={48} color="#FF4D00" />
-          <Text style={styles.title}>Algo salió mal</Text>
-          <Pressable style={styles.button} onPress={this.handleRetry}>
-            <Text style={styles.buttonText}>Reintentar</Text>
+        <View className="flex-1 justify-center items-center bg-white p-6">
+          <View className="w-20 h-20 rounded-full bg-primary-50 items-center justify-center mb-4">
+            <Ionicons name="warning-outline" size={40} color={colors.brand.orange} />
+          </View>
+          <Text className="text-lg font-semibold text-neutral-900 mt-2">
+            Algo salió mal
+          </Text>
+          <Text className="text-sm text-neutral-500 mt-2 text-center">
+            Ha ocurrido un error inesperado. Intenta de nuevo.
+          </Text>
+          <Pressable
+            className="mt-6 px-6 py-3 bg-neutral-900 rounded-lg active:bg-neutral-800"
+            onPress={this.handleRetry}
+          >
+            <Text className="text-white text-base font-semibold">
+              Reintentar
+            </Text>
           </Pressable>
         </View>
       );
@@ -50,31 +63,3 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-  },
-  title: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#171717',
-  },
-  button: {
-    marginTop: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#171717',
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

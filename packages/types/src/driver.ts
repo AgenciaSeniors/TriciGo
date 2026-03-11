@@ -2,7 +2,7 @@
 // TriciGo — Driver Types
 // ============================================================
 
-import type { DocumentType, DriverStatus } from './enums';
+import type { DocumentType, DriverStatus, VehicleType } from './enums';
 
 export interface GeoPoint {
   latitude: number;
@@ -28,6 +28,8 @@ export interface DriverProfile {
   total_rides_offered: number;
   is_financially_eligible: boolean;
   negative_balance_since: string | null;
+  /** Driver's custom per-km rate in CUP whole pesos. null = use default */
+  custom_per_km_rate_cup: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,4 +97,14 @@ export interface DriverStatusHistoryEntry {
   changed_by: string;
   reason: string | null;
   created_at: string;
+}
+
+/** Nearby vehicle for map display (returned by find_nearby_vehicles RPC) */
+export interface NearbyVehicle {
+  driver_profile_id: string;
+  latitude: number;
+  longitude: number;
+  heading: number | null;
+  vehicle_type: VehicleType;
+  custom_per_km_rate_cup: number | null;
 }

@@ -37,7 +37,9 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -55,7 +57,24 @@
         {
           "locationAlwaysAndWhenInUsePermission": "TriciGo necesita tu ubicación para encontrar conductores cercanos."
         }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "tricigo",
+          "project": "tricigo-client"
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "bb3c1a52-284b-476e-8a7d-8ef5f04b465e"
+      }
+    },
+    "owner": "edua2005"
   }
 }

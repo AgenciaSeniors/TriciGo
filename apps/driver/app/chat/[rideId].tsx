@@ -8,9 +8,11 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
@@ -73,7 +75,7 @@ export default function ChatScreen() {
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 border-b border-neutral-800">
           <Pressable onPress={() => router.back()} className="mr-3">
-            <Text variant="body" color="accent">← {t('chat.title', { defaultValue: 'Chat' })}</Text>
+            <Ionicons name="arrow-back" size={22} color={colors.primary[500]} />
           </Pressable>
           <Text variant="h4" color="inverse" className="flex-1">
             {t('trip.chat_passenger', { defaultValue: 'Chat con pasajero' })}
@@ -105,7 +107,7 @@ export default function ChatScreen() {
             value={text}
             onChangeText={setText}
             placeholder={t('chat.placeholder')}
-            placeholderTextColor="#525252"
+            placeholderTextColor={colors.neutral[500]}
             className="flex-1 bg-neutral-800 rounded-full px-4 py-2 text-base text-white"
             multiline
             maxLength={500}
@@ -115,7 +117,7 @@ export default function ChatScreen() {
             disabled={!text.trim()}
             className="ml-2 bg-primary-500 w-10 h-10 rounded-full items-center justify-center"
           >
-            <Text variant="body" color="inverse">➤</Text>
+            <Ionicons name="send" size={18} color="white" />
           </Pressable>
         </View>
       </KeyboardAvoidingView>

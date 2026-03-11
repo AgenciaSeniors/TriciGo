@@ -7,9 +7,14 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatCUP } from '@tricigo/utils';
+import { formatTRC, formatCUP, cupToTrcCentavos } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
+import { colors } from '@tricigo/theme';
 
 const STATUS_LABEL: Record<string, string> = {
   searching: 'Buscando',
@@ -24,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function RideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation('rider');
+  const { isTablet } = useResponsive();
 
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [pricing, setPricing] = useState<RidePricingSnapshot | null>(null);
@@ -58,7 +64,7 @@ export default function RideDetailScreen() {
     return (
       <Screen bg="white" padded>
         <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator size="large" color="#FF4D00" />
+          <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
       </Screen>
     );
@@ -68,16 +74,15 @@ export default function RideDetailScreen() {
     return (
       <Screen bg="white" padded>
         <View className="pt-4">
-          <Pressable onPress={() => router.back()} className="mb-4">
-            <Text variant="body" color="accent">{t('ride.back_button', { defaultValue: '← Volver' })}</Text>
-          </Pressable>
+          <ScreenHeader title="" onBack={() => router.back()} />
           <Text variant="body" color="tertiary">Viaje no encontrado</Text>
         </View>
       </Screen>
     );
   }
 
-  const fare = ride.final_fare_cup ?? ride.estimated_fare_cup;
+  const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
+  const fareCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
   const isCompleted = ride.status === 'completed';
 
   const handleShare = () => {
@@ -90,43 +95,33 @@ export default function RideDetailScreen() {
     <Screen scroll bg="white" padded>
       <View className="pt-4 pb-8">
         {/* Header */}
-        <Pressable onPress={() => router.back()} className="mb-4">
-          <Text variant="body" color="accent">{t('ride.back_button', { defaultValue: '← Volver' })}</Text>
-        </Pressable>
-
-        <View className="flex-row items-center justify-between mb-4">
-          <Text variant="h3">{t('ride.ride_detail', { defaultValue: 'Detalle del viaje' })}</Text>
-          <View className={`px-3 py-1 rounded-full ${isCompleted ? 'bg-green-100' : 'bg-red-100'}`}>
-            <Text variant="caption" className={isCompleted ? 'text-green-700' : 'text-red-700'}>
-              {STATUS_LABEL[ride.status] ?? ride.status}
-            </Text>
-          </View>
-        </View>
+        <ScreenHeader
+          title={t('ride.ride_detail', { defaultValue: 'Detalle del viaje' })}
+          onBack={() => router.back()}
+          rightAction={
+            <StatusBadge
+              label={STATUS_LABEL[ride.status] ?? ride.status}
+              variant={isCompleted ? 'success' : 'error'}
+            />
+          }
+        />
 
         {/* Map */}
         <RideMapView
           pickupLocation={ride.pickup_location}
           dropoffLocation={ride.dropoff_location}
-          height={180}
+          height={isTablet ? 300 : 180}
         />
         <View className="h-4" />
 
         {/* Route */}
         <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-start mb-3">
-            <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="secondary">{t('ride.pickup')}</Text>
-              <Text variant="bodySmall">{ride.pickup_address}</Text>
-            </View>
-          </View>
-          <View className="flex-row items-start">
-            <View className="w-3 h-3 rounded-full bg-neutral-800 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="secondary">{t('ride.dropoff')}</Text>
-              <Text variant="bodySmall">{ride.dropoff_address}</Text>
-            </View>
-          </View>
+          <RouteSummary
+            pickupAddress={ride.pickup_address}
+            dropoffAddress={ride.dropoff_address}
+            pickupLabel={t('ride.pickup')}
+            dropoffLabel={t('ride.dropoff')}
+          />
         </Card>
 
         {/* Driver info */}
@@ -161,11 +156,11 @@ export default function RideDetailScreen() {
         <Card variant="elevated" padding="lg" className="mb-4">
           <Text variant="h4" className="mb-3">{t('ride.fare_breakdown')}</Text>
 
-          {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
+          {ride.final_fare_trc != null && ride.estimated_fare_trc != null && ride.final_fare_trc !== ride.estimated_fare_trc && (
             <View className="flex-row justify-between mb-2">
               <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
               <Text variant="bodySmall" color="secondary" className="line-through">
-                {formatCUP(ride.estimated_fare_cup)}
+                {formatTRC(ride.estimated_fare_trc)}
               </Text>
             </View>
           )}
@@ -196,8 +191,8 @@ export default function RideDetailScreen() {
 
           <View className="h-px bg-neutral-200 my-2" />
           <View className="flex-row justify-between">
-            <Text variant="h4">{ride.final_fare_cup != null ? t('ride.final_fare') : t('ride.estimated_fare')}</Text>
-            <Text variant="h3" color="accent">{formatCUP(fare)}</Text>
+            <Text variant="h4">{ride.final_fare_trc != null ? t('ride.final_fare') : t('ride.estimated_fare')}</Text>
+            <Text variant="h3" color="accent">{fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}</Text>
           </View>
         </Card>
 

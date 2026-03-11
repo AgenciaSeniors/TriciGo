@@ -9,6 +9,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
@@ -127,7 +128,7 @@ export default function DocumentsScreen() {
           <Pressable key={doc.document_type} onPress={() => pickAndUpload(doc.document_type)}>
             <Card variant="outlined" padding="md" className="mb-3 flex-row items-center">
               {doc.uploading ? (
-                <ActivityIndicator size="small" color="#FF4D00" />
+                <ActivityIndicator size="small" color={colors.brand.orange} />
               ) : (
                 <Ionicons
                   name={doc.uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}

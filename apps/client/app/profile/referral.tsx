@@ -7,6 +7,10 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { EmptyState } from '@tricigo/ui/EmptyState';
+import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
@@ -98,11 +102,10 @@ export default function ReferralScreen() {
               {t('profile.referral_bonus', { amount: formatCUP(item.bonus_amount) })}
             </Text>
           </View>
-          <View className={`px-2 py-0.5 rounded-full ${display.bg}`}>
-            <Text className={`text-xs font-medium ${display.text}`}>
-              {t(display.key)}
-            </Text>
-          </View>
+          <StatusBadge
+            label={t(display.key)}
+            variant={item.status === 'rewarded' ? 'success' : item.status === 'invalidated' ? 'error' : 'warning'}
+          />
         </View>
       </Card>
     );
@@ -111,12 +114,7 @@ export default function ReferralScreen() {
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#171717" />
-          </Pressable>
-          <Text variant="h3">{t('profile.referral_title')}</Text>
-        </View>
+        <ScreenHeader title={t('profile.referral_title')} onBack={() => router.back()} />
 
         <FlatList
           data={referrals}
@@ -140,7 +138,7 @@ export default function ReferralScreen() {
                   disabled={!myCode}
                 />
                 <Text variant="caption" color="tertiary" className="mt-3 text-center">
-                  {t('profile.referral_share_help', { bonus: formatCUP(50000) })}
+                  {t('profile.referral_share_help', { bonus: formatCUP(500) })}
                 </Text>
               </Card>
 
@@ -173,7 +171,7 @@ export default function ReferralScreen() {
               {hasBeenReferred && (
                 <Card variant="outlined" padding="md" className="mb-6">
                   <View className="flex-row items-center">
-                    <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                    <Ionicons name="checkmark-circle" size={20} color={colors.success.DEFAULT} />
                     <Text variant="bodySmall" color="secondary" className="ml-2">
                       {t('profile.referral_already_applied')}
                     </Text>
@@ -189,11 +187,10 @@ export default function ReferralScreen() {
           }
           ListEmptyComponent={
             !loading ? (
-              <View className="items-center py-6">
-                <Text variant="bodySmall" color="tertiary">
-                  {t('profile.referral_empty')}
-                </Text>
-              </View>
+              <EmptyState
+                icon="gift-outline"
+                title={t('profile.referral_empty')}
+              />
             ) : null
           }
         />

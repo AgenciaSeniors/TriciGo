@@ -155,13 +155,13 @@ export default function WalletPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('wallet_admin.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('wallet_admin.title')}</h1>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <p className="text-sm text-neutral-500 mb-1">{t('wallet_admin.label_circulation')}</p>
-          <p className="text-2xl font-bold text-[#FF4D00]">
+          <p className="text-2xl font-bold text-primary-500">
             {stats ? formatTriciCoin(stats.total_in_circulation) : '—'}
           </p>
         </div>
@@ -180,14 +180,14 @@ export default function WalletPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {tabs.map((tb) => (
           <button
             key={tb.value}
             onClick={() => { setTab(tb.value); setPage(0); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === tb.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
@@ -198,14 +198,15 @@ export default function WalletPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         {tab === 'redemptions' ? (
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_driver')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_amount')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_driver')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -224,7 +225,7 @@ export default function WalletPage() {
                     <td className="px-4 py-3 font-medium">
                       {formatTriciCoin(r.amount)}
                     </td>
-                    <td className="px-4 py-3 text-neutral-500">
+                    <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                       {new Date(r.requested_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-3">
@@ -254,10 +255,10 @@ export default function WalletPage() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_user')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_amount')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_user')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -276,7 +277,7 @@ export default function WalletPage() {
                     <td className="px-4 py-3 font-medium">
                       {formatTriciCoin(r.amount)}
                     </td>
-                    <td className="px-4 py-3 text-neutral-500">
+                    <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                       {new Date(r.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                     <td className="px-4 py-3">
@@ -306,10 +307,10 @@ export default function WalletPage() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_description')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_type')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_ref')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('wallet_admin.col_date')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_description')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_type')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_ref')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
               </tr>
             </thead>
             <tbody>
@@ -328,10 +329,10 @@ export default function WalletPage() {
                         {tx.type}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-neutral-500 text-xs font-mono">
+                    <td className="px-4 py-3 text-neutral-500 text-xs font-mono hidden lg:table-cell">
                       {tx.reference_id ? tx.reference_id.slice(0, 8) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-neutral-500">
+                    <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
                       {new Date(tx.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
                   </tr>
@@ -340,6 +341,7 @@ export default function WalletPage() {
             </tbody>
           </table>
         )}
+        </div>
       </div>
 
       {/* Pagination */}

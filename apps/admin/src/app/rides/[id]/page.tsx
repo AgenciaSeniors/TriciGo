@@ -114,7 +114,7 @@ export default function RideDetailPage() {
           </span>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-[#FF4D00]">{formatCUP(fare)}</p>
+          <p className="text-3xl font-bold text-primary-500">{formatCUP(fare)}</p>
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-neutral-400 line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
           )}
@@ -216,7 +216,7 @@ export default function RideDetailPage() {
           <div className="space-y-3">
             {transitions.map((tr) => (
               <div key={tr.id} className="flex items-center gap-4">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#FF4D00]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-primary-500" />
                 <div className="flex-1">
                   <span className="text-sm font-medium">
                     {STATUS_LABEL_KEY[tr.to_status] ? t(STATUS_LABEL_KEY[tr.to_status]!) : tr.to_status}

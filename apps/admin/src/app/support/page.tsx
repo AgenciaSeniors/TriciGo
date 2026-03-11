@@ -133,17 +133,17 @@ export default function SupportPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('support.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('support.title')}</h1>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {(['all', 'open', 'in_progress', 'waiting_user', 'resolved', 'closed'] as const).map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
           >
@@ -244,7 +244,7 @@ export default function SupportPage() {
                     key={msg.id}
                     className={`rounded-lg p-3 text-sm ${
                       msg.is_admin
-                        ? 'bg-[#FF4D00]/10 ml-8'
+                        ? 'bg-primary-500/10 ml-8'
                         : 'bg-neutral-50 mr-8'
                     }`}
                   >
@@ -259,7 +259,7 @@ export default function SupportPage() {
               {/* Reply */}
               <div className="flex gap-2">
                 <input
-                  className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#FF4D00]"
+                  className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                   placeholder={t('support.reply_placeholder')}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
@@ -268,7 +268,7 @@ export default function SupportPage() {
                 <button
                   onClick={handleReply}
                   disabled={sending || !reply.trim()}
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-[#FF4D00] text-white hover:bg-[#e04400] disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
                 >
                   {t('support.send')}
                 </button>

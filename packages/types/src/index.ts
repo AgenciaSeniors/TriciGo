@@ -13,5 +13,6 @@ export * from './incident';
 export * from './promotion';
 export * from './admin';
 export * from './pricing';
+export * from './exchange-rate';
 export * from './chat';
 export * from './support';

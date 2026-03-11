@@ -7,13 +7,13 @@ import { rideService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 
-const STATUS_STEPS: { key: RideStatus; label: string; icon: string }[] = [
-  { key: 'searching', label: 'Buscando conductor', icon: '🔍' },
-  { key: 'accepted', label: 'Conductor asignado', icon: '✅' },
-  { key: 'driver_en_route', label: 'En camino al punto', icon: '🚗' },
-  { key: 'arrived_at_pickup', label: 'Llegó al punto', icon: '📍' },
-  { key: 'in_progress', label: 'Viaje en curso', icon: '🛣️' },
-  { key: 'completed', label: 'Viaje completado', icon: '🏁' },
+const STATUS_STEPS: { key: RideStatus; label: string; step: number }[] = [
+  { key: 'searching', label: 'Buscando conductor', step: 1 },
+  { key: 'accepted', label: 'Conductor asignado', step: 2 },
+  { key: 'driver_en_route', label: 'En camino al punto', step: 3 },
+  { key: 'arrived_at_pickup', label: 'Lleg\u00f3 al punto', step: 4 },
+  { key: 'in_progress', label: 'Viaje en curso', step: 5 },
+  { key: 'completed', label: 'Viaje completado', step: 6 },
 ];
 
 function getStepIndex(status: RideStatus): number {
@@ -35,7 +35,7 @@ export default function SharedTrackingPage() {
         setRide(data);
         // Once we have the ride, subscribe to real-time updates
       } else {
-        setError('Enlace de seguimiento no válido o expirado.');
+        setError('Enlace de seguimiento no v\u00e1lido o expirado.');
       }
     } catch {
       setError('Error al cargar el seguimiento.');
@@ -70,9 +70,9 @@ export default function SharedTrackingPage() {
 
   if (error || !ride) {
     return (
-      <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <p style={{ color: '#e04400', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'No encontrado.'}</p>
-        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>← Ir a TriciGo</Link>
+      <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'No encontrado.'}</p>
+        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{'\u2190'} Ir a TriciGo</Link>
       </main>
     );
   }
@@ -89,7 +89,7 @@ export default function SharedTrackingPage() {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '2rem',
+        padding: '1.5rem',
         background: '#FAFAFA',
       }}
     >
@@ -105,7 +105,13 @@ export default function SharedTrackingPage() {
         {/* Status */}
         {isCanceled ? (
           <div style={{ padding: '1rem', background: '#FEE', borderRadius: '0.75rem', textAlign: 'center', marginBottom: '1.5rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>❌</span>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: '50%',
+              background: 'var(--primary-dark)', color: 'white', fontWeight: 700, fontSize: '1rem',
+            }}>
+              X
+            </span>
             <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje cancelado</p>
           </div>
         ) : (
@@ -147,7 +153,7 @@ export default function SharedTrackingPage() {
                       flexShrink: 0,
                     }}
                   >
-                    {isDone ? '✓' : step.icon}
+                    {isDone ? '\u2713' : step.step}
                   </span>
                   <span style={{ fontWeight: isActive ? 700 : 400, fontSize: '0.85rem' }}>
                     {step.label}
@@ -198,7 +204,7 @@ export default function SharedTrackingPage() {
                   width: 40,
                   height: 40,
                   borderRadius: '50%',
-                  background: '#FF4D00',
+                  background: 'var(--primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -243,8 +249,12 @@ export default function SharedTrackingPage() {
 
         {/* Live indicator */}
         {!isTerminal && (
-          <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#888', marginTop: '1rem' }}>
-            🟢 Actualizando en tiempo real
+          <p style={{ textAlign: 'center', fontSize: '0.7rem', color: '#888', marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+            <span style={{
+              display: 'inline-block', width: 8, height: 8,
+              borderRadius: '50%', background: '#4CAF50',
+            }} />
+            Actualizando en tiempo real
           </p>
         )}
 

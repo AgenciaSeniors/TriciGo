@@ -81,7 +81,7 @@ export default function DriversPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('drivers.title')}</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('drivers.title')}</h1>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -94,7 +94,7 @@ export default function DriversPage() {
             }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === filter.value
-                ? 'bg-[#FF4D00] text-white'
+                ? 'bg-primary-500 text-white'
                 : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
             }`}
           >
@@ -105,16 +105,17 @@ export default function DriversPage() {
 
       {/* Drivers table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_name')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_phone')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_vehicle')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_status')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_rating')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('drivers.col_registered')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_name')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_phone')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_vehicle')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_status')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_rating')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_registered')}</th>
+              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -141,7 +142,7 @@ export default function DriversPage() {
                     <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
                       {driver.users.full_name || '—'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">
+                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                       {driver.users.phone}
                     </td>
                     <td className="px-6 py-4 text-sm text-neutral-600">
@@ -156,16 +157,16 @@ export default function DriversPage() {
                         {t(statusLabelKeys[driver.status])}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">
+                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                       {Number(driver.rating_avg).toFixed(1)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">
+                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                       {formatDate(driver.created_at)}
                     </td>
                     <td className="px-6 py-4">
                       <Link
                         href={`/drivers/${driver.id}`}
-                        className="text-sm font-medium text-[#FF4D00] hover:text-[#e04400] transition-colors"
+                        className="text-sm font-medium text-primary-500 hover:text-primary-600 transition-colors"
                       >
                         {t('common.view_detail')}
                       </Link>
@@ -176,6 +177,7 @@ export default function DriversPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

@@ -268,7 +268,7 @@ export default function DriverDetailPage() {
                           href={url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-[#FF4D00] hover:underline"
+                          className="text-sm text-primary-500 hover:underline"
                         >
                           {t('drivers.view_document')}
                         </a>
@@ -414,7 +414,7 @@ export default function DriverDetailPage() {
               {showReasonModal === 'reject' ? t('drivers.reject_reason_title') : t('drivers.suspend_reason_title')}
             </h3>
             <textarea
-              className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF4D00]"
+              className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500"
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}

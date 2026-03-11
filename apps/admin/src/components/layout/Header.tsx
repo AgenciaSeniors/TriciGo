@@ -3,10 +3,13 @@
 import { useAdminUser } from '@/lib/useAdminUser';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useRouter } from 'next/navigation';
+import { useSidebar } from './SidebarContext';
+import { Menu } from 'lucide-react';
 
 export function Header() {
   const { email, loading } = useAdminUser();
   const router = useRouter();
+  const { toggle } = useSidebar();
 
   const handleLogout = async () => {
     const supabase = createBrowserClient();
@@ -18,12 +21,19 @@ export function Header() {
   const initial = email.charAt(0).toUpperCase();
 
   return (
-    <header className="h-16 bg-white border-b border-neutral-100 flex items-center justify-between px-6">
-      <div className="flex items-center gap-4">
+    <header className="h-16 bg-white border-b border-neutral-100 flex items-center justify-between px-4 md:px-6">
+      <div className="flex items-center gap-3 flex-1">
+        {/* Hamburger - mobile only */}
+        <button
+          onClick={toggle}
+          className="p-2 text-neutral-600 hover:text-neutral-900 md:hidden"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         <input
           type="text"
           placeholder="Buscar..."
-          className="px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500 w-72"
+          className="px-4 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500 w-full md:w-72"
         />
       </div>
 
@@ -42,13 +52,13 @@ export function Header() {
               {loading ? '...' : initial}
             </span>
           </div>
-          <span className="text-sm font-medium text-neutral-700">
+          <span className="text-sm font-medium text-neutral-700 hidden md:inline">
             {loading ? '...' : email}
           </span>
           <button
             onClick={handleLogout}
             className="ml-2 p-1.5 text-neutral-400 hover:text-red-500 transition-colors"
-            title="Cerrar sesión"
+            title="Cerrar sesion"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

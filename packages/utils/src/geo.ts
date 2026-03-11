@@ -68,6 +68,7 @@ const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
   triciclo_premium: 15,
   moto_standard: 30,
   auto_standard: 25,
+  mensajeria: 20,
 };
 
 /**
@@ -80,4 +81,60 @@ export function estimateDuration(
   const speedKmh = AVG_SPEEDS[serviceType] ?? 15;
   const speedMs = (speedKmh * 1000) / 3600;
   return Math.round(roadDistanceM / speedMs);
+}
+
+/**
+ * Format a Nominatim address into a Havana-style street address.
+ * Example output: "Calle 23, Vedado" or "Obispo #302, Habana Vieja".
+ */
+export function formatHavanaAddress(address: {
+  road?: string;
+  suburb?: string;
+  city?: string;
+  city_district?: string;
+  neighbourhood?: string;
+  house_number?: string;
+}): string {
+  const parts: string[] = [];
+
+  // Road + house number
+  if (address.road) {
+    const road = address.house_number
+      ? `${address.road} #${address.house_number}`
+      : address.road;
+    parts.push(road);
+  }
+
+  // Neighborhood / suburb — prefer suburb (barrio)
+  const area = address.suburb || address.neighbourhood || address.city_district;
+  if (area) {
+    parts.push(area);
+  }
+
+  return parts.join(', ');
+}
+
+/**
+ * Find the nearest HAVANA_PRESET to a given coordinate.
+ * Returns the preset if within `thresholdM` meters, otherwise null.
+ */
+export function findNearestPreset(
+  point: GeoPoint,
+  thresholdM = 500,
+): LocationPreset | null {
+  let nearest: LocationPreset | null = null;
+  let minDist = Infinity;
+
+  for (const preset of HAVANA_PRESETS) {
+    const dist = haversineDistance(point, {
+      latitude: preset.latitude,
+      longitude: preset.longitude,
+    });
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = preset;
+    }
+  }
+
+  return minDist <= thresholdM ? nearest : null;
 }

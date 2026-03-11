@@ -15,6 +15,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
 import type { ChatMessage } from '@tricigo/types';
+import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { IconButton } from '@tricigo/ui/IconButton';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -74,13 +76,12 @@ export default function ChatScreen() {
         keyboardVerticalOffset={0}
       >
         {/* Header */}
-        <View className="flex-row items-center px-4 py-3 border-b border-neutral-100">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Text variant="body" color="accent">{t('chat.title', { defaultValue: 'Chat' })} ←</Text>
-          </Pressable>
-          <Text variant="h4" className="flex-1">
-            {t('chat.chat_driver')}
-          </Text>
+        <View className="px-4 py-3 border-b border-neutral-100">
+          <ScreenHeader
+            title={t('chat.chat_driver')}
+            onBack={() => router.back()}
+            className="mb-0"
+          />
         </View>
 
         {/* Messages */}
@@ -112,13 +113,14 @@ export default function ChatScreen() {
             multiline
             maxLength={500}
           />
-          <Pressable
+          <IconButton
+            icon="send"
+            variant={text.trim() ? 'primary' : 'secondary'}
+            size="md"
             onPress={handleSend}
             disabled={!text.trim()}
-            className="ml-2 bg-primary-500 w-10 h-10 rounded-full items-center justify-center"
-          >
-            <Text variant="body" color="inverse">➤</Text>
-          </Pressable>
+            className="ml-2"
+          />
         </View>
       </KeyboardAvoidingView>
     </Screen>

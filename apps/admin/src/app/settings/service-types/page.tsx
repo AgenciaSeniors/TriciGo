@@ -83,7 +83,7 @@ export default function ServiceTypesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-[#FF4D00] hover:underline mb-4 inline-block">
+      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
@@ -163,7 +163,7 @@ export default function ServiceTypesPage() {
                         <button
                           onClick={handleSave}
                           disabled={saving}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-[#FF4D00] text-white hover:bg-[#E64500] disabled:opacity-50"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
                         >
                           {t('common.save')}
                         </button>
@@ -177,7 +177,7 @@ export default function ServiceTypesPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(c)}
-                        className="text-sm text-[#FF4D00] hover:underline"
+                        className="text-sm text-primary-500 hover:underline"
                       >
                         {t('common.edit')}
                       </button>
