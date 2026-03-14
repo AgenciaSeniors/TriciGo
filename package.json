@@ -16,6 +16,13 @@
     "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.0",
+      "react-dom": "19.2.0",
+      "@types/react": "~19.2.14"
+    }
+  },
   "devDependencies": {
     "prettier": "^3.4.2",
     "sharp": "^0.34.5",

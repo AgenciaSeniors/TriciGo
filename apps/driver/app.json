@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "tricigo-driver",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-logo.png",
       "backgroundColor": "#111111",
@@ -63,21 +62,13 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbms3bmwwczJ0MnNvcngycmpjZmdnIn0._5x_i8XoaUty3wS5ce82dg"
+          "RNMapboxMapsImpl": "mapbox"
         }
       ],
       [
         "expo-image-picker",
         {
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
-        }
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "tricigo",
-          "project": "tricigo-driver"
         }
       ]
     ],

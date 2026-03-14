@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "tricigo",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-logo.png",
       "backgroundColor": "#FFFFFF",
@@ -16,7 +15,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.client",
-      "associatedDomains": ["applinks:tricigo.app"],
+      "associatedDomains": [
+        "applinks:tricigo.app"
+      ],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos"
@@ -55,17 +56,11 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbms3bmwwczJ0MnNvcngycmpjZmdnIn0._5x_i8XoaUty3wS5ce82dg"
+          "RNMapboxMapsImpl": "mapbox"
         }
       ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "tricigo",
-          "project": "tricigo-client"
-        }
-      ]
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "extra": {
       "router": {

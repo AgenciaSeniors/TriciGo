@@ -30,6 +30,13 @@
     "./services/quest": "./src/services/quest.service.ts",
     "./services/blog": "./src/services/blog.service.ts",
     "./services/payment": "./src/services/payment.service.ts",
+    "./services/corporate": "./src/services/corporate.service.ts",
+    "./services/dispute": "./src/services/dispute.service.ts",
+    "./services/lost-item": "./src/services/lost-item.service.ts",
+    "./services/trusted-contact": "./src/services/trusted-contact.service.ts",
+    "./hooks/useFeatureFlag": "./src/hooks/useFeatureFlag.ts",
+    "./lib/offlineQueue": "./src/lib/offlineQueue.ts",
+    "./lib/offlineMutations": "./src/lib/offlineMutations.ts",
     "./queries/keys": "./src/queries/keys.ts",
     "./storage": "./src/storage.ts"
   },

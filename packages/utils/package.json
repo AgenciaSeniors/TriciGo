@@ -7,12 +7,21 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./analytics": "./src/analytics.ts",
+    "./chatQuickReplies": "./src/chatQuickReplies.ts",
     "./currency": "./src/currency.ts",
     "./date": "./src/date.ts",
-    "./validation": "./src/validation.ts",
+    "./destinationPredictor": "./src/destinationPredictor.ts",
+    "./fareCalculator": "./src/fareCalculator.ts",
     "./geo": "./src/geo.ts",
+    "./haptics": "./src/haptics.ts",
+    "./historyExport": "./src/historyExport.ts",
     "./mapboxOffline": "./src/mapboxOffline.ts",
-    "./offlineLabels": "./src/offlineLabels.ts"
+    "./offlineLabels": "./src/offlineLabels.ts",
+    "./receipt-template": "./src/receipt-template.ts",
+    "./sounds": "./src/sounds.ts",
+    "./useDebouncePress": "./src/useDebouncePress.ts",
+    "./validation": "./src/validation.ts"
   },
   "dependencies": {
     "@tricigo/types": "workspace:*"
