@@ -3,10 +3,12 @@ import * as Notifications from 'expo-notifications';
 import type {
   Ride,
   RideWithDriver,
+  RideSplit,
   FareEstimate,
   ServiceTypeSlug,
   PaymentMethod,
   RideStatus,
+  RidePreferences,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 
@@ -62,6 +64,10 @@ interface RideRequestDraft {
   paymentMethod: PaymentMethod;
   scheduledAt: Date | null;
   delivery: DeliveryDraft;
+  waypoints: LocationDraft[];
+  corporateAccountId: string | null;
+  insuranceSelected: boolean;
+  ridePreferences: RidePreferences;
 }
 
 const defaultDraft: RideRequestDraft = {
@@ -71,6 +77,10 @@ const defaultDraft: RideRequestDraft = {
   paymentMethod: 'cash',
   scheduledAt: null,
   delivery: { ...defaultDelivery },
+  waypoints: [],
+  corporateAccountId: null,
+  insuranceSelected: false,
+  ridePreferences: {},
 };
 
 interface PromoResult {
@@ -93,6 +103,9 @@ interface RideState {
   promoCode: string;
   promoResult: PromoResult | null;
 
+  // Fare splitting
+  splits: RideSplit[];
+
   setFlowStep: (step: RideFlowStep) => void;
   setPickup: (address: string, location: GeoPoint) => void;
   setDropoff: (address: string, location: GeoPoint) => void;
@@ -107,7 +120,17 @@ interface RideState {
   setError: (error: string | null) => void;
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
+  setCorporateAccount: (id: string | null) => void;
   setDeliveryField: (field: keyof DeliveryDraft, value: string) => void;
+  addWaypoint: () => void;
+  removeWaypoint: (index: number) => void;
+  updateWaypoint: (index: number, address: string, location: GeoPoint) => void;
+  setInsurance: (selected: boolean) => void;
+  setRidePreferences: (prefs: RidePreferences) => void;
+  setSplits: (splits: RideSplit[]) => void;
+  addSplit: (split: RideSplit) => void;
+  removeSplit: (splitId: string) => void;
+  updateSplit: (split: RideSplit) => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -122,6 +145,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   error: null,
   promoCode: '',
   promoResult: null,
+  splits: [],
 
   setFlowStep: (flowStep) => set({ flowStep }),
 
@@ -178,11 +202,49 @@ export const useRideStore = create<RideState>((set, get) => ({
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
+  setCorporateAccount: (corporateAccountId) =>
+    set((s) => ({
+      draft: {
+        ...s.draft,
+        corporateAccountId,
+        paymentMethod: corporateAccountId ? 'corporate' : s.draft.paymentMethod === 'corporate' ? 'cash' : s.draft.paymentMethod,
+      },
+    })),
   setDeliveryField: (field, value) =>
     set((s) => ({ draft: { ...s.draft, delivery: { ...s.draft.delivery, [field]: value } } })),
 
+  addWaypoint: () =>
+    set((s) => {
+      if (s.draft.waypoints.length >= 3) return s;
+      return { draft: { ...s.draft, waypoints: [...s.draft.waypoints, { address: '', location: { latitude: 0, longitude: 0 } }] } };
+    }),
+
+  removeWaypoint: (index) =>
+    set((s) => ({
+      draft: { ...s.draft, waypoints: s.draft.waypoints.filter((_, i) => i !== index) },
+    })),
+
+  updateWaypoint: (index, address, location) =>
+    set((s) => ({
+      draft: {
+        ...s.draft,
+        waypoints: s.draft.waypoints.map((wp, i) =>
+          i === index ? { address, location } : wp
+        ),
+      },
+    })),
+
+  setInsurance: (insuranceSelected) =>
+    set((s) => ({ draft: { ...s.draft, insuranceSelected } })),
+  setRidePreferences: (ridePreferences) =>
+    set((s) => ({ draft: { ...s.draft, ridePreferences } })),
+  setSplits: (splits) => set({ splits }),
+  addSplit: (split) => set((s) => ({ splits: [...s.splits, split] })),
+  removeSplit: (splitId) => set((s) => ({ splits: s.splits.filter((sp) => sp.id !== splitId) })),
+  updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
+
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, error: null, promoCode: '', promoResult: null }),
+    set({ draft: { ...defaultDraft }, fareEstimate: null, error: null, promoCode: '', promoResult: null, splits: [] }),
 
   resetAll: () =>
     set({
@@ -195,5 +257,6 @@ export const useRideStore = create<RideState>((set, get) => ({
       error: null,
       promoCode: '',
       promoResult: null,
+      splits: [],
     }),
 }));

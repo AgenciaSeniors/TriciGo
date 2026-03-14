@@ -1,7 +1,8 @@
 {
   "nav": {
     "book_ride": "Solicitar viaje",
-    "login": "Iniciar sesión"
+    "login": "Iniciar sesión",
+    "blog": "Blog"
   },
   "footer": {
     "location": "La Habana, Cuba",
@@ -9,7 +10,8 @@
     "login": "Iniciar sesión",
     "download": "Descarga la app para la experiencia completa",
     "privacy": "Privacidad",
-    "terms": "Términos"
+    "terms": "Términos",
+    "blog": "Blog"
   },
   "home": {
     "tagline": "Pide tu viaje en La Habana. Rápido, seguro y al mejor precio.",
@@ -73,7 +75,8 @@
     "no_vehicles_nearby": "No hay veh\u00edculos cerca",
     "vehicle_triciclo": "Triciclo",
     "vehicle_moto": "Moto",
-    "vehicle_auto": "Auto"
+    "vehicle_auto": "Auto",
+    "loading_map": "Cargando mapa..."
   },
   "privacy": {
     "title": "Política de Privacidad",
@@ -150,5 +153,44 @@
     "contact_title": "Contacto",
     "contact_text": "Para consultas sobre estos Términos y Condiciones:",
     "contact_email": "soporte@tricigo.app"
+  },
+  "track": {
+    "loading": "Cargando viaje...",
+    "not_found": "Viaje no encontrado.",
+    "error_loading": "Error al cargar el viaje.",
+    "back_home": "← Volver al inicio",
+    "title": "Seguimiento de viaje",
+    "canceled": "Viaje cancelado",
+    "disputed": "Viaje en disputa",
+    "from": "Desde",
+    "to": "Hasta",
+    "estimated_fare": "Tarifa estimada",
+    "final_fare": "Tarifa final",
+    "your_driver": "Tu conductor",
+    "live_updates": "Actualizando en tiempo real",
+    "step_searching": "Buscando conductor",
+    "step_accepted": "Conductor asignado",
+    "step_en_route": "En camino a recogerte",
+    "step_arrived": "Llegó al punto",
+    "step_in_progress": "Viaje en curso",
+    "step_completed": "Viaje completado",
+    "loading_tracking": "Cargando seguimiento...",
+    "shared_tracking": "Seguimiento compartido",
+    "invalid_link": "Enlace de seguimiento no válido o expirado.",
+    "error_loading_tracking": "Error al cargar el seguimiento.",
+    "go_tricigo": "← Ir a TriciGo",
+    "not_found_short": "No encontrado.",
+    "fare": "Tarifa",
+    "estimated": "Estimado",
+    "driver": "Conductor",
+    "cta_book": "Pide tu viaje con TriciGo"
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Noticias y novedades de TriciGo",
+    "no_posts": "Sin publicaciones a\u00fan",
+    "not_found": "Publicaci\u00f3n no encontrada",
+    "back_to_blog": "Volver al blog",
+    "loading": "Cargando..."
   }
 }

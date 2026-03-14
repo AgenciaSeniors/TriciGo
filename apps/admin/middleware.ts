@@ -44,6 +44,6 @@ export const config = {
      * - /favicon.png, /logo-*, /icon-* (static assets)
      * - /api (API routes if any)
      */
-    '/((?!login|_next|favicon\\.png|logo-|icon-|api).*)',
+    '/((?!login|forgot-password|reset-password|_next|favicon\\.png|logo-|icon-|api).*)',
   ],
 };

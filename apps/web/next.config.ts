@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   transpilePackages: ['@tricigo/api', '@tricigo/types', '@tricigo/utils'],
 };
 

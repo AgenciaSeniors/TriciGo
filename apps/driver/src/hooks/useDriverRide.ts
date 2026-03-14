@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
+import i18next from 'i18next';
+import Toast from 'react-native-toast-message';
 import { rideService, driverService, locationService } from '@tricigo/api';
+import { triggerHaptic, playSound } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -83,6 +85,8 @@ export function useIncomingRequests(isOnline: boolean) {
       // On INSERT (new searching ride)
       (ride) => {
         addRequest(ride);
+        triggerHaptic('warning');
+        playSound('new_request');
       },
       // On UPDATE (ride status changed)
       (ride) => {
@@ -122,6 +126,8 @@ export function useDriverRideActions() {
       const ride = await driverService.acceptRide(rideId, profile.id);
       setActiveTrip(ride);
       removeRequest(rideId);
+      triggerHaptic('success');
+      playSound('ride_accepted');
 
       // Subscribe to this ride's updates
       channelRef.current?.unsubscribe();
@@ -129,7 +135,7 @@ export function useDriverRideActions() {
         useDriverRideStore.getState().updateActiveTrip(updated);
       });
     } catch {
-      Alert.alert('Error', 'Otro conductor ya aceptó este viaje');
+      Toast.show({ type: 'error', text1: i18next.t('driver:common.ride_already_accepted') });
       removeRequest(rideId);
     }
   }, [profile, setActiveTrip, removeRequest]);
@@ -167,6 +173,8 @@ export function useDriverRideActions() {
           actualDurationS,
         });
 
+        triggerHaptic('success');
+        playSound('trip_completed');
         useDriverRideStore.getState().updateActiveTrip({
           ...activeTrip,
           status: 'completed',
@@ -184,7 +192,7 @@ export function useDriverRideActions() {
         });
       }
     } catch (err) {
-      Alert.alert('Error', 'No se pudo actualizar el estado del viaje');
+      Toast.show({ type: 'error', text1: i18next.t('driver:trip.status_update_failed') });
     }
   }, [profile]);
 
@@ -198,7 +206,7 @@ export function useDriverRideActions() {
       channelRef.current = null;
       reset();
     } catch {
-      Alert.alert('Error', 'No se pudo cancelar el viaje');
+      Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
     }
   }, [user, reset]);
 

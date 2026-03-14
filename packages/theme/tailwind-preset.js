@@ -39,10 +39,26 @@ module.exports = {
           900: '#171717',
           950: '#111111',
         },
-        success: '#10B981',
-        warning: '#F59E0B',
-        error: '#EF4444',
-        info: '#3B82F6',
+        success: {
+          light: '#D1FAE5',
+          DEFAULT: '#10B981',
+          dark: '#065F46',
+        },
+        warning: {
+          light: '#FEF3C7',
+          DEFAULT: '#F59E0B',
+          dark: '#92400E',
+        },
+        error: {
+          light: '#FEE2E2',
+          DEFAULT: '#EF4444',
+          dark: '#991B1B',
+        },
+        info: {
+          light: '#DBEAFE',
+          DEFAULT: '#3B82F6',
+          dark: '#1E40AF',
+        },
       },
       fontFamily: {
         sans: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],

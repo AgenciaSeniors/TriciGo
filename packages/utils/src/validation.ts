@@ -71,6 +71,21 @@ export function isValidOTP(code: string): boolean {
 }
 
 /**
+ * Mask a phone number for display, showing only country code + last 4 digits.
+ * "+5355123456" → "+53 •••• 3456"
+ * "55123456"    → "•••• 3456"
+ */
+export function maskPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  if (cleaned.length < 4) return '••••';
+  const last4 = cleaned.slice(-4);
+  if (cleaned.startsWith('+53')) return `+53 •••• ${last4}`;
+  if (cleaned.startsWith('+')) return `${cleaned.slice(0, 3)} •••• ${last4}`;
+  return `•••• ${last4}`;
+}
+
+/**
  * Sanitize user input text (trim, remove control characters).
  */
 export function sanitizeText(text: string): string {

@@ -1,0 +1,47 @@
+# ============================================================
+# TriciGo — Maestro E2E: Ride Request Flow
+# Verifies the complete ride request flow from home screen.
+# Assumes user is already logged in.
+# ============================================================
+appId: com.tricigo.client
+---
+
+# Home screen should be visible
+- assertVisible: "¿A dónde vas?"
+
+# Tap on the destination search field
+- tapOn: "Buscar destino"
+
+# Type a destination
+- inputText: "Capitolio"
+
+# Wait for search results and select one
+- assertVisible:
+    text: "Capitolio"
+    timeout: 5000
+- tapOn: "Capitolio de La Habana"
+
+# Should show fare estimate screen
+- assertVisible:
+    text: "Tarifa estimada"
+    timeout: 5000
+
+# Verify service types are displayed
+- assertVisible: "Triciclo"
+
+# Verify fare breakdown is visible
+- assertVisible: "CUP"
+
+# Select payment method (cash by default)
+- assertVisible: "Efectivo"
+
+# Tap confirm ride button
+- tapOn: "Confirmar viaje"
+
+# Should enter searching state
+- assertVisible:
+    text: "Buscando conductor"
+    timeout: 5000
+
+# Verify cancel option is available during search
+- assertVisible: "Cancelar viaje"

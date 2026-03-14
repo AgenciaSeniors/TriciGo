@@ -18,6 +18,9 @@
     "./EmptyState": "./src/EmptyState.tsx",
     "./ScreenHeader": "./src/ScreenHeader.tsx",
     "./IconButton": "./src/IconButton.tsx",
+    "./ETABadge": "./src/ETABadge.tsx",
+    "./FareBreakdownCard": "./src/FareBreakdownCard.tsx",
+    "./DriverCard": "./src/DriverCard.tsx",
     "./hooks/useResponsive": "./src/hooks/useResponsive.ts"
   },
   "dependencies": {

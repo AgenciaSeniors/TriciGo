@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["TEAMID.app.tricigo.client"],
+        "components": [
+          { "/": "/track/*", "comment": "Ride tracking" },
+          { "/": "/book", "comment": "Booking" }
+        ]
+      },
+      {
+        "appIDs": ["TEAMID.app.tricigo.driver"],
+        "components": [
+          { "/": "/driver/*", "comment": "Driver links" }
+        ]
+      }
+    ]
+  }
+}

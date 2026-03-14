@@ -6,12 +6,14 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 
 export default function DriverProfileScreen() {
   const { t } = useTranslation('common');
+  const { t: td } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
   const reset = useAuthStore((s) => s.reset);
   const driverProfile = useDriverStore((s) => s.profile);
@@ -37,6 +39,7 @@ export default function DriverProfileScreen() {
     { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
     { icon: 'car-outline' as const, label: t('profile.vehicle_info'), onPress: () => router.push('/profile/vehicle') },
     { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents') },
+    { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
     { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
     { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/settings') },
     { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
@@ -57,7 +60,7 @@ export default function DriverProfileScreen() {
             </Text>
           </View>
           <View className="flex-1">
-            <Text variant="h4" color="inverse">{user?.full_name ?? 'Conductor'}</Text>
+            <Text variant="h4" color="inverse">{user?.full_name ?? td('common.driver_label')}</Text>
             <Text variant="bodySmall" color="inverse" className="opacity-50">
               {user?.phone ?? '+53 5XXXXXXX'}
             </Text>
@@ -72,7 +75,7 @@ export default function DriverProfileScreen() {
                   {driverProfile.status ?? '--'}
                 </Text>
                 <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  Estado
+                  {td('common.status_label')}
                 </Text>
               </View>
               <View className="items-center flex-1">
@@ -80,7 +83,7 @@ export default function DriverProfileScreen() {
                   {driverProfile.rating_avg?.toFixed(1) ?? '--'}
                 </Text>
                 <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  Rating
+                  {td('earnings.rating')}
                 </Text>
               </View>
               <View className="items-center flex-1">
@@ -88,7 +91,7 @@ export default function DriverProfileScreen() {
                   {driverProfile.total_rides ?? 0}
                 </Text>
                 <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  Viajes
+                  {td('trips_history.title')}
                 </Text>
               </View>
             </View>
@@ -101,11 +104,11 @@ export default function DriverProfileScreen() {
             className="flex-row items-center py-4 border-b border-neutral-800"
             onPress={item.onPress}
           >
-            <Ionicons name={item.icon} size={22} color="#A3A3A3" />
+            <Ionicons name={item.icon} size={22} color={colors.neutral[400]} />
             <Text variant="body" color="inverse" className="ml-3 flex-1">
               {item.label}
             </Text>
-            <Ionicons name="chevron-forward" size={20} color="#525252" />
+            <Ionicons name="chevron-forward" size={20} color={colors.neutral[600]} />
           </Pressable>
         ))}
 
@@ -114,7 +117,7 @@ export default function DriverProfileScreen() {
           onPress={handleLogout}
           disabled={loggingOut}
         >
-          <Ionicons name="log-out-outline" size={22} color="#EF4444" />
+          <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
           <Text variant="body" color="error" className="ml-3">
             {loggingOut ? t('auth.logging_out') : t('auth.logout')}
           </Text>

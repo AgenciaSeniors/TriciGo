@@ -10,7 +10,9 @@
     "./currency": "./src/currency.ts",
     "./date": "./src/date.ts",
     "./validation": "./src/validation.ts",
-    "./geo": "./src/geo.ts"
+    "./geo": "./src/geo.ts",
+    "./mapboxOffline": "./src/mapboxOffline.ts",
+    "./offlineLabels": "./src/offlineLabels.ts"
   },
   "dependencies": {
     "@tricigo/types": "workspace:*"

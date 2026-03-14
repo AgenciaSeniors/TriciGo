@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, FlatList, ScrollView, Alert, Pressable } from 'react-native';
+import { View, FlatList, Alert, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
@@ -12,9 +12,11 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
-import { HAVANA_PRESETS } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRecentAddresses } from '@/hooks/useRecentAddresses';
+import { AddressSearchInput } from '@/components/AddressSearchInput';
 import type { CustomerProfile, SavedLocation } from '@tricigo/types';
+import type { GeoPoint } from '@tricigo/utils';
 
 export default function SavedLocationsScreen() {
   const { t } = useTranslation('common');
@@ -24,8 +26,9 @@ export default function SavedLocationsScreen() {
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [newLabel, setNewLabel] = useState('');
-  const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<{ address: string; location: GeoPoint } | null>(null);
   const [saving, setSaving] = useState(false);
+  const { recentAddresses } = useRecentAddresses();
 
   useEffect(() => {
     if (!user) return;
@@ -36,21 +39,20 @@ export default function SavedLocationsScreen() {
   }, [user]);
 
   const handleAdd = async () => {
-    if (!profile || !newLabel.trim() || selectedPreset === null) return;
+    if (!profile || !newLabel.trim() || !selectedAddress) return;
     setSaving(true);
     try {
-      const preset = HAVANA_PRESETS[selectedPreset]!;
       const updated = [...locations, {
         label: newLabel.trim(),
-        address: preset.address,
-        latitude: preset.latitude,
-        longitude: preset.longitude,
+        address: selectedAddress.address,
+        latitude: selectedAddress.location.latitude,
+        longitude: selectedAddress.location.longitude,
       }];
       await customerService.updateProfile(profile.id, { saved_locations: updated });
       setLocations(updated);
       setSheetVisible(false);
       setNewLabel('');
-      setSelectedPreset(null);
+      setSelectedAddress(null);
     } catch {
       Alert.alert('Error', t('errors.generic'));
     } finally {
@@ -76,6 +78,12 @@ export default function SavedLocationsScreen() {
         },
       },
     ]);
+  };
+
+  const handleOpenSheet = () => {
+    setNewLabel('');
+    setSelectedAddress(null);
+    setSheetVisible(true);
   };
 
   return (
@@ -113,7 +121,7 @@ export default function SavedLocationsScreen() {
           variant="primary"
           size="lg"
           fullWidth
-          onPress={() => setSheetVisible(true)}
+          onPress={handleOpenSheet}
           className="mt-4"
         />
       </View>
@@ -122,35 +130,31 @@ export default function SavedLocationsScreen() {
         <Text className="text-lg font-bold mb-4">{t('profile.add_location')}</Text>
         <Input
           label={t('profile.location_label')}
-          placeholder="Casa, Trabajo..."
+          placeholder={t('profile.location_label_placeholder')}
           value={newLabel}
           onChangeText={setNewLabel}
         />
         <Text variant="bodySmall" color="secondary" className="mt-3 mb-2">
           {t('profile.location_address')}
         </Text>
-        <ScrollView style={{ maxHeight: 220 }} className="mb-4">
-          {HAVANA_PRESETS.map((preset, idx) => (
-            <Pressable
-              key={idx}
-              onPress={() => setSelectedPreset(idx)}
-              className={`p-3 rounded-lg mb-2 border ${
-                selectedPreset === idx ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
-              }`}
-            >
-              <Text variant="body">{preset.label}</Text>
-              <Text variant="bodySmall" color="secondary">{preset.address}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <Button
-          title={saving ? '...' : t('save')}
-          variant="primary"
-          size="lg"
-          fullWidth
-          disabled={saving || !newLabel.trim() || selectedPreset === null}
-          onPress={handleAdd}
+        <AddressSearchInput
+          placeholder={t('profile.location_address_placeholder', { defaultValue: 'Buscar dirección...' })}
+          selectedAddress={selectedAddress?.address ?? null}
+          onSelect={(address, location) => setSelectedAddress({ address, location })}
+          recentAddresses={recentAddresses}
+          showUseMyLocation
         />
+        <View className="mt-4">
+          <Button
+            title={t('save')}
+            variant="primary"
+            size="lg"
+            fullWidth
+            loading={saving}
+            disabled={saving || !newLabel.trim() || !selectedAddress}
+            onPress={handleAdd}
+          />
+        </View>
       </BottomSheet>
     </Screen>
   );

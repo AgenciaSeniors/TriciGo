@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
+import { identifyUser, resetAnalytics } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 
 // Use SecureStore on native, localStorage on web
@@ -46,6 +47,7 @@ export function useAuthInit() {
           const user = await authService.getCurrentUser();
           if (mounted) setUser(user);
           if (user) {
+            identifyUser(user.id, { email: user.email });
             customerService.ensureProfile(user.id).catch((err) => console.warn('[Auth] Failed to ensure profile:', err));
           }
         } else if (mounted) {
@@ -62,11 +64,13 @@ export function useAuthInit() {
       async (event, session) => {
         if (!mounted) return;
         if (event === 'SIGNED_OUT' || !session) {
+          resetAnalytics();
           reset();
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
             const user = await authService.getCurrentUser();
             if (mounted) setUser(user);
+            if (user) identifyUser(user.id, { email: user.email });
           } catch {
             reset();
           }

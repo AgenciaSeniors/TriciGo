@@ -1,44 +1,45 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 
-const STATUS_STEPS: { key: RideStatus; label: string; stepNumber: number }[] = [
-  { key: 'searching', label: 'Buscando conductor', stepNumber: 1 },
-  { key: 'accepted', label: 'Conductor asignado', stepNumber: 2 },
-  { key: 'driver_en_route', label: 'En camino a recogerte', stepNumber: 3 },
-  { key: 'arrived_at_pickup', label: 'Llegó al punto', stepNumber: 4 },
-  { key: 'in_progress', label: 'Viaje en curso', stepNumber: 5 },
-  { key: 'completed', label: 'Viaje completado', stepNumber: 6 },
-];
-
-function getStepIndex(status: RideStatus): number {
-  const idx = STATUS_STEPS.findIndex((s) => s.key === status);
-  return idx >= 0 ? idx : -1;
+function useStatusSteps() {
+  const { t } = useTranslation('web');
+  return useMemo(() => [
+    { key: 'searching' as RideStatus, label: t('track.step_searching'), stepNumber: 1 },
+    { key: 'accepted' as RideStatus, label: t('track.step_accepted'), stepNumber: 2 },
+    { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route'), stepNumber: 3 },
+    { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived'), stepNumber: 4 },
+    { key: 'in_progress' as RideStatus, label: t('track.step_in_progress'), stepNumber: 5 },
+    { key: 'completed' as RideStatus, label: t('track.step_completed'), stepNumber: 6 },
+  ], [t]);
 }
 
 export default function TrackRidePage() {
+  const { t } = useTranslation('web');
   const params = useParams();
   const rideId = params.id as string;
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
     try {
       const data = await rideService.getRideWithDriver(rideId);
       if (data) setRide(data);
-      else setError('Viaje no encontrado.');
+      else setError(t('track.not_found'));
     } catch {
-      setError('Error al cargar el viaje.');
+      setError(t('track.error_loading'));
     } finally {
       setLoading(false);
     }
-  }, [rideId]);
+  }, [rideId, t]);
 
   useEffect(() => {
     fetchRide();
@@ -60,7 +61,7 @@ export default function TrackRidePage() {
   if (loading) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#888', fontSize: '1.125rem' }}>Cargando viaje...</p>
+        <p style={{ color: '#888', fontSize: '1.125rem' }}>{t('track.loading')}</p>
       </main>
     );
   }
@@ -68,13 +69,13 @@ export default function TrackRidePage() {
   if (error || !ride) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'Viaje no encontrado.'}</p>
-        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>← Volver al inicio</Link>
+        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? t('track.not_found')}</p>
+        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{t('track.back_home')}</Link>
       </main>
     );
   }
 
-  const currentStepIdx = getStepIndex(ride.status);
+  const currentStepIdx = statusSteps.findIndex((s) => s.key === ride.status);
   const isCanceled = ride.status === 'canceled';
   const isDisputed = ride.status === 'disputed';
   const isTerminal = isCanceled || isDisputed || ride.status === 'completed';
@@ -94,11 +95,11 @@ export default function TrackRidePage() {
           href="/"
           style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}
         >
-          ← Inicio
+          {t('track.back_home')}
         </Link>
 
         <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '1rem', marginBottom: '0.25rem' }}>
-          Seguimiento de viaje
+          {t('track.title')}
         </h1>
         <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
           ID: {ride.id.slice(0, 8)}...
@@ -108,7 +109,7 @@ export default function TrackRidePage() {
         {isCanceled ? (
           <div style={{ padding: '1rem', background: '#FEE', borderRadius: '0.75rem', textAlign: 'center', marginBottom: '1.5rem' }}>
             <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#EF4444' }}>✕</span>
-            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje cancelado</p>
+            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>{t('track.canceled')}</p>
             {ride.cancellation_reason && (
               <p style={{ color: '#888', fontSize: '0.8rem', marginTop: '0.25rem' }}>{ride.cancellation_reason}</p>
             )}
@@ -116,11 +117,11 @@ export default function TrackRidePage() {
         ) : isDisputed ? (
           <div style={{ padding: '1rem', background: '#FFF3E0', borderRadius: '0.75rem', textAlign: 'center', marginBottom: '1.5rem' }}>
             <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#F59E0B' }}>!</span>
-            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje en disputa</p>
+            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>{t('track.disputed')}</p>
           </div>
         ) : (
           <div style={{ marginBottom: '1.5rem' }}>
-            {STATUS_STEPS.map((step, idx) => {
+            {statusSteps.map((step, idx) => {
               const isActive = idx === currentStepIdx;
               const isDone = idx < currentStepIdx;
               return (
@@ -170,11 +171,11 @@ export default function TrackRidePage() {
           }}
         >
           <div style={{ marginBottom: '0.75rem' }}>
-            <span style={{ fontSize: '0.75rem', color: '#888', display: 'block' }}>Desde</span>
+            <span style={{ fontSize: '0.75rem', color: '#888', display: 'block' }}>{t('track.from')}</span>
             <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{ride.pickup_address}</span>
           </div>
           <div>
-            <span style={{ fontSize: '0.75rem', color: '#888', display: 'block' }}>Hasta</span>
+            <span style={{ fontSize: '0.75rem', color: '#888', display: 'block' }}>{t('track.to')}</span>
             <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{ride.dropoff_address}</span>
           </div>
         </div>
@@ -192,7 +193,7 @@ export default function TrackRidePage() {
           }}
         >
           <span style={{ color: '#666', fontSize: '0.875rem' }}>
-            {isTerminal ? 'Tarifa final' : 'Tarifa estimada'}
+            {isTerminal ? t('track.final_fare') : t('track.estimated_fare')}
           </span>
           <span style={{ fontWeight: 800, fontSize: '1.25rem', color: 'var(--primary)' }}>
             {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
@@ -210,7 +211,7 @@ export default function TrackRidePage() {
             }}
           >
             <span style={{ fontSize: '0.75rem', color: '#888', display: 'block', marginBottom: '0.5rem' }}>
-              Tu conductor
+              {t('track.your_driver')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div
@@ -250,7 +251,7 @@ export default function TrackRidePage() {
         {/* Live indicator */}
         {!isTerminal && (
           <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#888', marginTop: '1rem' }}>
-            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 6 }} />Actualizando en tiempo real
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 6 }} />{t('track.live_updates')}
           </p>
         )}
       </div>

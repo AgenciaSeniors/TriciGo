@@ -22,7 +22,9 @@ export type RideStatus =
   | 'canceled'
   | 'disputed';
 
-export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed';
+export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'tropipay' | 'corporate';
+
+export type PaymentStatus = 'not_applicable' | 'pending' | 'paid' | 'failed';
 
 export type VehicleType = 'triciclo' | 'moto' | 'auto';
 
@@ -38,7 +40,8 @@ export type WalletAccountType =
   | 'driver_cash'
   | 'driver_hold'
   | 'platform_revenue'
-  | 'platform_promotions';
+  | 'platform_promotions'
+  | 'corporate_cash';
 
 export type LedgerEntryType =
   | 'recharge'

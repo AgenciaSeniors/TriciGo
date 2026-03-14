@@ -40,4 +40,13 @@ export type { ScreenHeaderProps } from './ScreenHeader';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 
+export { Avatar } from './Avatar';
+export type { AvatarProps } from './Avatar';
+
+export { ServiceTypeCard } from './ServiceTypeCard';
+export type { ServiceTypeCardProps } from './ServiceTypeCard';
+
+export { HistoryFilters } from './HistoryFilters';
+export type { HistoryFiltersProps, HistoryFilterState } from './HistoryFilters';
+
 export { useResponsive } from './hooks/useResponsive';

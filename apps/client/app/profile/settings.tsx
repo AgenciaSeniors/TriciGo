@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -16,17 +16,43 @@ import * as Notifications from 'expo-notifications';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
+const NOTIF_CATEGORIES = [
+  { key: '@tricigo/notif_rides', icon: 'car-outline' as const, labelKey: 'profile.notif_rides' },
+  { key: '@tricigo/notif_chat', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
+  { key: '@tricigo/notif_wallet', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
+  { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
+];
+
 export default function SettingsScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
   const currentLang = i18n.language ?? 'es';
 
   useEffect(() => {
+    // Load master toggle
     AsyncStorage.getItem(NOTIF_PREF_KEY).then((val) => {
       if (val !== null) setNotificationsEnabled(val === 'true');
-    }).catch(() => { /* best-effort: read preference */ });
-  }, []);
+    }).catch(() => {});
+
+    // Load category preferences
+    Promise.all(
+      NOTIF_CATEGORIES.map(async (cat) => {
+        const val = await AsyncStorage.getItem(cat.key).catch(() => null);
+        return [cat.key, val !== 'false'] as const;  // default true
+      }),
+    ).then((results) => {
+      setCategoryPrefs(Object.fromEntries(results));
+    });
+
+    // Load SMS preference from server
+    if (userId) {
+      notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
+    }
+  }, [userId]);
 
   const toggleLanguage = () => {
     const next = currentLang === 'es' ? 'en' : 'es';
@@ -38,15 +64,19 @@ export default function SettingsScreen() {
     await AsyncStorage.setItem(NOTIF_PREF_KEY, String(enabled)).catch(() => {});
 
     if (!enabled && userId) {
-      // Remove push token when disabling
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync();
         await notificationService.removePushToken(userId, tokenData.data);
       } catch {
-        /* best-effort: token removal */
+        /* best-effort */
       }
     }
   };
+
+  const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
+    setCategoryPrefs((prev) => ({ ...prev, [key]: enabled }));
+    await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
+  }, []);
 
   return (
     <Screen scroll bg="white" padded>
@@ -65,6 +95,7 @@ export default function SettingsScreen() {
           </Pressable>
         </Card>
 
+        {/* Notifications section */}
         <Card variant="outlined" padding="md" className="mb-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center">
@@ -74,6 +105,66 @@ export default function SettingsScreen() {
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
+              trackColor={{ true: colors.brand.orange }}
+            />
+          </View>
+
+          {/* Granular category toggles */}
+          {notificationsEnabled && (
+            <View className="mt-3 pt-3 border-t border-neutral-100">
+              <Text variant="caption" color="secondary" className="mb-2">
+                {t('profile.notif_section_title')}
+              </Text>
+              {NOTIF_CATEGORIES.map((cat) => (
+                <View
+                  key={cat.key}
+                  className="flex-row items-center justify-between py-2"
+                >
+                  <View className="flex-row items-center">
+                    <Ionicons name={cat.icon} size={18} color={colors.neutral[400]} />
+                    <Text variant="bodySmall" className="ml-2.5">
+                      {t(cat.labelKey)}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={categoryPrefs[cat.key] !== false}
+                    onValueChange={(v) => handleCategoryToggle(cat.key, v)}
+                    trackColor={{ true: colors.brand.orange }}
+                    style={{ transform: [{ scale: 0.85 }] }}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </Card>
+
+        {/* SMS Alerts section */}
+        <Card variant="outlined" padding="md" className="mb-4">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1 mr-3">
+              <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.neutral[600]} />
+              <View className="ml-3 flex-1">
+                <Text variant="body">{t('profile.notif_sms')}</Text>
+                <Text variant="caption" color="secondary">
+                  {t('profile.notif_sms_desc')}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={smsEnabled}
+              disabled={smsLoading}
+              onValueChange={async (enabled) => {
+                if (!userId) return;
+                setSmsEnabled(enabled);
+                setSmsLoading(true);
+                try {
+                  await notificationService.updateSmsPreference(userId, enabled);
+                } catch {
+                  setSmsEnabled(!enabled); // revert on error
+                } finally {
+                  setSmsLoading(false);
+                }
+              }}
               trackColor={{ true: colors.brand.orange }}
             />
           </View>

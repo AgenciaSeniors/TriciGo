@@ -33,6 +33,49 @@ export const locationService = {
     return row ?? { distance_m: 0, point_count: 0 };
   },
 
+  /**
+   * Get all location events for a completed ride (for route playback/map).
+   * Returns coordinates in chronological order.
+   */
+  async getRideLocationEvents(rideId: string): Promise<RideLocationEvent[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_location_events')
+      .select('*')
+      .eq('ride_id', rideId)
+      .order('recorded_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as RideLocationEvent[];
+  },
+
+  /**
+   * Bulk-insert buffered location events (used when flushing offline GPS buffer).
+   */
+  async bulkRecordRideLocations(
+    events: Array<{
+      ride_id: string;
+      driver_id: string;
+      latitude: number;
+      longitude: number;
+      heading?: number;
+      speed?: number;
+      recorded_at: string;
+    }>,
+  ): Promise<void> {
+    if (events.length === 0) return;
+    const supabase = getSupabaseClient();
+    const rows = events.map((e) => ({
+      ride_id: e.ride_id,
+      driver_id: e.driver_id,
+      location: `POINT(${e.longitude} ${e.latitude})`,
+      heading: e.heading ?? null,
+      speed: e.speed ?? null,
+      recorded_at: e.recorded_at,
+    }));
+    const { error } = await supabase.from('ride_location_events').insert(rows);
+    if (error) throw error;
+  },
+
   async getLatestLocation(
     rideId: string,
   ): Promise<RideLocationEvent | null> {

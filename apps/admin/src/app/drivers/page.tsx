@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { DriverProfileWithUser } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
+import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 
 const PAGE_SIZE = 20;
 
@@ -44,23 +45,74 @@ function formatDate(dateString: string): string {
   });
 }
 
+const EMPTY_FILTERS: Record<string, string> = {
+  search: '',
+  ratingMin: '',
+  vehicleType: '',
+};
+
 export default function DriversPage() {
   const { t } = useTranslation('admin');
   const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
+
+  const filterFields: FilterField[] = [
+    {
+      key: 'search',
+      label: t('filters.search'),
+      type: 'text',
+      placeholder: t('filters.search_driver_placeholder'),
+    },
+    {
+      key: 'ratingMin',
+      label: t('filters.rating_min'),
+      type: 'select',
+      placeholder: t('filters.all'),
+      options: [
+        { label: '4.0+', value: '4.0' },
+        { label: '4.5+', value: '4.5' },
+        { label: '3.0+', value: '3.0' },
+      ],
+    },
+    {
+      key: 'vehicleType',
+      label: t('filters.vehicle_type'),
+      type: 'select',
+      placeholder: t('filters.all'),
+      options: [
+        { label: t('drivers.type_triciclo'), value: 'triciclo' },
+        { label: t('drivers.type_moto'), value: 'moto' },
+        { label: t('drivers.type_auto'), value: 'auto' },
+      ],
+    },
+  ];
+
+  const handleFilterChange = useCallback((key: string, value: string) => {
+    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(0);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setAdvancedFilters({ ...EMPTY_FILTERS });
+    setPage(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
 
     async function fetchDrivers() {
-      setLoading(true);
       try {
-        const data =
-          statusFilter === 'all'
-            ? await adminService.getAllDrivers(page, PAGE_SIZE)
-            : await adminService.getDriversByStatus(statusFilter, page, PAGE_SIZE);
+        const filters: Record<string, any> = {};
+        if (statusFilter !== 'all') filters.status = statusFilter;
+        if (advancedFilters.search) filters.search = advancedFilters.search;
+        if (advancedFilters.ratingMin) filters.ratingMin = parseFloat(advancedFilters.ratingMin);
+        if (advancedFilters.vehicleType) filters.vehicleType = advancedFilters.vehicleType;
+
+        const data = await adminService.getAllDrivers(page, PAGE_SIZE, filters);
         if (!cancelled) setDrivers(data);
       } catch (err) {
         console.error('Error fetching drivers:', err);
@@ -71,10 +123,8 @@ export default function DriversPage() {
     }
 
     fetchDrivers();
-    return () => {
-      cancelled = true;
-    };
-  }, [page, statusFilter]);
+    return () => { cancelled = true; };
+  }, [page, statusFilter, advancedFilters]);
 
   const canGoPrev = page > 0;
   const canGoNext = drivers.length === PAGE_SIZE;
@@ -84,7 +134,7 @@ export default function DriversPage() {
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('drivers.title')}</h1>
 
       {/* Status filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-4">
         {STATUS_FILTERS.map((filter) => (
           <button
             key={filter.value}
@@ -102,6 +152,16 @@ export default function DriversPage() {
           </button>
         ))}
       </div>
+
+      {/* Advanced filters */}
+      <FilterPanel
+        fields={filterFields}
+        values={advancedFilters}
+        onChange={handleFilterChange}
+        onClear={handleClearFilters}
+        clearLabel={t('filters.clear_all')}
+        toggleLabel={t('filters.advanced_filters')}
+      />
 
       {/* Drivers table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">

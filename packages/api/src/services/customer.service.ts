@@ -31,7 +31,7 @@ export const customerService = {
 
   async updateProfile(
     profileId: string,
-    updates: Partial<Pick<CustomerProfile, 'default_payment_method' | 'saved_locations' | 'emergency_contact'>>,
+    updates: Partial<Pick<CustomerProfile, 'default_payment_method' | 'saved_locations' | 'emergency_contact' | 'ride_preferences'>>,
   ): Promise<CustomerProfile> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase

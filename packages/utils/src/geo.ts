@@ -138,3 +138,208 @@ export function findNearestPreset(
 
   return minDist <= thresholdM ? nearest : null;
 }
+
+// ============================================================
+// OSRM Routing + Nominatim Geocoding (shared across all apps)
+// ============================================================
+
+/* ─── Types ─── */
+
+export interface RouteResult {
+  /** Array of [lat, lng] pairs for polyline rendering */
+  coordinates: [number, number][];
+  /** Route distance in meters */
+  distance_m: number;
+  /** Route duration in seconds */
+  duration_s: number;
+}
+
+export interface AddressSearchResult {
+  /** Formatted address string */
+  address: string;
+  /** Latitude */
+  latitude: number;
+  /** Longitude */
+  longitude: number;
+  /** Display name from Nominatim */
+  displayName: string;
+}
+
+/* ─── Nominatim throttle ─── */
+
+const NOMINATIM_MIN_INTERVAL_MS = 1100; // >1s to respect Nominatim rate limit
+let lastNominatimCall = 0;
+
+async function throttledFetch(url: string, headers?: Record<string, string>): Promise<Response> {
+  const now = Date.now();
+  const wait = NOMINATIM_MIN_INTERVAL_MS - (now - lastNominatimCall);
+  if (wait > 0) {
+    await new Promise<void>((r) => setTimeout(r, wait));
+  }
+  lastNominatimCall = Date.now();
+  return fetch(url, { headers });
+}
+
+const NOMINATIM_HEADERS: Record<string, string> = {
+  'User-Agent': 'TriciGo/1.0 (https://tricigo.com)',
+};
+
+/** Havana bounding box for Nominatim search (SW lng, SW lat, NE lng, NE lat) */
+const HAVANA_VIEWBOX = '-82.55,22.95,-82.25,23.20';
+
+/* ─── OSRM Routing ─── */
+
+/**
+ * Fetch a driving route between two points using the OSRM public API.
+ * Returns the route geometry (lat/lng pairs) + distance/duration,
+ * or null if the request fails.
+ */
+export async function fetchRoute(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): Promise<RouteResult | null> {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${from.lng},${from.lat};${to.lng},${to.lat}` +
+      `?overview=full&geometries=geojson`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    if (!route) return null;
+
+    // GeoJSON coordinates are [lng, lat] — convert to [lat, lng]
+    const coordinates: [number, number][] = route.geometry.coordinates.map(
+      (c: [number, number]) => [c[1], c[0]] as [number, number],
+    );
+
+    return {
+      coordinates,
+      distance_m: route.distance,
+      duration_s: route.duration,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch route with multiple waypoints using OSRM.
+ * Points should be in order: [origin, waypoint1, waypoint2, ..., destination]
+ */
+export async function fetchMultiStopRoute(
+  points: { lat: number; lng: number }[],
+): Promise<RouteResult | null> {
+  if (points.length < 2) return null;
+
+  const coordStr = points
+    .map((p) => `${p.lng},${p.lat}`)
+    .join(';');
+
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      routes?: Array<{
+        geometry: { coordinates: number[][] };
+        distance: number;
+        duration: number;
+      }>;
+    };
+    const route = data.routes?.[0];
+    if (!route) return null;
+
+    return {
+      coordinates: route.geometry.coordinates.map(
+        (c: number[]) => [c[1], c[0]] as [number, number],
+      ),
+      distance_m: Math.round(route.distance),
+      duration_s: Math.round(route.duration),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Nominatim Reverse Geocoding ─── */
+
+/**
+ * Reverse geocode coordinates to a human-readable address using Nominatim.
+ * Formats the result with `formatHavanaAddress()`.
+ * Returns null if the request fails.
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<string | null> {
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse` +
+      `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es`;
+
+    const res = await throttledFetch(url, NOMINATIM_HEADERS);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data?.address) return null;
+
+    const formatted = formatHavanaAddress(data.address);
+    return formatted || null;
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Nominatim Forward Geocoding (Address Search) ─── */
+
+/**
+ * Search for addresses in Havana using Nominatim forward geocoding.
+ * Results are bounded to the Havana area via viewbox.
+ * Returns up to `limit` results, or empty array on failure.
+ */
+export async function searchAddress(
+  query: string,
+  limit = 5,
+): Promise<AddressSearchResult[]> {
+  if (!query || query.trim().length < 2) return [];
+
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      format: 'json',
+      addressdetails: '1',
+      limit: String(limit),
+      viewbox: HAVANA_VIEWBOX,
+      bounded: '1',
+      'accept-language': 'es',
+    });
+
+    const url = `https://nominatim.openstreetmap.org/search?${params}`;
+    const res = await throttledFetch(url, NOMINATIM_HEADERS);
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((item: Record<string, unknown>) => {
+      const displayName = (item.display_name as string) ?? '';
+      const formatted = item.address
+        ? formatHavanaAddress(item.address as Parameters<typeof formatHavanaAddress>[0])
+        : displayName;
+
+      return {
+        address: formatted || displayName,
+        latitude: parseFloat(item.lat as string),
+        longitude: parseFloat(item.lon as string),
+        displayName,
+      };
+    });
+  } catch {
+    return [];
+  }
+}

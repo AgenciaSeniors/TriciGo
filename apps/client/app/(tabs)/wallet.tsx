@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, FlatList, ActivityIndicator, Alert, RefreshControl, Linking, Image } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -7,25 +7,42 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
+import { paymentService } from '@tricigo/api/services/payment';
+import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone } from '@tricigo/utils';
 import type { LedgerTransaction } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
 
+// TriciCoin images
+const tricoinLogo = require('../../assets/coins/tricoin-logo.png');
+const tricoinSmall = require('../../assets/coins/tricoin-small.png');
+const tricoinStack = require('../../assets/coins/tricoin-stack.png');
+
 type TransactionWithAmount = LedgerTransaction & {
   ledger_entries: { account_id: string; amount: number }[];
 };
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffDays = Math.floor(
     (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
   );
-  if (diffDays === 0) return 'Hoy';
-  if (diffDays === 1) return 'Ayer';
+  if (diffDays === 0) return todayLabel;
+  if (diffDays === 1) return yesterdayLabel;
   return date.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' });
+}
+
+function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
+  const lastPress = useRef(0);
+  return useCallback((...args: any[]) => {
+    const now = Date.now();
+    if (now - lastPress.current < delayMs) return;
+    lastPress.current = now;
+    callback(...args);
+  }, [callback, delayMs]);
 }
 
 export default function WalletScreen() {
@@ -51,6 +68,12 @@ export default function WalletScreen() {
   const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string } | null>(null);
   const [transferSearching, setTransferSearching] = useState(false);
   const [transferSubmitting, setTransferSubmitting] = useState(false);
+
+  // TropiPay recharge state
+  const [tropipaySheetVisible, setTropipaySheetVisible] = useState(false);
+  const [tropipayAmount, setTropipayAmount] = useState('');
+  const [tropipaySubmitting, setTropipaySubmitting] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState(520);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -98,7 +121,7 @@ export default function WalletScreen() {
     setRechargeSheetVisible(true);
   };
 
-  const submitRecharge = async () => {
+  const submitRecharge = useCallback(async () => {
     const amountNum = parseInt(rechargeAmount, 10);
     if (!amountNum || amountNum <= 0 || !userId) return;
     setRechargeSubmitting(true);
@@ -112,7 +135,8 @@ export default function WalletScreen() {
     } finally {
       setRechargeSubmitting(false);
     }
-  };
+  }, [rechargeAmount, userId, t]);
+  const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
   const handleTransfer = () => {
@@ -144,7 +168,7 @@ export default function WalletScreen() {
     }
   };
 
-  const submitTransfer = async () => {
+  const submitTransfer = useCallback(async () => {
     if (!transferRecipient || !userId) return;
     const amountNum = parseInt(transferAmount, 10);
     if (!amountNum || amountNum <= 0) return;
@@ -172,16 +196,51 @@ export default function WalletScreen() {
     } finally {
       setTransferSubmitting(false);
     }
-  };
+  }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData]);
+  const debouncedSubmitTransfer = useDebouncePress(submitTransfer);
+
+  // TropiPay handlers
+  const handleTropiPay = useCallback(async () => {
+    setTropipayAmount('');
+    setTropipaySheetVisible(true);
+    // Fetch current exchange rate for USD preview
+    try {
+      const rate = await exchangeRateService.getUsdCupRate();
+      if (rate) setExchangeRate(rate);
+    } catch {
+      // Use default rate
+    }
+  }, []);
+
+  const submitTropiPay = useCallback(async () => {
+    const amountNum = parseInt(tropipayAmount, 10);
+    if (!amountNum || amountNum <= 0 || !userId) return;
+    setTropipaySubmitting(true);
+    try {
+      const result = await paymentService.createRechargeLink(userId, amountNum);
+      setTropipaySheetVisible(false);
+      // Open payment URL in browser
+      const url = result.shortUrl || result.paymentUrl;
+      if (url) {
+        await Linking.openURL(url);
+      }
+    } catch (err) {
+      console.error('Error creating TropiPay link:', err);
+      Alert.alert(t('error'), t('wallet.tropipay_error_creating'));
+    } finally {
+      setTropipaySubmitting(false);
+    }
+  }, [tropipayAmount, userId, t]);
+  const debouncedSubmitTropiPay = useDebouncePress(submitTropiPay);
 
   const renderTransaction = ({ item }: { item: TransactionWithAmount }) => {
     const amount = item.ledger_entries?.[0]?.amount ?? 0;
     const isCredit = amount > 0;
     return (
-      <View className="flex-row items-center py-3 border-b border-neutral-100">
+      <View className="flex-row items-center py-3 border-b border-neutral-100" accessible={true}>
         <View className="flex-1">
           <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text>
-          <Text variant="caption" color="tertiary">{formatDate(item.created_at)}</Text>
+          <Text variant="caption" color="tertiary">{formatDate(item.created_at, t('today'), t('yesterday'))}</Text>
         </View>
         <Text
           variant="body"
@@ -206,19 +265,23 @@ export default function WalletScreen() {
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <Text variant="h3" className="mb-4">
-          {t('wallet.title')}
-        </Text>
+        <View className="flex-row items-center gap-2.5 mb-4">
+          <Image source={tricoinLogo} style={{ width: 48, height: 48 }} resizeMode="contain" />
+          <Text variant="h3">
+            {t('wallet.title')}
+          </Text>
+        </View>
 
         <BalanceBadge
           balance={balance.available}
           held={balance.held}
           size="lg"
           showHeld
+          coinIcon={tricoinSmall}
           className="mb-6"
         />
 
-        <View className="flex-row gap-3 mb-8">
+        <View className="flex-row gap-3 mb-3">
           <Button
             title={t('wallet.recharge')}
             variant="primary"
@@ -234,6 +297,14 @@ export default function WalletScreen() {
             onPress={handleTransfer}
           />
         </View>
+        <Button
+          title={t('wallet.recharge_tropipay')}
+          variant="secondary"
+          size="md"
+          fullWidth
+          onPress={handleTropiPay}
+          className="mb-8"
+        />
 
         <Text variant="h4" className="mb-3">
           {t('wallet.history')}
@@ -262,6 +333,9 @@ export default function WalletScreen() {
         onClose={() => setRechargeSheetVisible(false)}
       >
         <View className="px-4 pb-6">
+          <View style={{ alignItems: 'center', marginBottom: 12 }}>
+            <Image source={tricoinStack} style={{ width: 80, height: 80 }} resizeMode="contain" />
+          </View>
           <Text variant="h4" className="mb-4">{t('wallet.request_recharge')}</Text>
           <Text variant="bodySmall" color="secondary" className="mb-3">
             {t('wallet.recharge_amount')} (CUP)
@@ -276,7 +350,7 @@ export default function WalletScreen() {
             title={t('wallet.request_recharge')}
             size="lg"
             fullWidth
-            onPress={submitRecharge}
+            onPress={debouncedSubmitRecharge}
             loading={rechargeSubmitting}
             disabled={!rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
           />
@@ -356,13 +430,50 @@ export default function WalletScreen() {
             title={t('wallet.transfer_confirm')}
             size="lg"
             fullWidth
-            onPress={submitTransfer}
+            onPress={debouncedSubmitTransfer}
             loading={transferSubmitting}
             disabled={
               !transferRecipient ||
               !transferAmount ||
               parseInt(transferAmount, 10) <= 0
             }
+          />
+        </View>
+      </BottomSheet>
+
+      {/* TropiPay Recharge BottomSheet */}
+      <BottomSheet
+        visible={tropipaySheetVisible}
+        onClose={() => setTropipaySheetVisible(false)}
+      >
+        <View className="px-4 pb-6">
+          <Text variant="h4" className="mb-4">{t('wallet.tropipay_title')}</Text>
+          <Text variant="bodySmall" color="secondary" className="mb-3">
+            {t('wallet.tropipay_amount_label')}
+          </Text>
+          <Input
+            placeholder="1000"
+            value={tropipayAmount}
+            onChangeText={setTropipayAmount}
+            keyboardType="numeric"
+          />
+          {tropipayAmount && parseInt(tropipayAmount, 10) > 0 && (
+            <Text variant="caption" color="tertiary" className="mb-2 -mt-1">
+              {t('wallet.tropipay_amount_usd', {
+                usd: (parseInt(tropipayAmount, 10) / exchangeRate).toFixed(2),
+              })}
+            </Text>
+          )}
+          <Text variant="caption" color="tertiary" className="mb-4 text-center">
+            {t('wallet.tropipay_redirect')}
+          </Text>
+          <Button
+            title={t('wallet.tropipay_pay')}
+            size="lg"
+            fullWidth
+            onPress={debouncedSubmitTropiPay}
+            loading={tropipaySubmitting}
+            disabled={!tropipayAmount || parseInt(tropipayAmount, 10) <= 0}
           />
         </View>
       </BottomSheet>

@@ -1,7 +1,8 @@
 {
   "nav": {
     "book_ride": "Book a ride",
-    "login": "Sign in"
+    "login": "Sign in",
+    "blog": "Blog"
   },
   "footer": {
     "location": "Havana, Cuba",
@@ -9,7 +10,8 @@
     "login": "Sign in",
     "download": "Download the app for the full experience",
     "privacy": "Privacy",
-    "terms": "Terms"
+    "terms": "Terms",
+    "blog": "Blog"
   },
   "home": {
     "tagline": "Book your ride in Havana. Fast, safe, and affordable.",
@@ -73,7 +75,8 @@
     "no_vehicles_nearby": "No vehicles nearby",
     "vehicle_triciclo": "Triciclo",
     "vehicle_moto": "Moto",
-    "vehicle_auto": "Auto"
+    "vehicle_auto": "Auto",
+    "loading_map": "Loading map..."
   },
   "privacy": {
     "title": "Privacy Policy",
@@ -150,5 +153,44 @@
     "contact_title": "Contact",
     "contact_text": "For inquiries about these Terms and Conditions:",
     "contact_email": "soporte@tricigo.app"
+  },
+  "track": {
+    "loading": "Loading ride...",
+    "not_found": "Ride not found.",
+    "error_loading": "Error loading ride.",
+    "back_home": "← Back to home",
+    "title": "Ride tracking",
+    "canceled": "Ride canceled",
+    "disputed": "Ride in dispute",
+    "from": "From",
+    "to": "To",
+    "estimated_fare": "Estimated fare",
+    "final_fare": "Final fare",
+    "your_driver": "Your driver",
+    "live_updates": "Updating in real time",
+    "step_searching": "Searching for driver",
+    "step_accepted": "Driver assigned",
+    "step_en_route": "On the way to pick you up",
+    "step_arrived": "Arrived at pickup",
+    "step_in_progress": "Ride in progress",
+    "step_completed": "Ride completed",
+    "loading_tracking": "Loading tracking...",
+    "shared_tracking": "Shared tracking",
+    "invalid_link": "Invalid or expired tracking link.",
+    "error_loading_tracking": "Error loading tracking.",
+    "go_tricigo": "← Go to TriciGo",
+    "not_found_short": "Not found.",
+    "fare": "Fare",
+    "estimated": "Estimated",
+    "driver": "Driver",
+    "cta_book": "Book your ride with TriciGo"
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "News and updates from TriciGo",
+    "no_posts": "No posts yet",
+    "not_found": "Post not found",
+    "back_to_blog": "Back to blog",
+    "loading": "Loading..."
   }
 }

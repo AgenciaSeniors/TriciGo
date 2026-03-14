@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { adminService } from '@tricigo/api';
+import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { User, UserLevel } from '@tricigo/types';
+import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 
 type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
@@ -54,6 +54,10 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [levelUpdating, setLevelUpdating] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<UserLevel>('bronce');
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const [blockUpdating, setBlockUpdating] = useState(false);
+  const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -61,10 +65,14 @@ export default function UserDetailPage() {
 
     async function load() {
       try {
-        const data = await adminService.getUserDetail(id);
+        const [data, reviewSummary] = await Promise.all([
+          adminService.getUserDetail(id),
+          reviewService.getReviewSummary(id).catch(() => null),
+        ]);
         if (!cancelled) {
           setDetail(data);
           setSelectedLevel(data.user.level ?? 'bronce');
+          if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
         }
       } catch (err) {
         console.error('Error loading user:', err);
@@ -91,6 +99,27 @@ export default function UserDetailPage() {
       console.error('Error updating level:', err);
     } finally {
       setLevelUpdating(false);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!id || !detail) return;
+    const newActive = !detail.user.is_active;
+    if (!newActive && !blockReason.trim()) return; // Require reason to block
+    setBlockUpdating(true);
+    try {
+      await adminService.toggleUserActive(id, newActive, id, blockReason || undefined);
+      setDetail((prev) =>
+        prev
+          ? { ...prev, user: { ...prev.user, is_active: newActive } }
+          : null,
+      );
+      setBlockModalOpen(false);
+      setBlockReason('');
+    } catch (err) {
+      console.error('Error toggling user active:', err);
+    } finally {
+      setBlockUpdating(false);
     }
   };
 
@@ -152,6 +181,24 @@ export default function UserDetailPage() {
             </span>
           </div>
         </div>
+        <div>
+          {user.is_active ? (
+            <button
+              onClick={() => setBlockModalOpen(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+            >
+              {t('users.block_user')}
+            </button>
+          ) : (
+            <button
+              onClick={handleToggleActive}
+              disabled={blockUpdating}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
+            >
+              {blockUpdating ? t('common.processing') : t('users.unblock_user')}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -206,6 +253,22 @@ export default function UserDetailPage() {
               <dt className="text-sm text-neutral-500">{t('users.label_cancellations')}</dt>
               <dd className="text-sm font-medium">{user.cancellation_count ?? 0}</dd>
             </div>
+            {topTags.length > 0 && (
+              <div>
+                <dt className="text-sm text-neutral-500 mb-1">{t('users.top_review_tags')}</dt>
+                <dd className="flex flex-wrap gap-1">
+                  {topTags.slice(0, 5).map((tag) => (
+                    <span
+                      key={tag.tag_key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-xs text-neutral-600"
+                    >
+                      {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
+                      <span className="text-neutral-400">({tag.count})</span>
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
           </dl>
 
           {/* Level override */}
@@ -337,6 +400,38 @@ export default function UserDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Block User Modal */}
+      {blockModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
+            <p className="text-sm text-neutral-600 mb-4">{t('users.block_confirm')}</p>
+            <textarea
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              placeholder={t('users.block_reason')}
+              className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-primary-500"
+              rows={3}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setBlockModalOpen(false); setBlockReason(''); }}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-100 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleToggleActive}
+                disabled={blockUpdating || !blockReason.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {blockUpdating ? t('common.processing') : t('common.confirm')}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -17,6 +17,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
 import type { ChatMessage } from '@tricigo/types';
+import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
+import { getQuickRepliesForRole } from '@tricigo/utils';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -28,6 +30,12 @@ export default function ChatScreen() {
 
   useChatInit(rideId!);
   const { sendMessage } = useChatActions(rideId!);
+
+  const quickReplies = getQuickRepliesForRole('driver').map((qr) => ({
+    key: qr.key,
+    icon: qr.icon,
+    label: t(`chat.quick_${qr.key}` as any, { defaultValue: qr.key }),
+  }));
 
   const handleSend = async () => {
     if (!text.trim()) return;
@@ -41,6 +49,12 @@ export default function ChatScreen() {
     return (
       <View
         className={`mb-2 max-w-[80%] ${isOwn ? 'self-end' : 'self-start'}`}
+        accessible={true}
+        accessibilityLabel={
+          isOwn
+            ? t('a11y.message_from_you', { ns: 'common', message: item.body })
+            : t('a11y.message_from_other', { ns: 'common', sender: t('trip.chat_passenger', { defaultValue: 'Pasajero' }), message: item.body })
+        }
       >
         <View
           className={`px-4 py-2 rounded-2xl ${
@@ -74,7 +88,7 @@ export default function ChatScreen() {
       >
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 border-b border-neutral-800">
-          <Pressable onPress={() => router.back()} className="mr-3">
+          <Pressable onPress={() => router.back()} className="mr-3" accessibilityRole="button" accessibilityLabel={t('common:back')}>
             <Ionicons name="arrow-back" size={22} color={colors.primary[500]} />
           </Pressable>
           <Text variant="h4" color="inverse" className="flex-1">
@@ -88,6 +102,7 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
+          accessibilityLiveRegion="polite"
           contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center">
@@ -101,12 +116,20 @@ export default function ChatScreen() {
           }
         />
 
+        {/* Quick replies */}
+        <QuickReplyBar
+          replies={quickReplies}
+          onPress={(label) => sendMessage(label)}
+          variant="dark"
+        />
+
         {/* Input bar */}
         <View className="flex-row items-center px-4 py-2 border-t border-neutral-800">
           <TextInput
             value={text}
             onChangeText={setText}
             placeholder={t('chat.placeholder')}
+            accessibilityLabel={t('chat.placeholder')}
             placeholderTextColor={colors.neutral[500]}
             className="flex-1 bg-neutral-800 rounded-full px-4 py-2 text-base text-white"
             multiline
@@ -115,6 +138,9 @@ export default function ChatScreen() {
           <Pressable
             onPress={handleSend}
             disabled={!text.trim()}
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.send', { defaultValue: 'Send' })}
+            accessibilityState={{ disabled: !text.trim() }}
             className="ml-2 bg-primary-500 w-10 h-10 rounded-full items-center justify-center"
           >
             <Ionicons name="send" size={18} color="white" />

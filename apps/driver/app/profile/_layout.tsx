@@ -6,6 +6,7 @@ export default function ProfileLayout() {
       <Stack.Screen name="edit" />
       <Stack.Screen name="vehicle" />
       <Stack.Screen name="documents" />
+      <Stack.Screen name="safety" />
       <Stack.Screen name="pricing" />
       <Stack.Screen name="settings" />
       <Stack.Screen name="help" />

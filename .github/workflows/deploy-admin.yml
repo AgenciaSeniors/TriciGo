@@ -2,16 +2,16 @@ name: Deploy Admin
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'apps/admin/**'
       - 'packages/**'
 
 jobs:
   deploy:
-    name: Deploy to Vercel
+    name: Deploy Admin to VPS
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -28,17 +28,53 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install Vercel CLI
-        run: pnpm add -g vercel@latest
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/admin
+      - name: Build admin
+        run: pnpm turbo run build --filter=@tricigo/admin
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      - name: Build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/admin
+      - name: Copy build to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          source: 'apps/admin/.next/standalone/,apps/admin/.next/static/,apps/admin/public/'
+          target: '/tmp/tricigo-admin-deploy'
 
-      - name: Deploy
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/admin
+      - name: Deploy and restart
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            APP_DIR=/var/www/tricigo-admin
+            DEPLOY_DIR=/tmp/tricigo-admin-deploy/apps/admin
+            mkdir -p $APP_DIR/.next/static
+
+            # Copy standalone build
+            rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
+
+            # Copy static assets (not included in standalone)
+            cp -r $DEPLOY_DIR/.next/static/* $APP_DIR/.next/static/
+
+            # Copy public folder
+            cp -r $DEPLOY_DIR/public $APP_DIR/public 2>/dev/null || true
+
+            # Restart with PM2
+            cd $APP_DIR
+            pm2 restart tricigo-admin 2>/dev/null || pm2 start server.js --name tricigo-admin --env PORT=3000
+            pm2 save
+
+            # Cleanup
+            rm -rf /tmp/tricigo-admin-deploy

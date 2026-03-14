@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Alert, Pressable } from 'react-native';
+import { View, Alert, Pressable, ActionSheetIOS, Platform } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
 import { authService, customerService } from '@tricigo/api';
@@ -34,6 +37,8 @@ export default function EditProfileScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +47,68 @@ export default function EditProfileScreen() {
       setPaymentMethod(cp.default_payment_method);
     }).catch((err) => console.warn('[EditProfile] Failed to load:', err));
   }, [user]);
+
+  const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
+    if (!user) return;
+    try {
+      const pickerResult = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+
+      if (pickerResult.canceled || !pickerResult.assets[0]) return;
+
+      setUploadingAvatar(true);
+      // Compress to 300×300
+      const manipulated = await ImageManipulator.manipulateAsync(
+        pickerResult.assets[0].uri,
+        [{ resize: { width: 300, height: 300 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+      );
+
+      const publicUrl = await authService.uploadAvatar(user.id, manipulated.uri);
+      setAvatarUrl(publicUrl);
+      setUser({ ...user, avatar_url: publicUrl });
+    } catch {
+      Alert.alert('Error', t('errors.generic'));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [t('cancel'), t('profile.take_photo', { defaultValue: 'Tomar foto' }), t('profile.choose_photo', { defaultValue: 'Elegir de galería' })],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) pickAndUploadAvatar('camera');
+          else if (buttonIndex === 2) pickAndUploadAvatar('gallery');
+        },
+      );
+    } else {
+      Alert.alert(
+        t('profile.change_photo', { defaultValue: 'Cambiar foto' }),
+        '',
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('profile.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickAndUploadAvatar('camera') },
+          { text: t('profile.choose_photo', { defaultValue: 'Elegir de galería' }), onPress: () => pickAndUploadAvatar('gallery') },
+        ],
+      );
+    }
+  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -73,6 +140,21 @@ export default function EditProfileScreen() {
     <Screen scroll bg="white" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
+
+        {/* Avatar */}
+        <View className="items-center mb-6">
+          <Avatar
+            uri={avatarUrl}
+            size={96}
+            name={fullName || user?.full_name}
+            onPress={handleAvatarPress}
+            showEditBadge
+            loading={uploadingAvatar}
+          />
+          <Pressable onPress={handleAvatarPress} className="mt-2">
+            <Text variant="bodySmall" color="accent">{t('profile.change_photo', { defaultValue: 'Cambiar foto' })}</Text>
+          </Pressable>
+        </View>
 
         <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} />
         <Input label={t('profile.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />

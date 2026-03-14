@@ -10,10 +10,10 @@ export interface StatusBadgeProps {
 }
 
 const variantClasses = {
-  success: { bg: 'bg-green-100', text: 'text-green-700' },
-  error: { bg: 'bg-red-100', text: 'text-red-700' },
-  warning: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  info: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  success: { bg: 'bg-success-light', text: 'text-success-dark' },
+  error: { bg: 'bg-error-light', text: 'text-error-dark' },
+  warning: { bg: 'bg-warning-light', text: 'text-warning-dark' },
+  info: { bg: 'bg-info-light', text: 'text-info-dark' },
   neutral: { bg: 'bg-neutral-100', text: 'text-neutral-600' },
 } as const;
 
@@ -32,7 +32,12 @@ export function StatusBadge({
   const s = sizeClasses[size];
 
   return (
-    <View className={`rounded-full ${s} ${v.bg} ${className ?? ''}`}>
+    <View
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={label}
+      className={`rounded-full ${s} ${v.bg} ${className ?? ''}`}
+    >
       <Text variant="caption" className={`font-medium ${v.text}`}>
         {label}
       </Text>

@@ -12,6 +12,7 @@ import type {
   ExchangeRate,
   FeatureFlag,
   LedgerTransaction,
+  PaymentIntent,
   PricingRule,
   Promotion,
   Ride,
@@ -25,6 +26,7 @@ import type {
   WalletRechargeRequest,
   WalletRedemption,
   Zone,
+  SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -79,22 +81,48 @@ export const adminService = {
   },
 
   /**
-   * Get all drivers (no status filter) with pagination.
+   * Get all drivers with optional filters and pagination.
    */
   async getAllDrivers(
     page = 0,
     pageSize = 20,
+    filters: {
+      status?: string;
+      search?: string;
+      ratingMin?: number;
+      vehicleType?: string;
+    } = {},
   ): Promise<DriverProfileWithUser[]> {
     const supabase = getSupabaseClient();
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('driver_profiles')
       .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
       .order('created_at', { ascending: false })
       .range(from, to);
+
+    if (filters.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+    if (filters.search) {
+      query = query.ilike('users.full_name', `%${filters.search}%`);
+    }
+    if (filters.ratingMin !== undefined && filters.ratingMin > 0) {
+      query = query.gte('rating_avg', filters.ratingMin);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
+
+    // Client-side vehicle type filter (vehicles is a nested array)
+    if (filters.vehicleType) {
+      return (data as DriverProfileWithUser[]).filter((d) =>
+        d.vehicles?.some((v: any) => v.type === filters.vehicleType),
+      );
+    }
+
     return data as DriverProfileWithUser[];
   },
 
@@ -236,27 +264,62 @@ export const adminService = {
   },
 
   /**
-   * Get all users with pagination.
+   * Get all users with pagination and optional filters.
    */
-  async getUsers(page = 0, pageSize = 20): Promise<User[]> {
+  async getUsers(
+    page = 0,
+    pageSize = 20,
+    filters: {
+      search?: string;
+      role?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      isActive?: boolean;
+    } = {},
+  ): Promise<User[]> {
     const supabase = getSupabaseClient();
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('users')
       .select('*')
       .order('created_at', { ascending: false })
       .range(from, to);
+
+    if (filters.role && filters.role !== 'all') {
+      query = query.eq('role', filters.role);
+    }
+    if (filters.search) {
+      query = query.or(`full_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+    }
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      query = query.lt('created_at', filters.dateTo + 'T23:59:59');
+    }
+    if (filters.isActive !== undefined) {
+      query = query.eq('is_active', filters.isActive);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data as User[];
   },
 
   /**
-   * Get all rides with filters.
+   * Get all rides with advanced filters.
    */
   async getRides(
-    filters: { status?: string } = {},
+    filters: {
+      status?: string;
+      serviceType?: string;
+      paymentMethod?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+    } = {},
     page = 0,
     pageSize = 20,
   ): Promise<Ride[]> {
@@ -272,6 +335,21 @@ export const adminService = {
 
     if (filters.status) {
       query = query.eq('status', filters.status);
+    }
+    if (filters.serviceType) {
+      query = query.eq('service_type', filters.serviceType);
+    }
+    if (filters.paymentMethod) {
+      query = query.eq('payment_method', filters.paymentMethod);
+    }
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      query = query.lt('created_at', filters.dateTo + 'T23:59:59');
+    }
+    if (filters.search) {
+      query = query.or(`pickup_address.ilike.%${filters.search}%,dropoff_address.ilike.%${filters.search}%`);
     }
 
     const { data, error } = await query;
@@ -747,6 +825,31 @@ export const adminService = {
     if (error) throw error;
   },
 
+  /**
+   * Toggle user active status (block/unblock).
+   */
+  async toggleUserActive(
+    userId: string,
+    isActive: boolean,
+    adminId: string,
+    reason?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('users')
+      .update({ is_active: isActive })
+      .eq('id', userId);
+    if (error) throw error;
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: isActive ? 'unblock_user' : 'block_user',
+      target_type: 'user',
+      target_id: userId,
+      reason: reason ?? null,
+    });
+  },
+
   // ==================== RIDE DETAIL ====================
 
   async getRideDetail(rideId: string) {
@@ -1054,5 +1157,153 @@ export const adminService = {
     });
     if (error) throw error;
     return typeof data === 'number' ? data : 50.0;
+  },
+
+  // ==================== TROPIPAY PAYMENT INTENTS ====================
+
+  /**
+   * Get TropiPay payment intents (admin view).
+   */
+  async getTropiPayIntents(
+    page = 0,
+    pageSize = 20,
+    statusFilter?: string,
+  ): Promise<(PaymentIntent & { user_name: string })[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('payment_intents')
+      .select('*, users!inner(full_name)')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (statusFilter) {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      ...(row as unknown as PaymentIntent),
+      user_name: (row.users as { full_name: string } | null)?.full_name ?? 'Unknown',
+    }));
+  },
+
+  // ==================== DOCUMENT VERIFICATION ====================
+
+  /**
+   * Verify or reject an individual driver document.
+   */
+  async verifyDocument(
+    documentId: string,
+    adminId: string,
+    isVerified: boolean,
+    notes?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('driver_documents')
+      .update({
+        is_verified: isVerified,
+        verified_by: adminId,
+        verified_at: new Date().toISOString(),
+        verification_notes: notes ?? null,
+        rejection_reason: isVerified ? null : (notes ?? null),
+      })
+      .eq('id', documentId);
+    if (error) throw error;
+
+    // Log admin action
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action_type: isVerified ? 'verify_document' : 'reject_document',
+      target_type: 'driver_document',
+      target_id: documentId,
+      details: { notes },
+    });
+  },
+
+  /**
+   * Get selfie check history for a driver (admin view).
+   */
+  async getDriverSelfieChecks(
+    driverId: string,
+    limit = 20,
+  ): Promise<SelfieCheck[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('selfie_checks')
+      .select('*')
+      .eq('driver_id', driverId)
+      .order('requested_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data as SelfieCheck[];
+  },
+
+  // ==================== Analytics ====================
+
+  /**
+   * Get rides grouped by day for trend chart.
+   */
+  async getRidesByDay(daysBack = 30) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_rides_by_day', { p_days_back: daysBack });
+    if (error) throw error;
+    return (data ?? []) as { day: string; total: number; completed: number; canceled: number; revenue: number }[];
+  },
+
+  /**
+   * Get rides grouped by service type.
+   */
+  async getRidesByServiceType(daysBack = 30) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_rides_by_service_type', { p_days_back: daysBack });
+    if (error) throw error;
+    return (data ?? []) as { service_type: string; count: number; revenue: number }[];
+  },
+
+  /**
+   * Get rides grouped by payment method.
+   */
+  async getRidesByPaymentMethod(daysBack = 30) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_rides_by_payment_method', { p_days_back: daysBack });
+    if (error) throw error;
+    return (data ?? []) as { payment_method: string; count: number; revenue: number }[];
+  },
+
+  /**
+   * Get average rides per hour for peak hours analysis.
+   */
+  async getPeakHours(daysBack = 30) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_peak_hours', { p_days_back: daysBack });
+    if (error) throw error;
+    return (data ?? []) as { hour: number; avg_rides: number }[];
+  },
+
+  /**
+   * Get top drivers by completed rides.
+   */
+  async getTopDrivers(limit = 10) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_top_drivers', { p_limit: limit });
+    if (error) throw error;
+    return (data ?? []) as { driver_id: string; driver_name: string; rides_count: number; rating: number; revenue: number }[];
+  },
+
+  /**
+   * Get driver utilization snapshot.
+   */
+  async getDriverUtilization() {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_utilization');
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? { online: 0, busy: 0, idle: 0, offline: 0 }) as { online: number; busy: number; idle: number; offline: number };
   },
 };

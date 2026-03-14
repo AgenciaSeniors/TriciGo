@@ -28,6 +28,8 @@ export function Card({
 }: CardProps & { className?: string }) {
   return (
     <View
+      accessible
+      accessibilityRole="summary"
       className={`
         ${variantClasses[variant]}
         ${paddingClasses[padding]}

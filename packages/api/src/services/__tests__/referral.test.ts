@@ -34,6 +34,7 @@ describe('referralService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const code = await referralService.getOrCreateReferralCode('abcd1234-5678-uuid');
@@ -51,6 +52,7 @@ describe('referralService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const code = await referralService.getOrCreateReferralCode('a1b2c3d4-ef56-7890-abcd-ef1234567890');
@@ -70,6 +72,7 @@ describe('referralService', () => {
               error: null,
             }),
           }),
+          insert: mockInsert,
         });
 
       await expect(
@@ -89,6 +92,7 @@ describe('referralService', () => {
               error: null,
             }),
           }),
+          insert: mockInsert,
         });
 
       await expect(
@@ -106,6 +110,7 @@ describe('referralService', () => {
               error: null,
             }),
           }),
+          insert: mockInsert,
         })
         // Mock: existing referral check returns a result
         .mockReturnValueOnce({
@@ -117,6 +122,7 @@ describe('referralService', () => {
               }),
             }),
           }),
+          insert: mockInsert,
         });
 
       await expect(
@@ -143,6 +149,7 @@ describe('referralService', () => {
               error: null,
             }),
           }),
+          insert: mockInsert,
         })
         // Mock: no existing referral
         .mockReturnValueOnce({
@@ -154,9 +161,11 @@ describe('referralService', () => {
               }),
             }),
           }),
+          insert: mockInsert,
         })
         // Mock: insert succeeds
         .mockReturnValueOnce({
+          select: mockSelect,
           insert: vi.fn().mockReturnValue({
             select: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
@@ -190,6 +199,7 @@ describe('referralService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const history = await referralService.getReferralHistory('user-1');
@@ -210,6 +220,7 @@ describe('referralService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       expect(await referralService.hasBeenReferred('user-1')).toBe(true);
@@ -225,6 +236,7 @@ describe('referralService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       expect(await referralService.hasBeenReferred('user-1')).toBe(false);

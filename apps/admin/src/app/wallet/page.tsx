@@ -5,11 +5,13 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
-import type { LedgerTransaction, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
+import type { LedgerTransaction, PaymentIntent, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
-type Tab = 'redemptions' | 'recharges' | 'ledger';
+type Tab = 'redemptions' | 'recharges' | 'ledger' | 'tropipay';
+
+type TropiPayRow = PaymentIntent & { user_name: string };
 
 type RechargeRow = WalletRechargeRequest & { user_name: string };
 
@@ -29,6 +31,7 @@ export default function WalletPage() {
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [recharges, setRecharges] = useState<RechargeRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [tropipayIntents, setTropipayIntents] = useState<TropiPayRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -61,9 +64,12 @@ export default function WalletPage() {
         } else if (tab === 'recharges') {
           const data = await adminService.getPendingRecharges(page, PAGE_SIZE);
           if (!cancelled) setRecharges(data as RechargeRow[]);
-        } else {
+        } else if (tab === 'ledger') {
           const data = await adminService.getAdminTransactions(page, PAGE_SIZE);
           if (!cancelled) setTransactions(data);
+        } else if (tab === 'tropipay') {
+          const data = await adminService.getTropiPayIntents(page, PAGE_SIZE);
+          if (!cancelled) setTropipayIntents(data);
         }
       } catch (err) {
         console.error('Error fetching wallet data:', err);
@@ -147,9 +153,10 @@ export default function WalletPage() {
     { labelKey: 'wallet_admin.tab_redemptions', value: 'redemptions' },
     { labelKey: 'wallet_admin.tab_recharges', value: 'recharges' },
     { labelKey: 'wallet_admin.tab_ledger', value: 'ledger' },
+    { labelKey: 'wallet_admin.tab_tropipay', value: 'tropipay' },
   ];
 
-  const listData = tab === 'redemptions' ? redemptions : tab === 'recharges' ? recharges : transactions;
+  const listData = tab === 'redemptions' ? redemptions : tab === 'recharges' ? recharges : tab === 'tropipay' ? tropipayIntents : transactions;
   const canGoPrev = page > 0;
   const canGoNext = listData.length === PAGE_SIZE;
 
@@ -303,7 +310,7 @@ export default function WalletPage() {
               )}
             </tbody>
           </table>
-        ) : (
+        ) : tab === 'ledger' ? (
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
@@ -337,6 +344,63 @@ export default function WalletPage() {
                     </td>
                   </tr>
                 ))
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 border-b border-neutral-100">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_user')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_usd_amount')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_status')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_reference')}</th>
+                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tropipayIntents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-neutral-400">
+                    {loading ? t('common.loading') : t('wallet_admin.tropipay_no_intents')}
+                  </td>
+                </tr>
+              ) : (
+                tropipayIntents.map((pi) => {
+                  const statusColors: Record<string, string> = {
+                    created: 'bg-neutral-100 text-neutral-700',
+                    pending: 'bg-yellow-100 text-yellow-700',
+                    completed: 'bg-green-100 text-green-700',
+                    failed: 'bg-red-100 text-red-700',
+                    expired: 'bg-neutral-100 text-neutral-500',
+                    refunded: 'bg-blue-100 text-blue-700',
+                  };
+                  return (
+                    <tr key={pi.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                      <td className="px-4 py-3 font-medium text-neutral-900">
+                        {pi.user_name}
+                      </td>
+                      <td className="px-4 py-3 font-medium">
+                        {formatTriciCoin(pi.amount_cup)}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-600">
+                        ${pi.amount_usd ?? '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[pi.status] ?? 'bg-neutral-100 text-neutral-700'}`}>
+                          {pi.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500 text-xs font-mono hidden lg:table-cell">
+                        {pi.tropipay_reference ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
+                        {new Date(pi.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

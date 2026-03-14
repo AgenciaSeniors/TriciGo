@@ -7,14 +7,15 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { customerService } from '@tricigo/api';
+import { customerService, trustedContactService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import type { CustomerProfile } from '@tricigo/types';
+import type { CustomerProfile, TrustedContact } from '@tricigo/types';
 
 export default function EmergencyContactScreen() {
   const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const [existingContact, setExistingContact] = useState<TrustedContact | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -22,6 +23,8 @@ export default function EmergencyContactScreen() {
 
   useEffect(() => {
     if (!user) return;
+
+    // Load from customer_profiles (backward compat)
     customerService.ensureProfile(user.id).then((cp) => {
       setProfile(cp);
       if (cp.emergency_contact) {
@@ -30,12 +33,25 @@ export default function EmergencyContactScreen() {
         setRelationship(cp.emergency_contact.relationship);
       }
     }).catch((err) => console.warn('[EmergencyContact] Failed to load:', err));
+
+    // Also check trusted_contacts for existing emergency contact
+    trustedContactService.getContacts(user.id).then((contacts) => {
+      const emergency = contacts.find((c) => c.is_emergency);
+      if (emergency) {
+        setExistingContact(emergency);
+        // Prefer trusted_contacts data if available
+        setName(emergency.name);
+        setPhone(emergency.phone);
+        setRelationship(emergency.relationship);
+      }
+    }).catch(() => {});
   }, [user]);
 
   const handleSave = async () => {
-    if (!profile) return;
+    if (!profile || !user) return;
     setSaving(true);
     try {
+      // 1. Update customer_profiles JSONB (backward compat)
       await customerService.updateProfile(profile.id, {
         emergency_contact: {
           name: name.trim(),
@@ -43,6 +59,28 @@ export default function EmergencyContactScreen() {
           relationship: relationship.trim(),
         },
       });
+
+      // 2. Upsert in trusted_contacts with is_emergency=true
+      if (existingContact) {
+        await trustedContactService.updateContact(existingContact.id, {
+          name: name.trim(),
+          phone: phone.trim(),
+          relationship: relationship.trim(),
+          is_emergency: true,
+        });
+      } else {
+        await trustedContactService.addContact({
+          user_id: user.id,
+          name: name.trim(),
+          phone: phone.trim(),
+          relationship: relationship.trim(),
+          auto_share: true,
+          is_emergency: true,
+        }).catch(() => {
+          // May fail if duplicate phone — that's ok, trusted_contacts already has this phone
+        });
+      }
+
       router.back();
     } catch {
       Alert.alert('Error', t('errors.generic'));

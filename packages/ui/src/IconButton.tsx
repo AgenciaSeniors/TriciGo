@@ -21,7 +21,7 @@ const variantStyles = {
     iconColor: colors.neutral[700],
   },
   danger: {
-    bg: 'bg-red-600 active:bg-red-700',
+    bg: 'bg-error active:bg-error-dark',
     iconColor: colors.brand.white,
   },
   ghost: {
@@ -52,6 +52,7 @@ export function IconButton({
       className={`rounded-full items-center justify-center ${s.container} ${v.bg} ${className ?? ''}`}
       accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: !!props.disabled }}
       {...props}
     >
       <Ionicons name={icon} size={s.iconSize} color={v.iconColor} />

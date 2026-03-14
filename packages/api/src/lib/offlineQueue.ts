@@ -4,12 +4,19 @@
 // when connectivity is restored.
 // ============================================================
 
-type QueuedMutation = {
+export type QueuedMutation = {
   id: string;
   action: string;
   params: unknown[];
   timestamp: number;
   retries: number;
+};
+
+export type ProcessingStatus = {
+  isProcessing: boolean;
+  currentAction: string | null;
+  currentIndex: number;
+  total: number;
 };
 
 type StorageAdapter = {
@@ -28,6 +35,25 @@ let isOnline = true;
 
 // Registry of mutation handlers
 const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+
+// Event emitter for queue changes
+type QueueChangeCallback = (queue: QueuedMutation[], status: ProcessingStatus) => void;
+const listeners: Set<QueueChangeCallback> = new Set();
+
+let processingStatus: ProcessingStatus = {
+  isProcessing: false,
+  currentAction: null,
+  currentIndex: 0,
+  total: 0,
+};
+
+function notifyListeners() {
+  const snapshot = [...queue];
+  const statusSnapshot = { ...processingStatus };
+  for (const cb of listeners) {
+    try { cb(snapshot, statusSnapshot); } catch { /* ignore */ }
+  }
+}
 
 /**
  * Initialize the offline queue with a storage adapter.
@@ -73,6 +99,28 @@ export function getPendingCount(): number {
 }
 
 /**
+ * Get a snapshot of all pending mutations.
+ */
+export function getPendingMutations(): QueuedMutation[] {
+  return [...queue];
+}
+
+/**
+ * Get current processing status.
+ */
+export function getProcessingStatus(): ProcessingStatus {
+  return { ...processingStatus };
+}
+
+/**
+ * Subscribe to queue changes. Returns unsubscribe function.
+ */
+export function onQueueChange(callback: QueueChangeCallback): () => void {
+  listeners.add(callback);
+  return () => { listeners.delete(callback); };
+}
+
+/**
  * Execute a mutation, or queue it if offline.
  * Returns true if executed immediately, false if queued.
  */
@@ -114,12 +162,15 @@ async function enqueue(action: string, params: unknown[]) {
   };
   queue.push(mutation);
   await saveQueue();
+  notifyListeners();
 }
 
 async function processQueue() {
   if (isProcessing || queue.length === 0 || !isOnline) return;
 
   isProcessing = true;
+  const total = queue.length;
+  let index = 0;
 
   while (queue.length > 0 && isOnline) {
     const mutation = queue[0]!;
@@ -131,10 +182,21 @@ async function processQueue() {
       continue;
     }
 
+    // Update processing status
+    index++;
+    processingStatus = {
+      isProcessing: true,
+      currentAction: mutation.action,
+      currentIndex: index,
+      total,
+    };
+    notifyListeners();
+
     try {
       await handler(...mutation.params);
       queue.shift();
       await saveQueue();
+      notifyListeners();
     } catch (err) {
       if (isNetworkError(err)) {
         // Still offline, stop processing
@@ -149,11 +211,14 @@ async function processQueue() {
         queue.shift();
       }
       await saveQueue();
+      notifyListeners();
       break;
     }
   }
 
   isProcessing = false;
+  processingStatus = { isProcessing: false, currentAction: null, currentIndex: 0, total: 0 };
+  notifyListeners();
 }
 
 function isNetworkError(err: unknown): boolean {

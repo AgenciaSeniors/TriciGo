@@ -7,7 +7,13 @@ const mockNot = vi.fn();
 const mockSelect = vi.fn();
 const mockDelete = vi.fn();
 const mockFrom = vi.fn();
-const mockSupabase = { from: mockFrom };
+const mockChannel = vi.fn();
+const mockOn = vi.fn();
+const mockSubscribe = vi.fn();
+const mockSupabase = {
+  from: mockFrom,
+  channel: mockChannel,
+};
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -282,7 +288,7 @@ describe('notificationService', () => {
         'Body',
       );
 
-      const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const fetchBody = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
       expect(fetchBody[0]).not.toHaveProperty('data');
       expect(fetchBody[0]).toEqual({
         to: 'ExponentPushToken[aaa]',
@@ -345,7 +351,7 @@ describe('notificationService', () => {
       );
 
       // Verify the fetch body contains the correct tokens and message
-      const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const fetchBody = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
       expect(fetchBody).toHaveLength(2);
       expect(fetchBody[0].to).toBe('ExponentPushToken[aaa]');
       expect(fetchBody[1].to).toBe('ExponentPushToken[bbb]');
@@ -380,6 +386,314 @@ describe('notificationService', () => {
 
       // fetch should NOT have been called since there are no tokens
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateSmsPreference', () => {
+    it('updates sms_notifications_enabled for user', async () => {
+      const mockUpdateEq = vi.fn().mockResolvedValue({ error: null });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      mockFrom.mockReturnValue({ update: mockUpdate });
+
+      await notificationService.updateSmsPreference('user-1', true);
+      expect(mockFrom).toHaveBeenCalledWith('users');
+      expect(mockUpdate).toHaveBeenCalledWith({ sms_notifications_enabled: true });
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', 'user-1');
+    });
+
+    it('throws when update fails', async () => {
+      const mockUpdateEq = vi.fn().mockResolvedValue({ error: { message: 'RLS denied' } });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      mockFrom.mockReturnValue({ update: mockUpdate });
+
+      await expect(notificationService.updateSmsPreference('user-1', true)).rejects.toBeDefined();
+    });
+  });
+
+  describe('getSmsPreference', () => {
+    it('returns true when sms is enabled', async () => {
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { sms_notifications_enabled: true },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const result = await notificationService.getSmsPreference('user-1');
+      expect(result).toBe(true);
+    });
+
+    it('returns false when sms is disabled', async () => {
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { sms_notifications_enabled: false },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const result = await notificationService.getSmsPreference('user-1');
+      expect(result).toBe(false);
+    });
+
+    it('returns false when user not found', async () => {
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const result = await notificationService.getSmsPreference('user-404');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('sendSMS', () => {
+    it('returns false when user has SMS disabled', async () => {
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { phone: '+5355555555', sms_notifications_enabled: false },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const result = await notificationService.sendSMS({
+        userId: 'user-1',
+        body: 'Test message',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('returns false when user has no phone', async () => {
+      mockFrom.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { phone: null, sms_notifications_enabled: true },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const result = await notificationService.sendSMS({
+        userId: 'user-1',
+        body: 'Test message',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ============================================================
+  // In-App Notification Inbox
+  // ============================================================
+
+  describe('getInboxNotifications', () => {
+    it('returns paginated notifications ordered by created_at desc', async () => {
+      const mockNotifs = [
+        { id: 'n-1', user_id: 'user-1', type: 'ride_completed', title: 'Viaje completado', body: 'Gracias', data: null, read: false, created_at: '2026-03-13T10:00:00Z' },
+        { id: 'n-2', user_id: 'user-1', type: 'promo', title: 'Oferta', body: '50% off', data: null, read: true, created_at: '2026-03-12T10:00:00Z' },
+      ];
+
+      const mockRange = vi.fn().mockResolvedValue({ data: mockNotifs, error: null });
+      const mockOrder = vi.fn().mockReturnValue({ range: mockRange });
+      const mockEqUser = vi.fn().mockReturnValue({ order: mockOrder });
+      const mockSelectFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+
+      const result = await notificationService.getInboxNotifications('user-1');
+
+      expect(mockFrom).toHaveBeenCalledWith('notifications');
+      expect(mockSelectFn).toHaveBeenCalledWith('*');
+      expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('n-1');
+    });
+
+    it('filters by unread when unreadOnly is true', async () => {
+      const mockRange = vi.fn().mockResolvedValue({ data: [], error: null });
+      const mockOrder = vi.fn().mockReturnValue({ range: mockRange });
+      const mockEqRead = vi.fn().mockReturnValue({ order: mockOrder });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqRead });
+      const mockSelectFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+
+      await notificationService.getInboxNotifications('user-1', { unreadOnly: true });
+
+      expect(mockEqRead).toHaveBeenCalledWith('read', false);
+    });
+
+    it('returns empty array when no notifications', async () => {
+      const mockRange = vi.fn().mockResolvedValue({ data: [], error: null });
+      const mockOrder = vi.fn().mockReturnValue({ range: mockRange });
+      const mockEqUser = vi.fn().mockReturnValue({ order: mockOrder });
+      const mockSelectFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+
+      const result = await notificationService.getInboxNotifications('user-1');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getUnreadCount', () => {
+    it('returns count of unread notifications', async () => {
+      const mockEqRead = vi.fn().mockResolvedValue({ count: 5, error: null });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqRead });
+      const mockSelectFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+
+      const count = await notificationService.getUnreadCount('user-1');
+
+      expect(mockFrom).toHaveBeenCalledWith('notifications');
+      expect(mockSelectFn).toHaveBeenCalledWith('*', { count: 'exact', head: true });
+      expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
+      expect(mockEqRead).toHaveBeenCalledWith('read', false);
+      expect(count).toBe(5);
+    });
+
+    it('returns 0 when no unread notifications', async () => {
+      const mockEqRead = vi.fn().mockResolvedValue({ count: 0, error: null });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqRead });
+      const mockSelectFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+
+      const count = await notificationService.getUnreadCount('user-1');
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('markAsRead', () => {
+    it('updates notification to read=true', async () => {
+      const mockUpdateEq = vi.fn().mockResolvedValue({ error: null });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      mockFrom.mockReturnValueOnce({ update: mockUpdate });
+
+      await notificationService.markAsRead('n-123');
+
+      expect(mockFrom).toHaveBeenCalledWith('notifications');
+      expect(mockUpdate).toHaveBeenCalledWith({ read: true });
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', 'n-123');
+    });
+
+    it('throws on error', async () => {
+      const mockUpdateEq = vi.fn().mockResolvedValue({ error: { message: 'Not found' } });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq });
+
+      mockFrom.mockReturnValueOnce({ update: mockUpdate });
+
+      await expect(notificationService.markAsRead('n-bad')).rejects.toBeDefined();
+    });
+  });
+
+  describe('markAllAsRead', () => {
+    it('marks all unread notifications as read for user', async () => {
+      const mockEqRead = vi.fn().mockResolvedValue({ error: null });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqRead });
+      const mockUpdate = vi.fn().mockReturnValue({ eq: mockEqUser });
+
+      mockFrom.mockReturnValueOnce({ update: mockUpdate });
+
+      await notificationService.markAllAsRead('user-1');
+
+      expect(mockFrom).toHaveBeenCalledWith('notifications');
+      expect(mockUpdate).toHaveBeenCalledWith({ read: true });
+      expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
+      expect(mockEqRead).toHaveBeenCalledWith('read', false);
+    });
+  });
+
+  describe('createInboxNotification', () => {
+    it('inserts notification with data', async () => {
+      const notif = { id: 'n-new', user_id: 'user-1', type: 'ride_completed', title: 'Done', body: 'Trip done', data: { ride_id: 'r-1' }, read: false, created_at: '2026-03-13T10:00:00Z' };
+      const mockSingle = vi.fn().mockResolvedValue({ data: notif, error: null });
+      const mockSelectFn = vi.fn().mockReturnValue({ single: mockSingle });
+      const mockInsert = vi.fn().mockReturnValue({ select: mockSelectFn });
+
+      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+
+      const result = await notificationService.createInboxNotification(
+        'user-1', 'ride_completed', 'Done', 'Trip done', { ride_id: 'r-1' },
+      );
+
+      expect(mockFrom).toHaveBeenCalledWith('notifications');
+      expect(mockInsert).toHaveBeenCalledWith({
+        user_id: 'user-1',
+        type: 'ride_completed',
+        title: 'Done',
+        body: 'Trip done',
+        data: { ride_id: 'r-1' },
+      });
+      expect(result.id).toBe('n-new');
+    });
+
+    it('inserts notification without data', async () => {
+      const notif = { id: 'n-new2', user_id: 'user-1', type: 'system', title: 'Hi', body: 'Welcome', data: null, read: false, created_at: '2026-03-13T10:00:00Z' };
+      const mockSingle = vi.fn().mockResolvedValue({ data: notif, error: null });
+      const mockSelectFn = vi.fn().mockReturnValue({ single: mockSingle });
+      const mockInsert = vi.fn().mockReturnValue({ select: mockSelectFn });
+
+      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+
+      const result = await notificationService.createInboxNotification(
+        'user-1', 'system', 'Hi', 'Welcome',
+      );
+
+      expect(mockInsert).toHaveBeenCalledWith({
+        user_id: 'user-1',
+        type: 'system',
+        title: 'Hi',
+        body: 'Welcome',
+        data: null,
+      });
+      expect(result.data).toBeNull();
+    });
+  });
+
+  describe('subscribeToNotifications', () => {
+    it('sets up realtime subscription for user inbox', () => {
+      const mockSubscribeFn = vi.fn().mockReturnValue({ unsubscribe: vi.fn() });
+      const mockOnFn = vi.fn().mockReturnValue({ subscribe: mockSubscribeFn });
+      mockChannel.mockReturnValue({ on: mockOnFn });
+
+      const callback = vi.fn();
+      notificationService.subscribeToNotifications('user-1', callback);
+
+      expect(mockChannel).toHaveBeenCalledWith('inbox:user-1');
+      expect(mockOnFn).toHaveBeenCalledWith(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: 'user_id=eq.user-1',
+        },
+        expect.any(Function),
+      );
+      expect(mockSubscribeFn).toHaveBeenCalled();
     });
   });
 });

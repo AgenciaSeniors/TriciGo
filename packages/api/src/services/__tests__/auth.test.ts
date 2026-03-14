@@ -12,7 +12,15 @@ const mockAuth = {
   updateUser: vi.fn(),
 };
 const mockFrom = vi.fn();
-const mockSupabase = { auth: mockAuth, from: mockFrom };
+const mockStorageUpload = vi.fn();
+const mockStorageGetPublicUrl = vi.fn();
+const mockStorage = {
+  from: vi.fn(() => ({
+    upload: mockStorageUpload,
+    getPublicUrl: mockStorageGetPublicUrl,
+  })),
+};
+const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage };
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -303,6 +311,53 @@ describe('authService', () => {
       mockAuth.verifyOtp.mockResolvedValue({ data: null, error: err });
 
       await expect(authService.verifyPhoneLink('+573009876543', '000000')).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== uploadAvatar ====================
+  describe('uploadAvatar', () => {
+    beforeEach(() => {
+      // Mock global fetch for blob conversion
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        blob: vi.fn().mockResolvedValue(new Blob(['test'], { type: 'image/jpeg' })),
+      }));
+    });
+
+    it('uploads image to storage and updates profile', async () => {
+      mockStorageUpload.mockResolvedValue({ error: null });
+      mockStorageGetPublicUrl.mockReturnValue({
+        data: { publicUrl: 'https://storage.supabase.co/avatars/user-1/avatar.jpg' },
+      });
+
+      // Mock updateProfile chain
+      mockFrom.mockReturnValue({
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: { id: 'user-1', avatar_url: 'https://storage.supabase.co/avatars/user-1/avatar.jpg' },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const result = await authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg');
+
+      expect(mockStorage.from).toHaveBeenCalledWith('avatars');
+      expect(mockStorageUpload).toHaveBeenCalledWith(
+        'user-1/avatar.jpg',
+        expect.any(Blob),
+        { contentType: 'image/jpeg', upsert: true },
+      );
+      expect(result).toContain('https://storage.supabase.co/avatars/user-1/avatar.jpg');
+    });
+
+    it('throws on storage upload error', async () => {
+      mockStorageUpload.mockResolvedValue({ error: new Error('Storage full') });
+
+      await expect(authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg')).rejects.toThrow('Storage full');
     });
   });
 });

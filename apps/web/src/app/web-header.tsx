@@ -53,6 +53,17 @@ export function WebHeader() {
             {t('nav.book_ride')}
           </a>
           <a
+            href="/blog"
+            style={{
+              color: '#333',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+            }}
+          >
+            {t('nav.blog')}
+          </a>
+          <a
             href="/login"
             style={{
               background: 'var(--primary)',
@@ -105,6 +116,17 @@ export function WebHeader() {
             }}
           >
             {t('nav.book_ride')}
+          </a>
+          <a
+            href="/blog"
+            style={{
+              color: '#333',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+            }}
+          >
+            {t('nav.blog')}
           </a>
           <a
             href="/login"

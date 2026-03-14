@@ -20,11 +20,19 @@ export default function AboutScreen() {
         <ScreenHeader title={t('profile.about_title')} onBack={() => router.back()} />
 
         <View className="items-center mb-8">
-          <Image
-            source={require('../../assets/icon.png')}
-            style={{ width: 80, height: 80, borderRadius: 16 }}
-            className="mb-3"
-          />
+          <View style={{
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 6,
+            borderRadius: 18,
+          }} className="mb-3">
+            <Image
+              source={require('../../assets/icon.png')}
+              style={{ width: 80, height: 80, borderRadius: 18 }}
+            />
+          </View>
           <Text variant="h4">{t('app_name')}</Text>
           <Text variant="bodySmall" color="secondary">
             {t('profile.version', { version: APP_VERSION })}
@@ -33,7 +41,7 @@ export default function AboutScreen() {
 
         <Card variant="outlined" padding="md" className="mb-4">
           <Text variant="bodySmall" color="secondary" className="text-center">
-            TriciGo es la plataforma de transporte en bicitaxi para Cuba. Conectamos pasajeros con conductores de forma rápida y segura.
+            {t('profile.about_description')}
           </Text>
         </Card>
 
@@ -42,7 +50,7 @@ export default function AboutScreen() {
           onPress={() => Linking.openURL('https://tricigo.app/terms')}
         >
           <Ionicons name="document-text-outline" size={22} color={colors.neutral[600]} />
-          <Text variant="body" className="ml-3 flex-1">Términos de servicio</Text>
+          <Text variant="body" className="ml-3 flex-1">{t('profile.terms_of_service')}</Text>
           <Ionicons name="open-outline" size={18} color={colors.neutral[400]} />
         </Pressable>
 
@@ -51,7 +59,7 @@ export default function AboutScreen() {
           onPress={() => Linking.openURL('https://tricigo.app/privacy')}
         >
           <Ionicons name="shield-outline" size={22} color={colors.neutral[600]} />
-          <Text variant="body" className="ml-3 flex-1">Política de privacidad</Text>
+          <Text variant="body" className="ml-3 flex-1">{t('profile.privacy_policy')}</Text>
           <Ionicons name="open-outline" size={18} color={colors.neutral[400]} />
         </Pressable>
       </View>

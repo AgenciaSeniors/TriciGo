@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import type { Ride, RideStatus } from '@tricigo/types';
+import type { Ride } from '@tricigo/types';
+import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 
 const PAGE_SIZE = 20;
 
@@ -45,6 +46,14 @@ function truncate(str: string, len: number) {
   return str.length > len ? str.slice(0, len) + '…' : str;
 }
 
+const EMPTY_FILTERS: Record<string, string> = {
+  serviceType: '',
+  paymentMethod: '',
+  dateFrom: '',
+  dateTo: '',
+  search: '',
+};
+
 export default function RidesPage() {
   const router = useRouter();
   const { t } = useTranslation('admin');
@@ -52,6 +61,51 @@ export default function RidesPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
+
+  const filterFields: FilterField[] = [
+    {
+      key: 'search',
+      label: t('filters.search'),
+      type: 'text',
+      placeholder: t('filters.search_address_placeholder'),
+    },
+    {
+      key: 'serviceType',
+      label: t('filters.service_type'),
+      type: 'select',
+      placeholder: t('filters.all'),
+      options: [
+        { label: 'Triciclo Básico', value: 'triciclo_basico' },
+        { label: 'Moto', value: 'moto_standard' },
+        { label: 'Auto', value: 'auto_standard' },
+        { label: 'Mensajería', value: 'mensajeria' },
+      ],
+    },
+    {
+      key: 'paymentMethod',
+      label: t('filters.payment_method'),
+      type: 'select',
+      placeholder: t('filters.all'),
+      options: [
+        { label: t('rides.payment_cash'), value: 'cash' },
+        { label: t('rides.payment_tricicoin'), value: 'tricicoin' },
+        { label: 'TropiPay', value: 'tropipay' },
+      ],
+    },
+    { key: 'dateFrom', label: t('filters.date_from'), type: 'date' },
+    { key: 'dateTo', label: t('filters.date_to'), type: 'date' },
+  ];
+
+  const handleFilterChange = useCallback((key: string, value: string) => {
+    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(0);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setAdvancedFilters({ ...EMPTY_FILTERS });
+    setPage(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +113,14 @@ export default function RidesPage() {
 
     async function fetchRides() {
       try {
-        const filters = statusFilter === 'all' ? {} : { status: statusFilter };
+        const filters: Record<string, string> = {};
+        if (statusFilter !== 'all') filters.status = statusFilter;
+        if (advancedFilters.serviceType) filters.serviceType = advancedFilters.serviceType;
+        if (advancedFilters.paymentMethod) filters.paymentMethod = advancedFilters.paymentMethod;
+        if (advancedFilters.dateFrom) filters.dateFrom = advancedFilters.dateFrom;
+        if (advancedFilters.dateTo) filters.dateTo = advancedFilters.dateTo;
+        if (advancedFilters.search) filters.search = advancedFilters.search;
+
         const data = await adminService.getRides(filters, page, PAGE_SIZE);
         if (!cancelled) setRides(data);
       } catch (err) {
@@ -72,7 +133,7 @@ export default function RidesPage() {
 
     fetchRides();
     return () => { cancelled = true; };
-  }, [page, statusFilter]);
+  }, [page, statusFilter, advancedFilters]);
 
   const canGoPrev = page > 0;
   const canGoNext = rides.length === PAGE_SIZE;
@@ -82,7 +143,7 @@ export default function RidesPage() {
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('rides.title')}</h1>
 
       {/* Status filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-4">
         {STATUS_FILTERS.map((filter) => (
           <button
             key={filter.value}
@@ -97,6 +158,16 @@ export default function RidesPage() {
           </button>
         ))}
       </div>
+
+      {/* Advanced filters */}
+      <FilterPanel
+        fields={filterFields}
+        values={advancedFilters}
+        onChange={handleFilterChange}
+        onClear={handleClearFilters}
+        clearLabel={t('filters.clear_all')}
+        toggleLabel={t('filters.advanced_filters')}
+      />
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">

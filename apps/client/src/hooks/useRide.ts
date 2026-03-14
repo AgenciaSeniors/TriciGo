@@ -1,6 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Alert } from 'react-native';
+import i18next from 'i18next';
+import Toast from 'react-native-toast-message';
 import { rideService, deliveryService } from '@tricigo/api';
+import { triggerHaptic, trackEvent, playSound } from '@tricigo/utils';
+import { recentAddressService } from '@/services/recentAddresses';
+import { invalidatePredictionCache } from '@/services/predictionCache';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -105,7 +110,7 @@ export function useRideActions() {
       setFareEstimate(estimate);
       setFlowStep('reviewing');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al estimar tarifa');
+      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
     } finally {
       setLoading(false);
     }
@@ -128,8 +133,11 @@ export function useRideActions() {
         promotionId: result.promotion?.id,
         error: result.error,
       });
+      if (result.valid) {
+        trackEvent('promo_applied', { code: promoCode.trim(), discount: result.discountAmount });
+      }
     } catch {
-      setPromoResult({ valid: false, discountAmount: 0, error: 'Error al validar código' });
+      setPromoResult({ valid: false, discountAmount: 0, error: i18next.t('rider:ride.promo_invalid') });
     } finally {
       setValidatingPromo(false);
     }
@@ -157,6 +165,10 @@ export function useRideActions() {
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         discount_amount_cup: promoResult?.valid ? promoResult.discountAmount : undefined,
         scheduled_at: d.scheduledAt ? d.scheduledAt.toISOString() : undefined,
+        corporate_account_id: d.corporateAccountId ?? undefined,
+        insurance_selected: d.insuranceSelected,
+        insurance_premium_cup: d.insuranceSelected ? (fareEstimate?.insurance_premium_cup ?? 0) : 0,
+        rider_preferences: Object.keys(d.ridePreferences).length > 0 ? d.ridePreferences : undefined,
       });
 
       // Save delivery details if mensajeria
@@ -177,14 +189,55 @@ export function useRideActions() {
         }
       }
 
+      // Save pickup & dropoff as recent addresses (fire-and-forget)
+      recentAddressService.add(d.pickup.address, d.pickup.location.latitude, d.pickup.location.longitude).catch(() => {});
+      recentAddressService.add(d.dropoff.address, d.dropoff.location.latitude, d.dropoff.location.longitude).catch(() => {});
+
       setActiveRide(ride);
       setFlowStep('searching');
+      trackEvent('ride_requested', {
+        ride_id: ride.id,
+        service_type: d.serviceType,
+        payment_method: d.paymentMethod,
+        has_promo: !!promoResult?.valid,
+      });
 
       // Subscribe to ride updates
       channelRef.current?.unsubscribe();
       channelRef.current = rideService.subscribeToRide(ride.id, async (updated) => {
         const store = useRideStore.getState();
         store.updateRideFromRealtime(updated);
+
+        // Haptic + sound feedback on key status changes
+        if (updated.status === 'accepted') {
+          triggerHaptic('success');
+          playSound('ride_accepted');
+        }
+        if (updated.status === 'arrived_at_pickup') {
+          triggerHaptic('medium');
+          playSound('driver_arrived');
+        }
+        if (updated.status === 'completed') {
+          triggerHaptic('success');
+          playSound('trip_completed');
+          trackEvent('ride_completed', { ride_id: updated.id, service_type: updated.service_type });
+          // Invalidate prediction cache so next load recalculates with new ride
+          invalidatePredictionCache().catch(() => {});
+        }
+
+        // TropiPay payment confirmed via Realtime
+        const prev = useRideStore.getState().activeRide;
+        if (
+          prev?.payment_status === 'pending' &&
+          (updated as any).payment_status === 'paid'
+        ) {
+          triggerHaptic('success');
+          Toast.show({
+            type: 'success',
+            text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
+          });
+          trackEvent('ride_tropipay_paid', { ride_id: updated.id });
+        }
 
         // When driver accepts, load driver info
         if (updated.status === 'accepted' && updated.driver_id) {
@@ -210,11 +263,11 @@ export function useRideActions() {
           channelRef.current?.unsubscribe();
           channelRef.current = null;
           resetAll();
-          setError('No se encontró conductor. Intenta de nuevo.');
+          setError(i18next.t('rider:ride.no_driver_found'));
         }
       }, SEARCH_TIMEOUT_MS);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al crear viaje');
+      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
       setFlowStep('reviewing');
     } finally {
       setLoading(false);
@@ -231,20 +284,21 @@ export function useRideActions() {
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      trackEvent('ride_canceled', { ride_id: activeRide.id, reason });
       resetAll();
 
       // Show penalty info if applicable
       if (penalty && penalty.penaltyAmount > 0) {
         const amount = (penalty.penaltyAmount / 100).toFixed(0);
         Alert.alert(
-          'Cancelación',
+          i18next.t('rider:ride.cancel_title'),
           penalty.isBlocked
-            ? `Se aplicó una penalización de ${amount} CUP. Has sido bloqueado temporalmente por cancelaciones excesivas.`
-            : `Se aplicó una penalización de ${amount} CUP por cancelación.`,
+            ? `${i18next.t('rider:ride.cancel_penalty_applied', { amount })} ${i18next.t('rider:ride.cancel_blocked')}`
+            : i18next.t('rider:ride.cancel_penalty_applied', { amount }),
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cancelar');
+      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
     } finally {
       setLoading(false);
     }

@@ -82,8 +82,46 @@ export interface FareEstimate {
   pricing_rule_id: string;
   /** Effective per-km rate used (CUP whole pesos) */
   per_km_rate_cup: number;
+  /** Effective base fare used (CUP whole pesos) */
+  base_fare_cup: number;
+  /** Effective per-minute rate used (CUP whole pesos) */
+  per_minute_rate_cup: number;
+  /** Whether minimum fare was applied (raw calc was below min) */
+  min_fare_applied: boolean;
   /** Exchange rate used: 1 USD = X CUP */
   exchange_rate_usd_cup: number;
+  /** Minimum expected fare in CUP (considering traffic variance) */
+  fare_range_min_cup: number;
+  /** Maximum expected fare in CUP (considering traffic + surge) */
+  fare_range_max_cup: number;
+  /** Minimum expected fare in TRC centavos */
+  fare_range_min_trc: number;
+  /** Maximum expected fare in TRC centavos */
+  fare_range_max_trc: number;
+  /** Insurance premium in CUP (if insurance available) */
+  insurance_premium_cup?: number;
+  /** Insurance premium in TRC centavos */
+  insurance_premium_trc?: number;
+  /** Whether trip insurance is available for this service type */
+  insurance_available?: boolean;
+  /** Insurance coverage description (localized) */
+  insurance_coverage_desc?: string;
+}
+
+export interface TripInsuranceConfig {
+  id: string;
+  service_type: ServiceTypeSlug;
+  /** Premium as a fraction of the fare (0.05 = 5%) */
+  premium_pct: number;
+  /** Minimum premium in CUP (even for very short rides) */
+  min_premium_cup: number;
+  /** Maximum coverage amount in CUP */
+  max_coverage_cup: number;
+  coverage_description_es: string;
+  coverage_description_en: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface FeatureFlag {

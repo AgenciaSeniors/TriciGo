@@ -1,5 +1,5 @@
-import React from 'react';
-import { Stack, Redirect, useSegments } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
@@ -7,10 +7,24 @@ import { useDriverStore } from '@/stores/driver.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
+import MapboxGL from '@rnmapbox/maps';
+import Toast from 'react-native-toast-message';
+import { registerSoundAssets } from '@tricigo/utils';
+import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import '../global.css';
 
 // Initialize Sentry as early as possible
 initSentry();
+
+// Register sound assets for ride events
+registerSoundAssets({
+  ride_accepted: require('../assets/sounds/ride_accepted.wav'),
+  trip_completed: require('../assets/sounds/trip_completed.wav'),
+  new_request: require('../assets/sounds/new_request.wav'),
+});
+
+// Initialize Mapbox
+MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -18,51 +32,63 @@ function RootNavigator() {
   const driverProfile = useDriverStore((s) => s.profile);
   const segments = useSegments();
 
+  // Download Havana offline map tiles (runs once per week)
+  useMapboxOffline();
+  const router = useRouter();
+  const navRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    if (isLoading || !navRef.isReady()) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inOnboarding = segments[0] === 'onboarding';
+
+    // Not authenticated → login
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    // Authenticated but in auth group → redirect based on profile state
+    if (isAuthenticated && inAuthGroup) {
+      if (!driverProfile || driverProfile.status === 'pending_verification') {
+        router.replace('/onboarding/personal-info');
+      } else if (driverProfile.status === 'approved') {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/onboarding/pending');
+      }
+      return;
+    }
+
+    // Authenticated, no profile or pending_verification → onboarding
+    if (
+      isAuthenticated &&
+      (!driverProfile || driverProfile.status === 'pending_verification') &&
+      !inOnboarding
+    ) {
+      router.replace('/onboarding/personal-info');
+      return;
+    }
+
+    // Authenticated, profile not approved → pending
+    if (
+      isAuthenticated &&
+      driverProfile &&
+      driverProfile.status !== 'approved' &&
+      driverProfile.status !== 'pending_verification' &&
+      !inOnboarding
+    ) {
+      router.replace('/onboarding/pending');
+    }
+  }, [isAuthenticated, isLoading, driverProfile, segments]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111111' }}>
         <ActivityIndicator size="large" color={colors.brand.orange} />
       </View>
     );
-  }
-
-  const inAuthGroup = segments[0] === '(auth)';
-  const inOnboarding = segments[0] === 'onboarding';
-
-  // Not authenticated → login
-  if (!isAuthenticated && !inAuthGroup) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
-  // Authenticated but in auth group → redirect based on profile state
-  if (isAuthenticated && inAuthGroup) {
-    if (!driverProfile || driverProfile.status === 'pending_verification') {
-      return <Redirect href="/onboarding/personal-info" />;
-    }
-    if (driverProfile.status === 'approved') {
-      return <Redirect href="/(tabs)" />;
-    }
-    return <Redirect href="/onboarding/pending" />;
-  }
-
-  // Authenticated, no profile or pending_verification → onboarding
-  if (
-    isAuthenticated &&
-    (!driverProfile || driverProfile.status === 'pending_verification') &&
-    !inOnboarding
-  ) {
-    return <Redirect href="/onboarding/personal-info" />;
-  }
-
-  // Authenticated, profile not approved (under_review/rejected/suspended) → pending
-  if (
-    isAuthenticated &&
-    driverProfile &&
-    driverProfile.status !== 'approved' &&
-    driverProfile.status !== 'pending_verification' &&
-    !inOnboarding
-  ) {
-    return <Redirect href="/onboarding/pending" />;
   }
 
   return (
@@ -73,6 +99,7 @@ function RootNavigator() {
       <Stack.Screen name="profile" />
       <Stack.Screen name="trip" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="notifications" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -80,10 +107,11 @@ function RootNavigator() {
 
 function RootLayoutInner() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
       <AppProviders>
         <RootNavigator />
       </AppProviders>
+      <Toast />
     </ErrorBoundary>
   );
 }

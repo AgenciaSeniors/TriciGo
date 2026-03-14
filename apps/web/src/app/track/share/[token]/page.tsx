@@ -1,48 +1,48 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 
-const STATUS_STEPS: { key: RideStatus; label: string; step: number }[] = [
-  { key: 'searching', label: 'Buscando conductor', step: 1 },
-  { key: 'accepted', label: 'Conductor asignado', step: 2 },
-  { key: 'driver_en_route', label: 'En camino al punto', step: 3 },
-  { key: 'arrived_at_pickup', label: 'Lleg\u00f3 al punto', step: 4 },
-  { key: 'in_progress', label: 'Viaje en curso', step: 5 },
-  { key: 'completed', label: 'Viaje completado', step: 6 },
-];
-
-function getStepIndex(status: RideStatus): number {
-  const idx = STATUS_STEPS.findIndex((s) => s.key === status);
-  return idx >= 0 ? idx : -1;
+function useStatusSteps() {
+  const { t } = useTranslation('web');
+  return useMemo(() => [
+    { key: 'searching' as RideStatus, label: t('track.step_searching'), step: 1 },
+    { key: 'accepted' as RideStatus, label: t('track.step_accepted'), step: 2 },
+    { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route'), step: 3 },
+    { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived'), step: 4 },
+    { key: 'in_progress' as RideStatus, label: t('track.step_in_progress'), step: 5 },
+    { key: 'completed' as RideStatus, label: t('track.step_completed'), step: 6 },
+  ], [t]);
 }
 
 export default function SharedTrackingPage() {
+  const { t } = useTranslation('web');
   const params = useParams();
   const token = params.token as string;
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
     try {
       const data = await rideService.getRideByShareToken(token);
       if (data) {
         setRide(data);
-        // Once we have the ride, subscribe to real-time updates
       } else {
-        setError('Enlace de seguimiento no v\u00e1lido o expirado.');
+        setError(t('track.invalid_link'));
       }
     } catch {
-      setError('Error al cargar el seguimiento.');
+      setError(t('track.error_loading_tracking'));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     fetchRide();
@@ -63,7 +63,7 @@ export default function SharedTrackingPage() {
   if (loading) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#888', fontSize: '1.125rem' }}>Cargando seguimiento...</p>
+        <p style={{ color: '#888', fontSize: '1.125rem' }}>{t('track.loading_tracking')}</p>
       </main>
     );
   }
@@ -71,13 +71,13 @@ export default function SharedTrackingPage() {
   if (error || !ride) {
     return (
       <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? 'No encontrado.'}</p>
-        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{'\u2190'} Ir a TriciGo</Link>
+        <p style={{ color: 'var(--primary-dark)', fontSize: '1.125rem', marginBottom: '1rem' }}>{error ?? t('track.not_found_short')}</p>
+        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{t('track.go_tricigo')}</Link>
       </main>
     );
   }
 
-  const currentStepIdx = getStepIndex(ride.status);
+  const currentStepIdx = statusSteps.findIndex((s) => s.key === ride.status);
   const isCanceled = ride.status === 'canceled';
   const isCompleted = ride.status === 'completed';
   const isTerminal = isCanceled || isCompleted || ride.status === 'disputed';
@@ -99,7 +99,7 @@ export default function SharedTrackingPage() {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </h1>
-          <p style={{ fontSize: '0.8rem', color: '#888' }}>Seguimiento compartido</p>
+          <p style={{ fontSize: '0.8rem', color: '#888' }}>{t('track.shared_tracking')}</p>
         </div>
 
         {/* Status */}
@@ -112,7 +112,7 @@ export default function SharedTrackingPage() {
             }}>
               X
             </span>
-            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>Viaje cancelado</p>
+            <p style={{ fontWeight: 700, marginTop: '0.5rem' }}>{t('track.canceled')}</p>
           </div>
         ) : (
           <div
@@ -124,7 +124,7 @@ export default function SharedTrackingPage() {
               marginBottom: '1.5rem',
             }}
           >
-            {STATUS_STEPS.map((step, idx) => {
+            {statusSteps.map((step, idx) => {
               const isActive = idx === currentStepIdx;
               const isDone = idx < currentStepIdx;
               return (
@@ -153,7 +153,7 @@ export default function SharedTrackingPage() {
                       flexShrink: 0,
                     }}
                   >
-                    {isDone ? '\u2713' : step.step}
+                    {isDone ? '✓' : step.step}
                   </span>
                   <span style={{ fontWeight: isActive ? 700 : 400, fontSize: '0.85rem' }}>
                     {step.label}
@@ -175,11 +175,11 @@ export default function SharedTrackingPage() {
           }}
         >
           <div style={{ marginBottom: '0.75rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#888', display: 'block' }}>Desde</span>
+            <span style={{ fontSize: '0.7rem', color: '#888', display: 'block' }}>{t('track.from')}</span>
             <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{ride.pickup_address}</span>
           </div>
           <div>
-            <span style={{ fontSize: '0.7rem', color: '#888', display: 'block' }}>Hasta</span>
+            <span style={{ fontSize: '0.7rem', color: '#888', display: 'block' }}>{t('track.to')}</span>
             <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{ride.dropoff_address}</span>
           </div>
         </div>
@@ -196,7 +196,7 @@ export default function SharedTrackingPage() {
             }}
           >
             <span style={{ fontSize: '0.7rem', color: '#888', display: 'block', marginBottom: '0.5rem' }}>
-              Conductor
+              {t('track.driver')}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div
@@ -240,7 +240,7 @@ export default function SharedTrackingPage() {
           }}
         >
           <span style={{ color: '#666', fontSize: '0.8rem' }}>
-            {isTerminal ? 'Tarifa' : 'Estimado'}
+            {isTerminal ? t('track.fare') : t('track.estimated')}
           </span>
           <span style={{ fontWeight: 800, fontSize: '1.125rem', color: 'var(--primary)' }}>
             {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
@@ -254,7 +254,7 @@ export default function SharedTrackingPage() {
               display: 'inline-block', width: 8, height: 8,
               borderRadius: '50%', background: '#4CAF50',
             }} />
-            Actualizando en tiempo real
+            {t('track.live_updates')}
           </p>
         )}
 
@@ -273,7 +273,7 @@ export default function SharedTrackingPage() {
               textDecoration: 'none',
             }}
           >
-            Pide tu viaje con TriciGo
+            {t('track.cta_book')}
           </Link>
         </div>
       </div>

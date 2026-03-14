@@ -33,7 +33,8 @@
     "invalid_otp": "Código inválido",
     "or_continue_with": "o continúa con",
     "google": "Google",
-    "apple": "Apple"
+    "apple": "Apple",
+    "driver_tagline": "Tu app para conducir en La Habana"
   },
 
   "wallet": {
@@ -62,7 +63,18 @@
     "transfer_user_not_found": "Usuario no encontrado",
     "transfer_searching": "Buscando usuario...",
     "transfer_sent": "Enviado",
-    "transfer_received": "Recibido"
+    "transfer_received": "Recibido",
+    "recharge_tropipay": "Recargar con TropiPay",
+    "tropipay_title": "Recarga vía TropiPay",
+    "tropipay_amount_label": "Monto a recargar (CUP)",
+    "tropipay_amount_usd": "Equivalente: ~${{usd}} USD",
+    "tropipay_processing": "Procesando pago...",
+    "tropipay_success": "Pago recibido. Tu saldo se actualizará en breve.",
+    "tropipay_failed": "El pago no pudo ser completado.",
+    "tropipay_min_amount": "Monto mínimo: {{min}} CUP",
+    "tropipay_redirect": "Serás redirigido a TropiPay para completar el pago",
+    "tropipay_pay": "Pagar con TropiPay",
+    "tropipay_error_creating": "Error al crear el enlace de pago"
   },
 
   "profile": {
@@ -118,7 +130,7 @@
     "referral_title": "Referidos",
     "referral_your_code": "Tu código de referido",
     "referral_share": "Compartir código",
-    "referral_share_message": "Usa mi código de referido {{code}} en TriciGo y gana un bono. Descarga la app: https://tricigo.app",
+    "referral_share_message": "Usa mi código de referido {{code}} en TriciGo y gana un bono. Descarga la app: https://tricigo.app/refer/{{code}}",
     "referral_share_help": "Comparte tu código con amigos. Recibirás un bono de {{bonus}} cuando completen su primer viaje.",
     "referral_have_code": "¿Tienes un código de referido?",
     "referral_enter_code": "Ingresa el código",
@@ -158,7 +170,107 @@
     "help_description_placeholder": "Agrega más detalles...",
     "help_submit_ticket": "Enviar ticket",
     "help_ticket_created": "Tu ticket ha sido creado exitosamente.",
-    "help_ticket_error": "Intenta de nuevo."
+    "help_ticket_error": "Intenta de nuevo.",
+    "about_description": "TriciGo es la plataforma de transporte en bicitaxi para Cuba. Conectamos pasajeros con conductores de forma rápida y segura.",
+    "terms_of_service": "Términos de servicio",
+    "privacy_policy": "Política de privacidad",
+    "support_label": "Soporte",
+    "ticket_no_messages": "No hay mensajes aún. Escribe el primero.",
+    "ticket_message_placeholder": "Escribe un mensaje...",
+    "ticket_closed_message": "Este ticket está {{status}}",
+    "location_label_placeholder": "Casa, Trabajo...",
+    "notif_section_title": "Preferencias de notificaciones",
+    "notif_rides": "Actualizaciones de viaje",
+    "notif_chat": "Mensajes de chat",
+    "notif_wallet": "Billetera y pagos",
+    "notif_promos": "Promociones y ofertas",
+    "notif_trip_requests": "Solicitudes de viaje",
+    "notif_sms": "Alertas por SMS",
+    "notif_sms_desc": "Recibe alertas de viaje por SMS cuando no tengas conexion. Puede generar cargos del operador."
+  },
+
+  "safety": {
+    "title": "Centro de Seguridad",
+    "desc": "Tus herramientas de seguridad en un solo lugar",
+    "emergency_call": "Servicios de Emergencia",
+    "emergency_call_desc": "Llama al 106 para ayuda inmediata",
+    "emergency_call_button": "Llamar al 106",
+    "emergency_contact_card": "Contacto de Emergencia",
+    "emergency_contact_desc": "Alguien de confianza sera notificado",
+    "set_emergency_contact": "Configurar contacto de emergencia",
+    "share_trip": "Compartir Mi Viaje",
+    "share_trip_desc": "Comparte tu ubicacion en vivo con alguien",
+    "share_trip_inactive": "Disponible durante viajes activos",
+    "share_trip_sharing": "Compartiendo viaje...",
+    "share_trip_message": "Sigue mi viaje en TriciGo en vivo: {{url}}",
+    "share_now": "Compartir ahora",
+    "report": "Reportar Problema de Seguridad",
+    "report_desc": "Reporta un problema con un viaje",
+    "report_after_trip": "Disponible despues del viaje",
+    "tips_title": "Consejos de Seguridad",
+    "tip_1": "Siempre verifica que la placa del vehiculo coincida con la app",
+    "tip_2": "Comparte tu viaje con un contacto de confianza",
+    "tip_3": "Sientate en el asiento trasero cuando sea posible",
+    "tip_4": "Confia en tu instinto - cancela si algo no se siente bien",
+    "tip_5": "Manten tu telefono cargado durante los viajes",
+    "tip_driver_1": "Verifica la identidad del pasajero antes de iniciar",
+    "tip_driver_2": "Mantene tu vehiculo en buenas condiciones",
+    "tip_driver_3": "Reporta cualquier situacion sospechosa",
+    "tip_driver_4": "No aceptes viajes si te sientes cansado",
+    "tip_driver_5": "Usa la app para todas las comunicaciones con pasajeros",
+    "my_reports": "Mis Reportes de Seguridad",
+    "no_reports": "Sin reportes de seguridad",
+    "report_type_sos": "Emergencia SOS",
+    "report_type_safety_concern": "Preocupacion de Seguridad",
+    "report_type_driver_behavior": "Comportamiento del Conductor",
+    "report_type_passenger_behavior": "Comportamiento del Pasajero",
+    "report_type_vehicle_issue": "Problema con Vehiculo",
+    "report_status_open": "Abierto",
+    "report_status_investigating": "Investigando",
+    "report_status_resolved": "Resuelto",
+    "report_status_dismissed": "Descartado",
+    "call_contact": "Llamar contacto",
+    "trusted_contacts_count": "{{count}} contactos de confianza",
+    "share_with_contacts": "Compartir con Contactos",
+    "share_with_contacts_desc": "Enviar link a {{count}} contactos de confianza",
+    "share_sent_to_n": "Enviado a {{count}} contactos",
+    "share_for_contacts": "Envía este link a: {{names}}",
+    "no_trusted_contacts": "Sin contactos de confianza configurados"
+  },
+
+  "trusted_contacts": {
+    "title": "Contactos de Confianza",
+    "desc": "Agrega personas que recibirán automáticamente un link para seguir tus viajes en tiempo real",
+    "add_contact": "Agregar Contacto",
+    "edit_contact": "Editar Contacto",
+    "delete_contact": "Eliminar Contacto",
+    "delete_confirm": "¿Seguro que quieres eliminar a {{name}} de tus contactos de confianza?",
+    "name": "Nombre",
+    "phone": "Teléfono",
+    "relationship": "Relación",
+    "auto_share": "Auto-compartir viajes",
+    "auto_share_desc": "Recibe SMS con link de seguimiento al iniciar un viaje",
+    "is_emergency": "Contacto de emergencia",
+    "emergency_desc": "Marcado como contacto de emergencia principal",
+    "emergency_badge": "Emergencia",
+    "no_contacts": "Sin contactos de confianza",
+    "no_contacts_desc": "Agrega contactos para compartir automáticamente tus viajes",
+    "max_contacts": "Límite alcanzado",
+    "max_reached": "Máximo 5 contactos de confianza permitidos",
+    "duplicate_phone": "Ya tienes un contacto con ese número de teléfono",
+    "share_sent": "Link enviado",
+    "share_sent_desc": "Tus contactos recibirán un SMS con el link de seguimiento"
+  },
+
+  "insurance": {
+    "title": "Seguro de Viaje",
+    "desc": "Protección opcional durante tu viaje",
+    "toggle_label": "Activar seguro de viaje",
+    "coverage_label": "Cobertura",
+    "premium_label": "Prima de seguro",
+    "enabled": "Seguro activado",
+    "disabled": "Sin seguro",
+    "coverage_amount": "Cobertura hasta {{amount}} CUP"
   },
 
   "network": {
@@ -179,11 +291,57 @@
     "denied": "Permiso de ubicación denegado"
   },
 
+  "today": "Hoy",
+  "yesterday": "Ayer",
+
+  "a11y": {
+    "opens_destination": "Abre la búsqueda de destino",
+    "set_as_destination": "Establecer como destino",
+    "sends_quick_reply": "Envía respuesta rápida",
+    "expands_filters": "Expande opciones de filtro",
+    "change_profile_photo": "Cambiar foto de perfil",
+    "ride_map": "Mapa del viaje",
+    "messages_list": "Lista de mensajes",
+    "sync_progress": "Progreso de sincronización {{pct}}%",
+    "call_emergency": "Llamar servicios de emergencia",
+    "unread_count": "{{count}} notificaciones sin leer",
+    "toggles_online_status": "Cambia tu disponibilidad en línea",
+    "message_from_you": "Tú dijiste: {{message}}",
+    "message_from_other": "{{sender}} dijo: {{message}}",
+    "driver_info": "Conductor {{name}}, {{rating}} estrellas, {{vehicle}}",
+    "fare_amount": "Tarifa: {{amount}}",
+    "stat_distance": "Distancia: {{value}}",
+    "stat_duration": "Duración: {{value}}",
+    "stat_payment": "Pago: {{value}}",
+    "pickup_address": "Recogida: {{address}}",
+    "dropoff_address": "Destino: {{address}}",
+    "dispute_action": "Responder a la disputa",
+    "lost_item_action": "Responder al reporte de objeto perdido",
+    "incoming_requests": "{{count}} solicitudes de viaje entrantes"
+  },
+
   "errors": {
     "generic": "Algo salió mal. Inténtalo de nuevo.",
     "network": "Error de conexión. Verifica tu red.",
     "server": "Error del servidor. Inténtalo más tarde.",
     "unauthorized": "Sesión expirada. Inicia sesión de nuevo.",
     "not_found": "No encontrado"
-  }
+  },
+
+  "preferences": {
+    "title": "Preferencias de viaje",
+    "quiet_mode": "Modo silencio",
+    "quiet_mode_desc": "Prefiero un viaje tranquilo sin conversación",
+    "temperature": "Temperatura",
+    "temp_cool": "Fresco",
+    "temp_warm": "Cálido",
+    "temp_no_preference": "Sin pref.",
+    "conversation_ok": "Conversación bienvenida",
+    "conversation_ok_desc": "Me gusta conversar durante el viaje",
+    "luggage_trunk": "Espacio para equipaje",
+    "luggage_trunk_desc": "Necesito espacio para maletas o paquetes",
+    "saved": "Preferencias guardadas"
+  },
+
+  "recurring_rides": "Viajes recurrentes"
 }

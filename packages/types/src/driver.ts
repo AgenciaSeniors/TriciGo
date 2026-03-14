@@ -87,6 +87,23 @@ export interface DriverDocument {
   verified_by: string | null;
   verified_at: string | null;
   rejection_reason: string | null;
+  verification_notes: string | null;
+  face_match_score: number | null;
+  liveness_passed: boolean | null;
+}
+
+export type SelfieCheckStatus = 'pending' | 'processing' | 'passed' | 'failed' | 'expired';
+
+export interface SelfieCheck {
+  id: string;
+  driver_id: string;
+  storage_path: string;
+  face_match_score: number | null;
+  liveness_passed: boolean | null;
+  status: SelfieCheckStatus;
+  requested_at: string;
+  completed_at: string | null;
+  expires_at: string;
 }
 
 export interface DriverStatusHistoryEntry {

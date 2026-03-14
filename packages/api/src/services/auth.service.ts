@@ -75,6 +75,45 @@ export const authService = {
   },
 
   /**
+   * Upload an avatar image to Supabase Storage and update the user profile.
+   *
+   * @param userId - The user's ID
+   * @param fileUri - Local file URI (from expo-image-picker)
+   * @returns Public URL of the uploaded avatar
+   */
+  async uploadAvatar(userId: string, fileUri: string): Promise<string> {
+    const supabase = getSupabaseClient();
+
+    // Fetch the image as a blob
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+
+    const filePath = `${userId}/avatar.jpg`;
+
+    // Upload (upsert) to avatars bucket
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+    if (uploadError) throw uploadError;
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    // Append cache-buster to force refresh
+    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+    // Update profile
+    await this.updateProfile(userId, { avatar_url: publicUrl });
+
+    return publicUrl;
+  },
+
+  /**
    * Sign out the current user.
    */
   async signOut() {

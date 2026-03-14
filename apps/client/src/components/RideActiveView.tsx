@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Pressable, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
@@ -7,30 +7,122 @@ import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatTRC } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { incidentService } from '@tricigo/api';
+import { incidentService, rideService, customerService, getSupabaseClient } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
 import { RideMapView } from '@/components/RideMapView';
-import { useDriverPosition } from '@/hooks/useDriverPosition';
+import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
+import { formatTimeAgo } from '@tricigo/utils/offlineLabels';
+import { useRoutePolyline } from '@/hooks/useRoutePolyline';
+import { useETA } from '@/hooks/useETA';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { ETABadge } from '@tricigo/ui/ETABadge';
 import { IconButton } from '@tricigo/ui/IconButton';
-
-const RIDE_STEPS = [
-  { key: 'accepted', label: 'Aceptado' },
-  { key: 'driver_en_route', label: 'En camino' },
-  { key: 'arrived_at_pickup', label: 'En recogida' },
-  { key: 'in_progress', label: 'En viaje' },
-];
+import { DriverCard } from '@tricigo/ui/DriverCard';
+import { BottomSheet } from '@tricigo/ui/BottomSheet';
+import { CancelRideSheet } from '@/components/CancelRideSheet';
+import { SafetySheet } from '@/components/SafetySheet';
+import { AddressSearchInput } from '@/components/AddressSearchInput';
+import type { GeoPoint } from '@tricigo/utils';
 
 export function RideActiveView() {
   const { t } = useTranslation('rider');
+
+  const RIDE_STEPS = [
+    { key: 'accepted', label: t('ride.status_accepted') },
+    { key: 'driver_en_route', label: t('ride.status_driver_en_route') },
+    { key: 'arrived_at_pickup', label: t('ride.status_arrived_at_pickup') },
+    { key: 'in_progress', label: t('ride.status_in_progress') },
+  ];
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const isLoading = useRideStore((s) => s.isLoading);
   const userId = useAuthStore((s) => s.user?.id);
   const { cancelRide } = useRideActions();
-  const driverPosition = useDriverPosition(activeRide?.id ?? null);
+  const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
+  const driverPosition = driverPosState.position;
+  const routeCoordinates = useRoutePolyline(
+    activeRide?.pickup_location ?? null,
+    activeRide?.dropoff_location ?? null,
+  );
+  const { etaMinutes, isCalculating } = useETA({
+    driverLocation: driverPosition,
+    pickupLocation: activeRide?.pickup_location ?? null,
+    dropoffLocation: activeRide?.dropoff_location ?? null,
+    rideStatus: activeRide?.status ?? null,
+    estimatedDurationS: activeRide?.estimated_duration_s,
+  });
+
+  // Waypoints state
+  const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
+  const [addStopVisible, setAddStopVisible] = useState(false);
+  const [addingStop, setAddingStop] = useState(false);
+
+  // Fetch existing waypoints + subscribe to inserts AND updates (driver arrive/depart)
+  useEffect(() => {
+    if (!activeRide) return;
+    rideService.getRideWaypoints(activeRide.id)
+      .then((wps) => setWaypoints(wps))
+      .catch(() => {});
+
+    const channel = rideService.subscribeToWaypoints(
+      activeRide.id,
+      (newWp) => {
+        setWaypoints((prev) => [...prev, newWp]);
+      },
+      (updatedWp) => {
+        setWaypoints((prev) =>
+          prev.map((wp) => (wp.id === updatedWp.id ? { ...wp, ...updatedWp } : wp)),
+        );
+      },
+    );
+
+    return () => {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(channel);
+    };
+  }, [activeRide?.id]);
+
+  const handleAddStop = async (address: string, location: GeoPoint) => {
+    if (!activeRide) return;
+    setAddingStop(true);
+    try {
+      const wp = await rideService.addWaypointToActiveRide(
+        activeRide.id,
+        address,
+        location.latitude,
+        location.longitude,
+      );
+      setWaypoints((prev) => [...prev, wp]);
+      setAddStopVisible(false);
+    } catch (err: any) {
+      if (err?.message === 'MAX_WAYPOINTS_REACHED') {
+        Alert.alert('', t('ride.max_stops_active', { defaultValue: 'Máximo de paradas alcanzado' }));
+      }
+    } finally {
+      setAddingStop(false);
+    }
+  };
+
+  // Cancel sheet state
+  const [cancelSheetVisible, setCancelSheetVisible] = useState(false);
+  const [penaltyPreview, setPenaltyPreview] = useState({ penaltyAmount: 0, cancelCount24h: 0 });
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Safety sheet state
+  const [safetySheetVisible, setSafetySheetVisible] = useState(false);
+  const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string } | null>(null);
+
+  // Load emergency contact
+  useEffect(() => {
+    if (!userId) return;
+    customerService.ensureProfile(userId).then((cp) => {
+      if (cp.emergency_contact) {
+        setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
+      }
+    }).catch(() => {});
+  }, [userId]);
 
   if (!activeRide) return null;
 
@@ -47,12 +139,12 @@ export function RideActiveView() {
 
   const handleSOS = () => {
     Alert.alert(
-      'SOS - Emergencia',
-      '¿Estás en peligro? Se registrará un reporte de emergencia y se abrirá el marcador telefónico.',
+      t('ride.sos_title'),
+      t('ride.sos_body'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('ride.sos_cancel'), style: 'cancel' },
         {
-          text: 'Llamar emergencia',
+          text: t('ride.sos_call_emergency'),
           style: 'destructive',
           onPress: async () => {
             if (userId) {
@@ -70,19 +162,27 @@ export function RideActiveView() {
     );
   };
 
-  const handleCancel = () => {
-    Alert.alert(
-      t('ride.cancel_ride'),
-      t('ride.cancel_confirm'),
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: t('ride.cancel_ride'),
-          style: 'destructive',
-          onPress: () => cancelRide('Cancelado por el pasajero'),
-        },
-      ],
-    );
+  const handleCancelPress = async () => {
+    if (!userId) return;
+    setPreviewLoading(true);
+    try {
+      const preview = await rideService.previewCancelPenalty(userId);
+      setPenaltyPreview({
+        penaltyAmount: preview.penaltyAmount,
+        cancelCount24h: preview.cancelCount24h,
+      });
+    } catch {
+      // Default to 0 if preview fails — user can still cancel
+      setPenaltyPreview({ penaltyAmount: 0, cancelCount24h: 0 });
+    } finally {
+      setPreviewLoading(false);
+      setCancelSheetVisible(true);
+    }
+  };
+
+  const handleCancelConfirm = (reason: string) => {
+    setCancelSheetVisible(false);
+    cancelRide(reason);
   };
 
   const statusMessage: Record<string, string> = {
@@ -94,13 +194,25 @@ export function RideActiveView() {
 
   return (
     <View className="flex-1 pt-4">
-      {/* Live map */}
+      {/* Live map with route polyline */}
       <RideMapView
         pickupLocation={activeRide.pickup_location}
         dropoffLocation={activeRide.dropoff_location}
         driverLocation={driverPosition}
+        driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
+        routeCoordinates={routeCoordinates}
         height={200}
       />
+      {driverPosState.isCached && driverPosState.cachedAt && (
+        <View className="items-center mt-1">
+          <Text variant="caption" color="secondary" className="opacity-60">
+            {t('ride.last_seen', {
+              time: formatTimeAgo(driverPosState.cachedAt),
+              defaultValue: 'Visto hace {{time}}',
+            })}
+          </Text>
+        </View>
+      )}
       <View className="h-4" />
 
       {/* Status stepper */}
@@ -111,61 +223,77 @@ export function RideActiveView() {
       />
 
       {/* Status message */}
-      <Text variant="h4" className="text-center mb-4">
+      <Text
+        variant="h4"
+        className="text-center mb-3"
+        accessibilityLiveRegion="assertive"
+        accessibilityRole="alert"
+      >
         {statusMessage[activeRide.status] ?? activeRide.status}
       </Text>
 
+      {/* ETA Badge */}
+      {etaMinutes !== null && (
+        <View className="items-center mb-4">
+          <ETABadge
+            label={
+              activeRide.status === 'arrived_at_pickup'
+                ? t('ride.eta_driver_arrived')
+                : activeRide.status === 'in_progress'
+                  ? t('ride.eta_destination', { minutes: etaMinutes })
+                  : t('ride.eta_driver_arriving', { minutes: etaMinutes })
+            }
+            isCalculating={isCalculating}
+            urgent={etaMinutes > 0 && etaMinutes <= 3}
+            variant="light"
+          />
+        </View>
+      )}
+
       {/* Driver info */}
       {rideWithDriver?.driver_name && (
-        <Card variant="elevated" padding="md" className="mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text variant="h4">{rideWithDriver.driver_name}</Text>
-              {rideWithDriver.driver_rating && (
-                <Text variant="caption" color="secondary">
-                  {'★ '}{rideWithDriver.driver_rating.toFixed(1)}
-                </Text>
-              )}
-              {rideWithDriver.vehicle_make && (
-                <Text variant="bodySmall" color="secondary" className="mt-1">
-                  {rideWithDriver.vehicle_make} {rideWithDriver.vehicle_model}
-                  {rideWithDriver.vehicle_color ? ` · ${rideWithDriver.vehicle_color}` : ''}
-                </Text>
-              )}
-              {rideWithDriver.vehicle_plate && (
-                <Text variant="label" color="accent" className="mt-1">
-                  {rideWithDriver.vehicle_plate}
-                </Text>
-              )}
-            </View>
-
-            <View className="flex-row gap-2">
-              <IconButton
-                icon="chatbubble-outline"
-                variant="secondary"
-                size="lg"
-                onPress={() => router.push(`/chat/${activeRide.id}`)}
-                label="Chat"
-              />
-              {rideWithDriver.driver_phone && (
+        <View className="mb-4">
+          <DriverCard
+            driverName={rideWithDriver.driver_name}
+            driverAvatarUrl={rideWithDriver.driver_avatar_url}
+            driverRating={rideWithDriver.driver_rating}
+            driverTotalRides={rideWithDriver.driver_total_rides}
+            vehicleMake={rideWithDriver.vehicle_make}
+            vehicleModel={rideWithDriver.vehicle_model}
+            vehicleColor={rideWithDriver.vehicle_color}
+            vehiclePlate={rideWithDriver.vehicle_plate}
+            vehiclePhotoUrl={rideWithDriver.vehicle_photo_url}
+            vehicleYear={rideWithDriver.vehicle_year}
+            ridesLabel={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0, defaultValue: '{{count}} viajes' }).replace(/^\d+\s*/, '')}
+            actions={
+              <>
                 <IconButton
-                  icon="call-outline"
-                  variant="primary"
+                  icon="chatbubble-outline"
+                  variant="secondary"
                   size="lg"
-                  onPress={handleCall}
-                  label="Llamar"
+                  onPress={() => router.push(`/chat/${activeRide.id}`)}
+                  label="Chat"
                 />
-              )}
-              <IconButton
-                icon="warning-outline"
-                variant="danger"
-                size="lg"
-                onPress={handleSOS}
-                label="SOS"
-              />
-            </View>
-          </View>
-        </Card>
+                {rideWithDriver.driver_phone && (
+                  <IconButton
+                    icon="call-outline"
+                    variant="primary"
+                    size="lg"
+                    onPress={handleCall}
+                    label={t('ride.call_driver', { defaultValue: 'Llamar' })}
+                  />
+                )}
+                <IconButton
+                  icon="shield-checkmark-outline"
+                  variant="danger"
+                  size="lg"
+                  onPress={() => setSafetySheetVisible(true)}
+                  label={t('ride.safety_button', { defaultValue: 'Safety' })}
+                />
+              </>
+            }
+          />
+        </View>
       )}
 
       {/* Route info */}
@@ -175,11 +303,31 @@ export function RideActiveView() {
           dropoffAddress={activeRide.dropoff_address}
           pickupLabel={t('ride.pickup')}
           dropoffLabel={t('ride.dropoff')}
+          waypoints={waypoints.map((wp) => ({
+            address: wp.address,
+            label: wp.departed_at
+              ? `✅ ${t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}`
+              : wp.arrived_at
+                ? `📍 ${t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}`
+                : t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` }),
+          }))}
         />
       </Card>
 
+      {/* Add stop button (only during active trip, max 3 stops) */}
+      {activeRide.status === 'in_progress' && waypoints.length < 3 && (
+        <Button
+          title={t('ride.add_stop', { defaultValue: 'Agregar parada' })}
+          variant="outline"
+          size="md"
+          fullWidth
+          onPress={() => setAddStopVisible(true)}
+          className="mb-4"
+        />
+      )}
+
       {/* Fare */}
-      <View className="flex-row justify-between items-center mb-6 px-2">
+      <View className="flex-row justify-between items-center mb-6 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatTRC(activeRide.estimated_fare_trc ?? activeRide.estimated_fare_cup) })}>
         <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
         <Text variant="h4" color="accent">
           {formatTRC(activeRide.estimated_fare_trc ?? activeRide.estimated_fare_cup)}
@@ -193,10 +341,46 @@ export function RideActiveView() {
           variant="outline"
           size="lg"
           fullWidth
-          onPress={handleCancel}
-          loading={isLoading}
+          onPress={handleCancelPress}
+          loading={previewLoading}
         />
       )}
+
+      {/* Add stop bottom sheet */}
+      <BottomSheet visible={addStopVisible} onClose={() => setAddStopVisible(false)}>
+        <Text variant="h4" className="mb-3">
+          {t('ride.add_stop', { defaultValue: 'Agregar parada' })}
+        </Text>
+        <AddressSearchInput
+          placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
+          onSelect={handleAddStop}
+        />
+        {addingStop && (
+          <Text variant="caption" color="secondary" className="mt-2 text-center">
+            {t('ride.adding_stop', { defaultValue: 'Agregando parada...' })}
+          </Text>
+        )}
+      </BottomSheet>
+
+      {/* Cancel ride bottom sheet */}
+      <CancelRideSheet
+        visible={cancelSheetVisible}
+        onClose={() => setCancelSheetVisible(false)}
+        onConfirm={handleCancelConfirm}
+        penaltyAmount={penaltyPreview.penaltyAmount}
+        cancelCount24h={penaltyPreview.cancelCount24h}
+        isLoading={isLoading}
+      />
+
+      {/* Safety bottom sheet */}
+      <SafetySheet
+        visible={safetySheetVisible}
+        onClose={() => setSafetySheetVisible(false)}
+        rideId={activeRide.id}
+        driverId={activeRide.driver_id}
+        userId={userId!}
+        emergencyContact={emergencyContact}
+      />
     </View>
   );
 }

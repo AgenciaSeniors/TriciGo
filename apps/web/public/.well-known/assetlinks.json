@@ -1,0 +1,18 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app_name",
+      "package_name": "app.tricigo.client",
+      "sha256_cert_fingerprints": ["FINGERPRINT_HERE"]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app_name",
+      "package_name": "app.tricigo.driver",
+      "sha256_cert_fingerprints": ["FINGERPRINT_HERE"]
+    }
+  }
+]

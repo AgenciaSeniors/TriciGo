@@ -14,16 +14,15 @@ import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Abierto',
-  in_progress: 'En proceso',
-  waiting_user: 'Esperando respuesta',
-  resolved: 'Resuelto',
-  closed: 'Cerrado',
-};
-
 export default function TicketDetailScreen() {
   const { t } = useTranslation('common');
+  const STATUS_LABELS: Record<string, string> = {
+    open: t('profile.help_status_open'),
+    in_progress: t('profile.help_status_in_progress'),
+    waiting_user: t('profile.help_status_waiting_response'),
+    resolved: t('profile.help_status_resolved'),
+    closed: t('profile.help_status_closed'),
+  };
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const userId = useAuthStore((s) => s.user?.id);
   const flatListRef = useRef<FlatList>(null);
@@ -85,8 +84,8 @@ export default function TicketDetailScreen() {
           }`}
         >
           {item.is_admin && (
-            <Text variant="caption" className="text-blue-600 font-semibold mb-0.5">
-              Soporte
+            <Text variant="caption" className="text-info-dark font-semibold mb-0.5">
+              {t('profile.support_label')}
             </Text>
           )}
           <Text
@@ -144,7 +143,7 @@ export default function TicketDetailScreen() {
               !loading ? (
                 <View className="flex-1 items-center justify-center">
                   <Text variant="bodySmall" color="tertiary">
-                    No hay mensajes aún. Escribe el primero.
+                    {t('profile.ticket_no_messages')}
                   </Text>
                 </View>
               ) : null
@@ -156,7 +155,7 @@ export default function TicketDetailScreen() {
             <View className="flex-row items-end px-4 py-3 border-t border-neutral-100 bg-white">
               <View className="flex-1 mr-2">
                 <Input
-                  placeholder="Escribe un mensaje..."
+                  placeholder={t('profile.ticket_message_placeholder')}
                   value={messageText}
                   onChangeText={setMessageText}
                   multiline
@@ -174,7 +173,7 @@ export default function TicketDetailScreen() {
           ) : (
             <View className="px-4 py-3 border-t border-neutral-100 bg-neutral-50">
               <Text variant="bodySmall" color="tertiary" className="text-center">
-                Este ticket está {ticket?.status === 'resolved' ? 'resuelto' : 'cerrado'}
+                {t('profile.ticket_closed_message', { status: STATUS_LABELS[ticket?.status ?? 'closed'] })}
               </Text>
             </View>
           )}

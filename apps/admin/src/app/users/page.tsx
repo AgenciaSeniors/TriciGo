@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { User } from '@tricigo/types';
 import type { UserRole } from '@tricigo/types';
+import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 
 const PAGE_SIZE = 20;
 
@@ -31,45 +32,78 @@ function formatDate(dateString: string): string {
   });
 }
 
+const EMPTY_FILTERS: Record<string, string> = {
+  search: '',
+  dateFrom: '',
+  dateTo: '',
+  isActive: '',
+};
+
 export default function UsersPage() {
   const { t } = useTranslation('admin');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
+  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
+
+  const filterFields: FilterField[] = [
+    {
+      key: 'search',
+      label: t('filters.search'),
+      type: 'text',
+      placeholder: t('filters.search_user_placeholder'),
+    },
+    { key: 'dateFrom', label: t('filters.date_from'), type: 'date' },
+    { key: 'dateTo', label: t('filters.date_to'), type: 'date' },
+    {
+      key: 'isActive',
+      label: t('filters.status'),
+      type: 'select',
+      placeholder: t('filters.all'),
+      options: [
+        { label: t('common.active'), value: 'true' },
+        { label: t('common.inactive'), value: 'false' },
+      ],
+    },
+  ];
+
+  const handleFilterChange = useCallback((key: string, value: string) => {
+    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(0);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setAdvancedFilters({ ...EMPTY_FILTERS });
+    setPage(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
 
     async function fetchUsers() {
-      setLoading(true);
       try {
-        const data = await adminService.getUsers(page, PAGE_SIZE);
-        if (!cancelled) {
-          setUsers(data);
-        }
+        const filters: Record<string, any> = {};
+        if (roleFilter !== 'all') filters.role = roleFilter;
+        if (advancedFilters.search) filters.search = advancedFilters.search;
+        if (advancedFilters.dateFrom) filters.dateFrom = advancedFilters.dateFrom;
+        if (advancedFilters.dateTo) filters.dateTo = advancedFilters.dateTo;
+        if (advancedFilters.isActive) filters.isActive = advancedFilters.isActive === 'true';
+
+        const data = await adminService.getUsers(page, PAGE_SIZE, filters);
+        if (!cancelled) setUsers(data);
       } catch (err) {
         console.error('Error fetching users:', err);
-        if (!cancelled) {
-          setUsers([]);
-        }
+        if (!cancelled) setUsers([]);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
     fetchUsers();
-    return () => {
-      cancelled = true;
-    };
-  }, [page]);
-
-  const filteredUsers =
-    roleFilter === 'all'
-      ? users
-      : users.filter((u) => u.role === roleFilter);
+    return () => { cancelled = true; };
+  }, [page, roleFilter, advancedFilters]);
 
   const canGoPrev = page > 0;
   const canGoNext = users.length === PAGE_SIZE;
@@ -79,11 +113,11 @@ export default function UsersPage() {
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('users.title')}</h1>
 
       {/* Role filter buttons */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-4">
         {ROLE_FILTERS.map((filter) => (
           <button
             key={filter.value}
-            onClick={() => setRoleFilter(filter.value)}
+            onClick={() => { setRoleFilter(filter.value); setPage(0); }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               roleFilter === filter.value
                 ? 'bg-primary-500 text-white'
@@ -94,6 +128,16 @@ export default function UsersPage() {
           </button>
         ))}
       </div>
+
+      {/* Advanced filters */}
+      <FilterPanel
+        fields={filterFields}
+        values={advancedFilters}
+        onChange={handleFilterChange}
+        onClear={handleClearFilters}
+        clearLabel={t('filters.clear_all')}
+        toggleLabel={t('filters.advanced_filters')}
+      />
 
       {/* Users table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
@@ -124,24 +168,18 @@ export default function UsersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td
-                  colSpan={6}
-                  className="text-center py-12 text-neutral-400"
-                >
+                <td colSpan={6} className="text-center py-12 text-neutral-400">
                   {t('common.loading')}
                 </td>
               </tr>
-            ) : filteredUsers.length === 0 ? (
+            ) : users.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  className="text-center py-12 text-neutral-400"
-                >
+                <td colSpan={6} className="text-center py-12 text-neutral-400">
                   {t('users.no_users')}
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((user) => (
+              users.map((user) => (
                 <tr
                   key={user.id}
                   className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"

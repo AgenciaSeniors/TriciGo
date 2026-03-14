@@ -33,7 +33,7 @@ const variantStyles = {
     text: 'text-neutral-900',
   },
   danger: {
-    container: 'bg-error active:bg-red-700',
+    container: 'bg-error active:bg-error-dark',
     text: 'text-white',
   },
 } as const;
@@ -60,6 +60,9 @@ export function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled }}
       className={`
         flex-row items-center justify-center
         ${s.container} ${v.container}

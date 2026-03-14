@@ -12,10 +12,10 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.brand.orange,
-        tabBarInactiveTintColor: '#737373',
+        tabBarInactiveTintColor: colors.neutral[500],
         tabBarStyle: {
-          backgroundColor: '#111111',
-          borderTopColor: '#262626',
+          backgroundColor: colors.brand.black,
+          borderTopColor: colors.neutral[800],
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
@@ -30,7 +30,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inicio',
+          title: t('common.home_tab'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="navigate" size={size} color={color} />
           ),
@@ -57,7 +57,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Perfil',
+          title: t('common.profile_tab'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),

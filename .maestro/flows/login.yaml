@@ -1,0 +1,30 @@
+# ============================================================
+# TriciGo — Maestro E2E: Login Flow
+# Verifies the OTP-based authentication flow.
+# ============================================================
+appId: com.tricigo.client
+---
+
+# App should open to the login screen
+- assertVisible: "TriciGo"
+
+# Enter a valid Cuban phone number
+- tapOn:
+    id: "phone-input"
+- inputText: "51234567"
+
+# Tap the "Send OTP" button
+- tapOn: "Enviar código"
+
+# Wait for OTP screen
+- assertVisible: "Ingresa el código"
+
+# Enter test OTP (dev mode accepts 123456)
+- tapOn:
+    id: "otp-input"
+- inputText: "123456"
+
+# Should navigate to home screen
+- assertVisible:
+    text: "¿A dónde vas?"
+    timeout: 10000

@@ -6,6 +6,8 @@ import { colors } from '@tricigo/theme';
 export interface ErrorBoundaryProps {
   /** Custom fallback UI to render when an error occurs */
   fallback?: ReactNode;
+  /** Called when an error is caught — use for crash reporting (e.g. Sentry) */
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
   children: ReactNode;
 }
 
@@ -25,6 +27,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('[ErrorBoundary]', error, errorInfo);
+    this.props.onError?.(error, errorInfo);
   }
 
   private handleRetry = () => {
@@ -39,7 +42,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
       return (
         <View className="flex-1 justify-center items-center bg-white p-6">
-          <View className="w-20 h-20 rounded-full bg-primary-50 items-center justify-center mb-4">
+          <View accessibilityElementsHidden className="w-20 h-20 rounded-full bg-primary-50 items-center justify-center mb-4">
             <Ionicons name="warning-outline" size={40} color={colors.brand.orange} />
           </View>
           <Text className="text-lg font-semibold text-neutral-900 mt-2">
@@ -51,6 +54,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <Pressable
             className="mt-6 px-6 py-3 bg-neutral-900 rounded-lg active:bg-neutral-800"
             onPress={this.handleRetry}
+            accessibilityRole="button"
+            accessibilityLabel="Reintentar"
           >
             <Text className="text-white text-base font-semibold">
               Reintentar

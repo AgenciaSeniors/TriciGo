@@ -36,6 +36,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const value = await walletService.getConfigValue('commission_rate');
@@ -53,6 +54,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const value = await walletService.getConfigValue('nonexistent_key');
@@ -69,6 +71,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const value = await walletService.getConfigValue('commission_rate');
@@ -85,6 +88,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       await expect(walletService.getConfigValue('commission_rate')).rejects.toEqual({
@@ -110,7 +114,7 @@ describe('walletService', () => {
       const mockTxEqInner = vi.fn().mockReturnValue({ order: mockTxOrder });
       const mockTxSelect = vi.fn().mockReturnValue({ eq: mockTxEqInner });
 
-      mockFrom.mockReturnValueOnce({ select: mockTxSelect });
+      mockFrom.mockReturnValueOnce({ select: mockTxSelect, insert: mockInsert });
 
       const txns = await walletService.getTransactions('acc-1');
 
@@ -130,7 +134,7 @@ describe('walletService', () => {
       const mockTxEqInner = vi.fn().mockReturnValue({ order: mockTxOrder });
       const mockTxSelect = vi.fn().mockReturnValue({ eq: mockTxEqInner });
 
-      mockFrom.mockReturnValueOnce({ select: mockTxSelect });
+      mockFrom.mockReturnValueOnce({ select: mockTxSelect, insert: mockInsert });
 
       await walletService.getTransactions('acc-1', 2, 10);
 
@@ -161,6 +165,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const account = await walletService.getAccount('user-1');
@@ -180,6 +185,7 @@ describe('walletService', () => {
             }),
           }),
         }),
+        insert: mockInsert,
       });
 
       const account = await walletService.getAccount('unknown-user');

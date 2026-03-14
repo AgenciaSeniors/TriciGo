@@ -224,6 +224,50 @@ export const walletService = {
     return data as WalletTransfer[];
   },
 
+  // ==================== CORPORATE WALLETS ====================
+
+  /**
+   * Get corporate wallet balance.
+   * Reuses user_id column to store corporate_account_id.
+   */
+  async getCorporateBalance(
+    corporateAccountId: string,
+  ): Promise<{ available: number; held: number }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_accounts')
+      .select('balance, held_balance')
+      .eq('user_id', corporateAccountId)
+      .eq('account_type', 'corporate_cash')
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) return { available: 0, held: 0 };
+    return { available: data.balance, held: data.held_balance };
+  },
+
+  /**
+   * Ensure a corporate wallet account exists.
+   */
+  async ensureCorporateAccount(
+    corporateAccountId: string,
+  ): Promise<WalletAccount> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('ensure_wallet_account', {
+      p_user_id: corporateAccountId,
+      p_type: 'corporate_cash',
+    });
+    if (error) throw error;
+    // Fetch the account
+    const { data: account, error: fetchError } = await supabase
+      .from('wallet_accounts')
+      .select('*')
+      .eq('user_id', corporateAccountId)
+      .eq('account_type', 'corporate_cash')
+      .single();
+    if (fetchError) throw fetchError;
+    return account as WalletAccount;
+  },
+
   // ==================== PLATFORM CONFIG ====================
 
   /**

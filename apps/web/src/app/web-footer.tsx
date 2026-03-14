@@ -34,6 +34,9 @@ export function WebFooter() {
         <a href="/terms" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.terms')}
         </a>
+        <a href="/blog" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+          {t('footer.blog')}
+        </a>
       </div>
       <p>TriciGo &copy; {new Date().getFullYear()} &middot; {t('footer.download')}</p>
     </footer>

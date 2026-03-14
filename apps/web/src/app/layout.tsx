@@ -3,6 +3,7 @@ import './globals.css';
 import { I18nProvider } from './providers';
 import { WebHeader } from './web-header';
 import { WebFooter } from './web-footer';
+import { JsonLd } from '../components/JsonLd';
 
 export const metadata: Metadata = {
   title: {
@@ -31,9 +32,58 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://tricigo.app'),
 };
 
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'TriciGo',
+  url: 'https://tricigo.app',
+  logo: 'https://tricigo.app/logo.png',
+  description:
+    'Plataforma de transporte en La Habana. Solicita triciclos, motos y autos de forma rapida y segura.',
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'La Habana',
+    addressCountry: 'CU',
+  },
+  contactPoint: {
+    '@type': 'ContactPoint',
+    email: 'soporte@tricigo.app',
+    contactType: 'customer service',
+    availableLanguage: ['Spanish', 'English'],
+  },
+};
+
+const localBusinessJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: 'TriciGo',
+  url: 'https://tricigo.app',
+  description:
+    'Servicio de transporte bajo demanda en La Habana, Cuba. Triciclos, motos y autos.',
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'La Habana',
+    addressCountry: 'CU',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: 23.1136,
+    longitude: -82.3666,
+  },
+  priceRange: '$',
+  areaServed: {
+    '@type': 'City',
+    name: 'La Habana',
+  },
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
+      <head>
+        <JsonLd data={organizationJsonLd} />
+        <JsonLd data={localBusinessJsonLd} />
+      </head>
       <body className="font-sans antialiased bg-white text-neutral-900">
         <I18nProvider>
           <WebHeader />

@@ -29,6 +29,19 @@ export {
   getOnlineStatus,
   executeOrQueue,
   getPendingCount,
+  getPendingMutations,
+  getProcessingStatus,
+  onQueueChange,
 } from './lib/offlineQueue';
+export type { QueuedMutation, ProcessingStatus } from './lib/offlineQueue';
 export { registerAllOfflineMutations } from './lib/offlineMutations';
 export { useFeatureFlag } from './hooks/useFeatureFlag';
+export { cmsService, type CmsContent } from './services/cms.service';
+export { questService } from './services/quest.service';
+export { blogService, type BlogPost } from './services/blog.service';
+export { paymentService } from './services/payment.service';
+export { corporateService } from './services/corporate.service';
+export { trustedContactService } from './services/trusted-contact.service';
+export { disputeService } from './services/dispute.service';
+export { lostItemService } from './services/lost-item.service';
+export { recurringRideService } from './services/recurring-ride.service';

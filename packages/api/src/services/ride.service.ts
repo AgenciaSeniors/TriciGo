@@ -6,6 +6,7 @@
 import type {
   Ride,
   RideWithDriver,
+  RideWithRider,
   RidePricingSnapshot,
   RideTransition,
   FareEstimate,
@@ -15,6 +16,8 @@ import type {
   Tip,
   SurgeZone,
   SurgeType,
+  TripInsuranceConfig,
+  RidePreferences,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
@@ -22,9 +25,15 @@ import {
   estimateRoadDistance,
   estimateDuration,
   cupToTrcCentavos,
+  calculateBaseFare,
+  applySurge,
+  matchPricingRule,
+  calculateFareRange,
+  maskPhone,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
+import { corporateService } from './corporate.service';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -41,6 +50,16 @@ export interface CreateRideParams {
   scheduled_at?: string;
   promo_code_id?: string;
   discount_amount_cup?: number;
+  waypoints?: Array<{
+    sort_order: number;
+    latitude: number;
+    longitude: number;
+    address: string;
+  }>;
+  corporate_account_id?: string;
+  insurance_selected?: boolean;
+  insurance_premium_cup?: number;
+  rider_preferences?: RidePreferences;
 }
 
 export const rideService = {
@@ -79,7 +98,7 @@ export const rideService = {
       .eq('service_type', params.service_type)
       .eq('is_active', true);
 
-    // Find matching time-based rule
+    // Find matching time-based rule (using pure function)
     let baseFare = svcConfig.base_fare_cup;
     let perKmRate = svcConfig.per_km_rate_cup;
     let perMinRate = svcConfig.per_minute_rate_cup;
@@ -87,21 +106,11 @@ export const rideService = {
     let ruleId = svcConfig.id;
 
     if (pricingRules && pricingRules.length > 0) {
-      const matchingRule = (pricingRules as PricingRule[]).find((rule) => {
-        // Check time window
-        if (rule.time_window_start && rule.time_window_end) {
-          if (currentHour < rule.time_window_start || currentHour >= rule.time_window_end) {
-            return false;
-          }
-        }
-        // Check day of week
-        if (rule.day_of_week && rule.day_of_week.length > 0) {
-          if (!rule.day_of_week.includes(currentDay)) {
-            return false;
-          }
-        }
-        return true;
-      });
+      const matchingRule = matchPricingRule(
+        pricingRules as PricingRule[],
+        currentHour,
+        currentDay,
+      );
 
       if (matchingRule) {
         baseFare = matchingRule.base_fare_cup;
@@ -122,13 +131,15 @@ export const rideService = {
     const distanceKm = roadDistance / 1000;
     const durationMin = duration / 60;
 
-    const fare = Math.round(
-      baseFare +
-      distanceKm * perKmRate +
-      durationMin * perMinRate,
-    );
-
-    const baseFinalFare = Math.max(fare, minFare);
+    // Calculate fare using pure function
+    const fareResult = calculateBaseFare({
+      distanceKm,
+      durationMin,
+      baseFare,
+      perKmRate,
+      perMinRate,
+      minimumFare: minFare,
+    });
 
     // ─── Dynamic Surge ───
     let surgeMultiplier = 1.0;
@@ -143,23 +154,46 @@ export const rideService = {
       });
       if (typeof surgeData === 'number' && surgeData > 1.0) {
         surgeMultiplier = surgeData;
-        // Determine surge type based on context
-        // If there's a matching time-based rule, it's at least time_based
         const hasTimeRule = pricingRules && (pricingRules as PricingRule[]).some(
           (r) => r.time_window_start && r.time_window_end,
         );
         surgeType = hasTimeRule ? 'combined' : 'demand';
       }
     } catch {
-      // Surge is non-critical, default to 1.0x
       console.warn('calculate_dynamic_surge failed, defaulting to 1.0x');
     }
 
-    const surgedFare = Math.round(baseFinalFare * surgeMultiplier);
+    const surgedFare = applySurge(fareResult.fare, surgeMultiplier);
 
     // ─── Exchange Rate: convert CUP → TRC ───
     const exchangeRate = await exchangeRateService.getUsdCupRate();
     const estimatedFareTrc = cupToTrcCentavos(surgedFare, exchangeRate);
+
+    // ─── Fare Range (min-max considering traffic variance) ───
+    const fareRange = calculateFareRange({
+      fareCup: surgedFare,
+      surgeMultiplier,
+      exchangeRate,
+    });
+
+    // ─── Insurance Premium (optional) ───
+    let insurancePremiumCup: number | undefined;
+    let insurancePremiumTrc: number | undefined;
+    let insuranceAvailable = false;
+    let insuranceCoverageDesc: string | undefined;
+
+    try {
+      const insuranceConfig = await this.getInsuranceConfig(params.service_type);
+      if (insuranceConfig) {
+        insuranceAvailable = true;
+        const premium = this.calculateInsurancePremium(surgedFare, insuranceConfig);
+        insurancePremiumCup = premium;
+        insurancePremiumTrc = cupToTrcCentavos(premium, exchangeRate);
+        insuranceCoverageDesc = insuranceConfig.coverage_description_es;
+      }
+    } catch {
+      // Insurance not available — not critical
+    }
 
     return {
       service_type: params.service_type,
@@ -171,7 +205,18 @@ export const rideService = {
       surge_type: surgeType,
       pricing_rule_id: ruleId,
       per_km_rate_cup: perKmRate,
+      base_fare_cup: baseFare,
+      per_minute_rate_cup: perMinRate,
+      min_fare_applied: fareResult.minFareApplied,
       exchange_rate_usd_cup: exchangeRate,
+      fare_range_min_cup: fareRange.minFareCup,
+      fare_range_max_cup: fareRange.maxFareCup,
+      fare_range_min_trc: fareRange.minFareTrc,
+      fare_range_max_trc: fareRange.maxFareTrc,
+      insurance_premium_cup: insurancePremiumCup,
+      insurance_premium_trc: insurancePremiumTrc,
+      insurance_available: insuranceAvailable,
+      insurance_coverage_desc: insuranceCoverageDesc,
     };
   },
 
@@ -205,12 +250,27 @@ export const rideService = {
       ? cupToTrcCentavos(params.estimated_fare_cup, exchangeRate)
       : 0;
 
+    // Corporate ride validation
+    let paymentMethod = params.payment_method;
+    if (params.corporate_account_id) {
+      const validation = await corporateService.validateCorporateRide(
+        params.corporate_account_id,
+        user.id,
+        estimatedFareTrc,
+        params.service_type,
+      );
+      if (!validation.valid) {
+        throw new Error(validation.reason ?? 'Corporate ride validation failed');
+      }
+      paymentMethod = 'corporate';
+    }
+
     const { data, error } = await supabase
       .from('rides')
       .insert({
         customer_id: user.id,
         service_type: params.service_type,
-        payment_method: params.payment_method,
+        payment_method: paymentMethod,
         pickup_location: `POINT(${params.pickup_longitude} ${params.pickup_latitude})`,
         pickup_address: params.pickup_address,
         dropoff_location: `POINT(${params.dropoff_longitude} ${params.dropoff_latitude})`,
@@ -224,6 +284,10 @@ export const rideService = {
         is_scheduled: !!params.scheduled_at,
         promo_code_id: params.promo_code_id ?? null,
         discount_amount_cup: params.discount_amount_cup ?? 0,
+        corporate_account_id: params.corporate_account_id ?? null,
+        insurance_selected: params.insurance_selected ?? false,
+        insurance_premium_cup: params.insurance_premium_cup ?? 0,
+        rider_preferences: params.rider_preferences ?? null,
         status: 'searching' as RideStatus,
       })
       .select()
@@ -242,7 +306,19 @@ export const rideService = {
       });
     }
 
-    return data as Ride;
+    // Insert waypoints if provided
+    const rideData = data as Ride;
+    if (params.waypoints && params.waypoints.length > 0) {
+      const waypointRows = params.waypoints.map((wp) => ({
+        ride_id: rideData.id,
+        sort_order: wp.sort_order,
+        location: `POINT(${wp.longitude} ${wp.latitude})`,
+        address: wp.address,
+      }));
+      await supabase.from('ride_waypoints').insert(waypointRows);
+    }
+
+    return rideData;
   },
 
   /**
@@ -268,23 +344,28 @@ export const rideService = {
       driver_avatar_url: null,
       driver_rating: null,
       driver_phone: null,
+      driver_masked_phone: null,
+      driver_total_rides: null,
       vehicle_make: null,
       vehicle_model: null,
       vehicle_color: null,
       vehicle_plate: null,
+      vehicle_photo_url: null,
+      vehicle_year: null,
     };
 
     // If driver assigned, fetch details
     if (rideData.driver_id) {
       const { data: driverProfile } = await supabase
         .from('driver_profiles')
-        .select('user_id, rating_avg')
+        .select('user_id, rating_avg, total_rides_completed')
         .eq('id', rideData.driver_id)
         .single();
 
       if (driverProfile) {
         result.driver_user_id = driverProfile.user_id;
         result.driver_rating = driverProfile.rating_avg;
+        result.driver_total_rides = driverProfile.total_rides_completed ?? null;
 
         // Fetch user info for driver name/phone
         const { data: driverUser } = await supabase
@@ -297,12 +378,13 @@ export const rideService = {
           result.driver_name = driverUser.full_name;
           result.driver_avatar_url = driverUser.avatar_url;
           result.driver_phone = driverUser.phone;
+          result.driver_masked_phone = maskPhone(driverUser.phone);
         }
 
         // Fetch vehicle
         const { data: vehicle } = await supabase
           .from('vehicles')
-          .select('make, model, color, plate_number')
+          .select('make, model, color, plate_number, photo_url, year')
           .eq('driver_id', rideData.driver_id)
           .eq('is_active', true)
           .limit(1)
@@ -313,11 +395,63 @@ export const rideService = {
           result.vehicle_model = vehicle.model;
           result.vehicle_color = vehicle.color;
           result.vehicle_plate = vehicle.plate_number;
+          result.vehicle_photo_url = vehicle.photo_url ?? null;
+          result.vehicle_year = vehicle.year ?? null;
         }
       }
     }
 
+    // Fetch waypoints
+    const { data: waypoints } = await supabase
+      .from('ride_waypoints')
+      .select('*')
+      .eq('ride_id', rideData.id)
+      .order('sort_order', { ascending: true });
+
+    if (waypoints && waypoints.length > 0) {
+      (result as any).waypoints = waypoints;
+    }
+
     return result;
+  },
+
+  /**
+   * Get a ride with rider details (for driver display).
+   * Joins user info + customer_profiles for name, avatar, and rating.
+   */
+  async getRideWithRider(rideId: string): Promise<RideWithRider | null> {
+    const supabase = getSupabaseClient();
+
+    const { data: ride, error: rideError } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('id', rideId)
+      .maybeSingle();
+    if (rideError) throw rideError;
+    if (!ride) return null;
+
+    const rideData = ride as Ride;
+
+    // Fetch rider (customer) info
+    const { data: riderUser } = await supabase
+      .from('users')
+      .select('full_name, avatar_url')
+      .eq('id', rideData.customer_id)
+      .single();
+
+    // Fetch customer profile for rating
+    const { data: customerProfile } = await supabase
+      .from('customer_profiles')
+      .select('rating_avg')
+      .eq('user_id', rideData.customer_id)
+      .maybeSingle();
+
+    return {
+      ...rideData,
+      rider_name: riderUser?.full_name ?? 'Pasajero',
+      rider_avatar_url: riderUser?.avatar_url ?? null,
+      rider_rating: customerProfile?.rating_avg ?? 5.0,
+    };
   },
 
   /**
@@ -387,6 +521,29 @@ export const rideService = {
   },
 
   /**
+   * Preview the cancellation penalty that would be applied (without applying it).
+   * Used to show the user what penalty they'd face before confirming cancellation.
+   */
+  async previewCancelPenalty(userId: string): Promise<{
+    penaltyAmount: number;
+    isBlocked: boolean;
+    cancelCount24h: number;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('preview_cancellation_penalty', {
+      p_user_id: userId,
+    });
+    if (error) throw error;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      penaltyAmount: row?.penalty_amount ?? 0,
+      isBlocked: row?.is_blocked ?? false,
+      cancelCount24h: row?.cancel_count_24h ?? 0,
+    };
+  },
+
+  /**
    * Get ride history for a user.
    */
   async getRideHistory(
@@ -403,6 +560,59 @@ export const rideService = {
       .select('*')
       .eq('customer_id', userId)
       .in('status', ['completed', 'canceled'])
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as Ride[];
+  },
+
+  /**
+   * Get ride history with optional filters.
+   */
+  async getRideHistoryFiltered(params: {
+    userId: string;
+    page?: number;
+    pageSize?: number;
+    status?: ('completed' | 'canceled')[];
+    serviceType?: ServiceTypeSlug;
+    paymentMethod?: PaymentMethod;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<Ride[]> {
+    const supabase = getSupabaseClient();
+    const page = params.page ?? 0;
+    const pageSize = params.pageSize ?? 20;
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('rides')
+      .select('*')
+      .eq('customer_id', params.userId);
+
+    // Status filter
+    const statuses = params.status ?? ['completed', 'canceled'];
+    query = query.in('status', statuses);
+
+    // Service type filter
+    if (params.serviceType) {
+      query = query.eq('service_type', params.serviceType);
+    }
+
+    // Payment method filter
+    if (params.paymentMethod) {
+      query = query.eq('payment_method', params.paymentMethod);
+    }
+
+    // Date range filters
+    if (params.dateFrom) {
+      query = query.gte('created_at', params.dateFrom);
+    }
+    if (params.dateTo) {
+      query = query.lte('created_at', params.dateTo);
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -592,6 +802,41 @@ export const rideService = {
     return this.getRideWithDriver((ride as Ride).id);
   },
 
+  /**
+   * Get the share_token for a ride (used for live trip sharing).
+   */
+  async getShareTokenForRide(rideId: string): Promise<string | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('rides')
+      .select('share_token')
+      .eq('id', rideId)
+      .single();
+    if (error) throw error;
+    return data?.share_token ?? null;
+  },
+
+  /**
+   * Generate a share_token for a ride that doesn't have one yet.
+   * Fallback for rides accepted before the trigger migration.
+   */
+  async generateShareToken(rideId: string): Promise<string> {
+    // Generate 24-char hex token (same format as DB trigger)
+    const chars = '0123456789abcdef';
+    let token = '';
+    for (let i = 0; i < 24; i++) {
+      token += chars[Math.floor(Math.random() * 16)];
+    }
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('rides')
+      .update({ share_token: token })
+      .eq('id', rideId)
+      .is('share_token', null);
+    if (error) throw error;
+    return token;
+  },
+
   // ==================== TIPS ====================
 
   /**
@@ -648,5 +893,303 @@ export const rideService = {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data as SurgeZone[];
+  },
+
+  /**
+   * Assign a chained (next) ride to a driver currently on a ride.
+   */
+  async assignChainedRide(currentRideId: string, nextRideId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('rides')
+      .update({ next_ride_id: nextRideId })
+      .eq('id', currentRideId);
+    if (error) throw error;
+
+    // Mark the next ride as chained
+    await supabase
+      .from('rides')
+      .update({ is_chained: true })
+      .eq('id', nextRideId);
+  },
+
+  /**
+   * Add a waypoint to an active ride (max 3 waypoints).
+   */
+  async addWaypointToActiveRide(
+    rideId: string,
+    address: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<any> {
+    const supabase = getSupabaseClient();
+    // Get current max sort_order
+    const { data: existing } = await supabase
+      .from('ride_waypoints')
+      .select('sort_order')
+      .eq('ride_id', rideId)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    const nextOrder = (existing?.[0]?.sort_order ?? 0) + 1;
+    if (nextOrder > 3) throw new Error('MAX_WAYPOINTS_REACHED');
+    const { data, error } = await supabase
+      .from('ride_waypoints')
+      .insert({
+        ride_id: rideId,
+        address,
+        latitude,
+        longitude,
+        sort_order: nextOrder,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get waypoints for a ride.
+   */
+  async getRideWaypoints(rideId: string): Promise<any[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_waypoints')
+      .select('*')
+      .eq('ride_id', rideId)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  /**
+   * Mark a waypoint as arrived (driver reached the stop).
+   */
+  async arriveAtWaypoint(waypointId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('ride_waypoints')
+      .update({ arrived_at: new Date().toISOString() })
+      .eq('id', waypointId)
+      .is('arrived_at', null);
+    if (error) throw error;
+  },
+
+  /**
+   * Mark a waypoint as departed (driver left the stop, continuing to next).
+   */
+  async departFromWaypoint(waypointId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('ride_waypoints')
+      .update({ departed_at: new Date().toISOString() })
+      .eq('id', waypointId)
+      .is('departed_at', null);
+    if (error) throw error;
+  },
+
+  /**
+   * Subscribe to waypoint changes (INSERT + UPDATE) for a ride.
+   * Used by rider to see when driver arrives/departs stops.
+   */
+  subscribeToWaypoints(
+    rideId: string,
+    onInsert: (wp: any) => void,
+    onUpdate: (wp: any) => void,
+  ) {
+    const supabase = getSupabaseClient();
+    return supabase
+      .channel(`waypoints-${rideId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'ride_waypoints',
+          filter: `ride_id=eq.${rideId}`,
+        },
+        (payload) => onInsert(payload.new),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'ride_waypoints',
+          filter: `ride_id=eq.${rideId}`,
+        },
+        (payload) => onUpdate(payload.new),
+      )
+      .subscribe();
+  },
+
+  // ============================================================
+  // Fare Splitting
+  // ============================================================
+
+  /**
+   * Invite a user to split the fare for a ride.
+   * Only works for tricicoin payment method.
+   */
+  async createSplitInvite(
+    rideId: string,
+    invitedUserId: string,
+    invitedByUserId: string,
+    sharePct: number,
+  ): Promise<any> {
+    const supabase = getSupabaseClient();
+
+    // Validate payment method is tricicoin
+    const { data: ride } = await supabase
+      .from('rides')
+      .select('payment_method, is_split')
+      .eq('id', rideId)
+      .single();
+    if (ride?.payment_method !== 'tricicoin') {
+      throw new Error('SPLIT_ONLY_TRICICOIN');
+    }
+
+    // Mark ride as split if not already
+    if (!ride.is_split) {
+      await supabase.from('rides').update({ is_split: true }).eq('id', rideId);
+    }
+
+    const { data, error } = await supabase
+      .from('ride_splits')
+      .insert({
+        ride_id: rideId,
+        user_id: invitedUserId,
+        invited_by: invitedByUserId,
+        share_pct: sharePct,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Remove a split invite (before ride starts).
+   */
+  async removeSplitInvite(rideId: string, splitId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('ride_splits')
+      .delete()
+      .eq('id', splitId)
+      .eq('ride_id', rideId);
+    if (error) throw error;
+
+    // Check if there are remaining splits
+    const { data: remaining } = await supabase
+      .from('ride_splits')
+      .select('id')
+      .eq('ride_id', rideId);
+    if (!remaining || remaining.length === 0) {
+      await supabase.from('rides').update({ is_split: false }).eq('id', rideId);
+    }
+  },
+
+  /**
+   * Accept a split invite (invited user accepts their share).
+   */
+  async acceptSplitInvite(splitId: string, userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('ride_splits')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', splitId)
+      .eq('user_id', userId)
+      .is('accepted_at', null);
+    if (error) throw error;
+  },
+
+  /**
+   * Get all splits for a ride with user info.
+   */
+  async getSplitsForRide(rideId: string): Promise<any[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_splits')
+      .select('*, users:user_id(raw_user_meta_data)')
+      .eq('ride_id', rideId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((s: any) => ({
+      ...s,
+      user_name: s.users?.raw_user_meta_data?.name ?? null,
+      user_phone: s.users?.raw_user_meta_data?.phone ?? null,
+      users: undefined,
+    }));
+  },
+
+  /**
+   * Get pending split invites for a user.
+   */
+  async getMySplitInvites(userId: string): Promise<any[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_splits')
+      .select('*, rides!inner(status, pickup_address, dropoff_address, estimated_fare_trc)')
+      .eq('user_id', userId)
+      .eq('payment_status', 'pending')
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  // ============================================================
+  // Trip Insurance
+  // ============================================================
+
+  /**
+   * Get the active insurance config for a service type.
+   */
+  async getInsuranceConfig(serviceType: ServiceTypeSlug): Promise<TripInsuranceConfig | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('trip_insurance_configs')
+      .select('*')
+      .eq('service_type', serviceType)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error) throw error;
+    return data as TripInsuranceConfig | null;
+  },
+
+  /**
+   * Calculate the insurance premium in CUP for a given fare.
+   * Returns the premium amount (>= min_premium_cup from config).
+   */
+  calculateInsurancePremium(
+    estimatedFareCup: number,
+    config: TripInsuranceConfig,
+  ): number {
+    const rawPremium = Math.round(estimatedFareCup * config.premium_pct);
+    return Math.max(rawPremium, config.min_premium_cup);
+  },
+
+  /**
+   * Subscribe to split changes for a ride.
+   */
+  subscribeToSplits(
+    rideId: string,
+    onInsert: (split: any) => void,
+    onUpdate: (split: any) => void,
+  ) {
+    const supabase = getSupabaseClient();
+    return supabase
+      .channel(`splits-${rideId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ride_splits', filter: `ride_id=eq.${rideId}` },
+        (payload) => onInsert(payload.new),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'ride_splits', filter: `ride_id=eq.${rideId}` },
+        (payload) => onUpdate(payload.new),
+      )
+      .subscribe();
   },
 };

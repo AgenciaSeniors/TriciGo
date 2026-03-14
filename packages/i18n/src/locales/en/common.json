@@ -33,7 +33,8 @@
     "invalid_otp": "Invalid code",
     "or_continue_with": "or continue with",
     "google": "Google",
-    "apple": "Apple"
+    "apple": "Apple",
+    "driver_tagline": "Your app to drive in Havana"
   },
 
   "wallet": {
@@ -62,7 +63,18 @@
     "transfer_user_not_found": "User not found",
     "transfer_searching": "Searching user...",
     "transfer_sent": "Sent",
-    "transfer_received": "Received"
+    "transfer_received": "Received",
+    "recharge_tropipay": "Recharge with TropiPay",
+    "tropipay_title": "Recharge via TropiPay",
+    "tropipay_amount_label": "Amount to recharge (CUP)",
+    "tropipay_amount_usd": "Equivalent: ~${{usd}} USD",
+    "tropipay_processing": "Processing payment...",
+    "tropipay_success": "Payment received. Your balance will update shortly.",
+    "tropipay_failed": "Payment could not be completed.",
+    "tropipay_min_amount": "Minimum amount: {{min}} CUP",
+    "tropipay_redirect": "You will be redirected to TropiPay to complete the payment",
+    "tropipay_pay": "Pay with TropiPay",
+    "tropipay_error_creating": "Error creating payment link"
   },
 
   "profile": {
@@ -118,7 +130,7 @@
     "referral_title": "Referrals",
     "referral_your_code": "Your referral code",
     "referral_share": "Share code",
-    "referral_share_message": "Use my referral code {{code}} on TriciGo and earn a bonus. Download the app: https://tricigo.app",
+    "referral_share_message": "Use my referral code {{code}} on TriciGo and earn a bonus. Download the app: https://tricigo.app/refer/{{code}}",
     "referral_share_help": "Share your code with friends. You will receive a {{bonus}} bonus when they complete their first ride.",
     "referral_have_code": "Have a referral code?",
     "referral_enter_code": "Enter the code",
@@ -158,7 +170,107 @@
     "help_description_placeholder": "Add more details...",
     "help_submit_ticket": "Submit ticket",
     "help_ticket_created": "Your ticket has been created successfully.",
-    "help_ticket_error": "Try again."
+    "help_ticket_error": "Try again.",
+    "about_description": "TriciGo is the bicitaxi transport platform for Cuba. We connect passengers with drivers quickly and safely.",
+    "terms_of_service": "Terms of service",
+    "privacy_policy": "Privacy policy",
+    "support_label": "Support",
+    "ticket_no_messages": "No messages yet. Write the first one.",
+    "ticket_message_placeholder": "Write a message...",
+    "ticket_closed_message": "This ticket is {{status}}",
+    "location_label_placeholder": "Home, Work...",
+    "notif_section_title": "Notification preferences",
+    "notif_rides": "Ride updates",
+    "notif_chat": "Chat messages",
+    "notif_wallet": "Wallet & payments",
+    "notif_promos": "Promotions & offers",
+    "notif_trip_requests": "Trip requests",
+    "notif_sms": "SMS Alerts",
+    "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply."
+  },
+
+  "safety": {
+    "title": "Safety Center",
+    "desc": "Your safety tools in one place",
+    "emergency_call": "Emergency Services",
+    "emergency_call_desc": "Call 106 for immediate help",
+    "emergency_call_button": "Call 106",
+    "emergency_contact_card": "Emergency Contact",
+    "emergency_contact_desc": "Someone you trust will be notified",
+    "set_emergency_contact": "Set up emergency contact",
+    "share_trip": "Share My Trip",
+    "share_trip_desc": "Share your live location with someone",
+    "share_trip_inactive": "Available during active rides",
+    "share_trip_sharing": "Sharing trip...",
+    "share_trip_message": "Track my TriciGo ride live: {{url}}",
+    "share_now": "Share now",
+    "report": "Report Safety Issue",
+    "report_desc": "Report a problem with a ride",
+    "report_after_trip": "Available after trip ends",
+    "tips_title": "Safety Tips",
+    "tip_1": "Always verify the vehicle plate matches the app",
+    "tip_2": "Share your trip with a trusted contact",
+    "tip_3": "Sit in the back seat when possible",
+    "tip_4": "Trust your instincts - cancel if something feels wrong",
+    "tip_5": "Keep your phone charged during rides",
+    "tip_driver_1": "Verify the rider's identity before starting",
+    "tip_driver_2": "Keep your vehicle in good condition",
+    "tip_driver_3": "Report any suspicious situations",
+    "tip_driver_4": "Don't accept rides if you feel tired",
+    "tip_driver_5": "Use the app for all communications with riders",
+    "my_reports": "My Safety Reports",
+    "no_reports": "No safety reports",
+    "report_type_sos": "SOS Emergency",
+    "report_type_safety_concern": "Safety Concern",
+    "report_type_driver_behavior": "Driver Behavior",
+    "report_type_passenger_behavior": "Passenger Behavior",
+    "report_type_vehicle_issue": "Vehicle Issue",
+    "report_status_open": "Open",
+    "report_status_investigating": "Investigating",
+    "report_status_resolved": "Resolved",
+    "report_status_dismissed": "Dismissed",
+    "call_contact": "Call contact",
+    "trusted_contacts_count": "{{count}} trusted contacts",
+    "share_with_contacts": "Share with Contacts",
+    "share_with_contacts_desc": "Send link to {{count}} trusted contacts",
+    "share_sent_to_n": "Sent to {{count}} contacts",
+    "share_for_contacts": "Send this link to: {{names}}",
+    "no_trusted_contacts": "No trusted contacts set up"
+  },
+
+  "trusted_contacts": {
+    "title": "Trusted Contacts",
+    "desc": "Add people who will automatically receive a link to track your rides in real time",
+    "add_contact": "Add Contact",
+    "edit_contact": "Edit Contact",
+    "delete_contact": "Delete Contact",
+    "delete_confirm": "Are you sure you want to remove {{name}} from your trusted contacts?",
+    "name": "Name",
+    "phone": "Phone",
+    "relationship": "Relationship",
+    "auto_share": "Auto-share rides",
+    "auto_share_desc": "Receive SMS with tracking link when a ride starts",
+    "is_emergency": "Emergency contact",
+    "emergency_desc": "Marked as primary emergency contact",
+    "emergency_badge": "Emergency",
+    "no_contacts": "No trusted contacts",
+    "no_contacts_desc": "Add contacts to automatically share your rides",
+    "max_contacts": "Limit reached",
+    "max_reached": "Maximum 5 trusted contacts allowed",
+    "duplicate_phone": "You already have a contact with that phone number",
+    "share_sent": "Link sent",
+    "share_sent_desc": "Your contacts will receive an SMS with the tracking link"
+  },
+
+  "insurance": {
+    "title": "Trip Insurance",
+    "desc": "Optional protection during your ride",
+    "toggle_label": "Enable trip insurance",
+    "coverage_label": "Coverage",
+    "premium_label": "Insurance premium",
+    "enabled": "Insurance enabled",
+    "disabled": "No insurance",
+    "coverage_amount": "Coverage up to {{amount}} CUP"
   },
 
   "network": {
@@ -179,11 +291,57 @@
     "denied": "Location permission denied"
   },
 
+  "today": "Today",
+  "yesterday": "Yesterday",
+
+  "a11y": {
+    "opens_destination": "Opens destination search",
+    "set_as_destination": "Set as destination",
+    "sends_quick_reply": "Sends quick reply",
+    "expands_filters": "Expands filter options",
+    "change_profile_photo": "Change profile photo",
+    "ride_map": "Ride map",
+    "messages_list": "Messages list",
+    "sync_progress": "Sync progress {{pct}}%",
+    "call_emergency": "Call emergency services",
+    "unread_count": "{{count}} unread notifications",
+    "toggles_online_status": "Toggles your online availability",
+    "message_from_you": "You said: {{message}}",
+    "message_from_other": "{{sender}} said: {{message}}",
+    "driver_info": "Driver {{name}}, rated {{rating}} stars, {{vehicle}}",
+    "fare_amount": "Fare: {{amount}}",
+    "stat_distance": "Distance: {{value}}",
+    "stat_duration": "Duration: {{value}}",
+    "stat_payment": "Payment: {{value}}",
+    "pickup_address": "Pickup: {{address}}",
+    "dropoff_address": "Dropoff: {{address}}",
+    "dispute_action": "Respond to dispute",
+    "lost_item_action": "Respond to lost item report",
+    "incoming_requests": "{{count}} incoming ride requests"
+  },
+
   "errors": {
     "generic": "Something went wrong. Please try again.",
     "network": "Connection error. Check your network.",
     "server": "Server error. Try again later.",
     "unauthorized": "Session expired. Please sign in again.",
     "not_found": "Not found"
-  }
+  },
+
+  "preferences": {
+    "title": "Ride Preferences",
+    "quiet_mode": "Quiet Mode",
+    "quiet_mode_desc": "I prefer a quiet ride without conversation",
+    "temperature": "Temperature",
+    "temp_cool": "Cool",
+    "temp_warm": "Warm",
+    "temp_no_preference": "No pref.",
+    "conversation_ok": "Conversation Welcome",
+    "conversation_ok_desc": "I enjoy chatting during the ride",
+    "luggage_trunk": "Luggage Space",
+    "luggage_trunk_desc": "I need space for bags or packages",
+    "saved": "Preferences saved"
+  },
+
+  "recurring_rides": "Recurring Rides"
 }

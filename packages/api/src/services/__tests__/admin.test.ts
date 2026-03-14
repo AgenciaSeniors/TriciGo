@@ -98,6 +98,67 @@ describe('adminService', () => {
       expect(result).toEqual(drivers);
     });
 
+    it('applies status filter', async () => {
+      const drivers = [{ id: 'd-1', status: 'approved' }];
+      const mockEq = vi.fn().mockResolvedValue({ data: drivers, error: null });
+      const mockRange = vi.fn(() => ({ eq: mockEq }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getAllDrivers(0, 20, { status: 'approved' });
+
+      expect(mockEq).toHaveBeenCalledWith('status', 'approved');
+      expect(result).toEqual(drivers);
+    });
+
+    it('applies search filter via ilike on users.full_name', async () => {
+      const drivers = [{ id: 'd-1', users: { full_name: 'Carlos' } }];
+      const mockIlike = vi.fn().mockResolvedValue({ data: drivers, error: null });
+      const mockRange = vi.fn(() => ({ ilike: mockIlike }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getAllDrivers(0, 20, { search: 'Carlos' });
+
+      expect(mockIlike).toHaveBeenCalledWith('users.full_name', '%Carlos%');
+      expect(result).toEqual(drivers);
+    });
+
+    it('applies rating filter via gte', async () => {
+      const drivers = [{ id: 'd-1', rating_avg: 4.5 }];
+      const mockGte = vi.fn().mockResolvedValue({ data: drivers, error: null });
+      const mockRange = vi.fn(() => ({ gte: mockGte }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getAllDrivers(0, 20, { ratingMin: 4.0 });
+
+      expect(mockGte).toHaveBeenCalledWith('rating_avg', 4.0);
+      expect(result).toEqual(drivers);
+    });
+
+    it('filters by vehicle type client-side', async () => {
+      const drivers = [
+        { id: 'd-1', vehicles: [{ type: 'moto', plate_number: 'M1' }] },
+        { id: 'd-2', vehicles: [{ type: 'auto', plate_number: 'A1' }] },
+      ];
+      const mockRange = vi.fn().mockResolvedValue({ data: drivers, error: null });
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getAllDrivers(0, 20, { vehicleType: 'moto' });
+
+      expect(result).toEqual([drivers[0]]);
+    });
+
     it('throws on supabase error', async () => {
       const err = { message: 'DB error', code: '42P01' };
       const mockRange = vi.fn().mockResolvedValue({ data: null, error: err });
@@ -392,7 +453,7 @@ describe('adminService', () => {
 
   // ==================== Users ====================
   describe('getUsers', () => {
-    it('returns paginated users', async () => {
+    it('returns paginated users without filters', async () => {
       const users = [{ id: 'u-1', full_name: 'Juan' }];
       const mockRange = vi.fn().mockResolvedValue({ data: users, error: null });
       const mockOrder = vi.fn(() => ({ range: mockRange }));
@@ -406,6 +467,68 @@ describe('adminService', () => {
       expect(mockSelect).toHaveBeenCalledWith('*');
       expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false });
       expect(mockRange).toHaveBeenCalledWith(0, 19);
+      expect(result).toEqual(users);
+    });
+
+    it('applies role filter via eq', async () => {
+      const users = [{ id: 'u-1', role: 'customer' }];
+      const mockEq = vi.fn().mockResolvedValue({ data: users, error: null });
+      const mockRange = vi.fn(() => ({ eq: mockEq }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getUsers(0, 20, { role: 'customer' });
+
+      expect(mockEq).toHaveBeenCalledWith('role', 'customer');
+      expect(result).toEqual(users);
+    });
+
+    it('applies search filter via or (name/phone)', async () => {
+      const users = [{ id: 'u-1', full_name: 'Maria' }];
+      const mockOr = vi.fn().mockResolvedValue({ data: users, error: null });
+      const mockRange = vi.fn(() => ({ or: mockOr }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getUsers(0, 20, { search: 'Maria' });
+
+      expect(mockOr).toHaveBeenCalledWith('full_name.ilike.%Maria%,phone.ilike.%Maria%');
+      expect(result).toEqual(users);
+    });
+
+    it('applies date range filters', async () => {
+      const users = [{ id: 'u-1' }];
+      const mockLt = vi.fn().mockResolvedValue({ data: users, error: null });
+      const mockGte = vi.fn(() => ({ lt: mockLt }));
+      const mockRange = vi.fn(() => ({ gte: mockGte }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getUsers(0, 20, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+      expect(mockGte).toHaveBeenCalledWith('created_at', '2026-01-01');
+      expect(mockLt).toHaveBeenCalledWith('created_at', '2026-01-31T23:59:59');
+      expect(result).toEqual(users);
+    });
+
+    it('applies isActive filter', async () => {
+      const users = [{ id: 'u-1', is_active: true }];
+      const mockEq = vi.fn().mockResolvedValue({ data: users, error: null });
+      const mockRange = vi.fn(() => ({ eq: mockEq }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getUsers(0, 20, { isActive: true });
+
+      expect(mockEq).toHaveBeenCalledWith('is_active', true);
       expect(result).toEqual(users);
     });
 
@@ -526,7 +649,6 @@ describe('adminService', () => {
   describe('getRides', () => {
     it('returns rides without filter', async () => {
       const rides = [{ id: 'r-1', status: 'completed' }];
-      // When no filter.status: select -> order -> range (chain ends with await, eq is not called)
       const mockEq = vi.fn().mockResolvedValue({ data: rides, error: null });
       const mockRange = vi.fn().mockResolvedValue({ data: rides, error: null });
       const mockOrder = vi.fn(() => ({ range: mockRange, eq: mockEq }));
@@ -544,7 +666,6 @@ describe('adminService', () => {
 
     it('returns rides with status filter', async () => {
       const rides = [{ id: 'r-1', status: 'in_progress' }];
-      // With filter: select -> order -> range returns an object with .eq
       const mockEqFinal = vi.fn().mockResolvedValue({ data: rides, error: null });
       const mockRange = vi.fn(() => ({ eq: mockEqFinal }));
       const mockOrder = vi.fn(() => ({ range: mockRange }));
@@ -555,6 +676,68 @@ describe('adminService', () => {
       const result = await adminService.getRides({ status: 'in_progress' });
 
       expect(mockEqFinal).toHaveBeenCalledWith('status', 'in_progress');
+      expect(result).toEqual(rides);
+    });
+
+    it('applies serviceType filter', async () => {
+      const rides = [{ id: 'r-1', service_type: 'moto_standard' }];
+      const mockEqService = vi.fn().mockResolvedValue({ data: rides, error: null });
+      const mockRange = vi.fn(() => ({ eq: mockEqService }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getRides({ serviceType: 'moto_standard' });
+
+      expect(mockEqService).toHaveBeenCalledWith('service_type', 'moto_standard');
+      expect(result).toEqual(rides);
+    });
+
+    it('applies paymentMethod filter', async () => {
+      const rides = [{ id: 'r-1', payment_method: 'cash' }];
+      const mockEqPayment = vi.fn().mockResolvedValue({ data: rides, error: null });
+      const mockRange = vi.fn(() => ({ eq: mockEqPayment }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getRides({ paymentMethod: 'cash' });
+
+      expect(mockEqPayment).toHaveBeenCalledWith('payment_method', 'cash');
+      expect(result).toEqual(rides);
+    });
+
+    it('applies search filter via or (address)', async () => {
+      const rides = [{ id: 'r-1' }];
+      const mockOr = vi.fn().mockResolvedValue({ data: rides, error: null });
+      const mockRange = vi.fn(() => ({ or: mockOr }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getRides({ search: 'Vedado' });
+
+      expect(mockOr).toHaveBeenCalledWith('pickup_address.ilike.%Vedado%,dropoff_address.ilike.%Vedado%');
+      expect(result).toEqual(rides);
+    });
+
+    it('applies date range filters', async () => {
+      const rides = [{ id: 'r-1' }];
+      const mockLt = vi.fn().mockResolvedValue({ data: rides, error: null });
+      const mockGte = vi.fn(() => ({ lt: mockLt }));
+      const mockRange = vi.fn(() => ({ gte: mockGte }));
+      const mockOrder = vi.fn(() => ({ range: mockRange }));
+      const mockSelect = vi.fn(() => ({ order: mockOrder }));
+
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const result = await adminService.getRides({ dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+      expect(mockGte).toHaveBeenCalledWith('created_at', '2026-01-01');
+      expect(mockLt).toHaveBeenCalledWith('created_at', '2026-01-31T23:59:59');
       expect(result).toEqual(rides);
     });
 
@@ -776,7 +959,7 @@ describe('adminService', () => {
 
       expect(mockFrom).toHaveBeenCalledWith('wallet_redemptions');
       expect(mockEq).toHaveBeenCalledWith('status', 'requested');
-      expect(result[0].driver_name).toBe('Carlos');
+      expect(result[0]!.driver_name).toBe('Carlos');
     });
 
     it('throws on supabase error', async () => {
@@ -896,7 +1079,7 @@ describe('adminService', () => {
       expect(mockFrom).toHaveBeenCalledWith('wallet_recharge_requests');
       expect(mockSelect).toHaveBeenCalledWith('*, users!inner(full_name)');
       expect(mockEq).toHaveBeenCalledWith('status', 'pending');
-      expect(result[0].user_name).toBe('Luis');
+      expect(result[0]!.user_name).toBe('Luis');
     });
 
     it('throws on supabase error', async () => {
@@ -1616,6 +1799,92 @@ describe('adminService', () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: err });
 
       await expect(adminService.adjustDriverScore('d-1', -10)).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== Analytics ====================
+  describe('getRidesByDay', () => {
+    it('returns daily ride data from rpc', async () => {
+      const days = [{ day: '2026-03-01', total: 10, completed: 8, canceled: 2, revenue: 50000 }];
+      mockRpc.mockResolvedValueOnce({ data: days, error: null });
+
+      const result = await adminService.getRidesByDay(7);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_rides_by_day', { p_days_back: 7 });
+      expect(result).toEqual(days);
+    });
+
+    it('throws on rpc error', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'fail' } });
+      await expect(adminService.getRidesByDay()).rejects.toEqual({ message: 'fail' });
+    });
+  });
+
+  describe('getRidesByServiceType', () => {
+    it('returns service type breakdown from rpc', async () => {
+      const types = [{ service_type: 'triciclo_basico', count: 100, revenue: 500000 }];
+      mockRpc.mockResolvedValueOnce({ data: types, error: null });
+
+      const result = await adminService.getRidesByServiceType(30);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_rides_by_service_type', { p_days_back: 30 });
+      expect(result).toEqual(types);
+    });
+  });
+
+  describe('getRidesByPaymentMethod', () => {
+    it('returns payment method breakdown from rpc', async () => {
+      const methods = [{ payment_method: 'cash', count: 80, revenue: 400000 }];
+      mockRpc.mockResolvedValueOnce({ data: methods, error: null });
+
+      const result = await adminService.getRidesByPaymentMethod(30);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_rides_by_payment_method', { p_days_back: 30 });
+      expect(result).toEqual(methods);
+    });
+  });
+
+  describe('getPeakHours', () => {
+    it('returns hourly averages from rpc', async () => {
+      const hours = [{ hour: 8, avg_rides: 5.2 }, { hour: 18, avg_rides: 7.1 }];
+      mockRpc.mockResolvedValueOnce({ data: hours, error: null });
+
+      const result = await adminService.getPeakHours(30);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_peak_hours', { p_days_back: 30 });
+      expect(result).toEqual(hours);
+    });
+  });
+
+  describe('getTopDrivers', () => {
+    it('returns top drivers from rpc', async () => {
+      const drivers = [{ driver_id: 'd-1', driver_name: 'Juan', rides_count: 50, rating: 4.8, revenue: 250000 }];
+      mockRpc.mockResolvedValueOnce({ data: drivers, error: null });
+
+      const result = await adminService.getTopDrivers(5);
+
+      expect(mockRpc).toHaveBeenCalledWith('get_top_drivers', { p_limit: 5 });
+      expect(result).toEqual(drivers);
+    });
+  });
+
+  describe('getDriverUtilization', () => {
+    it('returns utilization snapshot from rpc', async () => {
+      const util = { online: 15, busy: 8, idle: 7, offline: 30 };
+      mockRpc.mockResolvedValueOnce({ data: [util], error: null });
+
+      const result = await adminService.getDriverUtilization();
+
+      expect(mockRpc).toHaveBeenCalledWith('get_driver_utilization');
+      expect(result).toEqual(util);
+    });
+
+    it('returns defaults when data is null', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: null });
+
+      const result = await adminService.getDriverUtilization();
+
+      expect(result).toEqual({ online: 0, busy: 0, idle: 0, offline: 0 });
     });
   });
 });

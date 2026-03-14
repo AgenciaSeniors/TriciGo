@@ -10,6 +10,9 @@ import type {
   Vehicle,
   Ride,
   CompleteRideResult,
+  ServiceTypeSlug,
+  PaymentMethod,
+  SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
 import { cupToTrcCentavos } from '@tricigo/utils';
@@ -361,6 +364,80 @@ export const driverService = {
     return data as Ride[];
   },
 
+  /**
+   * Get completed trip history for a driver within a date range.
+   */
+  async getTripHistoryByDateRange(
+    driverId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Ride[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('driver_id', driverId)
+      .eq('status', 'completed')
+      .gte('completed_at', startDate)
+      .lte('completed_at', endDate)
+      .order('completed_at', { ascending: false });
+    if (error) throw error;
+    return data as Ride[];
+  },
+
+  /**
+   * Get filtered trip history for the driver.
+   */
+  async getTripHistoryFiltered(params: {
+    driverId: string;
+    page?: number;
+    pageSize?: number;
+    status?: ('completed' | 'canceled')[];
+    serviceType?: ServiceTypeSlug;
+    paymentMethod?: PaymentMethod;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<Ride[]> {
+    const supabase = getSupabaseClient();
+    const page = params.page ?? 0;
+    const pageSize = params.pageSize ?? 20;
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('rides')
+      .select('*')
+      .eq('driver_id', params.driverId);
+
+    // Status filter
+    const statuses = params.status ?? ['completed', 'canceled'];
+    query = query.in('status', statuses);
+
+    // Service type filter
+    if (params.serviceType) {
+      query = query.eq('service_type', params.serviceType);
+    }
+
+    // Payment method filter
+    if (params.paymentMethod) {
+      query = query.eq('payment_method', params.paymentMethod);
+    }
+
+    // Date range filters
+    if (params.dateFrom) {
+      query = query.gte('created_at', params.dateFrom);
+    }
+    if (params.dateTo) {
+      query = query.lte('created_at', params.dateTo);
+    }
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as Ride[];
+  },
+
   // ==================== ELIGIBILITY ====================
 
   /**
@@ -511,5 +588,237 @@ export const driverService = {
       .limit(limit);
     if (error) throw error;
     return data as CancellationPenalty[];
+  },
+
+  /**
+   * Get driver performance stats: acceptance, completion, cancellation rates,
+   * weekly/monthly ride counts, avg response time, rating, and match score.
+   */
+  async getDriverStats(driverId: string): Promise<{
+    acceptanceRate: number;
+    cancellationRate: number;
+    completionRate: number;
+    totalRidesOffered: number;
+    totalRidesCompleted: number;
+    totalRidesCanceled: number;
+    ridesThisWeek: number;
+    ridesThisMonth: number;
+    avgResponseTimeS: number | null;
+    ratingAvg: number;
+    matchScore: number;
+  }> {
+    const supabase = getSupabaseClient();
+
+    // 1. Driver profile basic stats
+    const { data: profile, error: profileErr } = await supabase
+      .from('driver_profiles')
+      .select('acceptance_rate, total_rides_offered, total_rides, total_rides_completed, rating_avg, match_score')
+      .eq('id', driverId)
+      .single();
+    if (profileErr) throw profileErr;
+
+    // 2. Rides canceled by this driver
+    const { count: canceledCount } = await supabase
+      .from('rides')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverId)
+      .eq('status', 'canceled');
+
+    // 3. Rides completed this week (Monday-based)
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+
+    const { count: weekCount } = await supabase
+      .from('rides')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverId)
+      .eq('status', 'completed')
+      .gte('completed_at', monday.toISOString());
+
+    // 4. Rides completed this month
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const { count: monthCount } = await supabase
+      .from('rides')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', driverId)
+      .eq('status', 'completed')
+      .gte('completed_at', monthStart.toISOString());
+
+    // 5. Average response time (time from ride creation to acceptance)
+    let avgResponseTimeS: number | null = null;
+    try {
+      const { data: recentRides } = await supabase
+        .from('rides')
+        .select('created_at, accepted_at')
+        .eq('driver_id', driverId)
+        .not('accepted_at', 'is', null)
+        .order('accepted_at', { ascending: false })
+        .limit(50);
+
+      if (recentRides && recentRides.length > 0) {
+        const totalSeconds = recentRides.reduce((sum: number, r: { created_at: string; accepted_at: string }) => {
+          const diff = (new Date(r.accepted_at).getTime() - new Date(r.created_at).getTime()) / 1000;
+          return sum + Math.max(diff, 0);
+        }, 0);
+        avgResponseTimeS = Math.round(totalSeconds / recentRides.length);
+      }
+    } catch { /* non-critical */ }
+
+    const totalOffered = profile.total_rides_offered || 1;
+    const totalCanceled = canceledCount ?? 0;
+    const totalCompleted = profile.total_rides_completed ?? 0;
+
+    return {
+      acceptanceRate: profile.acceptance_rate ?? 0,
+      cancellationRate: totalOffered > 0 ? totalCanceled / totalOffered : 0,
+      completionRate: totalOffered > 0 ? totalCompleted / totalOffered : 0,
+      totalRidesOffered: profile.total_rides_offered ?? 0,
+      totalRidesCompleted: totalCompleted,
+      totalRidesCanceled: totalCanceled,
+      ridesThisWeek: weekCount ?? 0,
+      ridesThisMonth: monthCount ?? 0,
+      avgResponseTimeS,
+      ratingAvg: profile.rating_avg ?? 5.0,
+      matchScore: profile.match_score ?? 50,
+    };
+  },
+
+  // ==================== IDENTITY VERIFICATION ====================
+
+  /**
+   * Get verification status for all documents of a driver.
+   */
+  async getDocumentVerificationStatus(
+    driverId: string,
+  ): Promise<DriverDocument[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_documents')
+      .select('*')
+      .eq('driver_id', driverId)
+      .order('uploaded_at', { ascending: true });
+    if (error) throw error;
+    return data as DriverDocument[];
+  },
+
+  /**
+   * Request a periodic selfie check for a driver.
+   */
+  async requestSelfieCheck(driverId: string): Promise<SelfieCheck> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('selfie_checks')
+      .insert({
+        driver_id: driverId,
+        storage_path: '',
+        status: 'pending',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as SelfieCheck;
+  },
+
+  /**
+   * Upload a selfie for an active check and mark as processing.
+   */
+  async uploadSelfieCheck(
+    checkId: string,
+    driverId: string,
+    filePath: string,
+    fileName: string,
+  ): Promise<SelfieCheck> {
+    const supabase = getSupabaseClient();
+
+    // Upload to storage
+    const response = await fetch(filePath);
+    const blob = await response.blob();
+    const storagePath = `selfie-checks/${driverId}/${checkId}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('driver-documents')
+      .upload(storagePath, blob, { upsert: true });
+    if (uploadError) throw uploadError;
+
+    // Update check record
+    const { data, error } = await supabase
+      .from('selfie_checks')
+      .update({
+        storage_path: storagePath,
+        status: 'processing',
+      })
+      .eq('id', checkId)
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Invoke Edge Function for face matching (fire-and-forget)
+    supabase.functions
+      .invoke('verify-selfie', {
+        body: { check_id: checkId, driver_id: driverId },
+      })
+      .catch((err) => console.error('verify-selfie invoke failed:', err));
+
+    return data as SelfieCheck;
+  },
+
+  /**
+   * Complete a selfie check (called by Edge Function or admin).
+   */
+  async completeSelfieCheck(
+    checkId: string,
+    passed: boolean,
+    faceMatchScore?: number,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('selfie_checks')
+      .update({
+        status: passed ? 'passed' : 'failed',
+        face_match_score: faceMatchScore ?? null,
+        liveness_passed: passed,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', checkId);
+    if (error) throw error;
+  },
+
+  /**
+   * Get the latest selfie check for a driver.
+   */
+  async getLatestSelfieCheck(
+    driverId: string,
+  ): Promise<SelfieCheck | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('selfie_checks')
+      .select('*')
+      .eq('driver_id', driverId)
+      .order('requested_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data as SelfieCheck | null;
+  },
+
+  /**
+   * Get selfie check history for a driver.
+   */
+  async getSelfieChecks(
+    driverId: string,
+    limit = 10,
+  ): Promise<SelfieCheck[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('selfie_checks')
+      .select('*')
+      .eq('driver_id', driverId)
+      .order('requested_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data as SelfieCheck[];
   },
 };

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { adminService } from '@tricigo/api';
+import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus } from '@tricigo/types';
+import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus, SelfieCheck, ReviewTagSummaryItem } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 
 type DriverDetail = {
@@ -65,6 +65,10 @@ export default function DriverDetailPage() {
   const [showReasonModal, setShowReasonModal] = useState<'reject' | 'suspend' | null>(null);
   const [reason, setReason] = useState('');
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
+  const [selfieChecks, setSelfieChecks] = useState<SelfieCheck[]>([]);
+  const [verifyingDoc, setVerifyingDoc] = useState<string | null>(null);
+  const [docNotes, setDocNotes] = useState<Record<string, string>>({});
+  const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -72,8 +76,16 @@ export default function DriverDetailPage() {
 
     async function load() {
       try {
-        const data = await adminService.getDriverDetail(id);
-        if (!cancelled) setDriver(data);
+        const [data, checks, reviewSummary] = await Promise.all([
+          adminService.getDriverDetail(id),
+          adminService.getDriverSelfieChecks(id).catch(() => [] as SelfieCheck[]),
+          reviewService.getReviewSummary(id).catch(() => null),
+        ]);
+        if (!cancelled) {
+          setDriver(data);
+          setSelfieChecks(checks);
+          if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
+        }
       } catch (err) {
         console.error('Error loading driver:', err);
       } finally {
@@ -101,8 +113,25 @@ export default function DriverDetailPage() {
 
   const refreshDriver = async () => {
     if (!id) return;
-    const data = await adminService.getDriverDetail(id);
+    const [data, checks] = await Promise.all([
+      adminService.getDriverDetail(id),
+      adminService.getDriverSelfieChecks(id).catch(() => [] as SelfieCheck[]),
+    ]);
     setDriver(data);
+    setSelfieChecks(checks);
+  };
+
+  const handleVerifyDoc = async (documentId: string, isVerified: boolean) => {
+    setVerifyingDoc(documentId);
+    try {
+      await adminService.verifyDocument(documentId, adminUserId, isVerified, docNotes[documentId] || undefined);
+      setDocNotes((prev) => ({ ...prev, [documentId]: '' }));
+      await refreshDriver();
+    } catch (err) {
+      console.error('Error verifying document:', err);
+    } finally {
+      setVerifyingDoc(null);
+    }
   };
 
   const handleApprove = async () => {
@@ -199,6 +228,22 @@ export default function DriverDetailPage() {
             <div>
               <dt className="text-sm text-neutral-500">{t('drivers.label_rating')}</dt>
               <dd className="text-sm font-medium">{Number(profile.rating_avg).toFixed(1)} / 5.0</dd>
+              {topTags.length > 0 && (
+                <div className="mt-2">
+                  <dt className="text-xs text-neutral-400 mb-1">{t('drivers.top_review_tags')}</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {topTags.slice(0, 5).map((tag) => (
+                      <span
+                        key={tag.tag_key}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-xs text-neutral-600"
+                      >
+                        {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
+                        <span className="text-neutral-400">({tag.count})</span>
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              )}
             </div>
             <div>
               <dt className="text-sm text-neutral-500">{t('drivers.label_completed_rides')}</dt>
@@ -250,34 +295,112 @@ export default function DriverDetailPage() {
       {/* Documents */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
         <h2 className="text-lg font-bold mb-4">{t('drivers.documents_section')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {(['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'] as const).map(
             (docType) => {
               const doc = documents.find((d) => d.document_type === docType);
               const url = doc ? docUrls[doc.id] : null;
+              const docVerified = doc?.is_verified;
+              const docRejected = !doc?.is_verified && !!doc?.rejection_reason;
+
               return (
                 <div
                   key={docType}
-                  className="border border-neutral-200 rounded-lg p-4"
+                  className={`border rounded-lg p-4 ${
+                    docVerified ? 'border-green-200 bg-green-50/30' :
+                    docRejected ? 'border-red-200 bg-red-50/30' :
+                    'border-neutral-200'
+                  }`}
                 >
-                  <p className="text-sm font-medium mb-2">{DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]!) : docType}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">{DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]!) : docType}</p>
+                    {doc && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        docVerified ? 'bg-green-100 text-green-700' :
+                        docRejected ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {docVerified ? t('verification.doc_status_verified') :
+                         docRejected ? t('verification.doc_status_rejected') :
+                         t('verification.doc_status_pending')}
+                      </span>
+                    )}
+                  </div>
+
                   {doc ? (
                     <div>
-                      {url ? (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary-500 hover:underline"
-                        >
-                          {t('drivers.view_document')}
+                      {/* Image preview */}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={url}
+                            alt={docType}
+                            className="w-full h-32 object-cover rounded-md mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                          />
                         </a>
-                      ) : (
-                        <span className="text-sm text-neutral-400">{t('common.loading')}</span>
                       )}
-                      <p className="text-xs text-neutral-400 mt-1">
+                      {!url && (
+                        <div className="w-full h-32 bg-neutral-100 rounded-md mb-2 flex items-center justify-center">
+                          <span className="text-xs text-neutral-400">{t('common.loading')}</span>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-neutral-400 mb-2">
                         {t('drivers.doc_uploaded_at')} {formatDate(doc.uploaded_at)}
                       </p>
+
+                      {/* Face match score */}
+                      {doc.face_match_score != null && (
+                        <div className="flex items-center gap-1 mb-2">
+                          <span className="text-xs text-neutral-500">{t('verification.face_match_score')}:</span>
+                          <span className={`text-xs font-medium ${
+                            doc.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {Math.round(doc.face_match_score * 100)}%
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Rejection reason */}
+                      {docRejected && doc.rejection_reason && (
+                        <p className="text-xs text-red-600 mb-2">
+                          {doc.rejection_reason}
+                        </p>
+                      )}
+
+                      {/* Verification notes */}
+                      {doc.verification_notes && (
+                        <p className="text-xs text-neutral-500 italic mb-2">{doc.verification_notes}</p>
+                      )}
+
+                      {/* Verify/Reject controls */}
+                      {!docVerified && (
+                        <div className="mt-3 border-t border-neutral-100 pt-3">
+                          <input
+                            type="text"
+                            value={docNotes[doc.id] || ''}
+                            onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
+                            placeholder={t('verification.verification_notes')}
+                            className="w-full border border-neutral-200 rounded px-2 py-1 text-xs mb-2 focus:outline-none focus:border-primary-500"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleVerifyDoc(doc.id, true)}
+                              disabled={verifyingDoc === doc.id}
+                              className="flex-1 px-3 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                            >
+                              {t('verification.verify_doc')}
+                            </button>
+                            <button
+                              onClick={() => handleVerifyDoc(doc.id, false)}
+                              disabled={verifyingDoc === doc.id || !docNotes[doc.id]?.trim()}
+                              className="flex-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            >
+                              {t('verification.reject_doc')}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-sm text-neutral-400">{t('drivers.not_uploaded')}</span>
@@ -288,6 +411,61 @@ export default function DriverDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Selfie Checks */}
+      {selfieChecks.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
+          <h2 className="text-lg font-bold mb-4">{t('verification.selfie_checks')}</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-100">
+                  <th className="text-left py-2 text-neutral-500 font-medium">{t('common.date')}</th>
+                  <th className="text-left py-2 text-neutral-500 font-medium">{t('common.status')}</th>
+                  <th className="text-left py-2 text-neutral-500 font-medium">{t('verification.face_match_score')}</th>
+                  <th className="text-left py-2 text-neutral-500 font-medium">{t('verification.liveness')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selfieChecks.map((check) => (
+                  <tr key={check.id} className="border-b border-neutral-50">
+                    <td className="py-2 text-neutral-700">{formatDate(check.requested_at)}</td>
+                    <td className="py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        check.status === 'passed' ? 'bg-green-100 text-green-700' :
+                        check.status === 'failed' ? 'bg-red-100 text-red-700' :
+                        check.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                        check.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {check.status}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      {check.face_match_score != null ? (
+                        <span className={`font-medium ${check.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
+                          {Math.round(check.face_match_score * 100)}%
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      {check.liveness_passed != null ? (
+                        <span className={check.liveness_passed ? 'text-green-600' : 'text-red-600'}>
+                          {check.liveness_passed ? '✓' : '✗'}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Financial Eligibility */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">

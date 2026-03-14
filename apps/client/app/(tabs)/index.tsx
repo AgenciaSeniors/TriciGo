@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { View, Pressable, ActivityIndicator, Platform, Switch } from 'react-native';
+import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -7,30 +8,48 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
-import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC, HAVANA_PRESETS } from '@tricigo/utils';
+import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
+import { formatTRC, triggerSelection, triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
+import { useNotificationStore } from '@/stores/notification.store';
 import { useRideInit, useRideActions } from '@/hooks/useRide';
+import { useRoutePolyline } from '@/hooks/useRoutePolyline';
+import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
+import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
-import type { GeoPoint, LocationPreset } from '@tricigo/utils';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { FareBreakdownCard } from '@tricigo/ui/FareBreakdownCard';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useRecentAddresses } from '@/hooks/useRecentAddresses';
+import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
+import { vehicleSelectionImages } from '@/utils/vehicleImages';
+import { SplitInviteCard } from '@/components/SplitInviteCard';
+import { FareSplitSheet } from '@/components/FareSplitSheet';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount } from '@tricigo/types';
+import type { PredictedDestination } from '@tricigo/utils';
+import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 
-const SEARCH_STEPS = [
-  { key: 'searching', label: 'Buscando' },
-  { key: 'accepted', label: 'Aceptado' },
-  { key: 'driver_en_route', label: 'En camino' },
-  { key: 'in_progress', label: 'En viaje' },
-];
+// Coin icon for BalanceBadge
+const tricoinSmall = require('../../assets/coins/tricoin-small.png');
+
+function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
+  const lastPress = useRef(0);
+  return useCallback((...args: any[]) => {
+    const now = Date.now();
+    if (now - lastPress.current < delayMs) return;
+    lastPress.current = now;
+    callback(...args);
+  }, [callback, delayMs]);
+}
 
 export default function HomeScreen() {
   const { t } = useTranslation('rider');
@@ -59,7 +78,14 @@ function IdleView() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
+  const setDropoff = useRideStore((s) => s.setDropoff);
   const [walletBalance, setWalletBalance] = useState(0);
+  const { recentAddresses } = useRecentAddresses();
+  const { predictions } = useDestinationPredictions();
+  const notifCenterEnabled = useFeatureFlag('notification_center_enabled');
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
+  const incrementUnread = useNotificationStore((s) => s.incrementUnread);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -74,18 +100,71 @@ function IdleView() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  // Fetch unread count + subscribe to realtime notifications
+  useEffect(() => {
+    if (!user?.id || !notifCenterEnabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const count = await notificationService.getUnreadCount(user.id);
+        if (!cancelled) setUnreadCount(count);
+      } catch (err) { console.warn('[Notif] Failed to load unread count:', err); }
+    })();
+    const subscription = notificationService.subscribeToNotifications(user.id, () => {
+      if (!cancelled) incrementUnread();
+    });
+    return () => {
+      cancelled = true;
+      subscription?.unsubscribe();
+    };
+  }, [user?.id, notifCenterEnabled]);
+
+  const handleRecentTap = useCallback((addr: { address: string; latitude: number; longitude: number }) => {
+    setDropoff(addr.address, { latitude: addr.latitude, longitude: addr.longitude });
+    setFlowStep('selecting');
+  }, [setDropoff, setFlowStep]);
+
   return (
     <View className="pt-4">
-      <Text variant="h3" className="mb-1">
-        {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
-      </Text>
+      <View className="flex-row items-center justify-between mb-1">
+        <Text variant="h3">
+          {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
+        </Text>
+        {notifCenterEnabled && (
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            className="relative p-2"
+            accessibilityRole="button"
+            accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
+          >
+            <Ionicons
+              name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
+              size={24}
+              color={colors.neutral[700]}
+            />
+            {unreadCount > 0 && (
+              <View className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-red-500 items-center justify-center px-1">
+                <Text variant="caption" className="text-white text-[10px] font-bold">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+      </View>
 
-      <BalanceBadge balance={walletBalance} size="sm" className="mt-4 mb-6" />
+      <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} className="mt-4 mb-6" />
+
+      {/* Pending split invites */}
+      <SplitInviteCard />
 
       {/* Destination search */}
       <Pressable
-        className="bg-neutral-100 rounded-xl px-4 py-4 flex-row items-center mb-6"
+        className="bg-neutral-100 rounded-xl px-4 py-4 flex-row items-center mb-4"
         onPress={() => setFlowStep('selecting')}
+        accessibilityRole="search"
+        accessibilityLabel={t('home.where_to')}
+        accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
       >
         <View className="w-3 h-3 rounded-full bg-primary-500 mr-3" />
         <Text variant="body" color="tertiary">
@@ -93,27 +172,75 @@ function IdleView() {
         </Text>
       </Pressable>
 
+      {/* Predicted destinations */}
+      {predictions.length > 0 && (
+        <View className="mb-4">
+          <Text variant="caption" color="secondary" className="mb-2">
+            {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+          </Text>
+          {predictions.slice(0, 3).map((pred, idx) => (
+            <Pressable
+              key={`pred-${idx}`}
+              className="flex-row items-center bg-primary-50 rounded-xl px-4 py-3 mb-2"
+              onPress={() => handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude })}
+              accessibilityRole="button"
+              accessibilityLabel={pred.address || pred.name}
+            >
+              <Ionicons
+                name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
+                size={18}
+                color={colors.brand.orange}
+              />
+              <View className="flex-1 ml-3">
+                <Text variant="bodySmall" numberOfLines={1}>{pred.address}</Text>
+                <Text variant="caption" color="accent">
+                  {pred.reason === 'time_pattern'
+                    ? t('prediction.time_pattern', { defaultValue: 'Según tu horario' })
+                    : pred.reason === 'frequent'
+                      ? t('prediction.frequent', { defaultValue: 'Destino frecuente' })
+                      : t('prediction.recent', { defaultValue: 'Viaje reciente' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {/* Recent places */}
+      {recentAddresses.length > 0 && (
+        <View className="mb-4">
+          <Text variant="caption" color="secondary" className="mb-2">
+            {t('home.recent_places', { defaultValue: 'Lugares recientes' })}
+          </Text>
+          {recentAddresses.slice(0, 3).map((addr, idx) => (
+            <Pressable
+              key={`recent-idle-${idx}`}
+              className="flex-row items-center bg-neutral-50 rounded-xl px-4 py-3 mb-2"
+              onPress={() => handleRecentTap(addr)}
+              accessibilityRole="button"
+              accessibilityLabel={addr.address}
+            >
+              <Ionicons name="time-outline" size={18} color={colors.neutral[500]} />
+              <Text variant="bodySmall" className="flex-1 ml-3" numberOfLines={1}>
+                {addr.address}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {/* Service types */}
       <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
-      <View className="flex-row gap-3">
-        {[
-          { key: 'triciclo_basico', icon: 'bicycle-outline' as const },
-          { key: 'moto_standard', icon: 'flash-outline' as const },
-          { key: 'auto_standard', icon: 'car-outline' as const },
-        ].map((service) => (
-          <Card
-            key={service.key}
-            variant="outlined"
-            padding="md"
-            className="flex-1 items-center"
-          >
-            <View className="w-10 h-10 rounded-full bg-primary-50 items-center justify-center mb-1">
-              <Ionicons name={service.icon} size={22} color={colors.brand.orange} />
-            </View>
-            <Text variant="caption" color="secondary" className="text-center">
-              {t(`service_type.${service.key}` as const)}
-            </Text>
-          </Card>
+      <View className="flex-row gap-3" accessibilityRole="radiogroup">
+        {(['triciclo_basico', 'moto_standard', 'auto_standard'] as const).map((slug) => (
+          <ServiceTypeCard
+            key={slug}
+            slug={slug}
+            name={t(`service_type.${slug}` as const)}
+            icon={vehicleSelectionImages[slug]}
+          />
         ))}
       </View>
     </View>
@@ -124,6 +251,7 @@ function IdleView() {
 
 function SelectingView() {
   const { t } = useTranslation('rider');
+  const user = useAuthStore((s) => s.user);
   const {
     draft,
     setPickup,
@@ -132,13 +260,29 @@ function SelectingView() {
     setPaymentMethod,
     setScheduledAt,
     setDeliveryField,
+    setCorporateAccount,
     setFlowStep,
+    addWaypoint,
+    removeWaypoint,
+    updateWaypoint,
     isLoading,
     error,
   } = useRideStore();
   const { requestEstimate } = useRideActions();
+  const { recentAddresses } = useRecentAddresses();
+  const { predictions } = useDestinationPredictions();
+  const { accounts: corporateAccounts } = useCorporateAccounts();
+  const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // Load saved locations from customer profile
+  useEffect(() => {
+    if (!user?.id) return;
+    customerService.ensureProfile(user.id).then((cp) => {
+      setSavedLocations(cp.saved_locations ?? []);
+    }).catch(() => {});
+  }, [user?.id]);
 
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
@@ -150,115 +294,96 @@ function SelectingView() {
 
   const minScheduleDate = new Date(Date.now() + 30 * 60 * 1000); // at least 30 min from now
 
-  const selectPreset = (preset: LocationPreset, field: 'pickup' | 'dropoff') => {
-    const loc: GeoPoint = { latitude: preset.latitude, longitude: preset.longitude };
-    if (field === 'pickup') {
-      setPickup(preset.address, loc);
-    } else {
-      setDropoff(preset.address, loc);
-    }
-  };
-
   return (
     <View className="pt-4">
       <ScreenHeader title={t('ride.select_route', { defaultValue: 'Seleccionar ruta' })} onBack={() => setFlowStep('idle')} />
 
-      {/* Pickup */}
+      {/* Pickup — address search with presets */}
       <Text variant="label" className="mb-1">
         {t('ride.pickup')}
       </Text>
-      <View className="bg-neutral-100 rounded-xl px-4 py-3 mb-2">
-        <Text variant="body" color={draft.pickup ? 'primary' : 'tertiary'}>
-          {draft.pickup?.address ?? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
-        </Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
-        <View className="flex-row gap-2">
-          {HAVANA_PRESETS.map((p) => (
-            <Pressable
-              key={p.label}
-              className={`px-3 py-1.5 rounded-full ${
-                draft.pickup?.address === p.address
-                  ? 'bg-primary-500'
-                  : 'bg-neutral-100'
-              }`}
-              onPress={() => selectPreset(p, 'pickup')}
-            >
-              <Text
-                variant="caption"
-                color={draft.pickup?.address === p.address ? 'inverse' : 'secondary'}
-              >
-                {p.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
+      <AddressSearchInput
+        placeholder={t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
+        selectedAddress={draft.pickup?.address ?? null}
+        onSelect={(address, location) => setPickup(address, location)}
+        savedLocations={savedLocations}
+        recentAddresses={recentAddresses}
+        showUseMyLocation
+      />
 
-      {/* Dropoff */}
+      <View className="h-2" />
+
+      {/* Dropoff — address search with presets */}
       <Text variant="label" className="mb-1">
         {t('ride.dropoff')}
       </Text>
-      <View className="bg-neutral-100 rounded-xl px-4 py-3 mb-2">
-        <Text variant="body" color={draft.dropoff ? 'primary' : 'tertiary'}>
-          {draft.dropoff?.address ?? t('ride.enter_dropoff', { defaultValue: 'Destino' })}
-        </Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6">
-        <View className="flex-row gap-2">
-          {HAVANA_PRESETS.map((p) => (
-            <Pressable
-              key={p.label}
-              className={`px-3 py-1.5 rounded-full ${
-                draft.dropoff?.address === p.address
-                  ? 'bg-primary-500'
-                  : 'bg-neutral-100'
-              }`}
-              onPress={() => selectPreset(p, 'dropoff')}
-            >
-              <Text
-                variant="caption"
-                color={draft.dropoff?.address === p.address ? 'inverse' : 'secondary'}
-              >
-                {p.label}
+      <AddressSearchInput
+        placeholder={t('ride.enter_dropoff', { defaultValue: 'Destino' })}
+        selectedAddress={draft.dropoff?.address ?? null}
+        onSelect={(address, location) => setDropoff(address, location)}
+        savedLocations={savedLocations}
+        recentAddresses={recentAddresses}
+        predictions={predictions}
+      />
+
+      {/* Waypoints */}
+      {draft.waypoints.map((wp, idx) => (
+        <View key={`waypoint-${idx}`}>
+          <View className="h-2" />
+          <View className="flex-row items-center">
+            <View className="flex-1">
+              <Text variant="label" className="mb-1">
+                {t('ride.stop_n', { n: idx + 1 })}
               </Text>
+              <AddressSearchInput
+                placeholder={t('ride.stop_n', { n: idx + 1 })}
+                selectedAddress={wp.address || null}
+                onSelect={(address, location) => updateWaypoint(idx, address, location)}
+              />
+            </View>
+            <Pressable
+              onPress={() => removeWaypoint(idx)}
+              className="ml-2 mt-5 p-2"
+              accessibilityRole="button"
+              accessibilityLabel={t('ride.remove_stop', { defaultValue: `Remove stop ${idx + 1}`, n: idx + 1 })}
+            >
+              <Ionicons name="close-circle" size={24} color={colors.error.DEFAULT} />
             </Pressable>
-          ))}
+          </View>
         </View>
-      </ScrollView>
+      ))}
+
+      {/* Add stop button */}
+      {draft.waypoints.length < 3 && (
+        <Pressable
+          onPress={addWaypoint}
+          className="flex-row items-center mt-2 mb-2 py-2"
+          accessibilityRole="button"
+          accessibilityLabel={t('ride.add_stop')}
+        >
+          <Ionicons name="add-circle-outline" size={20} color={colors.brand.orange} />
+          <Text variant="bodySmall" color="accent" className="ml-2">
+            {t('ride.add_stop')}
+          </Text>
+        </Pressable>
+      )}
+
+      <View className="h-4" />
 
       {/* Service type */}
       <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
-      <View className="flex-row flex-wrap gap-3 mb-4">
-        {([
-          { key: 'triciclo_basico' as const, icon: 'bicycle-outline' as const },
-          { key: 'moto_standard' as const, icon: 'flash-outline' as const },
-          { key: 'auto_standard' as const, icon: 'car-outline' as const },
-          { key: 'mensajeria' as const, icon: 'cube-outline' as const },
-        ]).map((st) => (
-          <Pressable
-            key={st.key}
-            className={`py-3 px-2 rounded-xl items-center ${
-              draft.serviceType === st.key ? 'bg-primary-500' : 'bg-neutral-100'
-            }`}
-            style={{ width: '22%' }}
-            onPress={() => setServiceType(st.key)}
-          >
-            <Ionicons
-              name={st.icon}
-              size={18}
-              color={draft.serviceType === st.key ? '#fff' : colors.neutral[500]}
-              style={{ marginBottom: 2 }}
+      <View className="flex-row flex-wrap gap-3 mb-4" accessibilityRole="radiogroup">
+        {(['triciclo_basico', 'moto_standard', 'auto_standard', 'mensajeria'] as ServiceTypeSlug[]).map((slug) => (
+          <View key={slug} style={{ width: '22%' }}>
+            <ServiceTypeCard
+              slug={slug}
+              name={t(`service_type.${slug}` as const)}
+              icon={vehicleSelectionImages[slug]}
+              selected={draft.serviceType === slug}
+              onPress={() => { setServiceType(slug); triggerSelection(); }}
+              compact
             />
-            <Text
-              variant="caption"
-              color={draft.serviceType === st.key ? 'inverse' : 'secondary'}
-              className="text-center"
-              style={{ fontSize: 10 }}
-            >
-              {t(`service_type.${st.key}` as const)}
-            </Text>
-          </Pressable>
+          </View>
         ))}
       </View>
 
@@ -307,26 +432,97 @@ function SelectingView() {
         </Card>
       )}
 
-      {/* Payment method */}
-      <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
-      <View className="flex-row gap-3 mb-4">
-        {(['cash', 'tricicoin'] as const).map((pm) => (
-          <Pressable
-            key={pm}
-            className={`flex-1 py-3 rounded-xl items-center ${
-              draft.paymentMethod === pm ? 'bg-primary-500' : 'bg-neutral-100'
-            }`}
-            onPress={() => setPaymentMethod(pm)}
-          >
-            <Text
-              variant="caption"
-              color={draft.paymentMethod === pm ? 'inverse' : 'secondary'}
+      {/* Corporate account toggle */}
+      {corporateAccounts.length > 0 && (
+        <View className="mb-4">
+          <Text variant="label" className="mb-2">
+            {t('corporate.riding_as_label', { defaultValue: 'Cobrar a' })}
+          </Text>
+          <View className="flex-row gap-3" accessibilityRole="radiogroup">
+            <Pressable
+              className={`flex-1 py-3 rounded-xl items-center ${
+                !draft.corporateAccountId ? 'bg-primary-500' : 'bg-neutral-100'
+              }`}
+              onPress={() => setCorporateAccount(null)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: !draft.corporateAccountId }}
             >
-              {t(`payment.${pm}` as const)}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+              <Text
+                variant="caption"
+                color={!draft.corporateAccountId ? 'inverse' : 'secondary'}
+              >
+                {t('corporate.personal')}
+              </Text>
+            </Pressable>
+            {corporateAccounts.map((acc) => (
+              <Pressable
+                key={acc.id}
+                className={`flex-1 py-3 rounded-xl items-center ${
+                  draft.corporateAccountId === acc.id ? 'bg-primary-500' : 'bg-neutral-100'
+                }`}
+                onPress={() => setCorporateAccount(acc.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: draft.corporateAccountId === acc.id }}
+              >
+                <Text
+                  variant="caption"
+                  color={draft.corporateAccountId === acc.id ? 'inverse' : 'secondary'}
+                  numberOfLines={1}
+                >
+                  {acc.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {draft.corporateAccountId && (
+            <View className="mt-2 bg-primary-50 rounded-lg px-3 py-2">
+              <Text variant="caption" color="accent">
+                {t('corporate.riding_as', {
+                  company: corporateAccounts.find((a) => a.id === draft.corporateAccountId)?.name ?? '',
+                })}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Payment method */}
+      {!draft.corporateAccountId && (
+        <>
+          <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
+          <View className="flex-row gap-3 mb-4" accessibilityRole="radiogroup">
+            {(['cash', 'tricicoin', 'tropipay'] as const).map((pm) => (
+              <Pressable
+                key={pm}
+                className={`flex-1 py-3 rounded-xl items-center ${
+                  draft.paymentMethod === pm ? 'bg-primary-500' : 'bg-neutral-100'
+                }`}
+                onPress={() => setPaymentMethod(pm)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: draft.paymentMethod === pm }}
+              >
+                <Text
+                  variant="caption"
+                  color={draft.paymentMethod === pm ? 'inverse' : 'secondary'}
+                  className="text-center"
+                >
+                  {t(`payment.${pm}` as const)}
+                </Text>
+                {pm === 'tropipay' && (
+                  <Text
+                    variant="caption"
+                    color={draft.paymentMethod === pm ? 'inverse' : 'tertiary'}
+                    style={{ fontSize: 9 }}
+                    className="text-center"
+                  >
+                    {t('payment.tropipay_desc', { defaultValue: 'Paga al finalizar' })}
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
 
       {/* Schedule ride */}
       <View className="mb-6">
@@ -427,24 +623,39 @@ function SelectingView() {
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
-  const { draft, fareEstimate, setFlowStep, isLoading, error, promoCode, promoResult, setPromoCode } = useRideStore();
+  const { draft, fareEstimate, setFlowStep, isLoading, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
   const { confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
+  const preferencesEnabled = useFeatureFlag('ride_preferences_enabled');
+  const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
+  const [splitSheetVisible, setSplitSheetVisible] = useState(false);
+  const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const nearbyVehicles = useNearbyVehicles(
+    draft.pickup?.location?.latitude ?? null,
+    draft.pickup?.location?.longitude ?? null,
+  );
 
   if (!fareEstimate) return null;
 
-  const distanceKm = (fareEstimate.estimated_distance_m / 1000).toFixed(1);
-  const durationMin = Math.round(fareEstimate.estimated_duration_s / 60);
   const discount = promoResult?.valid ? promoResult.discountAmount : 0;
-  const finalFare = fareEstimate.estimated_fare_trc - discount;
 
   return (
     <View className="pt-4 flex-1">
-      {/* Map preview */}
+      {/* Map preview with route polyline */}
       <RideMapView
         pickupLocation={draft.pickup?.location ?? null}
         dropoffLocation={draft.dropoff?.location ?? null}
+        routeCoordinates={routeCoordinates}
+        nearbyVehicles={nearbyVehicles}
         height={isTablet ? 250 : 150}
       />
+      {nearbyVehicles.length > 0 && (
+        <View className="mt-1 mb-1">
+          <Text variant="caption" color="secondary" className="text-center">
+            {t('ride.nearby_vehicles', { count: nearbyVehicles.length })}
+          </Text>
+        </View>
+      )}
       <View className="h-3" />
 
       {/* Route summary */}
@@ -467,44 +678,71 @@ function ReviewingView() {
       </Card>
 
       {/* Fare breakdown */}
-      <Card variant="elevated" padding="lg" className="mb-4">
-        <Text variant="h4" className="mb-4">
-          {t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
-        </Text>
+      <View className="mb-4">
+        <FareBreakdownCard
+          title={t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
+          baseFareCup={fareEstimate.base_fare_cup}
+          distanceM={fareEstimate.estimated_distance_m}
+          perKmRateCup={fareEstimate.per_km_rate_cup}
+          durationS={fareEstimate.estimated_duration_s}
+          perMinRateCup={fareEstimate.per_minute_rate_cup}
+          surgeMultiplier={fareEstimate.surge_multiplier}
+          surgeLabel={fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { multiplier: fareEstimate.surge_multiplier }) : undefined}
+          totalCup={fareEstimate.estimated_fare_cup}
+          totalTrc={fareEstimate.estimated_fare_trc}
+          totalLabel={t('ride.estimated_fare')}
+          discountTrc={discount}
+          discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
+          minFareApplied={fareEstimate.min_fare_applied}
+          minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
+          fareRangeMinTrc={fareEstimate.fare_range_min_trc}
+          fareRangeMaxTrc={fareEstimate.fare_range_max_trc}
+          fareRangeLabel={t('ride.fare_range', { defaultValue: 'Rango estimado' })}
+          insurancePremiumTrc={draft.insuranceSelected ? (fareEstimate.insurance_premium_trc ?? 0) : 0}
+          insuranceLabel={draft.insuranceSelected ? t('ride.insurance_premium', { defaultValue: 'Seguro de viaje' }) : undefined}
+          labels={{
+            baseFare: t('ride.base_fare'),
+            distanceCharge: t('ride.distance_charge'),
+            timeCharge: t('ride.time_charge'),
+            subtotal: t('ride.subtotal', { defaultValue: 'Subtotal' }),
+          }}
+        />
+      </View>
 
-        <View className="flex-row justify-between mb-2">
-          <Text variant="bodySmall" color="secondary">{t('ride.distance')}</Text>
-          <Text variant="bodySmall">{distanceKm} km</Text>
-        </View>
-        <View className="flex-row justify-between mb-2">
-          <Text variant="bodySmall" color="secondary">{t('ride.eta')}</Text>
-          <Text variant="bodySmall">{durationMin} min</Text>
-        </View>
-        <View className="flex-row justify-between mb-2">
-          <Text variant="bodySmall" color="secondary">
-            {t(`service_type.${draft.serviceType}` as const)}
-          </Text>
-          <Text variant="bodySmall">
-            {t(`payment.${draft.paymentMethod}` as const)}
-          </Text>
-        </View>
-
-        {discount > 0 && (
-          <View className="flex-row justify-between mb-2">
-            <Text variant="bodySmall" className="text-green-600">{t('ride.discount', { defaultValue: 'Descuento' })}</Text>
-            <Text variant="bodySmall" className="text-green-600">-{formatTRC(discount)}</Text>
+      {/* Trip insurance toggle */}
+      {insuranceEnabled && fareEstimate.insurance_available && fareEstimate.insurance_premium_trc != null && (
+        <Pressable
+          className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
+            draft.insuranceSelected ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+          }`}
+          onPress={() => setInsurance(!draft.insuranceSelected)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: draft.insuranceSelected }}
+          accessibilityLabel={t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
+        >
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={20}
+            color={draft.insuranceSelected ? colors.brand.orange : colors.neutral[500]}
+          />
+          <View className="flex-1 ml-3">
+            <Text variant="body" color={draft.insuranceSelected ? 'primary' : undefined}>
+              {t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
+            </Text>
+            <Text variant="caption" color="secondary">
+              {fareEstimate.insurance_coverage_desc ?? t('ride.insurance_desc', { defaultValue: 'Cobertura por accidentes y daños' })}
+              {' · '}
+              {formatTRC(fareEstimate.insurance_premium_trc)}
+            </Text>
           </View>
-        )}
-
-        <View className="h-px bg-neutral-200 my-3" />
-
-        <View className="flex-row justify-between">
-          <Text variant="h4">{t('ride.estimated_fare')}</Text>
-          <Text variant="h3" color="accent">
-            {formatTRC(finalFare)}
-          </Text>
-        </View>
-      </Card>
+          <Switch
+            value={draft.insuranceSelected}
+            onValueChange={(val) => setInsurance(val)}
+            trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
+            thumbColor="white"
+          />
+        </Pressable>
+      )}
 
       {/* Promo code */}
       <Card variant="outlined" padding="md" className="mb-6">
@@ -535,10 +773,106 @@ function ReviewingView() {
           >
             {promoResult.valid
               ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
-              : promoResult.error ?? 'Código inválido'}
+              : promoResult.error ?? t('ride.promo_invalid')}
           </Text>
         )}
       </Card>
+
+      {/* Split fare — only for tricicoin */}
+      {draft.paymentMethod === 'tricicoin' && fareEstimate && (
+        <>
+          <Pressable
+            className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${
+              splits.length > 0 ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+            }`}
+            onPress={() => setSplitSheetVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
+          >
+            <Ionicons
+              name="people-outline"
+              size={20}
+              color={splits.length > 0 ? colors.brand.orange : colors.neutral[500]}
+            />
+            <Text
+              variant="body"
+              color={splits.length > 0 ? 'accent' : 'secondary'}
+              className="ml-3 flex-1"
+            >
+              {splits.length > 0
+                ? t('ride.split_with_count', {
+                    count: splits.length,
+                    defaultValue: 'Dividido con {{count}} persona(s)',
+                  })
+                : t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+          </Pressable>
+
+          <FareSplitSheet
+            visible={splitSheetVisible}
+            onClose={() => setSplitSheetVisible(false)}
+            rideId=""
+            estimatedFareTrc={fareEstimate.estimated_fare_trc}
+          />
+        </>
+      )}
+
+      {/* Ride preferences */}
+      {preferencesEnabled && (
+        <Pressable
+          className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
+            Object.values(draft.ridePreferences).some(Boolean) ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+          }`}
+          onPress={() => router.push('/profile/ride-preferences')}
+          accessibilityRole="button"
+          accessibilityLabel={t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+        >
+          <Ionicons
+            name="options-outline"
+            size={20}
+            color={Object.values(draft.ridePreferences).some(Boolean) ? colors.brand.orange : colors.neutral[500]}
+          />
+          <View className="flex-1 ml-3">
+            <Text
+              variant="body"
+              color={Object.values(draft.ridePreferences).some(Boolean) ? 'accent' : 'secondary'}
+            >
+              {t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+            </Text>
+            {Object.values(draft.ridePreferences).some(Boolean) && (
+              <View className="flex-row flex-wrap gap-1 mt-1">
+                {draft.ridePreferences.quiet_mode && (
+                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs text-primary-700">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
+                  </View>
+                )}
+                {draft.ridePreferences.temperature === 'cool' && (
+                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs text-primary-700">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
+                  </View>
+                )}
+                {draft.ridePreferences.temperature === 'warm' && (
+                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs text-primary-700">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
+                  </View>
+                )}
+                {draft.ridePreferences.conversation_ok && (
+                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs text-primary-700">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
+                  </View>
+                )}
+                {draft.ridePreferences.luggage_trunk && (
+                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-xs text-primary-700">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+        </Pressable>
+      )}
 
       {error && (
         <Text variant="bodySmall" color="error" className="mb-4 text-center">
@@ -550,7 +884,7 @@ function ReviewingView() {
         title={t('ride.confirm_ride', { defaultValue: 'Confirmar viaje' })}
         size="lg"
         fullWidth
-        onPress={confirmRide}
+        onPress={debouncedConfirmRide}
         loading={isLoading}
         className="mb-3"
       />
@@ -572,15 +906,27 @@ function SearchingView() {
   const { isTablet } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
   const { cancelRide } = useRideActions();
+  const routeCoordinates = useRoutePolyline(
+    activeRide?.pickup_location ?? null,
+    activeRide?.dropoff_location ?? null,
+  );
+
+  const searchSteps = useMemo(() => [
+    { key: 'searching', label: t('ride.searching_driver') },
+    { key: 'accepted', label: t('ride.status_accepted') },
+    { key: 'driver_en_route', label: t('ride.status_driver_en_route') },
+    { key: 'in_progress', label: t('ride.status_in_progress') },
+  ], [t]);
 
   return (
     <View className="pt-4 flex-1 items-center">
-      {/* Map showing pickup + dropoff */}
+      {/* Map showing pickup + dropoff with route */}
       {activeRide && (
         <>
           <RideMapView
             pickupLocation={activeRide.pickup_location}
             dropoffLocation={activeRide.dropoff_location}
+            routeCoordinates={routeCoordinates}
             height={isTablet ? 300 : 180}
           />
           <View className="h-4" />
@@ -588,7 +934,7 @@ function SearchingView() {
       )}
 
       <StatusStepper
-        steps={SEARCH_STEPS}
+        steps={searchSteps}
         currentStep="searching"
         className="w-full mb-8"
       />

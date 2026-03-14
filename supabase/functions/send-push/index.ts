@@ -7,10 +7,12 @@ const corsHeaders = {
 };
 
 interface PushRequest {
-  user_id: string;
+  user_id?: string;
+  user_ids?: string[];
   title: string;
   body: string;
   data?: Record<string, string>;
+  category?: string;
 }
 
 Deno.serve(async (req) => {
@@ -24,20 +26,28 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const { user_id, title, body, data } = (await req.json()) as PushRequest;
+    const { user_id, user_ids, title, body, data, category } =
+      (await req.json()) as PushRequest;
 
-    if (!user_id || !title || !body) {
+    // Support both single user_id and batch user_ids
+    const targetIds: string[] = user_ids?.length
+      ? user_ids
+      : user_id
+        ? [user_id]
+        : [];
+
+    if (targetIds.length === 0 || !title || !body) {
       return new Response(
-        JSON.stringify({ error: 'user_id, title, and body are required' }),
+        JSON.stringify({ error: 'user_id (or user_ids), title, and body are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    // Fetch device tokens
+    // Fetch device tokens for all target users
     const { data: devices, error } = await supabase
       .from('user_devices')
       .select('push_token')
-      .eq('user_id', user_id)
+      .in('user_id', targetIds)
       .not('push_token', 'is', null);
 
     if (error) throw error;
@@ -47,11 +57,35 @@ Deno.serve(async (req) => {
       .filter(Boolean) as string[];
 
     if (tokens.length === 0) {
+      // Still persist to inbox even if no push tokens (user can see in-app)
+      try {
+        const inboxData = {
+          ...(data ?? {}),
+          ...(category ? { type: category } : {}),
+        };
+        const notifRows = targetIds.map((uid: string) => ({
+          user_id: uid,
+          type: category ?? 'system',
+          title,
+          body,
+          data: Object.keys(inboxData).length > 0 ? inboxData : null,
+        }));
+        await supabase.from('notifications').insert(notifRows);
+      } catch (inboxErr) {
+        console.warn('[send-push] Failed to persist to inbox:', (inboxErr as Error).message);
+      }
+
       return new Response(
         JSON.stringify({ message: 'No devices found', sent: 0, failed: 0 }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
+    // Merge category into data payload if provided
+    const pushData = {
+      ...(data ?? {}),
+      ...(category ? { type: category } : {}),
+    };
 
     // Send via Expo push API
     const messages = tokens.map((token) => ({
@@ -59,7 +93,8 @@ Deno.serve(async (req) => {
       title,
       body,
       sound: 'default' as const,
-      ...(data ? { data } : {}),
+      badge: 1,
+      ...(Object.keys(pushData).length > 0 ? { data: pushData } : {}),
     }));
 
     const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -77,6 +112,21 @@ Deno.serve(async (req) => {
         if (ticket.status === 'ok') sent++;
         else failed++;
       }
+    }
+
+    // Persist to in-app notification inbox for each target user
+    try {
+      const notifRows = targetIds.map((uid: string) => ({
+        user_id: uid,
+        type: category ?? 'system',
+        title,
+        body,
+        data: Object.keys(pushData).length > 0 ? pushData : null,
+      }));
+      await supabase.from('notifications').insert(notifRows);
+    } catch (inboxErr) {
+      // Non-critical: push was already sent, inbox persistence is best-effort
+      console.warn('[send-push] Failed to persist to inbox:', (inboxErr as Error).message);
     }
 
     return new Response(
