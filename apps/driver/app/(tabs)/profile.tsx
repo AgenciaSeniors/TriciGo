@@ -7,29 +7,79 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
-import { authService } from '@tricigo/api';
+import { authService, driverService } from '@tricigo/api';
+import { Platform } from 'react-native';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { useNotificationStore } from '@/stores/notification.store';
 
-export default function DriverProfileScreen() {
+// TEMP: Static web version for Play Store screenshots
+function WebDriverProfileScreen() {
+  const menuItems = [
+    { icon: 'person-outline' as const, label: 'Editar perfil' },
+    { icon: 'car-outline' as const, label: 'Info del vehículo' },
+    { icon: 'document-text-outline' as const, label: 'Documentos' },
+    { icon: 'shield-checkmark-outline' as const, label: 'Seguridad' },
+    { icon: 'gift-outline' as const, label: 'Referir amigos' },
+    { icon: 'language-outline' as const, label: 'Idioma' },
+    { icon: 'settings-outline' as const, label: 'Configuración' },
+    { icon: 'help-circle-outline' as const, label: 'Ayuda' },
+  ];
+  return (
+    <Screen scroll bg="dark" padded>
+      <View className="pt-4">
+        <Text variant="h3" color="inverse" className="mb-6">Perfil</Text>
+        <Card variant="filled" padding="md" className="mb-6 flex-row items-center bg-neutral-800">
+          <View className="w-14 h-14 rounded-full bg-primary-500 items-center justify-center mr-4">
+            <Text variant="h4" color="inverse">J</Text>
+          </View>
+          <View className="flex-1">
+            <Text variant="body" color="inverse" className="font-semibold">Juan Pérez</Text>
+            <Text variant="caption" className="text-neutral-400">+53 55123456</Text>
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="star" size={14} color={colors.brand.orange} />
+              <Text variant="caption" className="text-neutral-300 ml-1">4.87 — 342 viajes</Text>
+            </View>
+          </View>
+        </Card>
+        {menuItems.map((item, i) => (
+          <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-800">
+            <Ionicons name={item.icon} size={22} color="#9ca3af" />
+            <Text variant="body" color="inverse" className="flex-1 ml-4">{item.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#6b7280" />
+          </Pressable>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
+function NativeDriverProfileScreen() {
   const { t } = useTranslation('common');
   const { t: td } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
   const reset = useAuthStore((s) => s.reset);
   const driverProfile = useDriverStore((s) => s.profile);
   const resetDriver = useDriverStore((s) => s.reset);
+  const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
+      // Mark driver offline before signing out so backend stops routing rides
+      if (driverProfile?.id) {
+        await driverService.setOnlineStatus(driverProfile.id, false).catch(() => {});
+      }
       await authService.signOut();
       reset();
       resetDriver();
+      resetNotifications();
     } catch {
       // Still reset locally even if API call fails
       reset();
       resetDriver();
+      resetNotifications();
     } finally {
       setLoggingOut(false);
     }
@@ -125,4 +175,9 @@ export default function DriverProfileScreen() {
       </View>
     </Screen>
   );
+}
+
+export default function DriverProfileScreen() {
+  if (Platform.OS === 'web') return <WebDriverProfileScreen />;
+  return <NativeDriverProfileScreen />;
 }

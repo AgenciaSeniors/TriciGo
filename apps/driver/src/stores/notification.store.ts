@@ -15,6 +15,7 @@ interface NotificationState {
   markRead: (id: string) => void;
   markAllRead: () => void;
   setLoading: (loading: boolean) => void;
+  reset: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
@@ -45,4 +46,5 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       notifications: s.notifications.map((n) => ({ ...n, read: true })),
     })),
   setLoading: (loading) => set({ isLoading: loading }),
+  reset: () => set({ unreadCount: 0, notifications: [], isLoading: false }),
 }));

@@ -22,13 +22,32 @@ export default function VerifyOTPScreen() {
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
 
+  // Guard: phone param is required
+  if (!phone) {
+    return (
+      <Screen bg="white" padded>
+        <View className="flex-1 justify-center items-center">
+          <Text variant="body" color="error">{t('errors.generic')}</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  // Use a stable effect that only re-runs when timer starts (not on every tick)
   useEffect(() => {
     if (resendTimer <= 0) return;
     const interval = setInterval(() => {
-      setResendTimer((prev) => prev - 1);
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(interval);
-  }, [resendTimer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resendTimer > 0]);
 
   const handleVerify = async () => {
     setError('');
@@ -40,7 +59,7 @@ export default function VerifyOTPScreen() {
 
     setLoading(true);
     try {
-      await authService.verifyOTP(phone!, code);
+      await authService.verifyOTP(phone, code);
       const user = await authService.getCurrentUser();
       setUser(user);
       // Navigation is automatic via auth guard
@@ -53,7 +72,7 @@ export default function VerifyOTPScreen() {
 
   const handleResend = async () => {
     try {
-      await authService.sendOTP(phone!);
+      await authService.sendOTP(phone);
       setResendTimer(60);
     } catch {
       setError(t('errors.generic'));

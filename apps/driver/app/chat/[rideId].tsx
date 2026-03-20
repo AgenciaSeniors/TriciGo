@@ -28,8 +28,10 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
+  const remoteTyping = useChatStore((s) => s.remoteTyping);
+
   useChatInit(rideId!);
-  const { sendMessage } = useChatActions(rideId!);
+  const { sendMessage, notifyTyping } = useChatActions(rideId!);
 
   const quickReplies = getQuickRepliesForRole('driver').map((qr) => ({
     key: qr.key,
@@ -116,6 +118,15 @@ export default function ChatScreen() {
           }
         />
 
+        {/* Typing indicator */}
+        {remoteTyping && (
+          <View className="px-4 py-1">
+            <Text variant="caption" color="secondary">
+              {t('chat.typing', { defaultValue: 'El pasajero está escribiendo...' })}
+            </Text>
+          </View>
+        )}
+
         {/* Quick replies */}
         <QuickReplyBar
           replies={quickReplies}
@@ -127,7 +138,7 @@ export default function ChatScreen() {
         <View className="flex-row items-center px-4 py-2 border-t border-neutral-800">
           <TextInput
             value={text}
-            onChangeText={setText}
+            onChangeText={(v) => { setText(v); notifyTyping(); }}
             placeholder={t('chat.placeholder')}
             accessibilityLabel={t('chat.placeholder')}
             placeholderTextColor={colors.neutral[500]}

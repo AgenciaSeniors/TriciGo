@@ -76,6 +76,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  const inner = (
+    <QueryClientProvider client={queryClient}>
+      <OfflineBanner />
+      {children}
+    </QueryClientProvider>
+  );
+
+  if (!POSTHOG_API_KEY) return inner;
+
   return (
     <PostHogProvider
       apiKey={POSTHOG_API_KEY}
@@ -86,11 +95,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       }}
       autocapture={false}
     >
-      <QueryClientProvider client={queryClient}>
-        <AnalyticsInit />
-        <OfflineBanner />
-        {children}
-      </QueryClientProvider>
+      <AnalyticsInit />
+      {inner}
     </PostHogProvider>
   );
 }

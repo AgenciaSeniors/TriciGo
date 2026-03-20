@@ -147,7 +147,7 @@ export function SafetySheet({
         disabled={sharing}
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="share-outline" size={20} color={colors.primary.DEFAULT} />
+          <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
         </View>
         <View className="flex-1">
           <Text variant="body" className="font-semibold">
@@ -158,7 +158,7 @@ export function SafetySheet({
           </Text>
         </View>
         {sharing ? (
-          <ActivityIndicator size="small" color={colors.primary.DEFAULT} />
+          <ActivityIndicator size="small" color={colors.primary[500]} />
         ) : (
           <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
         )}
@@ -171,7 +171,7 @@ export function SafetySheet({
         disabled={sharingWithContacts || contactsSent}
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="people-outline" size={20} color={colors.primary.DEFAULT} />
+          <Ionicons name="people-outline" size={20} color={colors.primary[500]} />
         </View>
         <View className="flex-1">
           <Text variant="body" className="font-semibold">
@@ -186,7 +186,7 @@ export function SafetySheet({
           </Text>
         </View>
         {sharingWithContacts ? (
-          <ActivityIndicator size="small" color={colors.primary.DEFAULT} />
+          <ActivityIndicator size="small" color={colors.primary[500]} />
         ) : contactsSent ? (
           <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
         ) : (
@@ -200,7 +200,7 @@ export function SafetySheet({
         onPress={handleCallContact}
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="call-outline" size={20} color={colors.primary.DEFAULT} />
+          <Ionicons name="call-outline" size={20} color={colors.primary[500]} />
         </View>
         <View className="flex-1">
           <Text variant="body" className="font-semibold">

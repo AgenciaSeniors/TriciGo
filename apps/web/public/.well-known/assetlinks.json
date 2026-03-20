@@ -2,17 +2,17 @@
   {
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
-      "namespace": "android_app_name",
+      "namespace": "android_app",
       "package_name": "app.tricigo.client",
-      "sha256_cert_fingerprints": ["FINGERPRINT_HERE"]
+      "sha256_cert_fingerprints": ["46:C4:AF:04:B4:85:E0:F6:89:46:6F:16:22:FB:BE:64:B2:79:76:DC:34:1D:A3:06:BA:9E:50:99:92:70:DB:88"]
     }
   },
   {
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
-      "namespace": "android_app_name",
+      "namespace": "android_app",
       "package_name": "app.tricigo.driver",
-      "sha256_cert_fingerprints": ["FINGERPRINT_HERE"]
+      "sha256_cert_fingerprints": ["95:8D:D5:A7:26:84:21:34:D8:77:70:C2:45:49:14:67:7F:95:56:8A:61:6C:D2:DF:DA:53:71:64:8B:E0:B1:7D"]
     }
   }
 ]

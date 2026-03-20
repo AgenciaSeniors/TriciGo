@@ -10,9 +10,51 @@ import { authService } from '@tricigo/api';
 import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { Platform } from 'react-native';
 import { colors } from '@tricigo/theme';
 
-export default function ProfileScreen() {
+// TEMP: Static web version for Play Store screenshots
+function WebProfileScreen() {
+  const menuItems = [
+    { icon: 'person-outline' as const, label: 'Editar perfil' },
+    { icon: 'location-outline' as const, label: 'Lugares guardados' },
+    { icon: 'call-outline' as const, label: 'Contacto de emergencia' },
+    { icon: 'people-outline' as const, label: 'Contactos de confianza' },
+    { icon: 'shield-checkmark-outline' as const, label: 'Seguridad' },
+    { icon: 'repeat-outline' as const, label: 'Viajes recurrentes' },
+    { icon: 'language-outline' as const, label: 'Idioma' },
+    { icon: 'settings-outline' as const, label: 'Configuración' },
+    { icon: 'gift-outline' as const, label: 'Referir amigos' },
+    { icon: 'help-circle-outline' as const, label: 'Ayuda' },
+    { icon: 'newspaper-outline' as const, label: 'Blog' },
+    { icon: 'information-circle-outline' as const, label: 'Acerca de' },
+  ];
+  return (
+    <Screen scroll bg="white" padded>
+      <View className="pt-4">
+        <Text variant="h3" className="mb-6">Perfil</Text>
+        <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
+          <View className="w-14 h-14 rounded-full bg-primary-500 items-center justify-center mr-4">
+            <Text variant="h4" color="inverse">M</Text>
+          </View>
+          <View className="flex-1">
+            <Text variant="h4">María García</Text>
+            <Text variant="caption" color="secondary">+53 5XXXXXXX</Text>
+          </View>
+        </Card>
+        {menuItems.map((item, i) => (
+          <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-100">
+            <Ionicons name={item.icon} size={22} color={colors.neutral[500]} />
+            <Text variant="body" className="flex-1 ml-4">{item.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
+          </Pressable>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
+function NativeProfileScreen() {
   const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
   const reset = useAuthStore((s) => s.reset);
@@ -40,6 +82,7 @@ export default function ProfileScreen() {
     { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
     { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
     { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
+    { icon: 'newspaper-outline' as const, label: t('profile.blog_title', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog') },
     { icon: 'information-circle-outline' as const, label: t('profile.about'), onPress: () => router.push('/profile/about') },
   ];
 
@@ -102,4 +145,9 @@ export default function ProfileScreen() {
       </View>
     </Screen>
   );
+}
+
+export default function ProfileScreen() {
+  if (Platform.OS === 'web') return <WebProfileScreen />;
+  return <NativeProfileScreen />;
 }

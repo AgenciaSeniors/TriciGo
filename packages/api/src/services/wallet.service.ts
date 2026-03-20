@@ -8,7 +8,6 @@ import type {
   WalletAccount,
   LedgerTransaction,
   WalletSummary,
-  WalletRedemption,
   WalletRechargeRequest,
   WalletTransfer,
 } from '@tricigo/types';
@@ -102,42 +101,6 @@ export const walletService = {
     const account = await this.getAccount(userId);
     if (!account) throw new Error('Failed to ensure wallet account');
     return account;
-  },
-
-  /**
-   * Request a redemption (driver only).
-   * The actual processing happens via admin approval.
-   */
-  async requestRedemption(
-    driverId: string,
-    amount: number,
-  ): Promise<WalletRedemption> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('wallet_redemptions')
-      .insert({
-        driver_id: driverId,
-        amount,
-        status: 'requested',
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    return data as WalletRedemption;
-  },
-
-  /**
-   * Get redemption history for a driver.
-   */
-  async getRedemptions(driverId: string): Promise<WalletRedemption[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('wallet_redemptions')
-      .select('*')
-      .eq('driver_id', driverId)
-      .order('requested_at', { ascending: false });
-    if (error) throw error;
-    return data as WalletRedemption[];
   },
 
   /**

@@ -13,11 +13,20 @@ import type {
 } from './enums';
 import type { GeoPoint } from './driver';
 
+export type AccessibilityNeed =
+  | 'wheelchair'
+  | 'hearing_impaired'
+  | 'visual_impaired'
+  | 'service_animal'
+  | 'extra_space';
+
 export interface RidePreferences {
   quiet_mode?: boolean;
   temperature?: 'cool' | 'warm' | 'no_preference';
   conversation_ok?: boolean;
   luggage_trunk?: boolean;
+  /** Accessibility needs for this ride */
+  accessibility_needs?: AccessibilityNeed[];
 }
 
 export interface Waypoint {
@@ -86,6 +95,10 @@ export interface Ride {
   canceled_at: string | null;
   canceled_by: string | null;
   cancellation_reason: string | null;
+  /** Fee charged for cancellation based on ride state (CUP centavos) */
+  cancellation_fee_cup: number;
+  /** Fee charged for cancellation in TRC centavos */
+  cancellation_fee_trc: number;
 
   // Safety
   share_token: string | null;
@@ -130,6 +143,16 @@ export interface Ride {
 
   // Ride preferences
   rider_preferences?: RidePreferences | null;
+
+  // Passenger count
+  passenger_count: number;
+
+  // Wait time penalty
+  wait_time_minutes: number;
+  wait_time_charge_cup: number;
+
+  // Ride mode
+  ride_mode: string;
 }
 
 export interface Tip {
@@ -221,6 +244,28 @@ export interface CompleteRideResult {
 }
 
 /** Ride with joined rider info for driver display */
+/** Cancellation fee configuration per service type */
+export interface CancellationFeeConfig {
+  id: string;
+  service_type: ServiceTypeSlug;
+  free_cancel_window_s: number;
+  en_route_fee_cup: number;
+  arrived_fee_cup: number;
+  in_progress_fee_pct: number;
+  in_progress_min_fee_cup: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Preview of cancellation fee before confirming */
+export interface CancellationFeePreview {
+  fee_cup: number;
+  fee_trc: number;
+  fee_reason: string;
+  is_free: boolean;
+}
+
 export interface RideWithRider extends Ride {
   rider_name: string;
   rider_avatar_url: string | null;

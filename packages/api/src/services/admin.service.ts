@@ -24,13 +24,13 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
-  WalletRedemption,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
+import { notificationService } from './notification.service';
 
 export const adminService = {
   /**
@@ -208,6 +208,22 @@ export const adminService = {
       target_type: 'driver_profile',
       target_id: driverId,
     });
+
+    // Notify driver
+    const { data: profile } = await supabase
+      .from('driver_profiles')
+      .select('user_id')
+      .eq('id', driverId)
+      .single();
+    if (profile?.user_id) {
+      await notificationService.sendToUser(
+        profile.user_id,
+        'Cuenta aprobada',
+        'Tu cuenta de conductor ha sido aprobada. Ya puedes empezar a recibir viajes.',
+        adminId,
+        { type: 'driver_status', status: 'approved' },
+      ).catch(() => {/* non-critical */});
+    }
   },
 
   /**
@@ -232,6 +248,22 @@ export const adminService = {
       target_id: driverId,
       reason,
     });
+
+    // Notify driver
+    const { data: rejProfile } = await supabase
+      .from('driver_profiles')
+      .select('user_id')
+      .eq('id', driverId)
+      .single();
+    if (rejProfile?.user_id) {
+      await notificationService.sendToUser(
+        rejProfile.user_id,
+        'Solicitud rechazada',
+        `Tu solicitud de conductor fue rechazada. Razon: ${reason}`,
+        adminId,
+        { type: 'driver_status', status: 'rejected', reason },
+      ).catch(() => {/* non-critical */});
+    }
   },
 
   /**
@@ -261,6 +293,22 @@ export const adminService = {
       target_id: driverId,
       reason,
     });
+
+    // Notify driver
+    const { data: susProfile } = await supabase
+      .from('driver_profiles')
+      .select('user_id')
+      .eq('id', driverId)
+      .single();
+    if (susProfile?.user_id) {
+      await notificationService.sendToUser(
+        susProfile.user_id,
+        'Cuenta suspendida',
+        `Tu cuenta de conductor ha sido suspendida. Razon: ${reason}`,
+        adminId,
+        { type: 'driver_status', status: 'suspended', reason },
+      ).catch(() => {/* non-critical */});
+    }
   },
 
   /**
@@ -426,77 +474,6 @@ export const adminService = {
   },
 
   /**
-   * Get pending redemption requests with driver info.
-   */
-  async getPendingRedemptions(
-    page = 0,
-    pageSize = 20,
-  ): Promise<(WalletRedemption & { driver_name: string })[]> {
-    const supabase = getSupabaseClient();
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
-
-    const { data, error } = await supabase
-      .from('wallet_redemptions')
-      .select(`
-        *,
-        driver_profiles!inner(
-          users!inner(full_name)
-        )
-      `)
-      .eq('status', 'requested')
-      .order('requested_at', { ascending: false })
-      .range(from, to);
-    if (error) throw error;
-
-    return (data ?? []).map((row: Record<string, unknown>) => {
-      const dp = row.driver_profiles as Record<string, unknown> | undefined;
-      const usr = dp?.users as Record<string, string> | undefined;
-      return {
-        ...(row as unknown as WalletRedemption),
-        driver_name: usr?.full_name ?? 'Desconocido',
-      };
-    });
-  },
-
-  /**
-   * Approve or reject a redemption request.
-   */
-  async processRedemption(
-    redemptionId: string,
-    adminId: string,
-    action: 'approved' | 'rejected',
-    reason?: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-
-    const updatePayload: Record<string, unknown> = {
-      status: action,
-      processed_at: new Date().toISOString(),
-      processed_by: adminId,
-    };
-
-    if (action === 'rejected' && reason) {
-      updatePayload.rejection_reason = reason;
-    }
-
-    const { error } = await supabase
-      .from('wallet_redemptions')
-      .update(updatePayload)
-      .eq('id', redemptionId)
-      .eq('status', 'requested');
-    if (error) throw error;
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: action === 'approved' ? 'approve_redemption' : 'reject_redemption',
-      target_type: 'wallet_redemption',
-      target_id: redemptionId,
-      reason: reason ?? null,
-    });
-  },
-
-  /**
    * Get all ledger transactions for admin view.
    */
   async getAdminTransactions(
@@ -562,7 +539,8 @@ export const adminService = {
     id: string,
     updates: Partial<Pick<PricingRule,
       'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup' |
-      'surge_threshold' | 'max_surge_multiplier' | 'is_active'
+      'surge_threshold' | 'max_surge_multiplier' | 'is_active' |
+      'time_window_start' | 'time_window_end' | 'day_of_week'
     >>,
   ): Promise<void> {
     const supabase = getSupabaseClient();
@@ -576,13 +554,167 @@ export const adminService = {
   async createPricingRule(
     rule: Pick<PricingRule,
       'service_type' | 'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup'
-    > & { zone_id?: string | null; is_active?: boolean },
+    > & {
+      zone_id?: string | null;
+      is_active?: boolean;
+      time_window_start?: string | null;
+      time_window_end?: string | null;
+      day_of_week?: number[] | null;
+    },
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('pricing_rules')
       .insert(rule);
     if (error) throw error;
+  },
+
+  async deletePricingRule(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('pricing_rules')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // ==================== WEATHER STATUS ====================
+
+  async getWeatherStatus(): Promise<{
+    condition: string;
+    description: string;
+    temp: number;
+    multiplier: number;
+    lastCheck: string | null;
+    surgeActive: boolean;
+  }> {
+    const supabase = getSupabaseClient();
+
+    // Get last weather check from platform_config
+    const { data: configData } = await supabase
+      .from('platform_config')
+      .select('value')
+      .eq('key', 'weather_last_check')
+      .single();
+
+    // Check if any weather surge is active
+    const { data: activeSurges } = await supabase
+      .from('surge_zones')
+      .select('id, multiplier')
+      .like('reason', 'weather_%')
+      .eq('active', true)
+      .limit(1);
+
+    const surgeList = activeSurges ?? [];
+    const surgeActive = surgeList.length > 0;
+    const surgeMultiplier = surgeActive ? (surgeList[0]?.multiplier as number ?? 1.0) : 1.0;
+
+    if (!configData?.value || configData.value === 'null') {
+      return {
+        condition: 'unknown',
+        description: 'No data',
+        temp: 0,
+        multiplier: surgeMultiplier,
+        lastCheck: null,
+        surgeActive,
+      };
+    }
+
+    try {
+      const parsed = typeof configData.value === 'string'
+        ? JSON.parse(configData.value)
+        : configData.value;
+      return {
+        condition: parsed.condition ?? 'unknown',
+        description: parsed.description ?? '',
+        temp: parsed.temp ?? 0,
+        multiplier: surgeMultiplier > 1.0 ? surgeMultiplier : (parsed.multiplier ?? 1.0),
+        lastCheck: parsed.checked_at ?? null,
+        surgeActive,
+      };
+    } catch {
+      return {
+        condition: 'unknown',
+        description: 'Parse error',
+        temp: 0,
+        multiplier: surgeMultiplier,
+        lastCheck: null,
+        surgeActive,
+      };
+    }
+  },
+
+  // ==================== AUTO-ADMIN ====================
+
+  /**
+   * Get recent automated actions (system user).
+   */
+  async getRecentAutoActions(limit = 10): Promise<AdminAction[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('admin_actions')
+      .select('*')
+      .eq('admin_id', '00000000-0000-0000-0000-000000000001')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []) as AdminAction[];
+  },
+
+  // ==================== SURGE STATUS ====================
+
+  async getSurgeStatusForZones(
+    zones: { id: string; lat: number; lng: number }[],
+  ): Promise<{ zone_id: string; zone_name: string; multiplier: number }[]> {
+    const supabase = getSupabaseClient();
+    const results: { zone_id: string; zone_name: string; multiplier: number }[] = [];
+    for (const zone of zones) {
+      try {
+        const { data } = await supabase.rpc('calculate_dynamic_surge', {
+          p_zone_id: zone.id,
+          p_lat: zone.lat,
+          p_lng: zone.lng,
+          p_radius_m: 3000,
+        });
+        results.push({
+          zone_id: zone.id,
+          zone_name: '',
+          multiplier: typeof data === 'number' ? data : 1.0,
+        });
+      } catch {
+        results.push({ zone_id: zone.id, zone_name: '', multiplier: 1.0 });
+      }
+    }
+    return results;
+  },
+
+  async getLiveMetrics(): Promise<{
+    searching_rides: number;
+    in_progress_rides: number;
+    online_drivers: number;
+  }> {
+    const supabase = getSupabaseClient();
+
+    const [searchingRes, inProgressRes, driversRes] = await Promise.all([
+      supabase
+        .from('rides')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'searching'),
+      supabase
+        .from('rides')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress']),
+      supabase
+        .from('driver_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_online', true),
+    ]);
+
+    return {
+      searching_rides: searchingRes.count ?? 0,
+      in_progress_rides: inProgressRes.count ?? 0,
+      online_drivers: driversRes.count ?? 0,
+    };
   },
 
   // ==================== ZONES ====================

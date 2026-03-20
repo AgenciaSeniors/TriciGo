@@ -25,6 +25,7 @@ export default function SavedLocationsScreen() {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
   const [selectedAddress, setSelectedAddress] = useState<{ address: string; location: GeoPoint } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -38,23 +39,34 @@ export default function SavedLocationsScreen() {
     }).catch((err) => console.warn('[SavedLocations] Failed to load:', err)).finally(() => setLoading(false));
   }, [user]);
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!profile || !newLabel.trim() || !selectedAddress) return;
     setSaving(true);
     try {
-      const updated = [...locations, {
+      const entry: SavedLocation = {
         label: newLabel.trim(),
         address: selectedAddress.address,
         latitude: selectedAddress.location.latitude,
         longitude: selectedAddress.location.longitude,
-      }];
+      };
+
+      let updated: SavedLocation[];
+      if (editingIndex !== null) {
+        // Edit existing
+        updated = locations.map((loc, i) => (i === editingIndex ? entry : loc));
+      } else {
+        // Add new
+        updated = [...locations, entry];
+      }
+
       await customerService.updateProfile(profile.id, { saved_locations: updated });
       setLocations(updated);
       setSheetVisible(false);
       setNewLabel('');
       setSelectedAddress(null);
+      setEditingIndex(null);
     } catch {
-      Alert.alert('Error', t('errors.generic'));
+      Alert.alert(t('error'), t('errors.generic'));
     } finally {
       setSaving(false);
     }
@@ -73,16 +85,29 @@ export default function SavedLocationsScreen() {
             await customerService.updateProfile(profile.id, { saved_locations: updated });
             setLocations(updated);
           } catch {
-            Alert.alert('Error', t('errors.generic'));
+            Alert.alert(t('error'), t('errors.generic'));
           }
         },
       },
     ]);
   };
 
-  const handleOpenSheet = () => {
-    setNewLabel('');
-    setSelectedAddress(null);
+  const handleOpenSheet = (index?: number) => {
+    if (index !== undefined && locations[index]) {
+      // Edit mode — pre-populate
+      const loc = locations[index]!;
+      setEditingIndex(index);
+      setNewLabel(loc.label);
+      setSelectedAddress({
+        address: loc.address,
+        location: { latitude: loc.latitude, longitude: loc.longitude },
+      });
+    } else {
+      // Add mode
+      setEditingIndex(null);
+      setNewLabel('');
+      setSelectedAddress(null);
+    }
     setSheetVisible(true);
   };
 
@@ -97,13 +122,33 @@ export default function SavedLocationsScreen() {
           renderItem={({ item, index }) => (
             <Card variant="outlined" padding="md" className="mb-2">
               <View className="flex-row items-center justify-between">
-                <View className="flex-1 mr-3">
+                <Pressable
+                  className="flex-1 mr-3"
+                  onPress={() => handleOpenSheet(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
+                >
                   <Text variant="body" className="font-medium">{item.label}</Text>
                   <Text variant="bodySmall" color="secondary">{item.address}</Text>
-                </View>
-                <Pressable onPress={() => handleDelete(index)}>
-                  <Ionicons name="trash-outline" size={20} color={colors.error.DEFAULT} />
                 </Pressable>
+                <View className="flex-row items-center gap-3">
+                  <Pressable
+                    onPress={() => handleOpenSheet(index)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
+                  >
+                    <Ionicons name="pencil-outline" size={18} color={colors.neutral[500]} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleDelete(index)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('delete')}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={colors.error.DEFAULT} />
+                  </Pressable>
+                </View>
               </View>
             </Card>
           )}
@@ -121,13 +166,17 @@ export default function SavedLocationsScreen() {
           variant="primary"
           size="lg"
           fullWidth
-          onPress={handleOpenSheet}
+          onPress={() => handleOpenSheet()}
           className="mt-4"
         />
       </View>
 
-      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
-        <Text className="text-lg font-bold mb-4">{t('profile.add_location')}</Text>
+      <BottomSheet visible={sheetVisible} onClose={() => { setSheetVisible(false); setEditingIndex(null); }}>
+        <Text className="text-lg font-bold mb-4">
+          {editingIndex !== null
+            ? t('profile.edit_location', { defaultValue: 'Editar ubicación' })
+            : t('profile.add_location')}
+        </Text>
         <Input
           label={t('profile.location_label')}
           placeholder={t('profile.location_label_placeholder')}
@@ -152,7 +201,7 @@ export default function SavedLocationsScreen() {
             fullWidth
             loading={saving}
             disabled={saving || !newLabel.trim() || !selectedAddress}
-            onPress={handleAdd}
+            onPress={handleSave}
           />
         </View>
       </BottomSheet>

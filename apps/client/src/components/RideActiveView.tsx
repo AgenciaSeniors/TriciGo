@@ -38,6 +38,9 @@ export function RideActiveView() {
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const isLoading = useRideStore((s) => s.isLoading);
+  const addSplit = useRideStore((s) => s.addSplit);
+  const updateSplit = useRideStore((s) => s.updateSplit);
+  const setSplits = useRideStore((s) => s.setSplits);
   const userId = useAuthStore((s) => s.user?.id);
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
@@ -84,6 +87,27 @@ export function RideActiveView() {
     };
   }, [activeRide?.id]);
 
+  // Subscribe to real-time split changes (invitations, acceptances, payments)
+  useEffect(() => {
+    if (!activeRide?.id || !activeRide.is_split) return;
+
+    // Fetch existing splits
+    rideService.getSplitsForRide(activeRide.id)
+      .then((existingSplits) => setSplits(existingSplits))
+      .catch(() => {});
+
+    const channel = rideService.subscribeToSplits(
+      activeRide.id,
+      (newSplit) => addSplit(newSplit),
+      (updatedSplit) => updateSplit(updatedSplit),
+    );
+
+    return () => {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(channel);
+    };
+  }, [activeRide?.id, activeRide?.is_split]);
+
   const handleAddStop = async (address: string, location: GeoPoint) => {
     if (!activeRide) return;
     setAddingStop(true);
@@ -109,6 +133,7 @@ export function RideActiveView() {
   const [cancelSheetVisible, setCancelSheetVisible] = useState(false);
   const [penaltyPreview, setPenaltyPreview] = useState({ penaltyAmount: 0, cancelCount24h: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [cancellationFeePreview, setCancellationFeePreview] = useState<import('@tricigo/types').CancellationFeePreview | null>(null);
 
   // Safety sheet state
   const [safetySheetVisible, setSafetySheetVisible] = useState(false);
@@ -166,14 +191,24 @@ export function RideActiveView() {
     if (!userId) return;
     setPreviewLoading(true);
     try {
-      const preview = await rideService.previewCancelPenalty(userId);
-      setPenaltyPreview({
-        penaltyAmount: preview.penaltyAmount,
-        cancelCount24h: preview.cancelCount24h,
-      });
+      // Fetch both penalty preview and cancellation fee in parallel
+      const [penaltyResult, feeResult] = await Promise.allSettled([
+        rideService.previewCancelPenalty(userId),
+        activeRide ? rideService.previewCancellationFee(activeRide.id, userId) : Promise.resolve(null),
+      ]);
+
+      setPenaltyPreview(
+        penaltyResult.status === 'fulfilled'
+          ? { penaltyAmount: penaltyResult.value.penaltyAmount, cancelCount24h: penaltyResult.value.cancelCount24h }
+          : { penaltyAmount: 0, cancelCount24h: 0 },
+      );
+
+      setCancellationFeePreview(
+        feeResult.status === 'fulfilled' ? feeResult.value : null,
+      );
     } catch {
-      // Default to 0 if preview fails — user can still cancel
       setPenaltyPreview({ penaltyAmount: 0, cancelCount24h: 0 });
+      setCancellationFeePreview(null);
     } finally {
       setPreviewLoading(false);
       setCancelSheetVisible(true);
@@ -370,6 +405,7 @@ export function RideActiveView() {
         penaltyAmount={penaltyPreview.penaltyAmount}
         cancelCount24h={penaltyPreview.cancelCount24h}
         isLoading={isLoading}
+        cancellationFee={cancellationFeePreview}
       />
 
       {/* Safety bottom sheet */}

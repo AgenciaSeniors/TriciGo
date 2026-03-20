@@ -33,6 +33,7 @@ export default function VehicleScreen() {
         { label: 'Color', value: vehicle.color },
         { label: 'Placa', value: vehicle.plate_number },
         { label: 'Capacidad', value: `${vehicle.capacity} pasajeros` },
+        { label: 'Acepta carga', value: vehicle.accepts_cargo ? `Si — ${vehicle.max_cargo_weight_kg ?? '?'} kg max` : 'No' },
       ]
     : [];
 

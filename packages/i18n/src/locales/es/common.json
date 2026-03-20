@@ -61,6 +61,7 @@
     "transfer_to": "Enviar a: {{name}}",
     "transfer_insufficient": "Saldo insuficiente",
     "transfer_user_not_found": "Usuario no encontrado",
+    "cannot_transfer_self": "No puedes transferir a tu propia cuenta",
     "transfer_searching": "Buscando usuario...",
     "transfer_sent": "Enviado",
     "transfer_received": "Recibido",
@@ -186,7 +187,11 @@
     "notif_promos": "Promociones y ofertas",
     "notif_trip_requests": "Solicitudes de viaje",
     "notif_sms": "Alertas por SMS",
-    "notif_sms_desc": "Recibe alertas de viaje por SMS cuando no tengas conexion. Puede generar cargos del operador."
+    "notif_sms_desc": "Recibe alertas de viaje por SMS cuando no tengas conexion. Puede generar cargos del operador.",
+    "appearance": "Apariencia",
+    "theme_light": "Claro",
+    "theme_dark": "Oscuro",
+    "theme_system": "Sistema"
   },
 
   "safety": {
@@ -340,6 +345,18 @@
     "conversation_ok_desc": "Me gusta conversar durante el viaje",
     "luggage_trunk": "Espacio para equipaje",
     "luggage_trunk_desc": "Necesito espacio para maletas o paquetes",
+    "accessibility_title": "Necesidades de accesibilidad",
+    "accessibility_desc": "Informa al conductor sobre tus necesidades especiales",
+    "a11y_wheelchair": "Silla de ruedas",
+    "a11y_wheelchair_desc": "Necesito asistencia con silla de ruedas",
+    "a11y_hearing": "Discapacidad auditiva",
+    "a11y_hearing_desc": "Tengo dificultad auditiva",
+    "a11y_visual": "Discapacidad visual",
+    "a11y_visual_desc": "Tengo dificultad visual",
+    "a11y_service_animal": "Animal de servicio",
+    "a11y_service_animal_desc": "Viajo con un animal de servicio",
+    "a11y_extra_space": "Espacio extra",
+    "a11y_extra_space_desc": "Necesito espacio adicional",
     "saved": "Preferencias guardadas"
   },
 

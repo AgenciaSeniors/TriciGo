@@ -61,6 +61,7 @@
     "transfer_to": "Send to: {{name}}",
     "transfer_insufficient": "Insufficient balance",
     "transfer_user_not_found": "User not found",
+    "cannot_transfer_self": "You cannot transfer to your own account",
     "transfer_searching": "Searching user...",
     "transfer_sent": "Sent",
     "transfer_received": "Received",
@@ -186,7 +187,11 @@
     "notif_promos": "Promotions & offers",
     "notif_trip_requests": "Trip requests",
     "notif_sms": "SMS Alerts",
-    "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply."
+    "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply.",
+    "appearance": "Appearance",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_system": "System"
   },
 
   "safety": {
@@ -340,6 +345,18 @@
     "conversation_ok_desc": "I enjoy chatting during the ride",
     "luggage_trunk": "Luggage Space",
     "luggage_trunk_desc": "I need space for bags or packages",
+    "accessibility_title": "Accessibility Needs",
+    "accessibility_desc": "Let the driver know about your special needs",
+    "a11y_wheelchair": "Wheelchair",
+    "a11y_wheelchair_desc": "I need wheelchair assistance",
+    "a11y_hearing": "Hearing Impaired",
+    "a11y_hearing_desc": "I have hearing difficulty",
+    "a11y_visual": "Visually Impaired",
+    "a11y_visual_desc": "I have visual difficulty",
+    "a11y_service_animal": "Service Animal",
+    "a11y_service_animal_desc": "I'm traveling with a service animal",
+    "a11y_extra_space": "Extra Space",
+    "a11y_extra_space_desc": "I need additional space",
     "saved": "Preferences saved"
   },
 

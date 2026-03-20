@@ -3,6 +3,9 @@ import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
 import { identifyUser, resetAnalytics } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRideStore } from '@/stores/ride.store';
+import { useChatStore } from '@/stores/chat.store';
+import { useNotificationStore } from '@/stores/notification.store';
 
 // Use SecureStore on native, localStorage on web
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,6 +69,9 @@ export function useAuthInit() {
         if (event === 'SIGNED_OUT' || !session) {
           resetAnalytics();
           reset();
+          useRideStore.getState().resetAll();
+          useChatStore.getState().reset();
+          useNotificationStore.getState().reset();
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
             const user = await authService.getCurrentUser();

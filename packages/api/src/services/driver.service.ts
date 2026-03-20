@@ -524,7 +524,7 @@ export const driverService = {
     );
 
     // Fetch current exchange rate
-    let exchangeRate = 520;
+    let exchangeRate = 510;
     try {
       const { data: rateRow } = await supabase
         .from('exchange_rates')
@@ -755,12 +755,29 @@ export const driverService = {
       .single();
     if (error) throw error;
 
-    // Invoke Edge Function for face matching (fire-and-forget)
-    supabase.functions
-      .invoke('verify-selfie', {
-        body: { check_id: checkId, driver_id: driverId },
-      })
-      .catch((err) => console.error('verify-selfie invoke failed:', err));
+    // Invoke Edge Function for face matching with retry (max 3 attempts)
+    const invokeSelfieVerification = async (attempt = 1) => {
+      try {
+        await supabase.functions.invoke('verify-selfie', {
+          body: { check_id: checkId, driver_id: driverId },
+        });
+      } catch (err) {
+        if (attempt < 3) {
+          // Exponential backoff: 2s, 4s
+          await new Promise<void>((r) => setTimeout(r, attempt * 2000));
+          return invokeSelfieVerification(attempt + 1);
+        }
+        // After 3 failures, mark the check as failed so it doesn't stay in 'processing' forever
+        console.error('verify-selfie invoke failed after 3 attempts:', err);
+        try {
+          await supabase
+            .from('selfie_checks')
+            .update({ status: 'failed' })
+            .eq('id', checkId);
+        } catch { /* best effort */ }
+      }
+    };
+    invokeSelfieVerification();
 
     return data as SelfieCheck;
   },

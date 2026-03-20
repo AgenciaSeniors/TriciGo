@@ -8,6 +8,7 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import type { CancellationFeePreview } from '@tricigo/types';
 
 interface CancelRideSheetProps {
   visible: boolean;
@@ -19,6 +20,8 @@ interface CancelRideSheetProps {
   cancelCount24h: number;
   /** Whether cancel is in progress */
   isLoading: boolean;
+  /** State-based cancellation fee preview */
+  cancellationFee?: CancellationFeePreview | null;
 }
 
 const CANCEL_REASONS = [
@@ -35,6 +38,7 @@ export function CancelRideSheet({
   penaltyAmount,
   cancelCount24h,
   isLoading,
+  cancellationFee,
 }: CancelRideSheetProps) {
   const { t } = useTranslation('rider');
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
@@ -81,21 +85,61 @@ export function CancelRideSheet({
         />
       </Card>
 
-      {/* Your penalty preview */}
+      {/* State-based cancellation fee */}
+      {cancellationFee && !cancellationFee.is_free && (
+        <View className="rounded-xl px-4 py-3 mb-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700">
+          <View className="flex-row items-center mb-1">
+            <Ionicons name="car" size={16} color={colors.warning.DEFAULT} />
+            <Text variant="body" className="ml-2 font-semibold text-amber-800 dark:text-amber-200">
+              {t('ride.cancel_fee_title', { defaultValue: 'Tarifa de cancelación' })}
+            </Text>
+          </View>
+          <Text variant="bodySmall" className="text-amber-700 dark:text-amber-300 mb-1">
+            {cancellationFee.fee_reason === 'driver_en_route'
+              ? t('ride.cancel_fee_driver_en_route')
+              : cancellationFee.fee_reason === 'driver_arrived'
+                ? t('ride.cancel_fee_driver_arrived')
+                : cancellationFee.fee_reason === 'ride_in_progress'
+                  ? t('ride.cancel_fee_in_progress')
+                  : ''}
+          </Text>
+          <Text variant="body" className="font-bold text-amber-900 dark:text-amber-100">
+            {t('ride.cancel_fee_amount', { amount: formatCUP(cancellationFee.fee_cup) })}
+          </Text>
+          <Text variant="caption" className="text-amber-600 dark:text-amber-400 mt-0.5">
+            {t('ride.cancel_fee_driver_compensated')}
+          </Text>
+        </View>
+      )}
+
+      {cancellationFee && cancellationFee.is_free && (
+        <View className="rounded-xl px-4 py-3 mb-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
+          <View className="flex-row items-center">
+            <Ionicons name="checkmark-circle" size={16} color={colors.success.DEFAULT} />
+            <Text variant="bodySmall" className="ml-2 text-green-700 dark:text-green-300 font-medium">
+              {t('ride.cancel_fee_free', { defaultValue: 'Cancelación gratuita' })}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Your penalty preview (progressive, based on cancellation count) */}
       <View
         className={`rounded-xl px-4 py-3 mb-4 ${
-          hasPenalty ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'
+          hasPenalty
+            ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700'
+            : 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700'
         }`}
       >
         <Text
           variant="body"
-          className={`font-semibold ${hasPenalty ? 'text-red-700' : 'text-green-700'}`}
+          className={`font-semibold ${hasPenalty ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}
         >
           {t('ride.cancel_your_penalty', { defaultValue: 'Tu penalización' })}:{' '}
           {hasPenalty ? formatCUP(penaltyAmount) : '0 CUP'}
         </Text>
         {!hasPenalty && (
-          <Text variant="caption" className="text-green-600 mt-0.5">
+          <Text variant="caption" className="text-green-600 dark:text-green-400 mt-0.5">
             {t('ride.cancel_free_label', { defaultValue: 'Primera cancelación del día' })}
           </Text>
         )}

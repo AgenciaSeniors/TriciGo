@@ -4,10 +4,17 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ── CORS: restrict to allowed origins ──
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 interface SmsRequest {
   user_id: string;
@@ -18,11 +25,43 @@ interface SmsRequest {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    // ── Auth: allow internal service-role calls (pg_net triggers) or valid JWT ──
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const apiKey = req.headers.get('apikey') ?? '';
+    const isInternalCall = apiKey === serviceRoleKey;
+
+    if (!isInternalCall) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Missing authorization header' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const supabaseAuth = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        serviceRoleKey,
+      );
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+        authHeader.replace('Bearer ', ''),
+      );
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     const { user_id, phone, body, ride_id, event_type } =
       (await req.json()) as SmsRequest;
 
@@ -35,7 +74,7 @@ Deno.serve(async (req) => {
 
     // Read Twilio credentials from environment (same as Supabase Auth OTP)
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const authToken = Deno.env.get('SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN');
+    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
     const messagingServiceSid = Deno.env.get('TWILIO_MESSAGE_SERVICE_SID');
 
     if (!accountSid || !authToken || !messagingServiceSid) {
@@ -89,7 +128,7 @@ Deno.serve(async (req) => {
       console.error('[send-sms] Twilio error:', JSON.stringify(twilioResult));
       return new Response(
         JSON.stringify({ success: false, error: twilioResult.message ?? 'Twilio error' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 

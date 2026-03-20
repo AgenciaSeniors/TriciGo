@@ -7,6 +7,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
+import { isValidCubanPhone } from '@tricigo/utils';
 
 interface AddContactSheetProps {
   visible: boolean;
@@ -34,6 +35,10 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
 
   const handleSave = async () => {
     if (!name.trim() || !phone.trim()) return;
+    if (!isValidCubanPhone(phone)) {
+      Alert.alert(t('error'), t('errors.invalid_phone'));
+      return;
+    }
     setSaving(true);
     try {
       await trustedContactService.addContact({
@@ -51,9 +56,9 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
       if (err?.code === 'MAX_CONTACTS') {
         Alert.alert(t('trusted_contacts.max_contacts'), t('trusted_contacts.max_reached'));
       } else if (err?.code === '23505') {
-        Alert.alert('Error', t('trusted_contacts.duplicate_phone'));
+        Alert.alert(t('error'), t('trusted_contacts.duplicate_phone'));
       } else {
-        Alert.alert('Error', t('errors.generic'));
+        Alert.alert(t('error'), t('errors.generic'));
       }
     } finally {
       setSaving(false);
@@ -96,7 +101,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         <Switch
           value={autoShare}
           onValueChange={setAutoShare}
-          trackColor={{ true: colors.primary.DEFAULT, false: colors.neutral[300] }}
+          trackColor={{ true: colors.primary[500], false: colors.neutral[300] }}
         />
       </View>
 
@@ -110,7 +115,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         <Switch
           value={isEmergency}
           onValueChange={setIsEmergency}
-          trackColor={{ true: colors.primary.DEFAULT, false: colors.neutral[300] }}
+          trackColor={{ true: colors.primary[500], false: colors.neutral[300] }}
         />
       </View>
 

@@ -597,6 +597,8 @@
     "filter_triciclo": "Triciclo Basic",
     "filter_moto": "Moto",
     "filter_auto": "Auto",
+    "filter_confort": "Comfort",
+    "filter_cargo": "Cargo",
     "filter_mensajeria": "Delivery",
     "col_zone": "Zone",
     "col_service": "Service",
@@ -605,10 +607,33 @@
     "col_per_min": "Per Min",
     "col_min": "Min",
     "col_surge": "Surge",
+    "col_time_window": "Time Window",
     "col_active": "Active",
     "global_zone": "Global",
     "zone_label": "Zone",
-    "no_rules": "No pricing rules"
+    "no_rules": "No pricing rules",
+    "create_rule": "Create rule",
+    "delete_rule": "Delete",
+    "confirm_delete": "Are you sure you want to delete this pricing rule?",
+    "time_band_morning": "Morning",
+    "time_band_afternoon": "Afternoon",
+    "time_band_night": "Night",
+    "time_band_dawn": "Dawn",
+    "time_band_24h": "24 hours",
+    "pricing_matrix": "Pricing matrix",
+    "new_rule_title": "New pricing rule",
+    "label_service_type": "Service type",
+    "label_zone": "Zone (optional)",
+    "label_base_fare": "Base fare (CUP)",
+    "label_per_km": "Per km (CUP)",
+    "label_per_min": "Per minute (CUP)",
+    "label_min_fare": "Minimum fare (CUP)",
+    "label_time_start": "Start time",
+    "label_time_end": "End time",
+    "label_days": "Days of week",
+    "creating": "Creating...",
+    "error_creating": "Error creating rule",
+    "error_deleting": "Error deleting rule"
   },
 
   "zones": {
@@ -680,7 +705,39 @@
     "promotions_desc": "Promotional codes and discounts",
     "flags_desc": "Enable or disable system features",
     "surge_zones": "Dynamic pricing zones",
-    "surge_zones_desc": "Dynamic pricing rules by zone"
+    "surge_zones_desc": "Dynamic pricing rules by zone",
+    "surge_dashboard": "Live Surge",
+    "surge_dashboard_desc": "Real-time surge and demand monitoring",
+    "automation": "Automation Rules",
+    "automation_desc": "Configure auto-approval and auto-resolve rules"
+  },
+
+  "surge_dashboard": {
+    "title": "Live Surge Dashboard",
+    "current_multiplier": "Current multiplier",
+    "searching_rides": "Rides searching for driver",
+    "in_progress_rides": "Rides in progress",
+    "online_drivers": "Online drivers",
+    "demand_ratio": "Demand/supply ratio",
+    "last_updated": "Last updated",
+    "refreshing": "Refreshing...",
+    "zone_surge": "Surge by zone",
+    "live_metrics": "Live metrics",
+    "no_surge": "No active surge",
+    "auto_refresh": "Refresh every 30s",
+    "weather": "Current Weather",
+    "weather_clear": "Clear",
+    "weather_drizzle": "Drizzle",
+    "weather_rain": "Rain",
+    "weather_heavy_rain": "Heavy rain",
+    "weather_storm": "Storm",
+    "weather_extreme": "Extreme weather",
+    "weather_multiplier": "Weather multiplier",
+    "weather_last_check": "Last check",
+    "weather_no_data": "No weather data",
+    "weather_surge_active": "Weather surge active",
+    "weather_surge_inactive": "No weather surge",
+    "weather_temp": "Temperature"
   },
 
   "fraud": {
@@ -753,7 +810,12 @@
     "commission_rate": "Commission rate",
     "commission_rate_help": "Platform fee percentage per ride (e.g., 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Exchange rate fallback (CUP)",
-    "exchange_rate_fallback_cup_help": "Fallback USD/CUP rate if no current rate is set"
+    "exchange_rate_fallback_cup_help": "Fallback USD/CUP rate if no current rate is set",
+    "openweather_api_key": "OpenWeatherMap API Key",
+    "openweather_api_key_help": "API key for weather queries. Get one at openweathermap.org",
+    "weather_surge_enabled": "Weather surge enabled",
+    "weather_surge_enabled_help": "Enable/disable automatic fare increase during rain",
+    "weather_last_check": "Last weather check"
   },
 
   "exchange_rate": {
@@ -940,5 +1002,35 @@
     "doc_status_verified": "Verified",
     "doc_status_rejected": "Rejected",
     "doc_status_pending": "Pending review"
+  },
+
+  "automation": {
+    "title": "Automation Rules",
+    "subtitle": "Configure which admin tasks run automatically",
+    "driver_approval": "Driver Auto-Approval",
+    "driver_approval_desc": "Automatically approve drivers when all documents are verified and face match score meets the threshold",
+    "redemption_approval": "Redemption Auto-Approval",
+    "redemption_approval_desc": "Automatically approve wallet redemptions below the threshold amount from verified drivers",
+    "fraud_resolve": "Fraud Alert Auto-Resolve",
+    "fraud_resolve_desc": "Automatically resolve low-severity fraud alerts after the configured hours",
+    "incident_close": "Incident Auto-Close",
+    "incident_close_desc": "Automatically close resolved incidents after the configured hours",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "threshold": "Threshold",
+    "face_threshold": "Min face match %",
+    "max_amount": "Max amount (TRC centavos)",
+    "hours": "Hours",
+    "saved": "Saved",
+    "saving": "Saving..."
+  },
+
+  "dashboard_auto": {
+    "recent_auto_actions": "Recent Automated Actions",
+    "no_auto_actions": "No automated actions yet",
+    "auto_approve_driver": "Driver auto-approved",
+    "auto_approve_redemption": "Redemption auto-approved",
+    "auto_resolve_fraud": "Fraud alert auto-resolved",
+    "auto_close_incident": "Incident auto-closed"
   }
 }

@@ -14,6 +14,7 @@ import { recurringRideService, useFeatureFlag } from '@tricigo/api';
 import type { RecurringRide } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { CreateRecurringRideSheet } from '@/components/CreateRecurringRideSheet';
+import { EditRecurringRideSheet } from '@/components/EditRecurringRideSheet';
 
 const DAY_KEYS = ['day_mon', 'day_tue', 'day_wed', 'day_thu', 'day_fri', 'day_sat', 'day_sun'] as const;
 
@@ -32,6 +33,7 @@ export default function RecurringRidesScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingRide, setEditingRide] = useState<RecurringRide | null>(null);
 
   const fetchRides = useCallback(async () => {
     if (!userId) return;
@@ -94,6 +96,11 @@ export default function RecurringRidesScreen() {
     fetchRides();
   }, [fetchRides]);
 
+  const handleUpdated = useCallback(() => {
+    setEditingRide(null);
+    fetchRides();
+  }, [fetchRides]);
+
   if (!enabled) {
     return (
       <Screen>
@@ -111,7 +118,7 @@ export default function RecurringRidesScreen() {
       <ScreenHeader
         title={t('recurring.title')}
         onBack={() => router.back()}
-        rightElement={
+        rightAction={
           <Pressable onPress={() => setShowCreate(true)} hitSlop={8}>
             <Ionicons name="add-circle-outline" size={26} color={colors.primary[500]} />
           </Pressable>
@@ -208,6 +215,15 @@ export default function RecurringRidesScreen() {
                       </Text>
                     </Pressable>
                     <Pressable
+                      onPress={() => setEditingRide(ride)}
+                      className="flex-row items-center gap-1 px-3 py-1.5 rounded-lg bg-neutral-100"
+                    >
+                      <Ionicons name="pencil-outline" size={14} color={colors.neutral[600]} />
+                      <Text className="text-xs font-medium text-neutral-600">
+                        {t('recurring.edit_btn', { defaultValue: 'Editar' })}
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       onPress={() => handleDelete(ride.id)}
                       className="flex-row items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50"
                     >
@@ -226,6 +242,13 @@ export default function RecurringRidesScreen() {
         visible={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={handleCreated}
+      />
+
+      <EditRecurringRideSheet
+        ride={editingRide}
+        visible={!!editingRide}
+        onClose={() => setEditingRide(null)}
+        onUpdated={handleUpdated}
       />
     </Screen>
   );

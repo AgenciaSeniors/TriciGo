@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Pressable, FlatList } from 'react-native';
+import { View, Pressable, FlatList, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -25,14 +25,103 @@ import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
+import { Platform } from 'react-native';
 import type { Ride } from '@tricigo/types';
 
-export default function DriverHomeScreen() {
+// TEMP: Static web version for Play Store screenshots (all inline styles to bypass NativeWind web issues)
+function WebDriverHomeScreen() {
+  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+  return (
+    <View style={{ flex: 1, backgroundColor: '#111111', paddingHorizontal: 16 }}>
+      <View style={{ paddingTop: 16, flex: 1 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Conductor</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(34,197,94,0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' }} />
+            <Text style={{ fontSize: 14, color: '#4ade80', fontWeight: '600', ...font }}>En línea</Text>
+          </View>
+        </View>
+
+        {/* Real Mapbox dark map of Havana */}
+        <View style={{ height: 200, borderRadius: 16, overflow: 'hidden', position: 'relative', marginBottom: 12 }}>
+          <Image
+            source={require('../../assets/screenshots/map-havana-dark.png')}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
+          {/* Driver location (pulsing blue dot) overlay */}
+          <View style={{ position: 'absolute', top: 80, left: 170 }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(30,136,229,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#1e88e5', borderWidth: 3, borderColor: '#fff' }} />
+            </View>
+          </View>
+          {/* Demand heatmap zones */}
+          <View style={{ position: 'absolute', top: 25, left: 70, width: 60, height: 50, borderRadius: 25, backgroundColor: 'rgba(249,115,22,0.15)' }} />
+          <View style={{ position: 'absolute', top: 110, left: 260, width: 80, height: 55, borderRadius: 30, backgroundColor: 'rgba(249,115,22,0.2)' }} />
+          <View style={{ position: 'absolute', top: 45, left: 300, width: 50, height: 40, borderRadius: 20, backgroundColor: 'rgba(249,115,22,0.1)' }} />
+          {/* Demand indicator */}
+          <View style={{ position: 'absolute', top: 8, right: 12, backgroundColor: 'rgba(249,115,22,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="flame" size={12} color={colors.brand.orange} />
+            <Text style={{ color: colors.brand.orange, fontSize: 11, fontWeight: '600', ...font }}>Alta demanda</Text>
+          </View>
+        </View>
+
+        {/* Today's earnings summary */}
+        <View style={{ backgroundColor: '#1f1f1f', borderRadius: 16, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View>
+            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>Ganancias de hoy</Text>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>T$ 1,250.00</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>Viajes</Text>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: '#fff', ...font }}>8</Text>
+          </View>
+        </View>
+
+        {/* Incoming request */}
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 12, ...font }}>Solicitud entrante</Text>
+
+        <View style={{ backgroundColor: '#1f1f1f', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+            <View style={{ alignItems: 'center', marginRight: 12, marginTop: 4 }}>
+              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' }} />
+              <View style={{ width: 2, height: 24, backgroundColor: '#4b5563', marginVertical: 4 }} />
+              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange }} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, color: '#fff', marginBottom: 8, ...font }}>Calle 23 esq. L, Vedado</Text>
+              <Text style={{ fontSize: 14, color: '#d1d5db', ...font }}>Parque Central, Habana Vieja</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#374151' }}>
+            <Text style={{ fontSize: 16, color: '#fff', fontWeight: '700', ...font }}>T$ 85.00</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>3.2 km</Text>
+              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>12 min</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+            <Pressable style={{ flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#6b7280', alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, color: '#d1d5db', fontWeight: '600', ...font }}>Rechazar</Text>
+            </Pressable>
+            <Pressable style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.brand.orange, alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600', ...font }}>Aceptar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function NativeDriverHomeScreen() {
   const { t } = useTranslation('driver');
   const { profile, isOnline, setOnline } = useDriverStore();
   const user = useAuthStore((s) => s.user);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
+  const removeRequest = useDriverRideStore((s) => s.removeRequest);
   const [toggling, setToggling] = useState(false);
   const [isIneligible, setIsIneligible] = useState(false);
   const notifCenterEnabled = useFeatureFlag('notification_center_enabled');
@@ -127,16 +216,24 @@ export default function DriverHomeScreen() {
     [acceptRide],
   );
 
+  const handleReject = useCallback(
+    (rideId: string) => {
+      removeRequest(rideId);
+    },
+    [removeRequest],
+  );
+
   const renderRequest = useCallback(
     ({ item }: { item: Ride }) => (
       <IncomingRideCard
         ride={item}
         onAccept={handleAccept}
+        onReject={handleReject}
         driverCustomRateCup={profile?.custom_per_km_rate_cup ?? null}
         serviceConfig={serviceConfigs[item.service_type] ?? null}
       />
     ),
-    [handleAccept, profile?.custom_per_km_rate_cup, serviceConfigs],
+    [handleAccept, handleReject, profile?.custom_per_km_rate_cup, serviceConfigs],
   );
 
   // Active trip view
@@ -166,7 +263,7 @@ export default function DriverHomeScreen() {
               title={t('home.ineligible_recharge')}
               variant="outline"
               size="sm"
-              onPress={() => router.push('/earnings')}
+              onPress={() => router.push('/(tabs)/earnings')}
             />
           </View>
         )}
@@ -326,4 +423,9 @@ function Header({ isOnline }: { isOnline: boolean }) {
       </View>
     </View>
   );
+}
+
+export default function DriverHomeScreen() {
+  if (Platform.OS === 'web') return <WebDriverHomeScreen />;
+  return <NativeDriverHomeScreen />;
 }

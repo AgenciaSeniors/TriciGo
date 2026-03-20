@@ -8,9 +8,11 @@ import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
@@ -23,9 +25,16 @@ const NOTIF_CATEGORIES = [
   { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
 ];
 
+const THEME_OPTIONS: { value: ThemeMode; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'light', labelKey: 'profile.theme_light', icon: 'sunny-outline' },
+  { value: 'dark', labelKey: 'profile.theme_dark', icon: 'moon-outline' },
+  { value: 'system', labelKey: 'profile.theme_system', icon: 'phone-portrait-outline' },
+];
+
 export default function SettingsScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
+  const themeMode = useThemeStore((s) => s.mode);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
@@ -93,6 +102,40 @@ export default function SettingsScreen() {
               {currentLang === 'es' ? t('profile.spanish') : t('profile.english')}
             </Text>
           </Pressable>
+        </Card>
+
+        {/* Appearance / Dark mode section */}
+        <Card variant="outlined" padding="md" className="mb-4">
+          <View className="flex-row items-center mb-3">
+            <Ionicons name="color-palette-outline" size={22} color={colors.neutral[600]} />
+            <Text variant="body" className="ml-3">{t('profile.appearance')}</Text>
+          </View>
+          <View className="flex-row rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700">
+            {THEME_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => setThemeMode(option.value)}
+                className={`flex-1 py-2.5 items-center flex-row justify-center ${
+                  themeMode === option.value
+                    ? 'bg-primary-500'
+                    : 'bg-neutral-50 dark:bg-neutral-800'
+                }`}
+              >
+                <Ionicons
+                  name={option.icon}
+                  size={16}
+                  color={themeMode === option.value ? '#FFFFFF' : colors.neutral[500]}
+                />
+                <Text
+                  variant="caption"
+                  color={themeMode === option.value ? 'inverse' : 'secondary'}
+                  className="ml-1.5"
+                >
+                  {t(option.labelKey)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </Card>
 
         {/* Notifications section */}

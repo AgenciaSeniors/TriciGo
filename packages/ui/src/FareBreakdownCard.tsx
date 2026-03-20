@@ -46,6 +46,18 @@ export interface FareBreakdownCardProps {
   insurancePremiumTrc?: number;
   /** Insurance label (e.g. "Seguro de viaje") */
   insuranceLabel?: string;
+  /** Surge type (none, time_based, demand, combined, weather) */
+  surgeType?: string;
+  /** Weather surge label (e.g. "Tarifa por clima") */
+  weatherSurgeLabel?: string;
+  /** Wait time charge in CUP (shown if > 0) */
+  waitTimeChargeCup?: number;
+  /** Wait time minutes (billable) */
+  waitTimeMinutes?: number;
+  /** Wait time label (e.g. "Tiempo de espera") */
+  waitTimeLabel?: string;
+  /** Payment method — determines display currency (CUP for cash, TRC for tricicoin) */
+  paymentMethod?: 'cash' | 'tricicoin';
   /** Labels for breakdown rows */
   labels: {
     baseFare: string;
@@ -64,6 +76,11 @@ export function FareBreakdownCard({
   perMinRateCup,
   surgeMultiplier,
   surgeLabel,
+  surgeType,
+  weatherSurgeLabel,
+  waitTimeChargeCup = 0,
+  waitTimeMinutes = 0,
+  waitTimeLabel,
   totalCup,
   totalTrc,
   totalLabel,
@@ -76,6 +93,7 @@ export function FareBreakdownCard({
   fareRangeLabel,
   insurancePremiumTrc = 0,
   insuranceLabel,
+  paymentMethod = 'cash',
   labels,
 }: FareBreakdownCardProps) {
   const distanceKm = distanceM / 1000;
@@ -83,8 +101,9 @@ export function FareBreakdownCard({
   const distanceCharge = Math.round(distanceKm * perKmRateCup);
   const timeCharge = Math.round(durationMin * perMinRateCup);
   const subtotal = baseFareCup + distanceCharge + timeCharge;
-  const hasSurge = surgeMultiplier > 1;
   const finalTrc = totalTrc - discountTrc + insurancePremiumTrc;
+  const showTrc = paymentMethod === 'tricicoin';
+  const totalDisplay = showTrc ? formatTRC(finalTrc) : formatCUP(totalCup);
 
   return (
     <Card variant="elevated" padding="lg">
@@ -107,26 +126,29 @@ export function FareBreakdownCard({
         detail={`${Math.round(durationMin)} min × ${perMinRateCup} CUP/min`}
       />
 
-      {/* Surge */}
-      {hasSurge && (
-        <>
-          <View className="h-px bg-neutral-100 my-2" />
-          <Row
-            label={labels.subtotal ?? 'Subtotal'}
-            value={formatCUP(subtotal)}
-          />
-          <View className="flex-row justify-between items-center mb-2">
-            <View className="flex-row items-center">
-              <Ionicons name="trending-up-outline" size={14} color="#f97316" />
-              <Text variant="bodySmall" className="ml-1 text-orange-500">
-                {surgeLabel ?? `×${surgeMultiplier}`}
-              </Text>
-            </View>
-            <Text variant="bodySmall" className="text-orange-500">
-              {formatCUP(Math.round(subtotal * surgeMultiplier))}
+      {/* Weather surge indicator */}
+      {surgeType === 'weather' && surgeMultiplier > 1 && (
+        <View className="flex-row items-center mb-2 bg-blue-50 rounded-lg px-3 py-2">
+          <Ionicons name="rainy-outline" size={16} color="#3b82f6" />
+          <Text variant="bodySmall" className="ml-2 text-blue-600 font-medium">
+            {weatherSurgeLabel ?? 'Weather fare'} {surgeMultiplier.toFixed(1)}x
+          </Text>
+        </View>
+      )}
+
+      {/* Wait time charge */}
+      {waitTimeChargeCup > 0 && (
+        <View className="flex-row justify-between items-center mb-2">
+          <View className="flex-row items-center">
+            <Ionicons name="time-outline" size={14} color="#f59e0b" />
+            <Text variant="bodySmall" className="ml-1 text-amber-600">
+              {waitTimeLabel ?? 'Wait time'}
             </Text>
           </View>
-        </>
+          <Text variant="bodySmall" className="text-amber-600">
+            +{formatCUP(waitTimeChargeCup)} ({waitTimeMinutes} min)
+          </Text>
+        </View>
       )}
 
       {/* Min fare note */}
@@ -140,7 +162,7 @@ export function FareBreakdownCard({
       )}
 
       {/* Discount */}
-      {discountTrc > 0 && discountLabel && (
+      {discountTrc > 0 && discountLabel && showTrc && (
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" className="text-green-600">{discountLabel}</Text>
           <Text variant="bodySmall" className="text-green-600">-{formatTRC(discountTrc)}</Text>
@@ -148,7 +170,7 @@ export function FareBreakdownCard({
       )}
 
       {/* Insurance premium */}
-      {insurancePremiumTrc > 0 && insuranceLabel && (
+      {insurancePremiumTrc > 0 && insuranceLabel && showTrc && (
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <Ionicons name="shield-checkmark-outline" size={14} color="#3b82f6" />
@@ -160,13 +182,13 @@ export function FareBreakdownCard({
 
       {/* Divider + Total */}
       <View className="h-px bg-neutral-200 my-3" />
-      <View accessible accessibilityLabel={`${totalLabel}: ${formatTRC(finalTrc)}`} className="flex-row justify-between items-center">
+      <View accessible accessibilityLabel={`${totalLabel}: ${totalDisplay}`} className="flex-row justify-between items-center">
         <Text variant="h4">{totalLabel}</Text>
-        <Text variant="h3" color="accent">{formatTRC(finalTrc)}</Text>
+        <Text variant="h3" color="accent">{totalDisplay}</Text>
       </View>
 
       {/* Fare range */}
-      {fareRangeMinTrc != null && fareRangeMaxTrc != null && fareRangeMinTrc !== fareRangeMaxTrc && (
+      {fareRangeMinTrc != null && fareRangeMaxTrc != null && fareRangeMinTrc !== fareRangeMaxTrc && showTrc && (
         <View className="flex-row items-center mt-2">
           <Ionicons name="swap-horizontal-outline" size={14} color="#9ca3af" />
           <Text variant="caption" color="secondary" className="ml-1">

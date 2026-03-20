@@ -113,7 +113,7 @@ export default function SafetyCenterScreen() {
             onPress={() => router.push('/profile/trusted-contacts')}
           >
             <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="people-outline" size={20} color={colors.primary.DEFAULT} />
+              <Ionicons name="people-outline" size={20} color={colors.primary[500]} />
             </View>
             <View className="flex-1">
               <Text variant="body" className="font-semibold">{t('trusted_contacts.title')}</Text>
@@ -138,7 +138,7 @@ export default function SafetyCenterScreen() {
         <Card variant="outlined" padding="md" className="mb-3">
           <View className="flex-row items-center mb-2">
             <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="share-outline" size={20} color={colors.primary.DEFAULT} />
+              <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
             </View>
             <View className="flex-1">
               <Text variant="body" className="font-semibold">{t('safety.share_trip')}</Text>

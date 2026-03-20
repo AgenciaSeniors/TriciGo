@@ -64,7 +64,7 @@ export const matchingService = {
     const { data, error } = await supabase
       .from('driver_profiles')
       .select('match_score, acceptance_rate')
-      .eq('user_id', driverId)
+      .eq('id', driverId)
       .single();
     if (error) throw error;
     return {

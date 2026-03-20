@@ -11,12 +11,21 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ── CORS: restrict to allowed origins ──
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -122,7 +131,41 @@ Deno.serve(async (req) => {
       );
     }
 
-    const payload = await req.json();
+    // Verify TropiPay webhook signature (HMAC-SHA256)
+    const webhookSecret = Deno.env.get('TROPIPAY_WEBHOOK_SECRET');
+    const rawBody = await req.text();
+    let payload: Record<string, unknown>;
+
+    if (webhookSecret) {
+      const signature = req.headers.get('x-tropipay-signature')
+        ?? req.headers.get('x-webhook-signature')
+        ?? '';
+
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(webhookSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign'],
+      );
+      const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
+      const expectedSig = Array.from(new Uint8Array(sig))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      if (signature !== expectedSig) {
+        console.error('Invalid webhook signature');
+        return new Response(
+          JSON.stringify({ error: 'Invalid signature' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    } else {
+      console.warn('TROPIPAY_WEBHOOK_SECRET not set — skipping signature verification');
+    }
+
+    payload = JSON.parse(rawBody);
     console.log('TropiPay webhook received:', JSON.stringify(payload));
 
     // TropiPay webhook payload shape:
@@ -278,11 +321,11 @@ async function sendPaymentNotification(
 
     if (tokens.length === 0) return;
 
-    const formattedAmount = (amountCup / 100).toFixed(2);
+    const formattedAmount = amountCup.toLocaleString();
     const title = success ? '✅ Recarga exitosa' : '❌ Recarga fallida';
     const body = success
-      ? `Tu recarga de ${formattedAmount} TC ha sido acreditada a tu wallet.`
-      : `Tu recarga de ${formattedAmount} TC no pudo ser procesada.`;
+      ? `Tu recarga de ${formattedAmount} CUP ha sido acreditada a tu wallet.`
+      : `Tu recarga de ${formattedAmount} CUP no pudo ser procesada.`;
 
     const messages = tokens.map((token) => ({
       to: token,

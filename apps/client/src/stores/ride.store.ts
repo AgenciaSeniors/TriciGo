@@ -68,6 +68,7 @@ interface RideRequestDraft {
   corporateAccountId: string | null;
   insuranceSelected: boolean;
   ridePreferences: RidePreferences;
+  passengerCount: number;
 }
 
 const defaultDraft: RideRequestDraft = {
@@ -81,6 +82,7 @@ const defaultDraft: RideRequestDraft = {
   corporateAccountId: null,
   insuranceSelected: false,
   ridePreferences: {},
+  passengerCount: 1,
 };
 
 interface PromoResult {
@@ -126,6 +128,7 @@ interface RideState {
   removeWaypoint: (index: number) => void;
   updateWaypoint: (index: number, address: string, location: GeoPoint) => void;
   setInsurance: (selected: boolean) => void;
+  setPassengerCount: (count: number) => void;
   setRidePreferences: (prefs: RidePreferences) => void;
   setSplits: (splits: RideSplit[]) => void;
   addSplit: (split: RideSplit) => void;
@@ -236,6 +239,8 @@ export const useRideStore = create<RideState>((set, get) => ({
 
   setInsurance: (insuranceSelected) =>
     set((s) => ({ draft: { ...s.draft, insuranceSelected } })),
+  setPassengerCount: (passengerCount) =>
+    set((s) => ({ draft: { ...s.draft, passengerCount } })),
   setRidePreferences: (ridePreferences) =>
     set((s) => ({ draft: { ...s.draft, ridePreferences } })),
   setSplits: (splits) => set({ splits }),

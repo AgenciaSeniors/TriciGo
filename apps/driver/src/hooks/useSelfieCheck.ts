@@ -1,12 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { driverService } from '@tricigo/api';
 import type { SelfieCheck } from '@tricigo/types';
-import { useAuthStore } from '@/stores/auth.store';
+import { useDriverStore } from '@/stores/driver.store';
 
 export function useSelfieCheck() {
-  const user = useAuthStore((s) => s.user);
-  const driverProfileId = useAuthStore((s) => s.driverProfileId);
+  const driverProfileId = useDriverStore((s) => s.profile?.id);
   const [check, setCheck] = useState<SelfieCheck | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -59,6 +58,7 @@ export function useSelfieCheck() {
       // Upload and start processing
       const updated = await driverService.uploadSelfieCheck(
         activeCheck.id,
+        driverProfileId,
         asset.uri,
         fileName,
       );
@@ -70,23 +70,33 @@ export function useSelfieCheck() {
     }
   }, [driverProfileId, check]);
 
-  // Poll for result when processing
+  // Poll for result when processing (adaptive interval: 3s → 10s → 30s)
+  const pollCountRef = useRef(0);
   useEffect(() => {
     if (!check || check.status !== 'processing' || !driverProfileId) return;
+    pollCountRef.current = 0;
 
-    const interval = setInterval(async () => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled) return;
       try {
-        const latest = await driverService.getLatestSelfieCheck(driverProfileId);
+        const latest = await driverService.getLatestSelfieCheck(driverProfileId!);
         if (latest && latest.status !== 'processing') {
           setCheck(latest);
-          clearInterval(interval);
+          return;
         }
       } catch {
-        // retry
+        // retry on next poll
       }
-    }, 3000);
+      pollCountRef.current += 1;
+      const delay = pollCountRef.current < 5 ? 3000 : pollCountRef.current < 15 ? 10000 : 30000;
+      timeoutId = setTimeout(poll, delay);
+    }
 
-    return () => clearInterval(interval);
+    timeoutId = setTimeout(poll, 3000);
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [check?.status, driverProfileId]);
 
   return {

@@ -597,6 +597,8 @@
     "filter_triciclo": "Triciclo Básico",
     "filter_moto": "Moto",
     "filter_auto": "Auto",
+    "filter_confort": "Confort",
+    "filter_cargo": "Cargo",
     "filter_mensajeria": "Mensajeria",
     "col_zone": "Zona",
     "col_service": "Servicio",
@@ -605,10 +607,33 @@
     "col_per_min": "Por Min",
     "col_min": "Mín",
     "col_surge": "Surge",
+    "col_time_window": "Horario",
     "col_active": "Activo",
     "global_zone": "Global",
     "zone_label": "Zona",
-    "no_rules": "Sin reglas de precio"
+    "no_rules": "Sin reglas de precio",
+    "create_rule": "Crear regla",
+    "delete_rule": "Eliminar",
+    "confirm_delete": "\u00bfSeguro que quieres eliminar esta regla de precio?",
+    "time_band_morning": "Ma\u00f1ana",
+    "time_band_afternoon": "Tarde",
+    "time_band_night": "Noche",
+    "time_band_dawn": "Madrugada",
+    "time_band_24h": "24 horas",
+    "pricing_matrix": "Matriz de precios",
+    "new_rule_title": "Nueva regla de precio",
+    "label_service_type": "Tipo de servicio",
+    "label_zone": "Zona (opcional)",
+    "label_base_fare": "Tarifa base (CUP)",
+    "label_per_km": "Por km (CUP)",
+    "label_per_min": "Por minuto (CUP)",
+    "label_min_fare": "Tarifa m\u00ednima (CUP)",
+    "label_time_start": "Hora inicio",
+    "label_time_end": "Hora fin",
+    "label_days": "D\u00edas de la semana",
+    "creating": "Creando...",
+    "error_creating": "Error al crear regla",
+    "error_deleting": "Error al eliminar regla"
   },
 
   "zones": {
@@ -680,7 +705,39 @@
     "promotions_desc": "Códigos promocionales y descuentos",
     "flags_desc": "Activar o desactivar funcionalidades del sistema",
     "surge_zones": "Zonas de tarifa dinámica",
-    "surge_zones_desc": "Reglas de tarifa dinámica por zona"
+    "surge_zones_desc": "Reglas de tarifa dinámica por zona",
+    "surge_dashboard": "Surge en tiempo real",
+    "surge_dashboard_desc": "Monitoreo de surge y demanda en vivo",
+    "automation": "Automatización",
+    "automation_desc": "Reglas de auto-aprobación y auto-resolución"
+  },
+
+  "surge_dashboard": {
+    "title": "Surge en tiempo real",
+    "current_multiplier": "Multiplicador actual",
+    "searching_rides": "Viajes buscando conductor",
+    "in_progress_rides": "Viajes en curso",
+    "online_drivers": "Conductores en l\u00ednea",
+    "demand_ratio": "Ratio demanda/oferta",
+    "last_updated": "\u00daltima actualizaci\u00f3n",
+    "refreshing": "Actualizando...",
+    "zone_surge": "Surge por zona",
+    "live_metrics": "M\u00e9tricas en vivo",
+    "no_surge": "Sin surge activo",
+    "auto_refresh": "Actualizar cada 30s",
+    "weather": "Clima actual",
+    "weather_clear": "Despejado",
+    "weather_drizzle": "Llovizna",
+    "weather_rain": "Lluvia",
+    "weather_heavy_rain": "Lluvia fuerte",
+    "weather_storm": "Tormenta",
+    "weather_extreme": "Clima extremo",
+    "weather_multiplier": "Multiplicador por clima",
+    "weather_last_check": "Último chequeo",
+    "weather_no_data": "Sin datos de clima",
+    "weather_surge_active": "Surge por clima activo",
+    "weather_surge_inactive": "Sin surge por clima",
+    "weather_temp": "Temperatura"
   },
 
   "fraud": {
@@ -753,7 +810,12 @@
     "commission_rate": "Tasa de comisi\u00f3n",
     "commission_rate_help": "Porcentaje que cobra la plataforma por viaje (ej: 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Tasa de cambio de respaldo (CUP)",
-    "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada"
+    "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada",
+    "openweather_api_key": "API Key de OpenWeatherMap",
+    "openweather_api_key_help": "Clave para consultas de clima. Obtener en openweathermap.org",
+    "weather_surge_enabled": "Surge por clima activo",
+    "weather_surge_enabled_help": "Activar/desactivar el aumento automático de tarifa por lluvia",
+    "weather_last_check": "Último chequeo de clima"
   },
 
   "exchange_rate": {
@@ -940,5 +1002,35 @@
     "doc_status_verified": "Verificado",
     "doc_status_rejected": "Rechazado",
     "doc_status_pending": "Pendiente de revisión"
+  },
+
+  "automation": {
+    "title": "Automatización",
+    "subtitle": "Configura qué tareas admin se ejecutan automáticamente",
+    "driver_approval": "Auto-aprobación de conductores",
+    "driver_approval_desc": "Aprueba conductores automáticamente cuando todos los documentos estén verificados y el score facial cumpla el umbral",
+    "redemption_approval": "Auto-aprobación de retiros",
+    "redemption_approval_desc": "Aprueba retiros de wallet automáticamente por debajo del monto umbral de conductores verificados",
+    "fraud_resolve": "Auto-resolución de fraude",
+    "fraud_resolve_desc": "Resuelve automáticamente alertas de fraude de baja severidad después de las horas configuradas",
+    "incident_close": "Auto-cierre de incidentes",
+    "incident_close_desc": "Cierra automáticamente incidentes resueltos después de las horas configuradas",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "threshold": "Umbral",
+    "face_threshold": "Score facial mínimo (%)",
+    "max_amount": "Monto máximo (centavos TRC)",
+    "hours": "Horas",
+    "saved": "Guardado",
+    "saving": "Guardando..."
+  },
+
+  "dashboard_auto": {
+    "recent_auto_actions": "Acciones automatizadas recientes",
+    "no_auto_actions": "Sin acciones automatizadas aún",
+    "auto_approve_driver": "Conductor auto-aprobado",
+    "auto_approve_redemption": "Retiro auto-aprobado",
+    "auto_resolve_fraud": "Fraude auto-resuelto",
+    "auto_close_incident": "Incidente auto-cerrado"
   }
 }

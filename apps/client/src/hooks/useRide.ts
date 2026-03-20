@@ -85,6 +85,7 @@ export function useRideActions() {
     resetAll,
   } = useRideStore();
   const [validatingPromo, setValidatingPromo] = useState(false);
+  const validatingPromoRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -118,8 +119,9 @@ export function useRideActions() {
 
   const validatePromo = useCallback(async () => {
     const { promoCode, fareEstimate: fe } = useRideStore.getState();
-    if (!promoCode.trim() || !user) return;
+    if (!promoCode.trim() || !user || validatingPromoRef.current) return;
 
+    validatingPromoRef.current = true;
     setValidatingPromo(true);
     try {
       const result = await rideService.validatePromoCode({
@@ -139,6 +141,7 @@ export function useRideActions() {
     } catch {
       setPromoResult({ valid: false, discountAmount: 0, error: i18next.t('rider:ride.promo_invalid') });
     } finally {
+      validatingPromoRef.current = false;
       setValidatingPromo(false);
     }
   }, [user, setPromoResult]);
@@ -165,6 +168,14 @@ export function useRideActions() {
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         discount_amount_cup: promoResult?.valid ? promoResult.discountAmount : undefined,
         scheduled_at: d.scheduledAt ? d.scheduledAt.toISOString() : undefined,
+        waypoints: d.waypoints.length > 0
+          ? d.waypoints.map((wp, i) => ({
+              sort_order: i + 1,
+              latitude: wp.location.latitude,
+              longitude: wp.location.longitude,
+              address: wp.address,
+            }))
+          : undefined,
         corporate_account_id: d.corporateAccountId ?? undefined,
         insurance_selected: d.insuranceSelected,
         insurance_premium_cup: d.insuranceSelected ? (fareEstimate?.insurance_premium_cup ?? 0) : 0,
@@ -205,6 +216,9 @@ export function useRideActions() {
       // Subscribe to ride updates
       channelRef.current?.unsubscribe();
       channelRef.current = rideService.subscribeToRide(ride.id, async (updated) => {
+        // Capture previous state BEFORE updating store
+        const prevRide = useRideStore.getState().activeRide;
+
         const store = useRideStore.getState();
         store.updateRideFromRealtime(updated);
 
@@ -225,10 +239,9 @@ export function useRideActions() {
           invalidatePredictionCache().catch(() => {});
         }
 
-        // TropiPay payment confirmed via Realtime
-        const prev = useRideStore.getState().activeRide;
+        // TropiPay payment confirmed via Realtime (use prevRide captured before update)
         if (
-          prev?.payment_status === 'pending' &&
+          prevRide?.payment_status === 'pending' &&
           (updated as any).payment_status === 'paid'
         ) {
           triggerHaptic('success');
@@ -262,8 +275,14 @@ export function useRideActions() {
           }
           channelRef.current?.unsubscribe();
           channelRef.current = null;
+          const noDriverMsg = i18next.t('rider:ride.no_driver_found');
           resetAll();
-          setError(i18next.t('rider:ride.no_driver_found'));
+          // Show Toast instead of state error (resetAll sets flowStep to 'idle'
+          // where state error is not visible)
+          Toast.show({
+            type: 'error',
+            text1: noDriverMsg,
+          });
         }
       }, SEARCH_TIMEOUT_MS);
     } catch (err) {
@@ -280,21 +299,42 @@ export function useRideActions() {
 
     setLoading(true);
     try {
-      const penalty = await rideService.cancelRide(activeRide.id, user?.id, reason);
+      const result = await rideService.cancelRide(activeRide.id, user?.id, reason);
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      trackEvent('ride_canceled', { ride_id: activeRide.id, reason });
+      trackEvent('ride_canceled', {
+        ride_id: activeRide.id,
+        reason,
+        cancellation_fee: result?.cancellationFee?.fee_cup ?? 0,
+      });
       resetAll();
 
-      // Show penalty info if applicable
-      if (penalty && penalty.penaltyAmount > 0) {
-        const amount = (penalty.penaltyAmount / 100).toFixed(0);
+      // Build alert message with both fee and penalty info
+      const messages: string[] = [];
+
+      // State-based cancellation fee (fee_cup is in whole CUP pesos, not centavos)
+      if (result?.cancellationFee && !result.cancellationFee.is_free) {
+        messages.push(
+          i18next.t('rider:ride.cancel_fee_charged', { amount: result.cancellationFee.fee_cup }),
+        );
+      }
+
+      // Progressive penalty (penaltyAmount is in whole CUP pesos)
+      if (result && result.penaltyAmount > 0) {
+        messages.push(
+          i18next.t('rider:ride.cancel_penalty_applied', { amount: result.penaltyAmount }),
+        );
+      }
+
+      if (result?.isBlocked) {
+        messages.push(i18next.t('rider:ride.cancel_blocked'));
+      }
+
+      if (messages.length > 0) {
         Alert.alert(
           i18next.t('rider:ride.cancel_title'),
-          penalty.isBlocked
-            ? `${i18next.t('rider:ride.cancel_penalty_applied', { amount })} ${i18next.t('rider:ride.cancel_blocked')}`
-            : i18next.t('rider:ride.cancel_penalty_applied', { amount }),
+          messages.join('\n\n'),
         );
       }
     } catch (err) {

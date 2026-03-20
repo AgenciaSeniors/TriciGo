@@ -197,6 +197,7 @@ export default function NotificationsScreen() {
 
       {notifications.length === 0 && !isLoading ? (
         <EmptyState
+          icon="notifications-off-outline"
           title={t('notifications.empty')}
           description={t('notifications.empty_desc')}
         />

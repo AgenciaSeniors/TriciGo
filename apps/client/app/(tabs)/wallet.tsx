@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, FlatList, ActivityIndicator, Alert, RefreshControl, Linking, Image } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { View, FlatList, ActivityIndicator, Alert, RefreshControl, Linking, Image, Pressable, ScrollView } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -9,11 +9,14 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone } from '@tricigo/utils';
-import type { LedgerTransaction } from '@tricigo/types';
+import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay } from '@tricigo/utils';
+import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
+import { Platform } from 'react-native';
+
+type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
 // TriciCoin images
 const tricoinLogo = require('../../assets/coins/tricoin-logo.png');
@@ -23,17 +26,6 @@ const tricoinStack = require('../../assets/coins/tricoin-stack.png');
 type TransactionWithAmount = LedgerTransaction & {
   ledger_entries: { account_id: string; amount: number }[];
 };
-
-function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  if (diffDays === 0) return todayLabel;
-  if (diffDays === 1) return yesterdayLabel;
-  return date.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' });
-}
 
 function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
   const lastPress = useRef(0);
@@ -45,7 +37,80 @@ function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
   }, [callback, delayMs]);
 }
 
-export default function WalletScreen() {
+// TEMP: Static web version for Play Store screenshots
+function WebWalletScreen() {
+  const mockTxns = [
+    { id: '1', desc: 'Viaje — Vedado → Habana Vieja', date: 'Hoy', amount: -8500, credit: false },
+    { id: '2', desc: 'Recarga TropiPay', date: 'Hoy', amount: 500000, credit: true },
+    { id: '3', desc: 'Viaje — Miramar → Vedado', date: 'Ayer', amount: -12000, credit: false },
+    { id: '4', desc: 'Transferencia recibida de Carlos', date: 'Ayer', amount: 20000, credit: true },
+    { id: '5', desc: 'Viaje — Centro Habana → Playa', date: '12 mar', amount: -6500, credit: false },
+    { id: '6', desc: 'Recarga efectivo', date: '11 mar', amount: 300000, credit: true },
+  ];
+
+  const formatAmount = (cents: number) => {
+    const abs = Math.abs(cents);
+    return `T$ ${(abs / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })}`;
+  };
+
+  return (
+    <Screen bg="white" padded>
+      <View className="pt-4 flex-1">
+        <View className="flex-row items-center gap-2.5 mb-4">
+          <Image source={tricoinLogo} style={{ width: 48, height: 48 }} resizeMode="contain" />
+          <Text variant="h3">Billetera</Text>
+        </View>
+
+        <View className="bg-primary-50 rounded-2xl p-5 mb-6">
+          <Text variant="caption" color="secondary" className="mb-1">Saldo disponible</Text>
+          <View className="flex-row items-center gap-2">
+            <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
+            <Text variant="h2" className="font-bold">T$ 7,935.00</Text>
+          </View>
+          <Text variant="caption" color="tertiary" className="mt-1">En retención: T$ 120.00</Text>
+        </View>
+
+        <View className="flex-row gap-3 mb-3">
+          <Button title="Recargar" variant="primary" size="md" className="flex-1" onPress={() => {}} />
+          <Button title="Transferir" variant="outline" size="md" className="flex-1" onPress={() => {}} />
+        </View>
+        <Button title="Recargar con TropiPay" variant="secondary" size="md" fullWidth onPress={() => {}} className="mb-4" />
+
+        {/* Filter chips */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+          {[
+            { label: 'Todos', active: true },
+            { label: 'Recargas', active: false },
+            { label: 'Viajes', active: false },
+            { label: 'Transferencias', active: false },
+          ].map((chip, i) => (
+            <View key={i} style={{
+              paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+              backgroundColor: chip.active ? '#FF4D00' : '#f5f5f5',
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: chip.active ? '#fff' : '#6b7280' }}>{chip.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text variant="h4" className="mb-3">Historial</Text>
+        {mockTxns.map((tx) => (
+          <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100">
+            <View className="flex-1">
+              <Text variant="bodySmall" numberOfLines={1}>{tx.desc}</Text>
+              <Text variant="caption" color="tertiary">{tx.date}</Text>
+            </View>
+            <Text variant="body" className={`font-semibold ${tx.credit ? 'text-green-600' : 'text-red-500'}`}>
+              {tx.credit ? '+' : '-'}{formatAmount(tx.amount)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
+function NativeWalletScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
 
@@ -54,6 +119,7 @@ export default function WalletScreen() {
   const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<TxnFilter>('all');
 
   // Recharge state
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
@@ -74,6 +140,7 @@ export default function WalletScreen() {
   const [tropipayAmount, setTropipayAmount] = useState('');
   const [tropipaySubmitting, setTropipaySubmitting] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(520);
+  const [exchangeRateStale, setExchangeRateStale] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -89,6 +156,19 @@ export default function WalletScreen() {
       if (account?.id) {
         const txns = await walletService.getTransactions(account.id, 0, 20);
         setTransactions(txns as TransactionWithAmount[]);
+      }
+
+      // Fetch exchange rate on mount so it's ready for TropiPay
+      try {
+        const rate = await exchangeRateService.getUsdCupRate();
+        if (rate) {
+          setExchangeRate(rate);
+          setExchangeRateStale(false);
+        } else {
+          setExchangeRateStale(true);
+        }
+      } catch {
+        setExchangeRateStale(true);
       }
     } catch (err) {
       console.error('Error fetching wallet:', err);
@@ -157,7 +237,7 @@ export default function WalletScreen() {
       if (user && user.id !== userId) {
         setTransferRecipient({ id: user.id, full_name: user.full_name });
       } else if (user && user.id === userId) {
-        Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
+        Alert.alert(t('error'), t('wallet.cannot_transfer_self'));
       } else {
         Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
       }
@@ -233,6 +313,20 @@ export default function WalletScreen() {
   }, [tropipayAmount, userId, t]);
   const debouncedSubmitTropiPay = useDebouncePress(submitTropiPay);
 
+  const filteredTransactions = useMemo(() => {
+    if (activeFilter === 'all') return transactions;
+    return transactions.filter((tx) => tx.type === activeFilter);
+  }, [transactions, activeFilter]);
+
+  const filterOptions: { key: TxnFilter; label: string }[] = [
+    { key: 'all', label: t('wallet.filter_all', { defaultValue: 'Todos' }) },
+    { key: 'recharge', label: t('wallet.filter_recharge', { defaultValue: 'Recargas' }) },
+    { key: 'ride_payment', label: t('wallet.filter_rides', { defaultValue: 'Viajes' }) },
+    { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Recibidas' }) },
+    { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
+    { key: 'commission', label: t('wallet.filter_commission', { defaultValue: 'Comisiones' }) },
+  ];
+
   const renderTransaction = ({ item }: { item: TransactionWithAmount }) => {
     const amount = item.ledger_entries?.[0]?.amount ?? 0;
     const isCredit = amount > 0;
@@ -240,7 +334,7 @@ export default function WalletScreen() {
       <View className="flex-row items-center py-3 border-b border-neutral-100" accessible={true}>
         <View className="flex-1">
           <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text>
-          <Text variant="caption" color="tertiary">{formatDate(item.created_at, t('today'), t('yesterday'))}</Text>
+          <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
         </View>
         <Text
           variant="body"
@@ -306,12 +400,39 @@ export default function WalletScreen() {
           className="mb-8"
         />
 
-        <Text variant="h4" className="mb-3">
+        <Text variant="h4" className="mb-2">
           {t('wallet.history')}
         </Text>
 
+        {/* Filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+          <View className="flex-row gap-2">
+            {filterOptions.map((opt) => (
+              <Pressable
+                key={opt.key}
+                onPress={() => setActiveFilter(opt.key)}
+                className={`px-3 py-1.5 rounded-full border ${
+                  activeFilter === opt.key
+                    ? 'bg-primary-500 border-primary-500'
+                    : 'bg-white border-neutral-200'
+                }`}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: activeFilter === opt.key }}
+              >
+                <Text
+                  variant="caption"
+                  color={activeFilter === opt.key ? 'inverse' : 'secondary'}
+                  className="font-medium"
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+
         <FlatList
-          data={transactions}
+          data={filteredTransactions}
           keyExtractor={(item) => item.id}
           renderItem={renderTransaction}
           refreshControl={
@@ -420,6 +541,7 @@ export default function WalletScreen() {
             placeholder="..."
             value={transferNote}
             onChangeText={setTransferNote}
+            maxLength={200}
           />
 
           <Text variant="caption" color="tertiary" className="mb-3 text-center">
@@ -479,4 +601,9 @@ export default function WalletScreen() {
       </BottomSheet>
     </Screen>
   );
+}
+
+export default function WalletScreen() {
+  if (Platform.OS === 'web') return <WebWalletScreen />;
+  return <NativeWalletScreen />;
 }

@@ -20,9 +20,51 @@ import { openNavigation } from '@/utils/navigation';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useDriverETA } from '@/hooks/useDriverETA';
 import { ETABadge } from '@tricigo/ui/ETABadge';
+import { useInAppNavigation } from '@/hooks/useInAppNavigation';
+import { NavigationOverlay } from '@/components/NavigationOverlay';
+import { useLocationStore } from '@/stores/location.store';
 import { RiderRatingSheet } from './RiderRatingSheet';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import type { RideStatus, RideWithRider } from '@tricigo/types';
+
+/** Wait timer shown when driver has arrived and is waiting for passenger */
+function WaitTimer({ arrivedAt, freeMinutes }: { arrivedAt: string; freeMinutes: number }) {
+  const { t } = useTranslation('driver');
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const arrived = new Date(arrivedAt).getTime();
+    const update = () => setElapsed(Math.floor((Date.now() - arrived) / 1000));
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [arrivedAt]);
+
+  const elapsedMin = Math.floor(elapsed / 60);
+  const elapsedSec = elapsed % 60;
+  const isFree = elapsedMin < freeMinutes;
+  const billableMin = Math.max(0, elapsedMin - freeMinutes);
+
+  return (
+    <View className={`rounded-xl p-3 mb-3 items-center ${isFree ? 'bg-green-900/30' : 'bg-red-900/30'}`}>
+      <Text variant="caption" color="inverse" className="opacity-60 mb-1">
+        {t('trip.waiting_passenger', { defaultValue: 'Esperando al pasajero' })}
+      </Text>
+      <Text variant="h3" color="inverse" className="font-mono">
+        {String(elapsedMin).padStart(2, '0')}:{String(elapsedSec).padStart(2, '0')}
+      </Text>
+      {isFree ? (
+        <Text variant="caption" className="text-green-400 mt-1">
+          {t('trip.wait_free', { defaultValue: 'Gratis' })} ({freeMinutes - elapsedMin} min)
+        </Text>
+      ) : (
+        <Text variant="caption" className="text-red-400 mt-1 font-semibold">
+          {t('trip.wait_charging', { defaultValue: 'Cobrando espera' })} +{billableMin} min
+        </Text>
+      )}
+    </View>
+  );
+}
 
 function useTripSteps() {
   const { t } = useTranslation('driver');
@@ -55,17 +97,28 @@ export function DriverTripView() {
   const [waypointLoading, setWaypointLoading] = useState<string | null>(null);
   const lastAdvancePressRef = useRef(0);
 
-  // Fetch waypoints + subscribe to inserts AND updates
+  // In-app navigation
+  const driverLat = useLocationStore((s) => s.latitude);
+  const driverLng = useLocationStore((s) => s.longitude);
+  const driverLocation = driverLat != null && driverLng != null
+    ? { latitude: driverLat, longitude: driverLng }
+    : null;
+  const inAppNav = useInAppNavigation(driverLocation);
+
+  // Subscribe to waypoints first, then fetch (avoids race condition where a
+  // waypoint inserted between fetch and subscribe would be missed)
   useEffect(() => {
     if (!activeTrip) return;
-    rideService.getRideWaypoints(activeTrip.id)
-      .then((wps) => setWaypoints(wps))
-      .catch(() => {});
 
+    // Subscribe first so we don't miss any events during the fetch
     const channel = rideService.subscribeToWaypoints(
       activeTrip.id,
       (newWp) => {
-        setWaypoints((prev) => [...prev, newWp]);
+        setWaypoints((prev) => {
+          // Dedup: skip if already present from initial fetch
+          if (prev.some((w) => w.id === newWp.id)) return prev;
+          return [...prev, newWp];
+        });
         Alert.alert('', t('trip.new_stop_added', { defaultValue: 'El pasajero agregó una parada' }));
       },
       (updatedWp) => {
@@ -74,6 +127,11 @@ export function DriverTripView() {
         );
       },
     );
+
+    // Then fetch existing waypoints
+    rideService.getRideWaypoints(activeTrip.id)
+      .then((wps) => setWaypoints(wps))
+      .catch(() => {});
 
     return () => {
       const supabase = getSupabaseClient();
@@ -209,12 +267,27 @@ export function DriverTripView() {
         </View>
       )}
 
+      {/* In-app navigation overlay */}
+      {inAppNav.isNavigating && (
+        <NavigationOverlay
+          currentStep={inAppNav.currentStep}
+          nextStep={inAppNav.nextStep}
+          remainingDistance_m={inAppNav.remainingDistance_m}
+          remainingDuration_s={inAppNav.remainingDuration_s}
+          isRerouting={inAppNav.isRerouting}
+          onStop={inAppNav.stopNavigation}
+        />
+      )}
+
       {/* Map with route polyline */}
       <RideMapView
         pickupLocation={activeTrip.pickup_location}
         dropoffLocation={activeTrip.dropoff_location}
-        routeCoordinates={routeCoordinates}
-        height={isTablet ? 300 : 180}
+        driverLocation={driverLocation}
+        routeCoordinates={inAppNav.isNavigating && inAppNav.routeCoordinates.length > 0
+          ? inAppNav.routeCoordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }))
+          : routeCoordinates}
+        height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
       />
       <View className="h-3" />
 
@@ -241,6 +314,19 @@ export function DriverTripView() {
             urgent={etaMinutes > 0 && etaMinutes <= 3}
             variant="dark"
           />
+        </View>
+      )}
+
+      {/* Wait timer (visible when arrived at pickup) */}
+      {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at && (
+        <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
+      )}
+
+      {/* Cargo badge */}
+      {activeTrip.service_type === 'triciclo_cargo' && (
+        <View className="flex-row items-center justify-center mb-3 bg-orange-600 rounded-lg py-2 px-4">
+          <Ionicons name="cube" size={16} color="white" />
+          <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">CARGO</Text>
         </View>
       )}
 
@@ -276,6 +362,36 @@ export function DriverTripView() {
             <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
               <Ionicons name="briefcase" size={12} color="#AB47BC" />
               <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
+            </View>
+          )}
+          {activeTrip.rider_preferences.accessibility_needs?.includes('wheelchair') && (
+            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+              <Ionicons name="accessibility" size={12} color="#64B5F6" />
+              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_wheelchair', { defaultValue: 'Silla de ruedas' })}</Text>
+            </View>
+          )}
+          {activeTrip.rider_preferences.accessibility_needs?.includes('hearing_impaired') && (
+            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+              <Ionicons name="ear" size={12} color="#64B5F6" />
+              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_hearing', { defaultValue: 'Dificultad auditiva' })}</Text>
+            </View>
+          )}
+          {activeTrip.rider_preferences.accessibility_needs?.includes('visual_impaired') && (
+            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+              <Ionicons name="eye-off" size={12} color="#64B5F6" />
+              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_visual', { defaultValue: 'Dificultad visual' })}</Text>
+            </View>
+          )}
+          {activeTrip.rider_preferences.accessibility_needs?.includes('service_animal') && (
+            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+              <Ionicons name="paw" size={12} color="#64B5F6" />
+              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_service_animal', { defaultValue: 'Animal de servicio' })}</Text>
+            </View>
+          )}
+          {activeTrip.rider_preferences.accessibility_needs?.includes('extra_space') && (
+            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+              <Ionicons name="resize" size={12} color="#64B5F6" />
+              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_extra_space', { defaultValue: 'Espacio extra' })}</Text>
             </View>
           )}
         </View>
@@ -330,12 +446,25 @@ export function DriverTripView() {
 
       {/* Navigate + Chat + SOS buttons */}
       <View className="flex-row justify-center gap-3 mb-4">
-        {navTarget && (
+        {navTarget && !inAppNav.isNavigating && (
+          <Pressable
+            className="bg-primary-500 px-5 py-3 rounded-full flex-row items-center"
+            onPress={() => inAppNav.startNavigation(navTarget)}
+            accessibilityRole="button"
+            accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
+          >
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="compass-outline" size={18} color="white" />
+              <Text variant="body" color="inverse">{t('trip.navigate_inapp', { defaultValue: 'En app' })}</Text>
+            </View>
+          </Pressable>
+        )}
+        {navTarget && !inAppNav.isNavigating && (
           <Pressable
             className="bg-info px-5 py-3 rounded-full flex-row items-center"
             onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
             accessibilityRole="button"
-            accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
+            accessibilityLabel={t('trip.navigate_external', { defaultValue: 'Navegar externo' })}
           >
             <View className="flex-row items-center gap-2">
               <Ionicons name="navigate-outline" size={18} color="white" />
@@ -475,7 +604,15 @@ function TripCompleteView() {
       driverName: null,
       vehiclePlate: null,
       serviceType: activeTrip.service_type,
-      paymentMethod: activeTrip.payment_method,
+      paymentMethod: activeTrip.payment_method === 'cash'
+        ? t('payment.cash', { defaultValue: 'Efectivo' })
+        : activeTrip.payment_method === 'tropipay'
+          ? 'TropiPay'
+          : activeTrip.payment_method === 'corporate'
+            ? t('payment.corporate', { defaultValue: 'Cuenta corporativa' })
+            : activeTrip.payment_method === 'mixed'
+              ? t('payment.mixed', { defaultValue: 'Mixto' })
+              : 'TriciCoin',
       fareCup: activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup,
       fareTrc: activeTrip.final_fare_trc ?? activeTrip.estimated_fare_trc ?? null,
       distanceM: activeTrip.actual_distance_m ?? activeTrip.estimated_distance_m ?? 0,

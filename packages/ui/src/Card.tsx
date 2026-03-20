@@ -7,9 +7,9 @@ export interface CardProps extends ViewProps {
 }
 
 const variantClasses = {
-  elevated: 'bg-white rounded-xl shadow-md',
-  outlined: 'bg-white rounded-xl border border-neutral-200',
-  filled: 'bg-neutral-50 rounded-xl',
+  elevated: 'bg-white dark:bg-neutral-800 rounded-xl shadow-md',
+  outlined: 'bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700',
+  filled: 'bg-neutral-50 dark:bg-neutral-800 rounded-xl',
 } as const;
 
 const paddingClasses = {

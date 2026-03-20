@@ -25,4 +25,16 @@ config.resolver.nodeModulesPaths = [
 // Enable package.json "exports" field resolution
 config.resolver.unstable_enablePackageExports = true;
 
+// Stub @rnmapbox/maps on web (requires mapbox-gl which is not installed)
+const originalResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && (moduleName === '@rnmapbox/maps' || moduleName.startsWith('@rnmapbox/maps/'))) {
+    return { type: 'empty' };
+  }
+  if (originalResolveRequest) {
+    return originalResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = withNativeWind(config, { input: './global.css' });

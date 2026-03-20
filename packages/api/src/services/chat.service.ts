@@ -53,4 +53,52 @@ export const chatService = {
       )
       .subscribe();
   },
+
+  // ==================== TYPING INDICATOR ====================
+
+  /**
+   * Subscribe to typing events for a ride chat.
+   * Uses Supabase Realtime Broadcast (ephemeral, no DB writes).
+   * Returns the channel so the caller can unsubscribe.
+   */
+  subscribeToTyping(
+    rideId: string,
+    myUserId: string,
+    onTyping: (userId: string) => void,
+  ) {
+    const supabase = getSupabaseClient();
+    return supabase
+      .channel(`typing:${rideId}`)
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        const senderId = payload.payload?.user_id as string | undefined;
+        if (senderId && senderId !== myUserId) {
+          onTyping(senderId);
+        }
+      })
+      .subscribe();
+  },
+
+  /**
+   * Broadcast a typing event for the current user.
+   * Reuses or creates a short-lived channel.
+   */
+  broadcastTyping(rideId: string, userId: string) {
+    const supabase = getSupabaseClient();
+    const channelName = `typing:${rideId}`;
+
+    // Try to find an existing channel, otherwise create one
+    const channels = supabase.getChannels();
+    let channel = channels.find((c) => c.topic === `realtime:${channelName}`);
+
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      channel.subscribe();
+    }
+
+    channel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: userId },
+    });
+  },
 };

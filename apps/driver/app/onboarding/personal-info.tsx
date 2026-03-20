@@ -11,15 +11,19 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { isValidEmail, sanitizeText } from '@tricigo/utils';
 
-const STEPS = [
-  { key: 'personal', label: 'Personal' },
-  { key: 'vehicle', label: 'Vehículo' },
-  { key: 'documents', label: 'Docs' },
-  { key: 'review', label: 'Revisión' },
-];
+function useSteps() {
+  const { t } = useTranslation('driver');
+  return [
+    { key: 'personal', label: t('onboarding.step_personal', { defaultValue: 'Personal' }) },
+    { key: 'vehicle', label: t('onboarding.step_vehicle', { defaultValue: 'Vehículo' }) },
+    { key: 'documents', label: t('onboarding.step_docs', { defaultValue: 'Docs' }) },
+    { key: 'review', label: t('onboarding.step_review', { defaultValue: 'Revisión' }) },
+  ];
+}
 
 export default function PersonalInfoScreen() {
   const { t } = useTranslation('driver');
+  const STEPS = useSteps();
   const user = useAuthStore((s) => s.user);
   const { personalInfo, setPersonalInfo } = useOnboardingStore();
 

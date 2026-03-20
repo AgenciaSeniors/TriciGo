@@ -1,41 +1,102 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, ScrollView, RefreshControl, Alert, ActivityIndicator, Pressable, Dimensions } from 'react-native';
+import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { BottomSheet } from '@tricigo/ui/BottomSheet';
-import { Input } from '@tricigo/ui/Input';
+import i18next from 'i18next';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { driverService } from '@tricigo/api/services/driver';
 import { reviewService } from '@tricigo/api/services/review';
 import { questService } from '@tricigo/api/services/quest';
-import { formatCUP, formatTriciCoin, centavosToUnits } from '@tricigo/utils';
-import type { Ride, WalletRedemption, QuestWithProgress } from '@tricigo/types';
+import { formatCUP } from '@tricigo/utils';
+import type { Ride, QuestWithProgress } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { EarningsBarChart } from '@/components/EarningsBarChart';
 import type { BarChartDataPoint } from '@/components/EarningsBarChart';
+import { Platform } from 'react-native';
 import { HourlyHeatmap } from '@/components/HourlyHeatmap';
 
 type Period = 'day' | 'week' | 'month';
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  requested: { bg: 'bg-warning-light', text: 'text-warning-dark' },
-  approved: { bg: 'bg-success-light', text: 'text-success-dark' },
-  processed: { bg: 'bg-info-light', text: 'text-info-dark' },
-  rejected: { bg: 'bg-error-light', text: 'text-error-dark' },
-};
+// TEMP: Static web version for Play Store screenshots
+function WebEarningsScreen() {
+  return (
+    <Screen bg="dark" padded scroll>
+      <View className="pt-4">
+        <Text variant="h3" color="inverse" className="mb-4">Ganancias</Text>
 
-const STATUS_LABEL_KEYS: Record<string, string> = {
-  requested: 'earnings.status_requested',
-  approved: 'earnings.status_approved',
-  processed: 'earnings.status_processed',
-  rejected: 'earnings.status_rejected',
-};
+        <View className="bg-neutral-800 rounded-2xl p-5 mb-6">
+          <Text variant="caption" className="text-neutral-400 mb-1">Saldo disponible</Text>
+          <Text variant="h2" className="text-white font-bold">T$ 12,450.00</Text>
+          <Text variant="caption" className="text-neutral-500 mt-1">En retención: T$ 850.00</Text>
+        </View>
+
+        <View className="flex-row bg-neutral-800 rounded-xl p-1 mb-6">
+          {(['Hoy', 'Semana', 'Mes'] as const).map((period, i) => (
+            <Pressable key={period} className={`flex-1 py-2 rounded-lg items-center ${i === 1 ? 'bg-primary-500' : ''}`}>
+              <Text variant="bodySmall" className={i === 1 ? 'text-white font-semibold' : 'text-neutral-400'}>{period}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View className="bg-neutral-800 rounded-xl p-4 mb-6">
+          <Text variant="bodySmall" className="text-neutral-400 mb-3">Ganancias de la semana</Text>
+          <View className="flex-row items-end justify-between h-24">
+            {[45, 72, 38, 90, 65, 85, 55].map((h, i) => (
+              <View key={i} className="items-center flex-1 mx-0.5">
+                <View style={{ height: h, backgroundColor: i === 3 ? colors.brand.orange : '#374151', borderRadius: 4, width: '80%' }} />
+                <Text variant="caption" className="text-neutral-500 mt-1 text-[10px]">{['L', 'M', 'X', 'J', 'V', 'S', 'D'][i]}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View className="flex-row flex-wrap gap-3 mb-6">
+          {[
+            { label: 'Ganancias netas', value: 'T$ 8,250.00', trend: '+12%', up: true },
+            { label: 'Total viajes', value: '47', trend: '+5', up: true },
+            { label: 'Promedio por viaje', value: 'T$ 175.53', trend: '-3%', up: false },
+            { label: 'Calificación', value: '4.87 ★', trend: '+0.05', up: true },
+          ].map((stat, i) => (
+            <View key={i} className="bg-neutral-800 rounded-xl p-4" style={{ width: '48%' }}>
+              <Text variant="caption" className="text-neutral-400 mb-1">{stat.label}</Text>
+              <Text variant="body" className="text-white font-bold">{stat.value}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text variant="caption" className={stat.up ? 'text-green-400' : 'text-red-400'}>{stat.trend}</Text>
+                {stat.label === 'Calificación' && (
+                  <Text style={{ fontSize: 11, color: colors.brand.orange }}>Ver reseñas →</Text>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <Text variant="h4" color="inverse" className="mb-3">Rendimiento</Text>
+        <View className="flex-row gap-3 mb-6">
+          {[
+            { label: 'Aceptación', value: '94%' },
+            { label: 'Completados', value: '98%' },
+            { label: 'Cancelación', value: '2%' },
+          ].map((metric, i) => (
+            <View key={i} className="flex-1 bg-neutral-800 rounded-xl p-3 items-center">
+              <Text variant="h4" className="text-white font-bold">{metric.value}</Text>
+              <Text variant="caption" className="text-neutral-400">{metric.label}</Text>
+              {metric.label === 'Cancelación' && (
+                <Text style={{ fontSize: 11, color: colors.brand.orange, marginTop: 4 }}>Ver penalidades →</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </View>
+    </Screen>
+  );
+}
 
 function getDateRange(period: Period): { start: Date; end: Date } {
   const now = new Date();
@@ -121,7 +182,7 @@ function EarningsChart({ data }: { data: Map<string, { earnings: number; count: 
   );
 }
 
-export default function EarningsScreen() {
+function NativeEarningsScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
   const driverProfileId = useDriverStore((s) => s.profile?.id);
@@ -136,11 +197,6 @@ export default function EarningsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Withdrawal state
-  const [sheetVisible, setSheetVisible] = useState(false);
-  const [redeemAmount, setRedeemAmount] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [redemptions, setRedemptions] = useState<WalletRedemption[]>([]);
   const [prevPeriodEarnings, setPrevPeriodEarnings] = useState<number | null>(null);
   const [quests, setQuests] = useState<QuestWithProgress[]>([]);
   const [driverStats, setDriverStats] = useState<{
@@ -158,28 +214,26 @@ export default function EarningsScreen() {
     try {
       const { start, end } = getDateRange(period);
 
-      const [balanceData, trips, redHistory, commRateStr, ratingData] = await Promise.all([
+      const [balanceData, trips, commRateStr, ratingData] = await Promise.all([
         walletService.getBalance(userId),
         driverService.getTripHistoryByDateRange(
           driverProfileId,
           start.toISOString(),
           end.toISOString(),
         ),
-        walletService.getRedemptions(driverProfileId),
         walletService.getConfigValue('commission_rate').catch(() => null),
         reviewService.getReviewSummary(userId).catch(() => null),
       ]);
 
       setBalance(balanceData.available);
       setPeriodTrips(trips);
-      setRedemptions(redHistory);
 
       const parsedRate = commRateStr ? parseFloat(String(commRateStr).replace(/"/g, '')) : NaN;
       setCommissionRate(!isNaN(parsedRate) && parsedRate > 0 && parsedRate < 1 ? parsedRate : 0.15);
 
-      // Total trips (all time)
-      const allTrips = await driverService.getTripHistory(driverProfileId, 0, 1000);
-      setTotalTripsCount(allTrips.filter((t) => t.status === 'completed').length);
+      // Total trips (all time) — use profile field instead of fetching all trips
+      const driverProfileData = useDriverStore.getState().profile;
+      setTotalTripsCount(driverProfileData?.total_rides_completed ?? driverProfileData?.total_rides ?? 0);
 
       if (ratingData) {
         setAvgRating(ratingData.average_rating);
@@ -268,37 +322,6 @@ export default function EarningsScreen() {
     if (prevPeriodEarnings == null || prevPeriodEarnings === 0) return null;
     return Math.round(((periodStats.totalEarnings - prevPeriodEarnings) / prevPeriodEarnings) * 100);
   }, [periodStats.totalEarnings, prevPeriodEarnings]);
-
-  const handleRedeem = () => {
-    setRedeemAmount('');
-    setSheetVisible(true);
-  };
-
-  const handleConfirmRedeem = async () => {
-    if (!driverProfileId) return;
-    const parsed = parseFloat(redeemAmount);
-    if (isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Error', t('earnings.amount_error_min'));
-      return;
-    }
-    const amountCentavos = Math.round(parsed * 100);
-    if (amountCentavos > balance) {
-      Alert.alert('Error', t('earnings.amount_error_max'));
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await walletService.requestRedemption(driverProfileId, amountCentavos);
-      setSheetVisible(false);
-      Alert.alert('', t('earnings.withdrawal_success'));
-      fetchData();
-    } catch (err) {
-      console.error('Error requesting redemption:', err);
-      Alert.alert('Error', t('earnings.withdrawal_info'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const periodLabels: Record<Period, string> = {
     day: t('earnings.today', { defaultValue: 'Hoy' }),
@@ -405,78 +428,31 @@ export default function EarningsScreen() {
                 {formatCUP(periodStats.avgPerTrip)}
               </Text>
             </Card>
-            <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
-              <Text variant="caption" color="inverse" className="opacity-50">
-                {t('earnings.rating')}
-              </Text>
-              <View className="flex-row items-center mt-1">
-                <Text variant="h4" color="inverse" className="mr-1">
-                  {avgRating != null ? `★ ${avgRating.toFixed(1)}` : '★ —'}
+            <Pressable onPress={() => router.push('/profile/reviews')}>
+              <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
+                <Text variant="caption" color="inverse" className="opacity-50">
+                  {t('earnings.rating')}
                 </Text>
-                {totalReviews > 0 && (
-                  <Text variant="caption" color="inverse" className="opacity-50">
-                    ({totalReviews})
+                <View className="flex-row items-center mt-1">
+                  <Text variant="h4" color="inverse" className="mr-1">
+                    {avgRating != null ? `★ ${avgRating.toFixed(1)}` : '★ —'}
                   </Text>
-                )}
-              </View>
-            </Card>
+                  {totalReviews > 0 && (
+                    <Text variant="caption" color="inverse" className="opacity-50">
+                      ({totalReviews})
+                    </Text>
+                  )}
+                </View>
+                <Text variant="caption" className="text-primary-400 mt-1">
+                  {t('earnings.see_reviews', { defaultValue: 'Ver reseñas →' })}
+                </Text>
+              </Card>
+            </Pressable>
           </View>
 
           {/* Hourly Heatmap */}
           {periodTrips.length > 0 && (
             <HourlyHeatmap trips={periodTrips} />
-          )}
-
-          <Button
-            title={t('earnings.redeem')}
-            variant="outline"
-            size="lg"
-            fullWidth
-            loading={submitting}
-            disabled={balance <= 0}
-            onPress={handleRedeem}
-          />
-
-          {/* Withdrawal history */}
-          {redemptions.length > 0 && (
-            <View className="mt-8">
-              <Text variant="h4" color="inverse" className="mb-3">
-                {t('earnings.withdrawal_history')}
-              </Text>
-              {redemptions.map((r) => {
-                const statusColors = STATUS_COLORS[r.status] ?? { bg: 'bg-warning-light', text: 'text-warning-dark' };
-                const labelKey = STATUS_LABEL_KEYS[r.status];
-                const label = labelKey ? t(labelKey) : r.status;
-                return (
-                  <Card key={r.id} variant="filled" padding="md" className="mb-2 bg-neutral-800">
-                    <View className="flex-row items-center justify-between">
-                      <View>
-                        <Text variant="body" color="inverse" className="font-semibold">
-                          {formatTriciCoin(r.amount)}
-                        </Text>
-                        <Text variant="caption" color="inverse" className="opacity-50 mt-0.5">
-                          {new Date(r.requested_at).toLocaleDateString('es-CU', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                      </View>
-                      <View className={`px-2 py-0.5 rounded-full ${statusColors.bg}`}>
-                        <Text className={`text-xs font-medium ${statusColors.text}`}>
-                          {label}
-                        </Text>
-                      </View>
-                    </View>
-                    {r.rejection_reason && (
-                      <Text variant="caption" className="text-red-400 mt-1">
-                        {r.rejection_reason}
-                      </Text>
-                    )}
-                  </Card>
-                );
-              })}
-            </View>
           )}
 
           {/* Quests / Missions */}
@@ -493,8 +469,11 @@ export default function EarningsScreen() {
                 const isCompleted = !!q.progress?.completed_at;
                 const current = q.progress?.current_value ?? 0;
                 const progress = Math.min(current / q.target_value, 1);
-                const title = q.title_es; // TODO: use i18n language
-                const desc = q.description_es;
+                const langKey = i18next.language === 'en' ? 'en' : 'es';
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const qAny = q as any;
+                const title = qAny[`title_${langKey}`] ?? q.title_es;
+                const desc = qAny[`description_${langKey}`] ?? q.description_es;
 
                 return (
                   <Card key={q.id} variant="filled" padding="md" className={`mb-3 ${isCompleted ? 'bg-green-900/30' : 'bg-neutral-800'}`}>
@@ -559,14 +538,19 @@ export default function EarningsScreen() {
                 </Card>
               </View>
               <View className="flex-row gap-3 mb-3">
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}: ${Math.round(driverStats.cancellationRate * 100)}%`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
-                    {t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}
-                  </Text>
-                  <Text variant="h4" style={{ color: driverStats.cancellationRate > 0.15 ? '#EF4444' : '#fff' }} className="mt-1">
-                    {Math.round(driverStats.cancellationRate * 100)}%
-                  </Text>
-                </Card>
+                <Pressable onPress={() => router.push('/profile/penalties')} className="flex-1">
+                  <Card variant="filled" padding="md" className="bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}: ${Math.round(driverStats.cancellationRate * 100)}%`}>
+                    <Text variant="caption" color="inverse" className="opacity-50">
+                      {t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}
+                    </Text>
+                    <Text variant="h4" style={{ color: driverStats.cancellationRate > 0.15 ? '#EF4444' : '#fff' }} className="mt-1">
+                      {Math.round(driverStats.cancellationRate * 100)}%
+                    </Text>
+                    <Text variant="caption" className="text-primary-400 mt-1">
+                      {t('earnings.see_penalties', { defaultValue: 'Ver penalidades →' })}
+                    </Text>
+                  </Card>
+                </Pressable>
                 <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}: ${driverStats.avgResponseTimeS != null ? `${driverStats.avgResponseTimeS}s` : '—'}`}>
                   <Text variant="caption" color="inverse" className="opacity-50">
                     {t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}
@@ -601,27 +585,11 @@ export default function EarningsScreen() {
         </View>
       </ScrollView>
 
-      {/* Withdrawal BottomSheet */}
-      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
-        <Text className="text-lg font-bold mb-4">{t('earnings.request_withdrawal')}</Text>
-        <Input
-          label={t('earnings.redeem_amount')}
-          placeholder="0.00"
-          keyboardType="decimal-pad"
-          value={redeemAmount}
-          onChangeText={setRedeemAmount}
-          hint={`${t('earnings.balance')}: ${formatTriciCoin(balance)}`}
-        />
-        <Button
-          title={t('earnings.redeem_confirm_btn')}
-          variant="primary"
-          size="lg"
-          fullWidth
-          loading={submitting}
-          disabled={!redeemAmount.trim()}
-          onPress={handleConfirmRedeem}
-        />
-      </BottomSheet>
     </Screen>
   );
+}
+
+export default function EarningsScreen() {
+  if (Platform.OS === 'web') return <WebEarningsScreen />;
+  return <NativeEarningsScreen />;
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import type { Ride, DriverProfileWithUser } from '@tricigo/types';
+import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentRides, setRecentRides] = useState<Ride[]>([]);
   const [pendingDrivers, setPendingDrivers] = useState<DriverProfileWithUser[]>([]);
+  const [autoActions, setAutoActions] = useState<AdminAction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,15 +54,17 @@ export default function DashboardPage() {
 
     async function fetchDashboard() {
       try {
-        const [metricsData, rides, drivers] = await Promise.all([
+        const [metricsData, rides, drivers, autoActionsData] = await Promise.all([
           adminService.getDashboardMetrics(),
           adminService.getRides({}, 0, 5),
           adminService.getDriversByStatus('pending_verification', 0, 5),
+          adminService.getRecentAutoActions(5).catch(() => [] as AdminAction[]),
         ]);
         if (!cancelled) {
           setMetrics(metricsData);
           setRecentRides(rides);
           setPendingDrivers(drivers);
+          setAutoActions(autoActionsData);
         }
       } catch (err) {
         console.error('Error fetching dashboard:', err);
@@ -114,7 +117,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent rides */}
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <h2 className="text-lg font-bold mb-4">{t('dashboard.recent_rides')}</h2>
@@ -186,6 +189,35 @@ export default function DashboardPage() {
                   </a>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Automated actions */}
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
+          <h2 className="text-lg font-bold mb-4">{t('dashboard_auto.recent_auto_actions')}</h2>
+          {autoActions.length === 0 ? (
+            <p className="text-neutral-400">{t('dashboard_auto.no_auto_actions')}</p>
+          ) : (
+            <div className="space-y-3">
+              {autoActions.map((action) => {
+                const labelKey = `dashboard_auto.${action.action}`;
+                const label = t(labelKey) !== labelKey ? t(labelKey) : action.action.replace(/_/g, ' ');
+                const timeAgo = action.created_at
+                  ? new Date(action.created_at).toLocaleTimeString()
+                  : '';
+                return (
+                  <div key={action.id} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
+                    <div>
+                      <p className="text-sm text-neutral-900">{label}</p>
+                      <p className="text-xs text-neutral-400 font-mono">
+                        {action.target_id?.slice(0, 8)}...
+                      </p>
+                    </div>
+                    <span className="text-xs text-neutral-400">{timeAgo}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

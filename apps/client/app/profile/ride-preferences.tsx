@@ -9,11 +9,19 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
-import type { RidePreferences } from '@tricigo/types';
+import type { RidePreferences, AccessibilityNeed } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 
 type TemperaturePref = 'cool' | 'warm' | 'no_preference';
+
+const ACCESSIBILITY_OPTIONS: { value: AccessibilityNeed; labelKey: string; descKey: string; icon: string }[] = [
+  { value: 'wheelchair', labelKey: 'preferences.a11y_wheelchair', descKey: 'preferences.a11y_wheelchair_desc', icon: 'accessibility-outline' },
+  { value: 'hearing_impaired', labelKey: 'preferences.a11y_hearing', descKey: 'preferences.a11y_hearing_desc', icon: 'ear-outline' },
+  { value: 'visual_impaired', labelKey: 'preferences.a11y_visual', descKey: 'preferences.a11y_visual_desc', icon: 'eye-off-outline' },
+  { value: 'service_animal', labelKey: 'preferences.a11y_service_animal', descKey: 'preferences.a11y_service_animal_desc', icon: 'paw-outline' },
+  { value: 'extra_space', labelKey: 'preferences.a11y_extra_space', descKey: 'preferences.a11y_extra_space_desc', icon: 'resize-outline' },
+];
 
 const TEMP_OPTIONS: { value: TemperaturePref; labelKey: string; icon: string }[] = [
   { value: 'cool', labelKey: 'preferences.temp_cool', icon: 'snow-outline' },
@@ -66,6 +74,14 @@ export default function RidePreferencesScreen() {
     savePrefs({ ...prefs, luggage_trunk: !prefs.luggage_trunk });
   }, [prefs, savePrefs]);
 
+  const toggleAccessibility = useCallback((need: AccessibilityNeed) => {
+    const current = prefs.accessibility_needs ?? [];
+    const updated = current.includes(need)
+      ? current.filter((n) => n !== need)
+      : [...current, need];
+    savePrefs({ ...prefs, accessibility_needs: updated });
+  }, [prefs, savePrefs]);
+
   const setTemperature = useCallback((temp: TemperaturePref) => {
     savePrefs({ ...prefs, temperature: temp });
   }, [prefs, savePrefs]);
@@ -86,7 +102,7 @@ export default function RidePreferencesScreen() {
       <ScreenHeader
         title={t('preferences.title')}
         onBack={() => router.back()}
-        rightElement={saving ? <ActivityIndicator size="small" color={colors.primary[500]} /> : undefined}
+        rightAction={saving ? <ActivityIndicator size="small" color={colors.primary[500]} /> : undefined}
       />
 
       <View className="flex-1 px-4 pt-4 gap-4">
@@ -194,6 +210,60 @@ export default function RidePreferencesScreen() {
               onValueChange={toggleLuggage}
               trackColor={{ false: colors.neutral[200], true: colors.primary[500] }}
             />
+          </View>
+        </Card>
+
+        {/* Accessibility Needs */}
+        <Card>
+          <View className="gap-3">
+            <View className="flex-row items-center gap-3">
+              <Ionicons name="accessibility-outline" size={22} color={colors.neutral[600]} />
+              <View className="flex-1">
+                <Text className="text-base font-medium text-neutral-900">
+                  {t('preferences.accessibility_title')}
+                </Text>
+                <Text className="text-sm text-neutral-500 mt-0.5">
+                  {t('preferences.accessibility_desc')}
+                </Text>
+              </View>
+            </View>
+            {ACCESSIBILITY_OPTIONS.map((opt) => {
+              const selected = (prefs.accessibility_needs ?? []).includes(opt.value);
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => toggleAccessibility(opt.value)}
+                  className={`flex-row items-center gap-3 px-3 py-3 rounded-xl border ${
+                    selected
+                      ? 'bg-primary-50 border-primary-300'
+                      : 'bg-white border-neutral-200'
+                  }`}
+                >
+                  <Ionicons
+                    name={opt.icon as any}
+                    size={20}
+                    color={selected ? colors.primary[500] : colors.neutral[400]}
+                  />
+                  <View className="flex-1">
+                    <Text
+                      className={`text-sm font-medium ${
+                        selected ? 'text-primary-700' : 'text-neutral-800'
+                      }`}
+                    >
+                      {t(opt.labelKey)}
+                    </Text>
+                    <Text className="text-xs text-neutral-500 mt-0.5">
+                      {t(opt.descKey)}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={22}
+                    color={selected ? colors.primary[500] : colors.neutral[300]}
+                  />
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
       </View>

@@ -74,6 +74,37 @@ export function formatDistance(meters: number): string {
 }
 
 /**
+ * Get relative day label ("Hoy", "Ayer") or short date, using calendar-day
+ * comparison in Havana timezone (not millisecond diff).
+ */
+export function getRelativeDay(
+  isoString: string,
+  todayLabel: string,
+  yesterdayLabel: string,
+  locale = 'es-CU',
+): string {
+  const date = new Date(isoString);
+  const now = new Date();
+
+  // Compare calendar dates in Havana timezone (YYYY-MM-DD via en-CA)
+  const dateDay = date.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
+  const todayDay = now.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
+
+  if (dateDay === todayDay) return todayLabel;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayDay = yesterday.toLocaleDateString('en-CA', { timeZone: HAVANA_TIMEZONE });
+  if (dateDay === yesterdayDay) return yesterdayLabel;
+
+  return date.toLocaleDateString(locale, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: HAVANA_TIMEZONE,
+  });
+}
+
+/**
  * Get relative time string (e.g., "hace 5 min", "hace 2 h")
  */
 export function getRelativeTime(isoString: string, locale = 'es'): string {

@@ -2,12 +2,16 @@ import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
 import type { Ride } from '@tricigo/types';
 
+/** Ride with a local timestamp for TTL expiry */
+type TimestampedRide = Ride & { _receivedAt: number };
+
 interface DriverRideState {
-  incomingRequests: Ride[];
+  incomingRequests: TimestampedRide[];
   activeTrip: Ride | null;
 
   addRequest: (ride: Ride) => void;
   removeRequest: (rideId: string) => void;
+  removeStaleRequests: () => void;
   clearRequests: () => void;
   setActiveTrip: (trip: Ride | null) => void;
   updateActiveTrip: (trip: Ride) => void;
@@ -30,13 +34,22 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
         },
         trigger: null,
       }).catch(() => { /* best-effort: local notification */ });
-      return { incomingRequests: [ride, ...s.incomingRequests] };
+      return { incomingRequests: [{ ...ride, _receivedAt: Date.now() }, ...s.incomingRequests] };
     }),
 
   removeRequest: (rideId) =>
     set((s) => ({
       incomingRequests: s.incomingRequests.filter((r) => r.id !== rideId),
     })),
+
+  /** Remove requests older than 90 seconds */
+  removeStaleRequests: () =>
+    set((s) => {
+      const now = Date.now();
+      const fresh = s.incomingRequests.filter((r) => now - r._receivedAt < 90_000);
+      if (fresh.length === s.incomingRequests.length) return s;
+      return { incomingRequests: fresh };
+    }),
 
   clearRequests: () => set({ incomingRequests: [] }),
 

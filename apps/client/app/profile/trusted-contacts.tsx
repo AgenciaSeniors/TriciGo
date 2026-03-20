@@ -48,7 +48,7 @@ export default function TrustedContactsScreen() {
         prev.map((c) => (c.id === contact.id ? updated : c)),
       );
     } catch {
-      Alert.alert('Error', t('errors.generic'));
+      Alert.alert(t('error'), t('errors.generic'));
     }
   };
 
@@ -66,7 +66,7 @@ export default function TrustedContactsScreen() {
               await trustedContactService.deleteContact(contact.id);
               setContacts((prev) => prev.filter((c) => c.id !== contact.id));
             } catch {
-              Alert.alert('Error', t('errors.generic'));
+              Alert.alert(t('error'), t('errors.generic'));
             }
           },
         },
@@ -88,7 +88,7 @@ export default function TrustedContactsScreen() {
           <Card key={contact.id} variant="outlined" padding="md" className="mb-3">
             <View className="flex-row items-start">
               <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3 mt-1">
-                <Ionicons name="person-outline" size={20} color={colors.primary.DEFAULT} />
+                <Ionicons name="person-outline" size={20} color={colors.primary[500]} />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center">
@@ -116,7 +116,7 @@ export default function TrustedContactsScreen() {
                   <Switch
                     value={contact.auto_share}
                     onValueChange={() => handleToggleAutoShare(contact)}
-                    trackColor={{ true: colors.primary.DEFAULT, false: colors.neutral[300] }}
+                    trackColor={{ true: colors.primary[500], false: colors.neutral[300] }}
                   />
                 </View>
               </View>
@@ -126,6 +126,8 @@ export default function TrustedContactsScreen() {
                 className="ml-2 p-2"
                 onPress={() => handleDelete(contact)}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('delete')}
               >
                 <Ionicons name="trash-outline" size={18} color={colors.neutral[400]} />
               </Pressable>

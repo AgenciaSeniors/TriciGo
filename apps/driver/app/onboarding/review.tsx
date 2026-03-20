@@ -14,12 +14,15 @@ import { useDriverStore } from '@/stores/driver.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import type { VehicleType } from '@tricigo/types';
 
-const STEPS = [
-  { key: 'personal', label: 'Personal' },
-  { key: 'vehicle', label: 'Vehículo' },
-  { key: 'documents', label: 'Docs' },
-  { key: 'review', label: 'Revisión' },
-];
+function useSteps() {
+  const { t } = useTranslation('driver');
+  return [
+    { key: 'personal', label: t('onboarding.step_personal', { defaultValue: 'Personal' }) },
+    { key: 'vehicle', label: t('onboarding.step_vehicle', { defaultValue: 'Vehículo' }) },
+    { key: 'documents', label: t('onboarding.step_docs', { defaultValue: 'Docs' }) },
+    { key: 'review', label: t('onboarding.step_review', { defaultValue: 'Revisión' }) },
+  ];
+}
 
 const VEHICLE_TYPE_LABELS: Record<string, string> = {
   triciclo: 'Triciclo',
@@ -29,6 +32,7 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
 
 export default function ReviewScreen() {
   const { t } = useTranslation('driver');
+  const STEPS = useSteps();
   const user = useAuthStore((s) => s.user);
   const setProfile = useDriverStore((s) => s.setProfile);
   const { personalInfo, vehicle, documents, driverProfileId, reset } = useOnboardingStore();
@@ -60,6 +64,8 @@ export default function ReviewScreen() {
         color: vehicle.color,
         plate_number: vehicle.plate_number,
         capacity: parseInt(vehicle.capacity, 10),
+        accepts_cargo: vehicle.accepts_cargo,
+        max_cargo_weight_kg: vehicle.accepts_cargo && vehicle.max_cargo_weight_kg ? parseInt(vehicle.max_cargo_weight_kg, 10) : null,
         is_active: true,
         photo_url: null,
       });
@@ -123,6 +129,11 @@ export default function ReviewScreen() {
           <Text variant="bodySmall" color="secondary">
             {vehicle.color} | {vehicle.plate_number} | {vehicle.capacity} pasajeros
           </Text>
+          {vehicle.accepts_cargo && (
+            <Text variant="caption" className="text-orange-600 mt-1">
+              Acepta carga — Max {vehicle.max_cargo_weight_kg} kg
+            </Text>
+          )}
         </Card>
 
         {/* Documents */}

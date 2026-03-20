@@ -15,12 +15,15 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import type { DocumentType } from '@tricigo/types';
 
-const STEPS = [
-  { key: 'personal', label: 'Personal' },
-  { key: 'vehicle', label: 'Vehículo' },
-  { key: 'documents', label: 'Docs' },
-  { key: 'review', label: 'Revisión' },
-];
+function useSteps() {
+  const { t } = useTranslation('driver');
+  return [
+    { key: 'personal', label: t('onboarding.step_personal', { defaultValue: 'Personal' }) },
+    { key: 'vehicle', label: t('onboarding.step_vehicle', { defaultValue: 'Vehículo' }) },
+    { key: 'documents', label: t('onboarding.step_docs', { defaultValue: 'Docs' }) },
+    { key: 'review', label: t('onboarding.step_review', { defaultValue: 'Revisión' }) },
+  ];
+}
 
 const DOC_LABELS: Record<DocumentType, string> = {
   national_id: 'onboarding.national_id',
@@ -32,6 +35,7 @@ const DOC_LABELS: Record<DocumentType, string> = {
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
+  const STEPS = useSteps();
   const user = useAuthStore((s) => s.user);
   const {
     documents,
@@ -74,13 +78,13 @@ export default function DocumentsScreen() {
     if (isCamera) {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara.');
+        Alert.alert(t('onboarding.permission_required', { defaultValue: 'Permiso requerido' }), t('onboarding.camera_access_needed', { defaultValue: 'Necesitamos acceso a la cámara.' }));
         return;
       }
     } else {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permiso requerido', 'Necesitamos acceso a la galería.');
+        Alert.alert(t('onboarding.permission_required', { defaultValue: 'Permiso requerido' }), t('onboarding.gallery_access_needed', { defaultValue: 'Necesitamos acceso a la galería.' }));
         return;
       }
     }
@@ -142,7 +146,7 @@ export default function DocumentsScreen() {
                   <Text variant="caption" color="error">{doc.error}</Text>
                 ) : (
                   <Text variant="caption" color={doc.uploaded ? 'accent' : 'tertiary'}>
-                    {doc.uploaded ? 'Subido' : doc.document_type === 'selfie' ? t('onboarding.take_photo') : t('onboarding.pick_from_gallery')}
+                    {doc.uploaded ? t('onboarding.uploaded', { defaultValue: 'Subido' }) : doc.document_type === 'selfie' ? t('onboarding.take_photo') : t('onboarding.pick_from_gallery')}
                   </Text>
                 )}
               </View>

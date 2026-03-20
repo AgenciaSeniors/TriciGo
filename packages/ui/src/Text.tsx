@@ -18,10 +18,10 @@ const variantClasses = {
 } as const;
 
 const colorClasses = {
-  primary: 'text-neutral-950',
-  secondary: 'text-neutral-600',
-  tertiary: 'text-neutral-400',
-  inverse: 'text-white',
+  primary: 'text-neutral-950 dark:text-neutral-50',
+  secondary: 'text-neutral-600 dark:text-neutral-400',
+  tertiary: 'text-neutral-400 dark:text-neutral-500',
+  inverse: 'text-white dark:text-neutral-950',
   accent: 'text-primary-500',
   error: 'text-error',
 } as const;

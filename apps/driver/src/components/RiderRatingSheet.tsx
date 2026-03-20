@@ -9,12 +9,13 @@ import { triggerSelection, trackEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService, useFeatureFlag } from '@tricigo/api';
 
-const DRIVER_POSITIVE_TAGS = [
+// Fallback tags in case DB fetch fails
+const FALLBACK_POSITIVE_TAGS = [
   'respectful', 'good_conversation', 'on_time_pickup', 'pleasant_ride',
-] as const;
-const DRIVER_NEGATIVE_TAGS = [
+];
+const FALLBACK_NEGATIVE_TAGS = [
   'rude', 'left_mess', 'late_pickup', 'unsafe_behavior', 'bad_directions',
-] as const;
+];
 
 interface RiderRatingSheetProps {
   rideId: string;
@@ -41,7 +42,20 @@ export function RiderRatingSheet({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
+  const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
+
+  // Fetch dynamic tag definitions from DB
+  useEffect(() => {
+    Promise.all([
+      reviewService.getTagDefinitions('driver_to_rider', 'positive'),
+      reviewService.getTagDefinitions('driver_to_rider', 'negative'),
+    ]).then(([pos, neg]) => {
+      if (pos.length > 0) setPositiveTags(pos.map((t) => t.key));
+      if (neg.length > 0) setNegativeTags(neg.map((t) => t.key));
+    }).catch(() => { /* use fallback tags */ });
+  }, []);
 
   // Reset tags when crossing the positive/negative boundary
   useEffect(() => {
@@ -131,7 +145,7 @@ export function RiderRatingSheet({
             {t('ride.rating_tags_title')}
           </Text>
           <View className="flex-row flex-wrap gap-2">
-            {(selectedRating >= 4 ? DRIVER_POSITIVE_TAGS : DRIVER_NEGATIVE_TAGS).map((tag) => {
+            {(selectedRating >= 4 ? positiveTags : negativeTags).map((tag) => {
               const isSelected = selectedTags.includes(tag);
               return (
                 <Pressable

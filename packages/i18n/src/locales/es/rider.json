@@ -164,6 +164,16 @@
     "cancel_reason_mistake": "Pedí por error",
     "cancel_reason_other": "Otra razón",
     "cancel_go_back": "Volver",
+    "cancel_fee_title": "Tarifa de cancelación",
+    "cancel_fee_free": "Cancelación gratuita",
+    "cancel_fee_free_window": "Puedes cancelar gratis en los primeros {{seconds}}s",
+    "cancel_fee_driver_en_route": "El conductor ya está en camino",
+    "cancel_fee_driver_arrived": "El conductor ya llegó al punto de recogida",
+    "cancel_fee_in_progress": "El viaje ya está en curso",
+    "cancel_fee_amount": "Se cobrará una tarifa de {{amount}} CUP",
+    "cancel_fee_amount_trc": "({{amount}} TRC)",
+    "cancel_fee_charged": "Se cobró una tarifa de cancelación de {{amount}} CUP",
+    "cancel_fee_driver_compensated": "El conductor recibirá una compensación por su tiempo",
     "split_fare": "Dividir tarifa",
     "split_your_share": "Tu parte",
     "split_search_user": "Buscar por teléfono",
@@ -262,10 +272,12 @@
   },
 
   "service_type": {
-    "triciclo_basico": "Triciclo Básico",
+    "triciclo_basico": "Triciclo",
     "triciclo_premium": "Triciclo Premium",
+    "triciclo_cargo": "Triciclo Cargo",
     "moto_standard": "Moto",
     "auto_standard": "Auto",
+    "auto_confort": "Confort",
     "mensajeria": "Mensajeria"
   },
 

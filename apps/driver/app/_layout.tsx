@@ -1,9 +1,12 @@
 import React, { useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { useDriverRideStore } from '@/stores/ride.store';
+import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
@@ -23,14 +26,28 @@ registerSoundAssets({
   new_request: require('../assets/sounds/new_request.wav'),
 });
 
-// Initialize Mapbox
-MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+// Initialize Mapbox (try-catch to prevent crash if token is missing)
+try {
+  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+} catch {
+  // Mapbox will fail on map screens but app won't crash on startup
+}
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const driverProfile = useDriverStore((s) => s.profile);
+  const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const segments = useSegments();
+
+  // Dark mode: sync NativeWind color scheme with theme store
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const { setColorScheme } = useColorScheme();
+  useSystemThemeSync();
+
+  useEffect(() => {
+    setColorScheme(resolvedScheme);
+  }, [resolvedScheme, setColorScheme]);
 
   // Download Havana offline map tiles (runs once per week)
   useMapboxOffline();
@@ -72,12 +89,14 @@ function RootNavigator() {
     }
 
     // Authenticated, profile not approved → pending
+    // But allow completing an active trip first (e.g., if admin suspends mid-ride)
     if (
       isAuthenticated &&
       driverProfile &&
       driverProfile.status !== 'approved' &&
       driverProfile.status !== 'pending_verification' &&
-      !inOnboarding
+      !inOnboarding &&
+      !activeTrip
     ) {
       router.replace('/onboarding/pending');
     }
@@ -85,7 +104,7 @@ function RootNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111111' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.neutral[900] }}>
         <ActivityIndicator size="large" color={colors.brand.orange} />
       </View>
     );
@@ -110,8 +129,8 @@ function RootLayoutInner() {
     <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
       <AppProviders>
         <RootNavigator />
+        <Toast />
       </AppProviders>
-      <Toast />
     </ErrorBoundary>
   );
 }

@@ -9,28 +9,31 @@ import { Button } from '@tricigo/ui/Button';
 import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, trackEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
-import { rideService, useFeatureFlag } from '@tricigo/api';
+import { rideService, notificationService, useFeatureFlag, getSupabaseClient } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { DriverCard } from '@tricigo/ui/DriverCard';
 import { Input } from '@tricigo/ui/Input';
 import { Ionicons } from '@expo/vector-icons';
-import { RidePaymentPending } from './RidePaymentPending';
 import type { RideSplit } from '@tricigo/types';
 
-const RIDER_POSITIVE_TAGS = [
+// Fallback tags in case DB fetch fails
+const FALLBACK_POSITIVE_TAGS = [
   'clean_vehicle', 'great_conversation', 'expert_navigation', 'smooth_driving', 'went_above_and_beyond',
-] as const;
-const RIDER_NEGATIVE_TAGS = [
+];
+const FALLBACK_NEGATIVE_TAGS = [
   'dirty_vehicle', 'unsafe_driving', 'rude_behavior', 'wrong_route', 'long_wait',
-] as const;
+];
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const splits = useRideStore((s) => s.splits);
+  const addSplit = useRideStore((s) => s.addSplit);
+  const updateSplit = useRideStore((s) => s.updateSplit);
+  const setSplits = useRideStore((s) => s.setSplits);
   const resetAll = useRideStore((s) => s.resetAll);
   const userId = useAuthStore((s) => s.user?.id);
 
@@ -41,7 +44,43 @@ export function RideCompleteView() {
   const [submitted, setSubmitted] = useState(false);
   const [tipSent, setTipSent] = useState(false);
   const [sendingTip, setSendingTip] = useState(false);
+  const [receiptEmailed, setReceiptEmailed] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
+  const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
+
+  // Fetch dynamic tag definitions from DB
+  useEffect(() => {
+    Promise.all([
+      reviewService.getTagDefinitions('rider_to_driver', 'positive'),
+      reviewService.getTagDefinitions('rider_to_driver', 'negative'),
+    ]).then(([pos, neg]) => {
+      if (pos.length > 0) setPositiveTags(pos.map((t) => t.key));
+      if (neg.length > 0) setNegativeTags(neg.map((t) => t.key));
+    }).catch(() => { /* use fallback tags */ });
+  }, []);
+
+  // Subscribe to real-time split updates (payment confirmations post-ride)
+  useEffect(() => {
+    if (!activeRide?.id || !activeRide.is_split) return;
+
+    // Fetch current splits state
+    rideService.getSplitsForRide(activeRide.id)
+      .then((existingSplits) => setSplits(existingSplits))
+      .catch(() => {});
+
+    const channel = rideService.subscribeToSplits(
+      activeRide.id,
+      (newSplit) => addSplit(newSplit),
+      (updatedSplit) => updateSplit(updatedSplit),
+    );
+
+    return () => {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(channel);
+    };
+  }, [activeRide?.id, activeRide?.is_split]);
 
   // Reset tags when crossing the positive/negative boundary
   useEffect(() => {
@@ -50,13 +89,10 @@ export function RideCompleteView() {
 
   if (!activeRide) return null;
 
-  // If TropiPay payment is pending, show the payment screen instead
-  if (activeRide.payment_method === 'tropipay' && activeRide.payment_status === 'pending') {
-    return <RidePaymentPending />;
-  }
-
   const fareTrc = activeRide.final_fare_trc ?? activeRide.estimated_fare_trc;
   const fareCup = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
+  const showTrc = activeRide.payment_method === 'tricicoin';
+  const fareDisplay = showTrc && fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup);
   const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;
 
   const handleTip = async (amount: number) => {
@@ -105,7 +141,9 @@ export function RideCompleteView() {
       driverName: rideWithDriver?.driver_name ?? null,
       vehiclePlate: rideWithDriver?.vehicle_plate ?? null,
       serviceType: activeRide.service_type,
-      paymentMethod: activeRide.payment_method,
+      paymentMethod: activeRide.payment_method === 'corporate'
+        ? t('payment.paid_corporate', { defaultValue: 'Cuenta corporativa' })
+        : activeRide.payment_method,
       fareCup: activeRide.final_fare_cup ?? activeRide.estimated_fare_cup,
       fareTrc: activeRide.final_fare_trc ?? activeRide.estimated_fare_trc ?? null,
       distanceM: activeRide.actual_distance_m ?? activeRide.estimated_distance_m ?? 0,
@@ -120,6 +158,20 @@ export function RideCompleteView() {
       }
     } catch (err) {
       console.error('Receipt generation failed:', err);
+    }
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!activeRide || !userId) return;
+    setSendingEmail(true);
+    try {
+      await notificationService.sendRideReceipt(activeRide.id, userId);
+      setReceiptEmailed(true);
+      Toast.show({ type: 'success', text1: t('ride.receipt_emailed', { defaultValue: 'Recibo enviado a tu email' }) });
+    } catch {
+      Toast.show({ type: 'error', text1: t('common.error'), text2: t('ride.receipt_email_failed', { defaultValue: 'No se pudo enviar el recibo' }) });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -163,8 +215,8 @@ export function RideCompleteView() {
       )}
 
       {/* Fare */}
-      <Text variant="h2" color="accent" className="mb-2" accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup) })}>
-        {fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}
+      <Text variant="h2" color="accent" className="mb-2" accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: fareDisplay })}>
+        {fareDisplay}
       </Text>
       {activeRide.actual_distance_m != null && (
         <View className="flex-row gap-4 mb-2" accessible={true} accessibilityLabel={`${t('a11y.stat_distance', { ns: 'common', value: `${(activeRide.actual_distance_m / 1000).toFixed(1)} km` })}, ${t('a11y.stat_duration', { ns: 'common', value: `${Math.round((activeRide.actual_duration_s ?? 0) / 60)} min` })}`}>
@@ -179,8 +231,8 @@ export function RideCompleteView() {
       <Text variant="caption" color="secondary" className="mb-2">
         {activeRide.payment_method === 'cash'
           ? t('ride.paid_cash', { defaultValue: 'Pagado en efectivo' })
-          : activeRide.payment_method === 'tropipay'
-            ? t('payment.paid_tropipay', { defaultValue: 'Pagado con TropiPay' })
+          : activeRide.payment_method === 'corporate'
+            ? t('payment.paid_corporate', { defaultValue: 'Cobrado a cuenta corporativa' })
             : t('ride.paid_tricicoin', { defaultValue: 'Pagado con TriciCoin' })}
       </Text>
       {activeRide.discount_amount_cup > 0 && (
@@ -270,8 +322,28 @@ export function RideCompleteView() {
         size="md"
         fullWidth
         onPress={handleDownloadReceipt}
-        className="mb-4"
+        className="mb-2"
       />
+
+      {/* Email receipt */}
+      {!receiptEmailed ? (
+        <Button
+          title={t('ride.email_receipt', { defaultValue: 'Enviar recibo por email' })}
+          variant="ghost"
+          size="md"
+          fullWidth
+          loading={sendingEmail}
+          disabled={sendingEmail}
+          onPress={handleEmailReceipt}
+          className="mb-4"
+        />
+      ) : (
+        <View className="mb-4 items-center" accessibilityLiveRegion="polite">
+          <Text variant="bodySmall" className="text-success-dark">
+            {'✓ '}{t('ride.receipt_emailed', { defaultValue: 'Recibo enviado a tu email' })}
+          </Text>
+        </View>
+      )}
 
       {/* Tip section */}
       {hasDriver && activeRide.payment_method !== 'cash' && !tipSent && (
@@ -338,7 +410,7 @@ export function RideCompleteView() {
                 {t('ride.rating_tags_title')}
               </Text>
               <View className="flex-row flex-wrap gap-2">
-                {(selectedRating >= 4 ? RIDER_POSITIVE_TAGS : RIDER_NEGATIVE_TAGS).map((tag) => {
+                {(selectedRating >= 4 ? positiveTags : negativeTags).map((tag) => {
                   const isSelected = selectedTags.includes(tag);
                   return (
                     <Pressable

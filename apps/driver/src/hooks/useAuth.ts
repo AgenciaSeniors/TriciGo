@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { configureStorage, createStorageAdapter, authService, driverService } from '@tricigo/api';
+import { configureStorage, createStorageAdapter, authService, driverService, getSupabaseClient } from '@tricigo/api';
 import { identifyUser, resetAnalytics } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { useChatStore } from '@/stores/chat.store';
+import { useDriverRideStore } from '@/stores/ride.store';
 
 // Use SecureStore on native, localStorage on web
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,6 +77,8 @@ export function useAuthInit() {
           resetAnalytics();
           reset();
           resetDriver();
+          useChatStore.getState().reset();
+          useDriverRideStore.getState().reset();
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           try {
             const user = await authService.getCurrentUser();
@@ -95,9 +99,42 @@ export function useAuthInit() {
       },
     );
 
+    // Subscribe to driver profile changes in realtime (e.g., admin suspends driver)
+    let profileChannel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
+    async function subscribeToProfile() {
+      try {
+        const session = await authService.getSession();
+        if (!session?.user || !mounted) return;
+        const supabase = getSupabaseClient();
+        profileChannel = supabase
+          .channel(`driver-profile-${session.user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'driver_profiles',
+              filter: `user_id=eq.${session.user.id}`,
+            },
+            (payload) => {
+              if (mounted && payload.new) {
+                setProfile(payload.new as any);
+              }
+            },
+          )
+          .subscribe();
+      } catch {
+        // Best effort — profile sync is non-critical
+      }
+    }
+    subscribeToProfile();
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      if (profileChannel) {
+        getSupabaseClient().removeChannel(profileChannel);
+      }
     };
   }, [setUser, reset, setProfile, resetDriver]);
 }

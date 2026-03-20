@@ -19,6 +19,7 @@ interface ServiceConfig {
 interface IncomingRideCardProps {
   ride: Ride;
   onAccept: (rideId: string) => void;
+  onReject?: (rideId: string) => void;
   driverCustomRateCup: number | null;
   serviceConfig: ServiceConfig | null;
   /** Rider display name */
@@ -29,7 +30,7 @@ interface IncomingRideCardProps {
   riderRating?: number | null;
 }
 
-export function IncomingRideCard({ ride, onAccept, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
+export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
   const lastAcceptPressRef = useRef(0);
   const debouncedAccept = useCallback(() => {
@@ -38,6 +39,10 @@ export function IncomingRideCard({ ride, onAccept, driverCustomRateCup, serviceC
     lastAcceptPressRef.current = now;
     onAccept(ride.id);
   }, [onAccept, ride.id]);
+
+  const handleReject = useCallback(() => {
+    onReject?.(ride.id);
+  }, [onReject, ride.id]);
 
   // Calculate fare using the driver's own rate
   const driverFare = useMemo(() => {
@@ -166,12 +171,17 @@ export function IncomingRideCard({ ride, onAccept, driverCustomRateCup, serviceC
         <View className="flex-row gap-2">
           <View className="bg-neutral-700 px-2 py-1 rounded">
             <Ionicons
-              name={ride.service_type === 'triciclo_basico' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
+              name={ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
               size={16}
               color="white"
-              accessibilityLabel={ride.service_type === 'triciclo_basico' ? t('onboarding.triciclo', { defaultValue: 'Triciclo' }) : ride.service_type === 'moto_standard' ? t('onboarding.moto', { defaultValue: 'Moto' }) : t('onboarding.auto', { defaultValue: 'Auto' })}
+              accessibilityLabel={ride.service_type === 'triciclo_basico' ? t('onboarding.triciclo', { defaultValue: 'Triciclo' }) : ride.service_type === 'triciclo_cargo' ? 'Cargo' : ride.service_type === 'moto_standard' ? t('onboarding.moto', { defaultValue: 'Moto' }) : t('onboarding.auto', { defaultValue: 'Auto' })}
             />
           </View>
+          {ride.service_type === 'triciclo_cargo' && (
+            <View className="bg-orange-600 px-2 py-1 rounded">
+              <Text variant="caption" color="inverse" className="font-bold">CARGO</Text>
+            </View>
+          )}
           <View className="bg-neutral-700 px-2 py-1 rounded">
             <Text variant="caption" color="inverse">
               {ride.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
@@ -181,12 +191,25 @@ export function IncomingRideCard({ ride, onAccept, driverCustomRateCup, serviceC
       </View>
 
       {/* Accept button */}
-      <Button
-        title={t('home.accept')}
-        size="lg"
-        fullWidth
-        onPress={debouncedAccept}
-      />
+      <View className="flex-row gap-3">
+        <View className="flex-1">
+          <Button
+            title={t('home.reject', { defaultValue: 'Rechazar' })}
+            size="lg"
+            fullWidth
+            variant="outline"
+            onPress={handleReject}
+          />
+        </View>
+        <View className="flex-[2]">
+          <Button
+            title={t('home.accept')}
+            size="lg"
+            fullWidth
+            onPress={debouncedAccept}
+          />
+        </View>
+      </View>
     </Card>
   );
 }

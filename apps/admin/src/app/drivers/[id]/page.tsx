@@ -184,6 +184,9 @@ export default function DriverDetailPage() {
 
   const { profile, vehicle, documents, scoreEvents } = driver;
   const status = profile.status as DriverStatus;
+  const verifiedDocsCount = documents.filter((d) => d.is_verified).length;
+  const totalDocsCount = documents.length;
+  const allDocsVerified = totalDocsCount >= 5 && verifiedDocsCount === totalDocsCount;
 
   return (
     <div className="max-w-4xl">
@@ -284,6 +287,18 @@ export default function DriverDetailPage() {
               <div>
                 <dt className="text-sm text-neutral-500">{t('drivers.label_capacity')}</dt>
                 <dd className="text-sm font-medium">{vehicle.capacity} {t('drivers.passengers')}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-neutral-500">{t('drivers.accepts_cargo', { defaultValue: 'Acepta carga' })}</dt>
+                <dd className="text-sm font-medium">
+                  {vehicle.accepts_cargo ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                      Si — {vehicle.max_cargo_weight_kg ?? '?'} kg max
+                    </span>
+                  ) : (
+                    <span className="text-neutral-400">No</span>
+                  )}
+                </dd>
               </div>
             </dl>
           ) : (
@@ -555,13 +570,21 @@ export default function DriverDetailPage() {
         <h2 className="text-lg font-bold mb-4">{t('drivers.actions_section')}</h2>
         <div className="flex flex-wrap gap-3">
           {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
-            <button
-              onClick={handleApprove}
-              disabled={actionLoading}
-              className="px-6 py-2.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              {t('drivers.action_approve')}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleApprove}
+                disabled={actionLoading || !allDocsVerified}
+                className="px-6 py-2.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!allDocsVerified ? `Debe verificar todos los documentos (${verifiedDocsCount}/${totalDocsCount})` : ''}
+              >
+                {t('drivers.action_approve')}
+              </button>
+              {!allDocsVerified && (
+                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                  {verifiedDocsCount}/{totalDocsCount} docs verificados
+                </span>
+              )}
+            </div>
           )}
           {(status === 'under_review' || status === 'pending_verification') && (
             <button

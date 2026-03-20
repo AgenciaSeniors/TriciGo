@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -7,37 +7,92 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
-import { formatCUP, generateHistoryCSV } from '@tricigo/utils';
+import { formatCUP, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 
 const PAGE_SIZE = 20;
 
-function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+// TEMP: Static web version for Play Store screenshots (all inline styles to bypass NativeWind web issues)
+function WebTripsScreen() {
+  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+  const mockTrips = [
+    { id: '1', date: 'Hoy', status: 'completed', pickup: 'Calle Obispo 101, Habana Vieja', dropoff: 'Vedado, Calle 23 y 12', fare: 'T$ 85.00', payment: 'TriciCoin' },
+    { id: '2', date: 'Hoy', status: 'completed', pickup: 'Plaza de la Revolución', dropoff: 'Miramar, 5ta Ave y 42', fare: 'T$ 150.00', payment: 'Efectivo' },
+    { id: '3', date: 'Ayer', status: 'completed', pickup: 'Centro Habana, Galiano', dropoff: 'Cerro, Calzada del Cerro', fare: 'T$ 60.00', payment: 'TriciCoin' },
+    { id: '4', date: 'Ayer', status: 'canceled', pickup: 'Regla, Embarcadero', dropoff: 'Habana Vieja, Capitolio', fare: 'T$ 95.00', payment: 'Efectivo' },
+    { id: '5', date: '12 mar', status: 'completed', pickup: 'Playa, 3ra y 70', dropoff: 'Nuevo Vedado, 26 y Boyeros', fare: 'T$ 110.00', payment: 'TriciCoin' },
+  ];
+  return (
+    <View style={{ flex: 1, backgroundColor: '#111111', paddingHorizontal: 16 }}>
+      <View style={{ paddingTop: 16, flex: 1 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Historial de viajes</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#262626' }}>
+            <Ionicons name="download-outline" size={14} color="#9ca3af" />
+            <Text style={{ fontSize: 12, color: '#9ca3af', fontWeight: '500', ...font }}>CSV</Text>
+          </View>
+        </View>
+
+        {/* Filter tabs */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+          {['Todos', 'Completados', 'Cancelados'].map((f, i) => (
+            <View key={i} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: i === 0 ? '#F97316' : '#262626' }}>
+              <Text style={{ fontSize: 12, color: i === 0 ? '#fff' : '#9ca3af', fontWeight: i === 0 ? '600' : '500', ...font }}>{f}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Trip cards */}
+        {mockTrips.map((trip) => (
+          <View key={trip.id} style={{ backgroundColor: '#1f1f1f', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+            {/* Date + status badge */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>{trip.date}</Text>
+              <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, backgroundColor: trip.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: trip.status === 'completed' ? '#4ade80' : '#f87171', ...font }}>
+                  {trip.status === 'completed' ? 'Completado' : 'Cancelado'}
+                </Text>
+              </View>
+            </View>
+            {/* Origin + Destination */}
+            <View style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', marginTop: 4, marginRight: 8 }} />
+                <Text style={{ fontSize: 14, color: '#fff', flex: 1, ...font }} numberOfLines={1}>{trip.pickup}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F97316', marginTop: 4, marginRight: 8 }} />
+                <Text style={{ fontSize: 14, color: '#d1d5db', flex: 1, ...font }} numberOfLines={1}>{trip.dropoff}</Text>
+              </View>
+            </View>
+            {/* Fare + payment */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>{trip.fare}</Text>
+              <Text style={{ fontSize: 12, color: '#6b7280', ...font }}>{trip.payment}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
   );
-  if (diffDays === 0) return todayLabel;
-  if (diffDays === 1) return yesterdayLabel;
-  return date.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' });
 }
 
-export default function TripsScreen() {
+function NativeTripsScreen() {
   const { t } = useTranslation('driver');
   const driverProfileId = useDriverStore((s) => s.profile?.id);
 
   const [trips, setTrips] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<HistoryFilterState>({});
 
@@ -52,7 +107,7 @@ export default function TripsScreen() {
     { value: 'tricicoin', label: t('trip.tricicoin', { defaultValue: 'TriciCoin' }) },
   ];
 
-  const filterLabels = {
+  const filterLabels = useMemo(() => ({
     filters: t('trips_history.filters', { defaultValue: 'Filtros' }),
     all: t('trips_history.all_statuses', { defaultValue: 'Todos' }),
     completed: t('trips_history.completed', { defaultValue: 'Completado' }),
@@ -60,7 +115,7 @@ export default function TripsScreen() {
     serviceType: t('trips_history.service_type', { defaultValue: 'Tipo de servicio' }),
     paymentMethod: t('trips_history.payment_method', { defaultValue: 'Método de pago' }),
     clearFilters: t('trips_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
-  };
+  }), [t]);
 
   useEffect(() => {
     if (!driverProfileId) return;
@@ -102,11 +157,15 @@ export default function TripsScreen() {
     if (trips.length === 0) return;
     try {
       const csv = generateHistoryCSV(trips, 'es');
-      const fileUri = FileSystem.cacheDirectory + 'historial_viajes.csv';
+      const fileUri = (FileSystem.cacheDirectory ?? '') + 'historial_viajes.csv';
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
     } catch (err) {
       console.error('Error exporting CSV:', err);
+      Alert.alert(
+        t('common:errors.title', { defaultValue: 'Error' }),
+        t('trips.export_failed', { defaultValue: 'No se pudo exportar el CSV' }),
+      );
     }
   }, [trips]);
 
@@ -139,8 +198,7 @@ export default function TripsScreen() {
     }
   }, [driverProfileId, filters]);
 
-  const renderItem = ({ item }: { item: Ride }) => {
-    const isExpanded = expandedId === item.id;
+  const renderItem = useCallback(({ item }: { item: Ride }) => {
     const isCompleted = item.status === 'completed';
     const fare = item.final_fare_cup ?? item.estimated_fare_cup;
 
@@ -149,7 +207,7 @@ export default function TripsScreen() {
         <Card variant="filled" padding="md" className="mb-3 bg-neutral-800">
           <View className="flex-row items-center justify-between mb-2">
             <Text variant="caption" color="inverse" className="opacity-60">
-              {formatDate(item.created_at, t('common.today'), t('common.yesterday'))}
+              {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
             </Text>
             <View className={`px-2 py-0.5 rounded-full ${isCompleted ? 'bg-green-900' : 'bg-red-900'}`}>
               <Text variant="caption" className={isCompleted ? 'text-green-400' : 'text-red-400'}>
@@ -176,22 +234,10 @@ export default function TripsScreen() {
             <Text variant="caption" color="inverse" className="opacity-40">{item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}</Text>
           </View>
 
-          {isExpanded && (
-            <View className="mt-3 pt-3 border-t border-neutral-700">
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="inverse" className="opacity-60">{t('trips_history.fare')}</Text>
-                <Text variant="caption" color="inverse">{formatCUP(fare)}</Text>
-              </View>
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="inverse" className="opacity-60">{t('trips_history.date')}</Text>
-                <Text variant="caption" color="inverse">{new Date(item.created_at).toLocaleString('es-CU')}</Text>
-              </View>
-            </View>
-          )}
         </Card>
       </Pressable>
     );
-  };
+  }, [t]);
 
   return (
     <Screen bg="dark" statusBarStyle="light-content" padded>
@@ -256,4 +302,9 @@ export default function TripsScreen() {
       </View>
     </Screen>
   );
+}
+
+export default function TripsScreen() {
+  if (Platform.OS === 'web') return <WebTripsScreen />;
+  return <NativeTripsScreen />;
 }

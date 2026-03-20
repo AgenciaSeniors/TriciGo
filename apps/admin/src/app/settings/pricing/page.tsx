@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import type { PricingRule, Zone } from '@tricigo/types';
+import type { PricingRule, Zone, ServiceTypeSlug } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
 
@@ -14,12 +14,109 @@ const SERVICE_TAB_KEYS = [
   { labelKey: 'pricing.filter_triciclo', value: 'triciclo_basico' },
   { labelKey: 'pricing.filter_moto', value: 'moto_standard' },
   { labelKey: 'pricing.filter_auto', value: 'auto_standard' },
+  { labelKey: 'pricing.filter_confort', value: 'auto_confort' },
   { labelKey: 'pricing.filter_mensajeria', value: 'mensajeria' },
 ] as const;
 
-const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const SERVICE_OPTIONS = [
+  'triciclo_basico',
+  'moto_standard',
+  'auto_standard',
+  'auto_confort',
+  'mensajeria',
+];
+
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
 type ZoneRow = Omit<Zone, 'boundary'>;
+
+function getTimeBand(start: string | null | undefined, end: string | null | undefined) {
+  if (!start || !end) return null;
+  const s = start.substring(0, 5);
+  if (s === '06:00') return 'morning';
+  if (s === '12:00') return 'afternoon';
+  if (s === '18:00') return 'night';
+  if (s === '00:00') return 'dawn';
+  return null;
+}
+
+function TimeBandBadge({ start, end, t }: { start: string | null | undefined; end: string | null | undefined; t: (key: string, opts?: Record<string, string>) => string }) {
+  const band = getTimeBand(start, end);
+  if (!band) {
+    if (!start && !end) return <span className="text-neutral-400 text-xs">{t('pricing.time_band_24h')}</span>;
+    return <span className="text-xs">{start} - {end}</span>;
+  }
+  const configs: Record<string, { emoji: string; label: string; color: string }> = {
+    morning: { emoji: '\u{1F305}', label: t('pricing.time_band_morning'), color: 'bg-amber-100 text-amber-700' },
+    afternoon: { emoji: '\u{2600}\u{FE0F}', label: t('pricing.time_band_afternoon'), color: 'bg-yellow-100 text-yellow-700' },
+    night: { emoji: '\u{1F319}', label: t('pricing.time_band_night'), color: 'bg-indigo-100 text-indigo-700' },
+    dawn: { emoji: '\u{1F311}', label: t('pricing.time_band_dawn'), color: 'bg-purple-100 text-purple-700' },
+  };
+  const c = configs[band]!;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${c.color}`}>
+      {c.emoji} {c.label}
+    </span>
+  );
+}
+
+// Pricing matrix component
+function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) => string }) {
+  const serviceTypes = ['triciclo_basico', 'moto_standard', 'auto_standard'];
+  const serviceLabels: Record<string, string> = {
+    triciclo_basico: 'Triciclo',
+    moto_standard: 'Moto',
+    auto_standard: 'Auto',
+  };
+  const bands = [
+    { key: 'morning', label: t('pricing.time_band_morning'), emoji: '\u{1F305}', start: '06:00' },
+    { key: 'afternoon', label: t('pricing.time_band_afternoon'), emoji: '\u{2600}\u{FE0F}', start: '12:00' },
+    { key: 'night', label: t('pricing.time_band_night'), emoji: '\u{1F319}', start: '18:00' },
+    { key: 'dawn', label: t('pricing.time_band_dawn'), emoji: '\u{1F311}', start: '00:00' },
+  ];
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4 mb-6">
+      <h3 className="text-sm font-semibold text-neutral-700 mb-3">{t('pricing.pricing_matrix')}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-neutral-100">
+              <th className="text-left py-2 px-2 font-medium text-neutral-500">Servicio</th>
+              {bands.map((b) => (
+                <th key={b.key} className="text-center py-2 px-2 font-medium text-neutral-500">
+                  {b.emoji} {b.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {serviceTypes.map((svc) => (
+              <tr key={svc} className="border-b border-neutral-50">
+                <td className="py-2 px-2 font-semibold text-neutral-700">{serviceLabels[svc]}</td>
+                {bands.map((b) => {
+                  const rule = rules.find(
+                    (r) =>
+                      r.service_type === svc &&
+                      r.time_window_start &&
+                      r.time_window_start.substring(0, 5) === b.start,
+                  );
+                  if (!rule) return <td key={b.key} className="text-center py-2 px-2 text-neutral-300">—</td>;
+                  return (
+                    <td key={b.key} className="text-center py-2 px-2">
+                      <div className="font-mono font-semibold">{formatCUP(rule.base_fare_cup)}</div>
+                      <div className="text-neutral-400">{formatCUP(rule.per_km_rate_cup)}/km</div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function PricingPage() {
   const { t } = useTranslation('admin');
@@ -31,28 +128,40 @@ export default function PricingPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<PricingRule>>({});
   const [saving, setSaving] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    service_type: 'triciclo_basico',
+    zone_id: '' as string,
+    base_fare_cup: 0,
+    per_km_rate_cup: 0,
+    per_minute_rate_cup: 0,
+    min_fare_cup: 0,
+    time_window_start: '',
+    time_window_end: '',
+    day_of_week: [] as number[],
+  });
+  const [creating, setCreating] = useState(false);
 
   // Fetch zones once for name mapping
   useEffect(() => {
     adminService.getZones().then(setZones).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchRules = useCallback(async () => {
     setLoading(true);
-    async function fetch() {
-      try {
-        const data = await adminService.getPricingRules(page, PAGE_SIZE);
-        if (!cancelled) setRules(data);
-      } catch (err) {
-        console.error('Error fetching pricing rules:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    try {
+      const data = await adminService.getPricingRules(page, PAGE_SIZE);
+      setRules(data);
+    } catch (err) {
+      console.error('Error fetching pricing rules:', err);
+    } finally {
+      setLoading(false);
     }
-    fetch();
-    return () => { cancelled = true; };
   }, [page]);
+
+  useEffect(() => {
+    fetchRules();
+  }, [fetchRules]);
 
   const zoneMap = new Map(zones.map((z) => [z.id, z.name]));
   const filtered = filter === 'all' ? rules : rules.filter((r) => r.service_type === filter);
@@ -77,8 +186,7 @@ export default function PricingPage() {
     setSaving(true);
     try {
       await adminService.updatePricingRule(editingId, editForm);
-      const data = await adminService.getPricingRules(page, PAGE_SIZE);
-      setRules(data);
+      await fetchRules();
       setEditingId(null);
     } catch (err) {
       console.error('Error updating pricing rule:', err);
@@ -94,6 +202,53 @@ export default function PricingPage() {
       setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
     } catch (err) {
       console.error('Error toggling:', err);
+    }
+  }
+
+  async function handleDelete(rule: PricingRule) {
+    if (!window.confirm(t('pricing.confirm_delete'))) return;
+    try {
+      await adminService.deletePricingRule(rule.id);
+      await fetchRules();
+    } catch (err) {
+      console.error('Error deleting:', err);
+      window.alert(t('pricing.error_deleting'));
+    }
+  }
+
+  async function handleCreate() {
+    setCreating(true);
+    try {
+      await adminService.createPricingRule({
+        service_type: createForm.service_type as ServiceTypeSlug,
+        zone_id: createForm.zone_id || null,
+        base_fare_cup: createForm.base_fare_cup,
+        per_km_rate_cup: createForm.per_km_rate_cup,
+        per_minute_rate_cup: createForm.per_minute_rate_cup,
+        min_fare_cup: createForm.min_fare_cup,
+        time_window_start: createForm.time_window_start || null,
+        time_window_end: createForm.time_window_end || null,
+        day_of_week: createForm.day_of_week.length > 0 ? createForm.day_of_week : null,
+        is_active: true,
+      });
+      await fetchRules();
+      setShowCreate(false);
+      setCreateForm({
+        service_type: 'triciclo_basico',
+        zone_id: '',
+        base_fare_cup: 0,
+        per_km_rate_cup: 0,
+        per_minute_rate_cup: 0,
+        min_fare_cup: 0,
+        time_window_start: '',
+        time_window_end: '',
+        day_of_week: [],
+      });
+    } catch (err) {
+      console.error('Error creating:', err);
+      window.alert(t('pricing.error_creating'));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -129,7 +284,150 @@ export default function PricingPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
-      <h1 className="text-3xl font-bold mb-6">{t('pricing.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">{t('pricing.title')}</h1>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+        >
+          + {t('pricing.create_rule')}
+        </button>
+      </div>
+
+      {/* Pricing Matrix */}
+      <PricingMatrix rules={rules} t={t} />
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold mb-4">{t('pricing.new_rule_title')}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_service_type')}</label>
+              <select
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.service_type}
+                onChange={(e) => setCreateForm((f) => ({ ...f, service_type: e.target.value }))}
+              >
+                {SERVICE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_zone')}</label>
+              <select
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.zone_id}
+                onChange={(e) => setCreateForm((f) => ({ ...f, zone_id: e.target.value }))}
+              >
+                <option value="">Global</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>{z.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_base_fare')}</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.base_fare_cup / 100 || ''}
+                onChange={(e) => setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_km')}</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.per_km_rate_cup / 100 || ''}
+                onChange={(e) => setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_min')}</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.per_minute_rate_cup / 100 || ''}
+                onChange={(e) => setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_min_fare')}</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.min_fare_cup / 100 || ''}
+                onChange={(e) => setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_time_start')}</label>
+              <input
+                type="time"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.time_window_start}
+                onChange={(e) => setCreateForm((f) => ({ ...f, time_window_start: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_time_end')}</label>
+              <input
+                type="time"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                value={createForm.time_window_end}
+                onChange={(e) => setCreateForm((f) => ({ ...f, time_window_end: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_days')}</label>
+              <div className="flex gap-1 flex-wrap mt-1">
+                {DAY_LABELS.map((label, idx) => {
+                  const selected = createForm.day_of_week.includes(idx);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
+                      }`}
+                      onClick={() => {
+                        const next = selected
+                          ? createForm.day_of_week.filter((d) => d !== idx)
+                          : [...createForm.day_of_week, idx];
+                        setCreateForm((f) => ({ ...f, day_of_week: next }));
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={handleCreate}
+              disabled={creating}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+            >
+              {creating ? t('pricing.creating') : t('common.create')}
+            </button>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
@@ -149,7 +447,7 @@ export default function PricingPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_zone')}</th>
@@ -159,7 +457,7 @@ export default function PricingPage() {
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_min')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_min')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_surge')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 hidden lg:table-cell">{t('pricing.col_time_window', { defaultValue: 'Horario' })}</th>
+              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_time_window')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_active')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
             </tr>
@@ -197,10 +495,10 @@ export default function PricingPage() {
                         <span>x</span>
                       </div>
                     ) : (
-                      r.max_surge_multiplier ? `${r.max_surge_multiplier}x` : '—'
+                      r.max_surge_multiplier ? `${r.max_surge_multiplier}x` : '\u2014'
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs hidden lg:table-cell">
+                  <td className="px-4 py-3">
                     {editingId === r.id ? (
                       <div className="space-y-1">
                         <div className="flex gap-1 items-center">
@@ -242,13 +540,9 @@ export default function PricingPage() {
                       </div>
                     ) : (
                       <div>
-                        {r.time_window_start && r.time_window_end ? (
-                          <span>{r.time_window_start} - {r.time_window_end}</span>
-                        ) : (
-                          <span className="text-neutral-400">24h</span>
-                        )}
+                        <TimeBandBadge start={r.time_window_start} end={r.time_window_end} t={t} />
                         {r.day_of_week && r.day_of_week.length > 0 && (
-                          <div className="text-neutral-400 mt-0.5">
+                          <div className="text-neutral-400 mt-0.5 text-[10px]">
                             {r.day_of_week.map((d) => DAY_LABELS[d]).join(', ')}
                           </div>
                         )}
@@ -283,12 +577,20 @@ export default function PricingPage() {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => startEdit(r)}
-                        className="text-sm text-primary-500 hover:underline"
-                      >
-                        {t('common.edit')}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEdit(r)}
+                          className="text-sm text-primary-500 hover:underline"
+                        >
+                          {t('common.edit')}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r)}
+                          className="text-sm text-red-500 hover:underline"
+                        >
+                          {t('pricing.delete_rule')}
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

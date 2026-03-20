@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -13,12 +13,15 @@ import { useOnboardingStore } from '@/stores/onboarding.store';
 import { isValidPlateNumber, sanitizeText } from '@tricigo/utils';
 import type { VehicleType } from '@tricigo/types';
 
-const STEPS = [
-  { key: 'personal', label: 'Personal' },
-  { key: 'vehicle', label: 'Vehículo' },
-  { key: 'documents', label: 'Docs' },
-  { key: 'review', label: 'Revisión' },
-];
+function useSteps() {
+  const { t } = useTranslation('driver');
+  return [
+    { key: 'personal', label: t('onboarding.step_personal', { defaultValue: 'Personal' }) },
+    { key: 'vehicle', label: t('onboarding.step_vehicle', { defaultValue: 'Vehículo' }) },
+    { key: 'documents', label: t('onboarding.step_docs', { defaultValue: 'Docs' }) },
+    { key: 'review', label: t('onboarding.step_review', { defaultValue: 'Revisión' }) },
+  ];
+}
 
 const VEHICLE_TYPES: { value: VehicleType; label: string; icon: string; defaultCapacity: number }[] = [
   { value: 'triciclo', label: 'Triciclo', icon: 'bicycle', defaultCapacity: 3 },
@@ -28,6 +31,7 @@ const VEHICLE_TYPES: { value: VehicleType; label: string; icon: string; defaultC
 
 export default function VehicleInfoScreen() {
   const { t } = useTranslation('driver');
+  const STEPS = useSteps();
   const { vehicle, setVehicle } = useOnboardingStore();
 
   const [vehicleType, setVehicleType] = useState<VehicleType | null>(vehicle.type);
@@ -37,6 +41,8 @@ export default function VehicleInfoScreen() {
   const [color, setColor] = useState(vehicle.color);
   const [plateNumber, setPlateNumber] = useState(vehicle.plate_number);
   const [capacity, setCapacity] = useState(vehicle.capacity);
+  const [acceptsCargo, setAcceptsCargo] = useState(vehicle.accepts_cargo);
+  const [maxCargoWeight, setMaxCargoWeight] = useState(vehicle.max_cargo_weight_kg);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleTypeSelect = (vt: typeof VEHICLE_TYPES[number]) => {
@@ -56,7 +62,11 @@ export default function VehicleInfoScreen() {
     if (!sanitizeText(color)) e.color = t('onboarding.error_color_required');
     if (!isValidPlateNumber(plateNumber.toUpperCase())) e.plate = t('onboarding.error_plate_invalid');
     const c = parseInt(capacity, 10);
-    if (!c || c < 1 || c > 10) e.capacity = t('onboarding.error_capacity_invalid');
+    const maxCap = vehicleType === 'moto' ? 1 : vehicleType === 'triciclo' ? 8 : 4;
+    if (!c || c < 1 || c > maxCap) e.capacity = t('onboarding.error_capacity_invalid');
+    if (acceptsCargo && (!maxCargoWeight || parseInt(maxCargoWeight, 10) <= 0)) {
+      e.cargo_weight = t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingrese el peso maximo de carga' });
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -71,6 +81,8 @@ export default function VehicleInfoScreen() {
       color: sanitizeText(color),
       plate_number: plateNumber.toUpperCase(),
       capacity,
+      accepts_cargo: vehicleType === 'triciclo' ? acceptsCargo : false,
+      max_cargo_weight_kg: acceptsCargo ? maxCargoWeight : '',
     });
     router.push('/onboarding/documents');
   };
@@ -123,7 +135,47 @@ export default function VehicleInfoScreen() {
         <Input label={t('onboarding.vehicle_year')} placeholder="2024" keyboardType="number-pad" value={year} onChangeText={setYear} error={errors.year} />
         <Input label={t('onboarding.vehicle_color')} placeholder="Azul" value={color} onChangeText={setColor} error={errors.color} />
         <Input label={t('onboarding.plate_number')} placeholder="P123456" autoCapitalize="characters" value={plateNumber} onChangeText={setPlateNumber} error={errors.plate} />
-        <Input label={t('onboarding.vehicle_capacity')} placeholder="3" keyboardType="number-pad" value={capacity} onChangeText={setCapacity} error={errors.capacity} />
+        <Input
+          label={t('onboarding.vehicle_capacity', { defaultValue: 'Capacidad de pasajeros' })}
+          placeholder={vehicleType === 'moto' ? '1' : vehicleType === 'triciclo' ? '2-8' : '4'}
+          keyboardType="number-pad"
+          value={capacity}
+          onChangeText={setCapacity}
+          error={errors.capacity}
+          editable={vehicleType !== 'moto'}
+        />
+
+        {/* Cargo toggle — only for triciclo */}
+        {vehicleType === 'triciclo' && (
+          <View className="mb-4">
+            <View className="flex-row items-center justify-between py-3 px-4 bg-neutral-50 rounded-xl">
+              <View className="flex-1">
+                <Text variant="label">
+                  {t('onboarding.accepts_cargo', { defaultValue: 'Acepta carga' })}
+                </Text>
+                <Text variant="caption" color="secondary">
+                  {t('onboarding.cargo_description', { defaultValue: 'Activar si su vehiculo puede transportar mercancia' })}
+                </Text>
+              </View>
+              <Switch
+                value={acceptsCargo}
+                onValueChange={setAcceptsCargo}
+                trackColor={{ false: '#d4d4d4', true: colors.brand.orange }}
+                thumbColor="white"
+              />
+            </View>
+            {acceptsCargo && (
+              <Input
+                label={t('onboarding.max_cargo_weight', { defaultValue: 'Peso maximo de carga (kg)' })}
+                placeholder="100"
+                keyboardType="number-pad"
+                value={maxCargoWeight}
+                onChangeText={setMaxCargoWeight}
+                error={errors.cargo_weight}
+              />
+            )}
+          </View>
+        )}
 
         <Button
           title={t('common:next')}

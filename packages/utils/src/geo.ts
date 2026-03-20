@@ -66,8 +66,10 @@ export function estimateRoadDistance(straightLineM: number): number {
 const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
   triciclo_basico: 15,
   triciclo_premium: 15,
+  triciclo_cargo: 12,
   moto_standard: 30,
   auto_standard: 25,
+  auto_confort: 25,
   mensajeria: 20,
 };
 
@@ -154,6 +156,30 @@ export interface RouteResult {
   duration_s: number;
 }
 
+/** A single navigation step from OSRM */
+export interface NavigationStep {
+  /** Distance of this step in meters */
+  distance_m: number;
+  /** Duration of this step in seconds */
+  duration_s: number;
+  /** Street name */
+  name: string;
+  /** Maneuver type (turn, depart, arrive, continue, etc.) */
+  maneuver_type: string;
+  /** Maneuver modifier (left, right, straight, etc.) */
+  maneuver_modifier: string;
+  /** Maneuver location [lat, lng] */
+  maneuver_location: [number, number];
+  /** Step geometry as [lat, lng] pairs */
+  geometry: [number, number][];
+}
+
+/** Route result with turn-by-turn navigation steps */
+export interface NavigationRouteResult extends RouteResult {
+  /** Turn-by-turn steps */
+  steps: NavigationStep[];
+}
+
 export interface AddressSearchResult {
   /** Formatted address string */
   address: string;
@@ -177,7 +203,13 @@ async function throttledFetch(url: string, headers?: Record<string, string>): Pr
     await new Promise<void>((r) => setTimeout(r, wait));
   }
   lastNominatimCall = Date.now();
-  return fetch(url, { headers });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  try {
+    return await fetch(url, { headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 const NOMINATIM_HEADERS: Record<string, string> = {
@@ -260,6 +292,66 @@ export async function fetchMultiStopRoute(
       ),
       distance_m: Math.round(route.distance),
       duration_s: Math.round(route.duration),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ─── OSRM Navigation Route (with steps) ─── */
+
+/**
+ * Fetch a driving route with turn-by-turn navigation steps using OSRM.
+ * Returns the route geometry, distance, duration, and step-by-step instructions.
+ */
+export async function fetchNavigationRoute(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): Promise<NavigationRouteResult | null> {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${from.lng},${from.lat};${to.lng},${to.lat}` +
+      `?overview=full&geometries=geojson&steps=true`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    if (!route) return null;
+
+    // GeoJSON coordinates are [lng, lat] — convert to [lat, lng]
+    const coordinates: [number, number][] = route.geometry.coordinates.map(
+      (c: [number, number]) => [c[1], c[0]] as [number, number],
+    );
+
+    // Parse steps from all legs
+    const steps: NavigationStep[] = [];
+    for (const leg of route.legs ?? []) {
+      for (const step of leg.steps ?? []) {
+        const stepCoords: [number, number][] = (step.geometry?.coordinates ?? []).map(
+          (c: [number, number]) => [c[1], c[0]] as [number, number],
+        );
+        steps.push({
+          distance_m: step.distance ?? 0,
+          duration_s: step.duration ?? 0,
+          name: step.name ?? '',
+          maneuver_type: step.maneuver?.type ?? '',
+          maneuver_modifier: step.maneuver?.modifier ?? '',
+          maneuver_location: step.maneuver?.location
+            ? [step.maneuver.location[1], step.maneuver.location[0]]
+            : [0, 0],
+          geometry: stepCoords,
+        });
+      }
+    }
+
+    return {
+      coordinates,
+      distance_m: route.distance,
+      duration_s: route.duration,
+      steps,
     };
   } catch {
     return null;

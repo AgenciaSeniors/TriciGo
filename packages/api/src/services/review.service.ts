@@ -38,12 +38,18 @@ export const reviewService = {
       .single();
     if (error) throw error;
 
-    // Insert tags if provided
+    // Insert tags if provided — if this fails, delete the orphaned review
     if (params.tags && params.tags.length > 0) {
       const { error: tagError } = await supabase
         .from('review_tags')
         .insert(params.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
-      if (tagError) throw tagError;
+      if (tagError) {
+        // Rollback: delete the review to avoid orphaned record
+        try {
+          await supabase.from('reviews').delete().eq('id', data.id);
+        } catch { /* best effort cleanup */ }
+        throw tagError;
+      }
     }
 
     return { ...data, tags: params.tags ?? [] } as Review;

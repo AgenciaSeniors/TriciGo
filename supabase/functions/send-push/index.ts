@@ -1,10 +1,17 @@
 // supabase/functions/send-push/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ── CORS: restrict to allowed origins ──
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 interface PushRequest {
   user_id?: string;
@@ -16,14 +23,46 @@ interface PushRequest {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    // ── Auth: allow internal service-role calls or valid JWT ──
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const apiKey = req.headers.get('apikey') ?? '';
+    const isInternalCall = apiKey === serviceRoleKey;
+
+    if (!isInternalCall) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ error: 'Missing authorization header' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const supabaseAuth = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        serviceRoleKey,
+      );
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+        authHeader.replace('Bearer ', ''),
+      );
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
     );
 
     const { user_id, user_ids, title, body, data, category } =

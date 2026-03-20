@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV } from '@tricigo/utils';
+import { formatTRC, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -20,20 +20,61 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 
+import { Platform } from 'react-native';
+
 const PAGE_SIZE = 20;
 
-function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+// TEMP: Static web version for Play Store screenshots
+function WebRidesScreen() {
+  const mockRides = [
+    { id: '1', date: 'Hoy', status: 'completed', pickup: 'Calle 23 esq. L, Vedado', dropoff: 'Parque Central, Habana Vieja', fare: 'T$ 85.00', payment: 'TriciCoin' },
+    { id: '2', date: 'Hoy', status: 'completed', pickup: 'Miramar Trade Center', dropoff: 'Hotel Nacional de Cuba', fare: 'T$ 120.00', payment: 'Efectivo' },
+    { id: '3', date: 'Ayer', status: 'completed', pickup: 'Universidad de La Habana', dropoff: 'Plaza de la Revolución', fare: 'T$ 65.00', payment: 'TriciCoin' },
+    { id: '4', date: '12 mar', status: 'canceled', pickup: 'Aeropuerto José Martí', dropoff: 'Malecón y Prado', fare: 'T$ 250.00', payment: 'Efectivo' },
+    { id: '5', date: '11 mar', status: 'completed', pickup: 'Coppelia, Vedado', dropoff: 'Capitolio Nacional', fare: 'T$ 45.00', payment: 'TriciCoin' },
+  ];
+
+  return (
+    <Screen bg="white" padded>
+      <View className="pt-4 flex-1">
+        <View className="flex-row items-center justify-between mb-4">
+          <Text variant="h3">Historial de viajes</Text>
+          <View className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100">
+            <Ionicons name="download-outline" size={14} color="#6b7280" />
+            <Text variant="caption" color="secondary" className="font-medium">CSV</Text>
+          </View>
+        </View>
+
+        <View className="flex-row gap-2 mb-4">
+          {['Todos', 'Completados', 'Cancelados'].map((f, i) => (
+            <View key={i} className={`px-3 py-1.5 rounded-full ${i === 0 ? 'bg-primary-500' : 'bg-neutral-100'}`}>
+              <Text variant="caption" className={i === 0 ? 'text-white font-semibold' : 'font-medium'}>{f}</Text>
+            </View>
+          ))}
+        </View>
+
+        {mockRides.map((ride) => (
+          <Card key={ride.id} variant="outlined" padding="md" className="mb-3">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text variant="caption" color="secondary">{ride.date}</Text>
+              <StatusBadge
+                label={ride.status === 'completed' ? 'Completado' : 'Cancelado'}
+                variant={ride.status === 'completed' ? 'success' : 'error'}
+              />
+            </View>
+            <RouteSummary pickupAddress={ride.pickup} dropoffAddress={ride.dropoff} compact className="mb-2" />
+            <View className="flex-row justify-between items-center">
+              <Text variant="body" className="font-semibold">{ride.fare}</Text>
+              <Text variant="caption" color="tertiary">{ride.payment}</Text>
+            </View>
+          </Card>
+        ))}
+      </View>
+    </Screen>
   );
-  if (diffDays === 0) return todayLabel;
-  if (diffDays === 1) return yesterdayLabel;
-  return date.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' });
 }
 
-export default function RidesScreen() {
+function NativeRidesScreen() {
   const { t } = useTranslation('rider');
   const userId = useAuthStore((s) => s.user?.id);
 
@@ -42,7 +83,6 @@ export default function RidesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<HistoryFilterState>({});
 
   const serviceTypes = [
@@ -59,7 +99,7 @@ export default function RidesScreen() {
     { value: 'tropipay', label: t('payment.tropipay', { defaultValue: 'TropiPay' }) },
   ];
 
-  const filterLabels = {
+  const filterLabels = useMemo(() => ({
     filters: t('rides_history.filters', { defaultValue: 'Filtros' }),
     all: t('rides_history.all_statuses', { defaultValue: 'Todos' }),
     completed: t('rides_history.completed'),
@@ -67,7 +107,7 @@ export default function RidesScreen() {
     serviceType: t('rides_history.service_type', { defaultValue: 'Tipo de servicio' }),
     paymentMethod: t('rides_history.payment_method', { defaultValue: 'Método de pago' }),
     clearFilters: t('rides_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
-  };
+  }), [t]);
 
   useEffect(() => {
     if (!userId) return;
@@ -123,7 +163,7 @@ export default function RidesScreen() {
     if (rides.length === 0) return;
     try {
       const csv = generateHistoryCSV(rides, 'es');
-      const fileUri = FileSystem.cacheDirectory + 'historial_viajes.csv';
+      const fileUri = (FileSystem.cacheDirectory ?? '') + 'historial_viajes.csv';
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
     } catch (err) {
@@ -168,20 +208,19 @@ export default function RidesScreen() {
     }
   }, [userId, filters]);
 
-  const renderItem = ({ item }: { item: Ride }) => {
-    const isExpanded = expandedId === item.id;
+  const renderItem = useCallback(({ item }: { item: Ride }) => {
     const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.estimated_fare_cup;
 
     return (
       <Pressable
         onPress={() => router.push(`/ride/${item.id}`)}
         accessibilityRole="button"
-        accessibilityLabel={`${formatDate(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
+        accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
       >
         <Card variant="outlined" padding="md" className="mb-3">
           <View className="flex-row items-center justify-between mb-2">
             <Text variant="caption" color="secondary">
-              {formatDate(item.created_at, t('common.today'), t('common.yesterday'))}
+              {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
             </Text>
             <StatusBadge
               label={item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
@@ -201,24 +240,10 @@ export default function RidesScreen() {
             <Text variant="caption" color="tertiary">{item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}</Text>
           </View>
 
-          {isExpanded && (
-            <View className="mt-3 pt-3 border-t border-neutral-200">
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="secondary">{t('rides_history.date')}</Text>
-                <Text variant="caption">{new Date(item.created_at).toLocaleString('es-CU')}</Text>
-              </View>
-              {item.final_fare_trc != null && item.estimated_fare_trc != null && item.final_fare_trc !== item.estimated_fare_trc && (
-                <View className="flex-row justify-between mb-1">
-                  <Text variant="caption" color="secondary">{t('ride.estimated_fare')}</Text>
-                  <Text variant="caption">{formatTRC(item.estimated_fare_trc)}</Text>
-                </View>
-              )}
-            </View>
-          )}
         </Card>
       </Pressable>
     );
-  };
+  }, [t]);
 
   return (
     <Screen bg="white" padded>
@@ -314,4 +339,9 @@ export default function RidesScreen() {
       </View>
     </Screen>
   );
+}
+
+export default function RidesScreen() {
+  if (Platform.OS === 'web') return <WebRidesScreen />;
+  return <NativeRidesScreen />;
 }

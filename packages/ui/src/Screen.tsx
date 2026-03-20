@@ -19,8 +19,8 @@ export interface ScreenProps extends ViewProps {
 }
 
 const bgClasses = {
-  white: 'bg-white',
-  neutral: 'bg-neutral-50',
+  white: 'bg-white dark:bg-neutral-900',
+  neutral: 'bg-neutral-50 dark:bg-neutral-950',
   dark: 'bg-neutral-950',
 } as const;
 
@@ -45,8 +45,8 @@ export function Screen({
   return (
     <SafeAreaView className={`flex-1 ${bgClasses[bg]}`}>
       <StatusBar
-        barStyle={statusBarStyle}
-        backgroundColor={bg === 'dark' ? '#111111' : '#FFFFFF'}
+        barStyle={bg === 'dark' ? 'light-content' : statusBarStyle}
+        backgroundColor={bg === 'dark' ? '#111111' : undefined}
       />
       {scroll ? (
         <ScrollView

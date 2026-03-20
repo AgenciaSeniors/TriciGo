@@ -8,11 +8,13 @@ import { useTranslation } from '@tricigo/i18n';
 type ConfigEntry = { key: string; value: string };
 
 /** Well-known config keys with input type + help text key */
-const KNOWN_KEYS: Record<string, { type: 'number'; helpKey: string }> = {
+const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> = {
   max_driver_rate_multiplier: { type: 'number', helpKey: 'platform_config.max_driver_rate_multiplier_help' },
   default_per_km_rate_cup: { type: 'number', helpKey: 'platform_config.default_per_km_rate_cup_help' },
   commission_rate: { type: 'number', helpKey: 'platform_config.commission_rate_help' },
   exchange_rate_fallback_cup: { type: 'number', helpKey: 'platform_config.exchange_rate_fallback_cup_help' },
+  openweather_api_key: { type: 'text', helpKey: 'platform_config.openweather_api_key_help' },
+  weather_surge_enabled: { type: 'text', helpKey: 'platform_config.weather_surge_enabled_help' },
 };
 
 export default function PlatformConfigPage() {

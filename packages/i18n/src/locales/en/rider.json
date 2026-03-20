@@ -164,6 +164,16 @@
     "cancel_reason_mistake": "Ordered by mistake",
     "cancel_reason_other": "Other reason",
     "cancel_go_back": "Go back",
+    "cancel_fee_title": "Cancellation fee",
+    "cancel_fee_free": "Free cancellation",
+    "cancel_fee_free_window": "You can cancel for free within the first {{seconds}}s",
+    "cancel_fee_driver_en_route": "The driver is already on the way",
+    "cancel_fee_driver_arrived": "The driver has arrived at pickup",
+    "cancel_fee_in_progress": "The ride is already in progress",
+    "cancel_fee_amount": "A fee of {{amount}} CUP will be charged",
+    "cancel_fee_amount_trc": "({{amount}} TRC)",
+    "cancel_fee_charged": "A cancellation fee of {{amount}} CUP was charged",
+    "cancel_fee_driver_compensated": "The driver will receive compensation for their time",
     "split_fare": "Split fare",
     "split_your_share": "Your share",
     "split_search_user": "Search by phone",
@@ -262,10 +272,12 @@
   },
 
   "service_type": {
-    "triciclo_basico": "Basic Tricycle",
+    "triciclo_basico": "Tricycle",
     "triciclo_premium": "Premium Tricycle",
+    "triciclo_cargo": "Tricycle Cargo",
     "moto_standard": "Motorcycle",
     "auto_standard": "Car",
+    "auto_confort": "Comfort",
     "mensajeria": "Delivery"
   },
 

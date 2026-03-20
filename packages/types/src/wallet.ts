@@ -8,7 +8,6 @@
 import type {
   LedgerEntryType,
   LedgerTransactionStatus,
-  RedemptionStatus,
   WalletAccountType,
 } from './enums';
 
@@ -66,19 +65,6 @@ export interface WalletTransfer {
   transaction_id: string;
   note: string | null;
   created_at: string;
-}
-
-export interface WalletRedemption {
-  id: string;
-  driver_id: string;
-  /** Amount to redeem in centavos */
-  amount: number;
-  status: RedemptionStatus;
-  transaction_id: string | null;
-  requested_at: string;
-  processed_at: string | null;
-  processed_by: string | null;
-  rejection_reason: string | null;
 }
 
 export interface WalletRechargeRequest {

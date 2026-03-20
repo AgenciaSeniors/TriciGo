@@ -18,6 +18,7 @@ import type {
   SurgeType,
   TripInsuranceConfig,
   RidePreferences,
+  CancellationFeePreview,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
@@ -26,10 +27,12 @@ import {
   estimateDuration,
   cupToTrcCentavos,
   calculateBaseFare,
+  calculateCargoFare,
   applySurge,
   matchPricingRule,
   calculateFareRange,
   maskPhone,
+  isLocationInCuba,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
@@ -132,14 +135,22 @@ export const rideService = {
     const durationMin = duration / 60;
 
     // Calculate fare using pure function
-    const fareResult = calculateBaseFare({
-      distanceKm,
-      durationMin,
-      baseFare,
-      perKmRate,
-      perMinRate,
-      minimumFare: minFare,
-    });
+    const isCargo = params.service_type === 'triciclo_cargo';
+    const fareResult = isCargo
+      ? calculateCargoFare({
+          durationMin: durationMin > 0 ? durationMin : 60, // default 1 hour
+          baseFare,
+          perMinRate,
+          minimumFare: minFare,
+        })
+      : calculateBaseFare({
+          distanceKm,
+          durationMin,
+          baseFare,
+          perKmRate,
+          perMinRate,
+          minimumFare: minFare,
+        });
 
     // ─── Dynamic Surge ───
     let surgeMultiplier = 1.0;
@@ -154,10 +165,20 @@ export const rideService = {
       });
       if (typeof surgeData === 'number' && surgeData > 1.0) {
         surgeMultiplier = surgeData;
+
+        // Check if weather surge is active
+        const { data: weatherSurge } = await supabase
+          .from('surge_zones')
+          .select('id')
+          .like('reason', 'weather_%')
+          .eq('active', true)
+          .limit(1);
+
+        const hasWeatherSurge = weatherSurge && weatherSurge.length > 0;
         const hasTimeRule = pricingRules && (pricingRules as PricingRule[]).some(
           (r) => r.time_window_start && r.time_window_end,
         );
-        surgeType = hasTimeRule ? 'combined' : 'demand';
+        surgeType = hasWeatherSurge ? 'weather' : hasTimeRule ? 'combined' : 'demand';
       }
     } catch {
       console.warn('calculate_dynamic_surge failed, defaulting to 1.0x');
@@ -238,6 +259,14 @@ export const rideService = {
    * Request a new ride.
    */
   async createRide(params: CreateRideParams): Promise<Ride> {
+    // Validate coordinates are within Cuba
+    if (!isLocationInCuba(params.pickup_latitude, params.pickup_longitude)) {
+      throw new Error('Pickup location is outside the service area');
+    }
+    if (!isLocationInCuba(params.dropoff_latitude, params.dropoff_longitude)) {
+      throw new Error('Dropoff location is outside the service area');
+    }
+
     const supabase = getSupabaseClient();
 
     // Get current user for customer_id
@@ -478,14 +507,46 @@ export const rideService = {
 
   /**
    * Cancel a ride with optional penalty.
-   * Returns penalty info if a penalty was applied.
+   * Applies both: (1) state-based cancellation fee and (2) progressive penalty.
    */
   async cancelRide(
     rideId: string,
     userId?: string,
     reason?: string,
-  ): Promise<{ penaltyAmount: number; isBlocked: boolean } | null> {
+  ): Promise<{
+    penaltyAmount: number;
+    isBlocked: boolean;
+    cancellationFee?: CancellationFeePreview;
+  } | null> {
     const supabase = getSupabaseClient();
+
+    // Validate that the user is the ride's customer or assigned driver
+    if (userId) {
+      const { data: ride } = await supabase
+        .from('rides')
+        .select('customer_id, driver_id')
+        .eq('id', rideId)
+        .single();
+
+      if (ride) {
+        // Check driver: driver_profiles.id → driver_profiles.user_id
+        let isDriverUser = false;
+        if (ride.driver_id) {
+          const { data: dp } = await supabase
+            .from('driver_profiles')
+            .select('user_id')
+            .eq('id', ride.driver_id)
+            .single();
+          isDriverUser = dp?.user_id === userId;
+        }
+
+        if (ride.customer_id !== userId && !isDriverUser) {
+          throw new Error('Unauthorized: user is not the customer or driver of this ride');
+        }
+      }
+    }
+
+    // 1. Update ride status FIRST (critical — must succeed before applying fees)
     const { error } = await supabase
       .from('rides')
       .update({
@@ -497,7 +558,29 @@ export const rideService = {
       .eq('id', rideId);
     if (error) throw error;
 
-    // Apply cancellation penalty if user is known
+    // 2. Apply state-based cancellation fee (non-critical — ride is already canceled)
+    let cancellationFee: CancellationFeePreview | undefined;
+    if (userId) {
+      try {
+        const { data: feeData, error: feeErr } = await supabase.rpc(
+          'apply_cancellation_fee',
+          { p_ride_id: rideId, p_canceled_by: userId },
+        );
+        if (!feeErr && feeData) {
+          const row = Array.isArray(feeData) ? feeData[0] : feeData;
+          cancellationFee = {
+            fee_cup: row?.fee_cup ?? 0,
+            fee_trc: row?.fee_trc ?? 0,
+            fee_reason: row?.fee_reason ?? 'free_cancel',
+            is_free: (row?.fee_cup ?? 0) === 0,
+          };
+        }
+      } catch {
+        console.error('Failed to apply cancellation fee');
+      }
+    }
+
+    // 3. Apply progressive cancellation penalty (non-critical)
     if (userId) {
       try {
         const { data: penaltyData, error: penaltyErr } = await supabase.rpc(
@@ -509,15 +592,39 @@ export const rideService = {
           return {
             penaltyAmount: row?.penalty_amount ?? 0,
             isBlocked: row?.is_blocked ?? false,
+            cancellationFee,
           };
         }
       } catch {
-        // Penalty is non-critical, ride is already canceled
         console.error('Failed to apply cancellation penalty');
       }
     }
 
-    return null;
+    return cancellationFee ? { penaltyAmount: 0, isBlocked: false, cancellationFee } : null;
+  },
+
+  /**
+   * Preview the cancellation fee based on ride state (without applying it).
+   * Shows the user exactly what they'd be charged before confirming.
+   */
+  async previewCancellationFee(
+    rideId: string,
+    userId: string,
+  ): Promise<CancellationFeePreview> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('calculate_cancellation_fee', {
+      p_ride_id: rideId,
+      p_canceled_by: userId,
+    });
+    if (error) throw error;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      fee_cup: row?.fee_cup ?? 0,
+      fee_trc: row?.fee_trc ?? 0,
+      fee_reason: row?.fee_reason ?? 'free_cancel',
+      is_free: row?.is_free ?? true,
+    };
   },
 
   /**
@@ -937,8 +1044,7 @@ export const rideService = {
       .insert({
         ride_id: rideId,
         address,
-        latitude,
-        longitude,
+        location: `POINT(${longitude} ${latitude})`,
         sort_order: nextOrder,
       })
       .select()

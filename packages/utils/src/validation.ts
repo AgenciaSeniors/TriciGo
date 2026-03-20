@@ -7,6 +7,7 @@
  * Cuban mobile numbers: +53 5XXXXXXX (8 digits starting with 5)
  */
 export function isValidCubanPhone(phone: string): boolean {
+  if (!phone) return false;
   const cleaned = phone.replace(/[\s\-()]/g, '');
   // With country code: +535XXXXXXX
   if (/^\+535\d{7}$/.test(cleaned)) return true;
@@ -21,9 +22,16 @@ export function isValidCubanPhone(phone: string): boolean {
  */
 export function normalizeCubanPhone(phone: string): string {
   const cleaned = phone.replace(/[\s\-()]/g, '');
-  if (cleaned.startsWith('+53')) return cleaned;
+  // Already in E.164 Cuba format
+  if (cleaned.startsWith('+53') && cleaned.length === 11) return cleaned;
+  // Country code without +
   if (cleaned.startsWith('53') && cleaned.length === 10) return `+${cleaned}`;
-  return `+53${cleaned}`;
+  // Local number (8 digits starting with 5)
+  if (cleaned.startsWith('5') && cleaned.length === 8) return `+53${cleaned}`;
+  // Short local number without leading 5 — prepend +53
+  if (!cleaned.startsWith('+') && cleaned.length <= 8) return `+53${cleaned}`;
+  // Already has +, return as-is
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
 }
 
 /**
@@ -81,7 +89,11 @@ export function maskPhone(phone: string | null | undefined): string {
   if (cleaned.length < 4) return '••••';
   const last4 = cleaned.slice(-4);
   if (cleaned.startsWith('+53')) return `+53 •••• ${last4}`;
-  if (cleaned.startsWith('+')) return `${cleaned.slice(0, 3)} •••• ${last4}`;
+  if (cleaned.startsWith('+')) {
+    // Dynamically detect country code length (digits before subscriber number)
+    const codeEnd = Math.max(2, cleaned.length - 7);
+    return `${cleaned.slice(0, codeEnd)} •••• ${last4}`;
+  }
   return `•••• ${last4}`;
 }
 

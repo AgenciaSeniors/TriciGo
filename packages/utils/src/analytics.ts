@@ -16,7 +16,6 @@ export type AnalyticsEvent =
   | 'payment_method_selected'
   | 'ride_rated'
   | 'promo_applied'
-  | 'withdrawal_requested'
   | 'quest_completed';
 
 /**

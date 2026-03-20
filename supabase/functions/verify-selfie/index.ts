@@ -4,10 +4,17 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// ── CORS: restrict to allowed origins ──
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 const MATCH_THRESHOLD = 0.80;
 
@@ -17,6 +24,8 @@ interface VerifyRequest {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -89,8 +98,29 @@ Deno.serve(async (req) => {
     // const refImageUrl = supabase.storage.from('driver-documents').getPublicUrl(onboardingSelfie.storage_path);
     // const result = await faceComparisonApi.compare(checkImageUrl, refImageUrl);
 
-    const faceMatchScore = 0.85 + Math.random() * 0.15; // MVP: 0.85-1.0
-    const livenessScore = Math.random() > 0.05; // MVP: 95% pass rate
+    // SECURITY: MVP placeholder — always passes. Must be replaced before production.
+    // Set SELFIE_VERIFICATION_ENABLED=true in env ONLY after integrating a real
+    // face comparison service (AWS Rekognition, Azure Face, etc.).
+    const verificationEnabled = Deno.env.get('SELFIE_VERIFICATION_ENABLED') === 'true';
+
+    let faceMatchScore: number;
+    let livenessScore: boolean;
+
+    if (!verificationEnabled) {
+      console.warn('⚠️ SELFIE_VERIFICATION_ENABLED is not set — using placeholder (INSECURE)');
+      faceMatchScore = 0.85 + Math.random() * 0.15;
+      livenessScore = Math.random() > 0.05;
+    } else {
+      // TODO: Replace with real face comparison API call
+      // const checkImageUrl = supabase.storage.from('driver-documents').getPublicUrl(check.storage_path);
+      // const refImageUrl = supabase.storage.from('driver-documents').getPublicUrl(onboardingSelfie.storage_path);
+      // const result = await faceComparisonApi.compare(checkImageUrl, refImageUrl);
+      // faceMatchScore = result.similarity;
+      // livenessScore = result.livenessDetected;
+      faceMatchScore = 0;
+      livenessScore = false;
+    }
+
     const passed = faceMatchScore >= MATCH_THRESHOLD && livenessScore;
 
     // 4. Update the check record

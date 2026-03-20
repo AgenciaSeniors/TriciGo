@@ -81,6 +81,69 @@ export function calculateBaseFare(params: FareParams): FareResult {
   };
 }
 
+// ── Cargo Fare (hourly pricing) ──────────────────────────────
+
+export interface CargoFareParams {
+  /** Estimated or actual duration in minutes */
+  durationMin: number;
+  /** Base fare (charged once) */
+  baseFare: number;
+  /** Rate per minute (= hourly rate / 60) */
+  perMinRate: number;
+  /** Minimum fare */
+  minimumFare: number;
+}
+
+/**
+ * Calculate cargo fare based on hourly pricing.
+ * Charges per minute but rounds up to nearest hour for billing.
+ * Minimum 1 hour.
+ *
+ * Formula: baseFare + ceil(durationMin / 60) * hourlyRate
+ * where hourlyRate = perMinRate * 60
+ */
+export function calculateCargoFare(params: CargoFareParams): FareResult {
+  const hours = Math.max(1, Math.ceil(params.durationMin / 60));
+  const hourlyRate = params.perMinRate * 60;
+  const rawFare = Math.round(params.baseFare + hours * hourlyRate);
+  const fare = Math.max(rawFare, params.minimumFare);
+
+  return {
+    rawFare,
+    fare,
+    minFareApplied: rawFare < params.minimumFare,
+  };
+}
+
+// ── Wait Time Penalty ────────────────────────────────────────
+
+export interface WaitChargeParams {
+  /** Total wait time in minutes (driver_arrived_at → pickup_at) */
+  totalWaitMin: number;
+  /** Free wait minutes before charges begin */
+  freeMinutes: number;
+  /** Rate per minute after free period (CUP) */
+  perWaitMinRate: number;
+}
+
+export interface WaitChargeResult {
+  /** Billable wait minutes (after free period) */
+  billableMinutes: number;
+  /** Total wait charge in CUP */
+  charge: number;
+}
+
+/**
+ * Calculate wait time charge.
+ * Free period (e.g. 5 min) is not charged.
+ * After that, each minute is charged at perWaitMinRate.
+ */
+export function calculateWaitCharge(params: WaitChargeParams): WaitChargeResult {
+  const billableMinutes = Math.max(0, Math.floor(params.totalWaitMin) - params.freeMinutes);
+  const charge = Math.round(billableMinutes * params.perWaitMinRate);
+  return { billableMinutes, charge };
+}
+
 /**
  * Apply surge multiplier to a fare amount.
  */
@@ -121,10 +184,18 @@ export function matchPricingRule(
   currentDay: number,
 ): PricingRuleMatch | null {
   for (const rule of rules) {
-    // Check time window
+    // Check time window (supports overnight windows like "22:00"-"06:00")
     if (rule.time_window_start && rule.time_window_end) {
-      if (currentHour < rule.time_window_start || currentHour >= rule.time_window_end) {
-        continue;
+      if (rule.time_window_start <= rule.time_window_end) {
+        // Normal window (e.g., "08:00"-"20:00")
+        if (currentHour < rule.time_window_start || currentHour >= rule.time_window_end) {
+          continue;
+        }
+      } else {
+        // Overnight window (e.g., "22:00"-"06:00")
+        if (currentHour < rule.time_window_start && currentHour >= rule.time_window_end) {
+          continue;
+        }
       }
     }
     // Check day of week

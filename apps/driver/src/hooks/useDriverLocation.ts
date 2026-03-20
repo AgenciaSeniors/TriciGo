@@ -8,6 +8,7 @@ import {
 } from '@/services/locationBuffer';
 import type { BufferedLocation } from '@/services/locationBuffer';
 import NetInfo from '@react-native-community/netinfo';
+import { useLocationStore } from '@/stores/location.store';
 
 interface LocationState {
   latitude: number;
@@ -92,6 +93,9 @@ export function useDriverLocationTracking(
               heading: loc.coords.heading ?? null,
             };
             setLocation(pos);
+
+            // Share location globally for in-app navigation
+            useLocationStore.getState().setLocation(pos.latitude, pos.longitude, pos.heading);
 
             const online = getOnlineStatus();
 

@@ -62,8 +62,14 @@ export function useDriverRideInit() {
  * Manage incoming ride requests subscription.
  */
 export function useIncomingRequests(isOnline: boolean) {
-  const { addRequest, removeRequest, clearRequests } = useDriverRideStore();
+  const { addRequest, removeRequest, removeStaleRequests, clearRequests } = useDriverRideStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
+
+  // Periodically remove stale requests (>90s old)
+  useEffect(() => {
+    const cleanup = setInterval(() => removeStaleRequests(), 15_000);
+    return () => clearInterval(cleanup);
+  }, [removeStaleRequests]);
 
   useEffect(() => {
     if (!isOnline) {
@@ -120,10 +126,10 @@ export function useDriverRideActions() {
   }, []);
 
   const acceptRide = useCallback(async (rideId: string) => {
-    if (!profile) return;
+    if (!profile || profile.status !== 'approved') return;
 
     try {
-      const ride = await driverService.acceptRide(rideId, profile.id);
+      const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
       setActiveTrip(ride);
       removeRequest(rideId);
       triggerHaptic('success');
@@ -166,12 +172,26 @@ export function useDriverRideActions() {
           // Fall back to estimated distance
         }
 
-        const result = await driverService.completeRide({
-          rideId: activeTrip.id,
-          driverId: profile.id,
-          actualDistanceM,
-          actualDurationS,
-        });
+        // Retry logic — trip completion is critical and must survive transient failures
+        let result: Awaited<ReturnType<typeof driverService.completeRide>> | undefined;
+        let lastErr: unknown;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            result = await driverService.completeRide({
+              rideId: activeTrip.id,
+              driverId: profile.id,
+              actualDistanceM,
+              actualDurationS,
+            });
+            break;
+          } catch (err) {
+            lastErr = err;
+            if (attempt < 3) {
+              await new Promise<void>((r) => setTimeout(r, attempt * 2000));
+            }
+          }
+        }
+        if (!result) throw lastErr;
 
         triggerHaptic('success');
         playSound('trip_completed');

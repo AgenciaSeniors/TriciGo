@@ -24,16 +24,20 @@ export type RideStatus =
 
 export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'tropipay' | 'corporate';
 
-export type PaymentStatus = 'not_applicable' | 'pending' | 'paid' | 'failed';
+export type PaymentStatus = 'not_applicable' | 'pending' | 'created' | 'paid' | 'failed';
 
 export type VehicleType = 'triciclo' | 'moto' | 'auto';
 
 export type ServiceTypeSlug =
   | 'triciclo_basico'
   | 'triciclo_premium'
+  | 'triciclo_cargo'
   | 'moto_standard'
   | 'auto_standard'
+  | 'auto_confort'
   | 'mensajeria';
+
+export type RideMode = 'passenger' | 'cargo';
 
 export type WalletAccountType =
   | 'customer_cash'
@@ -86,8 +90,6 @@ export type PromotionType =
   | 'bonus_credit';
 
 export type ReferralStatus = 'pending' | 'rewarded' | 'invalidated';
-
-export type RedemptionStatus = 'requested' | 'approved' | 'processed' | 'rejected';
 
 export type ZoneType = 'operational' | 'surge' | 'restricted';
 

@@ -14,6 +14,8 @@ interface VehicleDraft {
   color: string;
   plate_number: string;
   capacity: string;
+  accepts_cargo: boolean;
+  max_cargo_weight_kg: string;
 }
 
 export interface DocumentDraft {
@@ -51,7 +53,7 @@ const INITIAL_DOCUMENTS: DocumentDraft[] = [
 
 const INITIAL_STATE = {
   personalInfo: { full_name: '', email: '' },
-  vehicle: { type: null as VehicleType | null, make: '', model: '', year: '', color: '', plate_number: '', capacity: '' },
+  vehicle: { type: null as VehicleType | null, make: '', model: '', year: '', color: '', plate_number: '', capacity: '', accepts_cargo: false, max_cargo_weight_kg: '' },
   documents: INITIAL_DOCUMENTS.map((d) => ({ ...d })),
   driverProfileId: null as string | null,
 };

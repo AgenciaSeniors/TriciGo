@@ -14,6 +14,8 @@ export interface Vehicle {
   color: string;
   plate_number: string;
   capacity: number;
+  accepts_cargo: boolean;
+  max_cargo_weight_kg: number | null;
   is_active: boolean;
   photo_url: string | null;
   created_at: string;

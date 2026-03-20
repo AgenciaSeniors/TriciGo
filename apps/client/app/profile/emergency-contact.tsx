@@ -83,7 +83,7 @@ export default function EmergencyContactScreen() {
 
       router.back();
     } catch {
-      Alert.alert('Error', t('errors.generic'));
+      Alert.alert(t('error'), t('errors.generic'));
     } finally {
       setSaving(false);
     }

@@ -62,11 +62,15 @@ export interface ServiceTypeConfig {
   max_passengers: number;
   icon_name: string;
   is_active: boolean;
+  /** Rate per minute of wait time after free period (CUP) */
+  per_wait_minute_rate_cup: number;
+  /** Free wait time in minutes before charges begin */
+  free_wait_minutes: number;
   created_at: string;
   updated_at: string;
 }
 
-export type SurgeType = 'none' | 'time_based' | 'demand' | 'combined';
+export type SurgeType = 'none' | 'time_based' | 'demand' | 'combined' | 'weather';
 
 /** Fare estimate returned to the client before ride request */
 export interface FareEstimate {

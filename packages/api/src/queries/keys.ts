@@ -40,8 +40,6 @@ export const queryKeys = {
     summary: (userId: string) => ['wallet', 'summary', userId] as const,
     transactions: (accountId: string, page?: number) =>
       ['wallet', 'transactions', accountId, page] as const,
-    redemptions: (driverId: string) =>
-      ['wallet', 'redemptions', driverId] as const,
   },
 
   // Rides

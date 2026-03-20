@@ -10,8 +10,10 @@ import type { ServiceTypeSlug } from '@tricigo/types';
 export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType> = {
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
   triciclo_premium: require('../../assets/vehicles/selection/triciclo.png'),
+  triciclo_cargo: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
   auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  auto_confort: require('../../assets/vehicles/selection/confort.png'),
   mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
 };
 
@@ -19,7 +21,9 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
 export const vehicleMarkerImages: Record<ServiceTypeSlug, ImageSourcePropType> = {
   triciclo_basico: require('../../assets/vehicles/markers/triciclo.png'),
   triciclo_premium: require('../../assets/vehicles/markers/triciclo.png'),
+  triciclo_cargo: require('../../assets/vehicles/markers/triciclo.png'),
   moto_standard: require('../../assets/vehicles/markers/moto.png'),
   auto_standard: require('../../assets/vehicles/markers/auto.png'),
+  auto_confort: require('../../assets/vehicles/markers/confort.png'),
   mensajeria: require('../../assets/vehicles/markers/moto.png'),
 };

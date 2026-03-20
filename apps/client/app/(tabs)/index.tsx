@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image } from 'react-native';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen } from '@tricigo/ui/Screen';
@@ -37,6 +37,10 @@ import { FareSplitSheet } from '@/components/FareSplitSheet';
 import type { SavedLocation, ServiceTypeSlug, CorporateAccount } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
+import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
+// Surge is calculated backend-side but not shown to users
+// import { useSurgeZones } from '@/hooks/useSurgeZones';
 
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -51,12 +55,111 @@ function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
   }, [callback, delayMs]);
 }
 
-export default function HomeScreen() {
+// TEMP: Static web version for Play Store screenshots (all inline styles to bypass NativeWind web issues)
+function WebHomeScreen() {
+  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+  return (
+    <View style={{ flex: 1, backgroundColor: '#ffffff', paddingHorizontal: 16 }}>
+      <View style={{ paddingTop: 16 }}>
+        {/* Header with greeting and notifications */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <View style={{ fontSize: 24, fontWeight: '700', ...font } as any}>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: '#111', ...font }}>¡Hola, María!</Text>
+          </View>
+          <View style={{ position: 'relative', padding: 8 }}>
+            <Ionicons name="notifications" size={24} color={colors.neutral[700]} />
+            <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', ...font }}>3</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Balance badge */}
+        <View style={{ backgroundColor: '#FFF7ED', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 16 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#111', ...font }}>T$ 2,500.00</Text>
+        </View>
+
+        {/* Search bar */}
+        <Pressable style={{ backgroundColor: '#f5f5f5', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
+          <Text style={{ fontSize: 16, color: '#9ca3af', ...font }}>¿A dónde vas?</Text>
+        </Pressable>
+
+        {/* Real Mapbox map of Havana */}
+        <View style={{ height: 220, borderRadius: 16, overflow: 'hidden', position: 'relative', marginBottom: 12 }}>
+          <Image
+            source={require('../../assets/screenshots/map-havana.png')}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
+          {/* Nearby vehicle overlays — custom 3D icons */}
+          {[
+            { top: 40, left: 100, img: require('../../assets/screenshots/vehicle-triciclo.png') },
+            { top: 95, left: 290, img: require('../../assets/screenshots/vehicle-auto.png') },
+            { top: 150, left: 60, img: require('../../assets/screenshots/vehicle-triciclo.png') },
+            { top: 55, left: 320, img: require('../../assets/screenshots/vehicle-moto.png') },
+            { top: 170, left: 230, img: require('../../assets/screenshots/vehicle-auto.png') },
+          ].map((v, i) => (
+            <Image key={i} source={v.img} style={{ position: 'absolute', top: v.top, left: v.left, width: 36, height: 36 }} resizeMode="contain" />
+          ))}
+        </View>
+
+        {/* Vehicles available */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', marginRight: 8 }} />
+          <Text style={{ fontSize: 12, color: '#6b7280', ...font }}>5 vehículos disponibles cerca de ti</Text>
+        </View>
+
+        {/* Route summary */}
+        <View style={{ backgroundColor: '#fafafa', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e', marginTop: 4, marginRight: 12 }} />
+            <Text style={{ fontSize: 14, color: '#333', ...font }}>Calle 23 esq. L, Vedado</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginTop: 4, marginRight: 12 }} />
+            <Text style={{ fontSize: 14, color: '#333', ...font }}>Parque Central, Habana Vieja</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
+            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>3.2 km — ~12 min</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.brand.orange, ...font }}>182 CUP</Text>
+          </View>
+        </View>
+
+        {/* Service types */}
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 12, ...font }}>Servicios</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {[
+            { name: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png'), selected: true },
+            { name: 'Moto', img: require('../../assets/vehicles/selection/moto.png'), selected: false },
+            { name: 'Auto', img: require('../../assets/vehicles/selection/auto.png'), selected: false },
+            { name: 'Delivery', img: require('../../assets/vehicles/selection/mensajeria.png'), selected: false },
+          ].map((svc, i) => (
+            <View key={i} style={{
+              flex: 1, borderRadius: 12, padding: 12, alignItems: 'center',
+              backgroundColor: svc.selected ? '#FFF7ED' : '#fafafa',
+              borderWidth: svc.selected ? 2 : 0,
+              borderColor: svc.selected ? colors.brand.orange : 'transparent',
+            }}>
+              <Image source={svc.img} style={{ width: 40, height: 40 }} resizeMode="contain" />
+              <Text style={{ marginTop: 4, fontSize: 12, fontWeight: svc.selected ? '700' : '500', color: svc.selected ? colors.brand.orange : '#6b7280', ...font }}>{svc.name}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function NativeHomeScreen() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
 
   // Init ride state from DB
   useRideInit();
+
+  // Share rider location during pickup phase (G1)
+  useRiderLocationSharing();
 
   const flowStep = useRideStore((s) => s.flowStep);
 
@@ -68,6 +171,8 @@ export default function HomeScreen() {
       {flowStep === 'searching' && <SearchingView />}
       {flowStep === 'active' && <RideActiveView />}
       {flowStep === 'completed' && <RideCompleteView />}
+      {/* Notification permission prompt (shows once on first visit) */}
+      {flowStep === 'idle' && <NotificationPermissionSheet />}
     </Screen>
   );
 }
@@ -82,6 +187,8 @@ function IdleView() {
   const [walletBalance, setWalletBalance] = useState(0);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
+  // Surge is calculated in the backend but not shown to users
+  // const { hasActiveSurge, maxMultiplier } = useSurgeZones();
   const notifCenterEnabled = useFeatureFlag('notification_center_enabled');
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
@@ -234,7 +341,7 @@ function IdleView() {
       {/* Service types */}
       <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
       <View className="flex-row gap-3" accessibilityRole="radiogroup">
-        {(['triciclo_basico', 'moto_standard', 'auto_standard'] as const).map((slug) => (
+        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((slug) => (
           <ServiceTypeCard
             key={slug}
             slug={slug}
@@ -260,6 +367,7 @@ function SelectingView() {
     setPaymentMethod,
     setScheduledAt,
     setDeliveryField,
+    setPassengerCount,
     setCorporateAccount,
     setFlowStep,
     addWaypoint,
@@ -373,19 +481,56 @@ function SelectingView() {
       {/* Service type */}
       <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
       <View className="flex-row flex-wrap gap-3 mb-4" accessibilityRole="radiogroup">
-        {(['triciclo_basico', 'moto_standard', 'auto_standard', 'mensajeria'] as ServiceTypeSlug[]).map((slug) => (
+        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as ServiceTypeSlug[]).map((slug) => (
           <View key={slug} style={{ width: '22%' }}>
             <ServiceTypeCard
               slug={slug}
               name={t(`service_type.${slug}` as const)}
               icon={vehicleSelectionImages[slug]}
-              selected={draft.serviceType === slug}
+              selected={draft.serviceType === slug || (slug === 'triciclo_basico' && draft.serviceType === 'triciclo_cargo')}
               onPress={() => { setServiceType(slug); triggerSelection(); }}
               compact
             />
           </View>
         ))}
       </View>
+
+      {/* Triciclo mode toggle: Pasajero / Cargo */}
+      {(draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_cargo') && (
+        <View className="flex-row gap-2 mb-4 bg-neutral-100 rounded-xl p-1">
+          <Pressable
+            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_basico' ? 'bg-white shadow-sm' : ''}`}
+            onPress={() => setServiceType('triciclo_basico')}
+          >
+            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_basico' ? 'font-semibold' : 'text-neutral-500'}>
+              {t('ride.mode_passenger', { defaultValue: 'Pasajero' })}
+            </Text>
+          </Pressable>
+          <Pressable
+            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_cargo' ? 'bg-white shadow-sm' : ''}`}
+            onPress={() => setServiceType('triciclo_cargo')}
+          >
+            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_cargo' ? 'font-semibold' : 'text-neutral-500'}>
+              {t('ride.mode_cargo', { defaultValue: 'Mercancia' })}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Cargo info note */}
+      {draft.serviceType === 'triciclo_cargo' && (
+        <Card variant="outlined" padding="md" className="mb-4">
+          <View className="flex-row items-center mb-2">
+            <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
+            <Text variant="label" className="ml-2">
+              {t('ride.cargo_title', { defaultValue: 'Servicio de carga' })}
+            </Text>
+          </View>
+          <Text variant="caption" color="secondary">
+            {t('ride.cargo_description', { defaultValue: 'Renta un triciclo para transportar mercancia. Se cobra por hora desde que llega el conductor. Minimo 1 hora.' })}
+          </Text>
+        </Card>
+      )}
 
       {/* Delivery fields (only when mensajeria is selected) */}
       {draft.serviceType === 'mensajeria' && (
@@ -432,6 +577,36 @@ function SelectingView() {
         </Card>
       )}
 
+      {/* Passenger count selector */}
+      {draft.serviceType !== 'triciclo_cargo' && draft.serviceType !== 'mensajeria' && (
+        (() => {
+          const maxP = draft.serviceType === 'moto_standard' ? 1
+            : (draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_premium') ? 8
+            : 4; // auto_standard, auto_confort
+          if (maxP <= 1) return null;
+          return (
+            <View className="mb-4">
+              <Text variant="label" className="mb-2">
+                {t('ride.passengers', { defaultValue: 'Pasajeros' })}
+              </Text>
+              <View className="flex-row gap-2">
+                {Array.from({ length: maxP }, (_, i) => i + 1).map((n) => (
+                  <Pressable
+                    key={n}
+                    className={`w-10 h-10 rounded-lg items-center justify-center ${draft.passengerCount === n ? 'bg-primary-500' : 'bg-neutral-100'}`}
+                    onPress={() => setPassengerCount(n)}
+                  >
+                    <Text variant="bodySmall" className={draft.passengerCount === n ? 'text-white font-bold' : 'text-neutral-600'}>
+                      {n}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          );
+        })()
+      )}
+
       {/* Corporate account toggle */}
       {corporateAccounts.length > 0 && (
         <View className="mb-4">
@@ -471,6 +646,15 @@ function SelectingView() {
                 >
                   {acc.name}
                 </Text>
+                {acc.monthly_budget_trc > 0 && (
+                  <Text
+                    variant="caption"
+                    color={draft.corporateAccountId === acc.id ? 'inverse' : 'tertiary'}
+                    style={{ fontSize: 9 }}
+                  >
+                    {formatTRC(acc.monthly_budget_trc - acc.current_month_spent)} {t('corporate.remaining', { defaultValue: 'disp.' })}
+                  </Text>
+                )}
               </Pressable>
             ))}
           </View>
@@ -491,7 +675,7 @@ function SelectingView() {
         <>
           <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
           <View className="flex-row gap-3 mb-4" accessibilityRole="radiogroup">
-            {(['cash', 'tricicoin', 'tropipay'] as const).map((pm) => (
+            {(['cash', 'tricicoin'] as const).map((pm) => (
               <Pressable
                 key={pm}
                 className={`flex-1 py-3 rounded-xl items-center ${
@@ -508,16 +692,6 @@ function SelectingView() {
                 >
                   {t(`payment.${pm}` as const)}
                 </Text>
-                {pm === 'tropipay' && (
-                  <Text
-                    variant="caption"
-                    color={draft.paymentMethod === pm ? 'inverse' : 'tertiary'}
-                    style={{ fontSize: 9 }}
-                    className="text-center"
-                  >
-                    {t('payment.tropipay_desc', { defaultValue: 'Paga al finalizar' })}
-                  </Text>
-                )}
               </Pressable>
             ))}
           </View>
@@ -627,6 +801,7 @@ function ReviewingView() {
   const { confirmRide, validatePromo, validatingPromo } = useRideActions();
   const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
   const preferencesEnabled = useFeatureFlag('ride_preferences_enabled');
+  const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const [splitSheetVisible, setSplitSheetVisible] = useState(false);
   const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
@@ -665,6 +840,10 @@ function ReviewingView() {
           dropoffAddress={draft.dropoff?.address ?? ''}
           pickupLabel={t('ride.pickup')}
           dropoffLabel={t('ride.dropoff')}
+          waypoints={draft.waypoints.map((wp, i) => ({
+            address: wp.address,
+            label: t('ride.stop_n', { n: i + 1, defaultValue: `Parada ${i + 1}` }),
+          }))}
         />
         {draft.scheduledAt && (
           <View className="flex-row items-center mt-3 pt-3 border-t border-neutral-200">
@@ -677,6 +856,41 @@ function ReviewingView() {
         )}
       </Card>
 
+      {/* Corporate account info */}
+      {draft.corporateAccountId && (() => {
+        const corp = corporateAccounts.find((a) => a.id === draft.corporateAccountId);
+        if (!corp) return null;
+        const remaining = corp.monthly_budget_trc > 0
+          ? corp.monthly_budget_trc - corp.current_month_spent
+          : null;
+        return (
+          <Card variant="filled" padding="md" className="mb-4" style={{ backgroundColor: 'rgba(255, 77, 0, 0.06)' }}>
+            <View className="flex-row items-center mb-1">
+              <Ionicons name="business-outline" size={16} color={colors.brand.orange} />
+              <Text variant="bodySmall" className="ml-2 font-bold">
+                {corp.name}
+              </Text>
+            </View>
+            {remaining != null && (
+              <Text variant="caption" color="secondary">
+                {t('corporate.budget_remaining', {
+                  amount: formatTRC(remaining),
+                  defaultValue: 'Presupuesto restante: {{amount}}',
+                })}
+              </Text>
+            )}
+            {corp.per_ride_cap_trc > 0 && (
+              <Text variant="caption" color="secondary">
+                {t('corporate.per_ride_cap', {
+                  amount: formatTRC(corp.per_ride_cap_trc),
+                  defaultValue: 'Máximo por viaje: {{amount}}',
+                })}
+              </Text>
+            )}
+          </Card>
+        );
+      })()}
+
       {/* Fare breakdown */}
       <View className="mb-4">
         <FareBreakdownCard
@@ -686,8 +900,8 @@ function ReviewingView() {
           perKmRateCup={fareEstimate.per_km_rate_cup}
           durationS={fareEstimate.estimated_duration_s}
           perMinRateCup={fareEstimate.per_minute_rate_cup}
-          surgeMultiplier={fareEstimate.surge_multiplier}
-          surgeLabel={fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { multiplier: fareEstimate.surge_multiplier }) : undefined}
+          surgeMultiplier={1}
+          surgeLabel={undefined}
           totalCup={fareEstimate.estimated_fare_cup}
           totalTrc={fareEstimate.estimated_fare_trc}
           totalLabel={t('ride.estimated_fare')}
@@ -700,6 +914,7 @@ function ReviewingView() {
           fareRangeLabel={t('ride.fare_range', { defaultValue: 'Rango estimado' })}
           insurancePremiumTrc={draft.insuranceSelected ? (fareEstimate.insurance_premium_trc ?? 0) : 0}
           insuranceLabel={draft.insuranceSelected ? t('ride.insurance_premium', { defaultValue: 'Seguro de viaje' }) : undefined}
+          paymentMethod={draft.paymentMethod === 'tricicoin' ? 'tricicoin' : 'cash'}
           labels={{
             baseFare: t('ride.base_fare'),
             distanceCharge: t('ride.distance_charge'),
@@ -812,7 +1027,7 @@ function ReviewingView() {
           <FareSplitSheet
             visible={splitSheetVisible}
             onClose={() => setSplitSheetVisible(false)}
-            rideId=""
+            rideId={activeRide?.id ?? ''}
             estimatedFareTrc={fareEstimate.estimated_fare_trc}
           />
         </>
@@ -964,4 +1179,9 @@ function SearchingView() {
       />
     </View>
   );
+}
+
+export default function HomeScreen() {
+  if (Platform.OS === 'web') return <WebHomeScreen />;
+  return <NativeHomeScreen />;
 }
