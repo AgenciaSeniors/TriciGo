@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text, Animated, Platform } from 'react-native';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
+import { WebMapView } from './WebMapView';
 
 let MapboxGL: any;
 try {
@@ -144,6 +145,17 @@ export function RideMapView({
   }, [pickupLocation, dropoffLocation, animatedDriver, routeCoordinates, waypointLocations]);
 
   if (!MapboxGL) {
+    // On web, use WebMapView with mapbox-gl instead of native @rnmapbox/maps
+    if (Platform.OS === 'web') {
+      return (
+        <WebMapView
+          pickup={pickupLocation ? { latitude: pickupLocation[1], longitude: pickupLocation[0] } : null}
+          dropoff={dropoffLocation ? { latitude: dropoffLocation[1], longitude: dropoffLocation[0] } : null}
+          routeCoords={routeCoordinates as [number, number][] | undefined}
+          style={{ height, borderRadius: 12, overflow: 'hidden' } as any}
+        />
+      );
+    }
     return (
       <View
         style={{

@@ -18,6 +18,7 @@ import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useRideInit, useRideActions } from '@/hooks/useRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
+import { WebMapView } from '@/components/WebMapView';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
@@ -85,23 +86,13 @@ function WebHomeScreen() {
           <Text style={{ fontSize: 16, color: '#9ca3af', ...font }}>¿A dónde vas?</Text>
         </Pressable>
 
-        {/* Real Mapbox map of Havana */}
-        <View style={{ height: 220, borderRadius: 16, overflow: 'hidden', position: 'relative', marginBottom: 12 }}>
-          <Image
-            source={require('../../assets/screenshots/map-havana.png')}
-            style={{ width: '100%', height: '100%' }}
-            resizeMode="cover"
+        {/* Interactive Mapbox map of Havana (dark style) */}
+        <View style={{ height: 260, borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
+          <WebMapView
+            center={[-82.38, 23.13]}
+            zoom={13}
+            interactive={true}
           />
-          {/* Nearby vehicle overlays — custom 3D icons */}
-          {[
-            { top: 40, left: 100, img: require('../../assets/screenshots/vehicle-triciclo.png') },
-            { top: 95, left: 290, img: require('../../assets/screenshots/vehicle-auto.png') },
-            { top: 150, left: 60, img: require('../../assets/screenshots/vehicle-triciclo.png') },
-            { top: 55, left: 320, img: require('../../assets/screenshots/vehicle-moto.png') },
-            { top: 170, left: 230, img: require('../../assets/screenshots/vehicle-auto.png') },
-          ].map((v, i) => (
-            <Image key={i} source={v.img} style={{ position: 'absolute', top: v.top, left: v.left, width: 36, height: 36 }} resizeMode="contain" />
-          ))}
         </View>
 
         {/* Vehicles available */}

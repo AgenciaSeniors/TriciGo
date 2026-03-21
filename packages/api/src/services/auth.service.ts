@@ -6,12 +6,25 @@
 import type { User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
+declare const __DEV__: boolean | undefined;
+
 export const authService = {
   /**
    * Send OTP to a phone number.
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
+    // Dev bypass: skip Twilio SMS in development
+    if ((typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV === 'development') {
+      console.log('[DEV] OTP bypass active — use code 000000');
+      // Still call signInWithOtp to create/find the user, but don't fail if SMS fails
+      try {
+        await supabase.auth.signInWithOtp({ phone });
+      } catch {
+        console.log('[DEV] SMS send failed (expected without Twilio), continuing...');
+      }
+      return;
+    }
     const { error } = await supabase.auth.signInWithOtp({ phone });
     if (error) throw error;
   },
@@ -21,6 +34,18 @@ export const authService = {
    */
   async verifyOTP(phone: string, token: string) {
     const supabase = getSupabaseClient();
+    // Dev bypass: accept "000000" and sign in with email/password
+    if (((typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV === 'development') && token === '000000') {
+      const devEmail = `dev_${phone.replace(/\+/g, '')}@tricigo.test`;
+      // Try signInWithPassword first (user may already have dev credentials)
+      const { data: pwData, error: pwError } = await supabase.auth.signInWithPassword({
+        email: devEmail,
+        password: 'dev000000',
+      });
+      if (!pwError && pwData.session) return pwData;
+      // If that fails, try the real OTP verification as fallback
+      console.log('[DEV] Password login failed, trying real OTP...');
+    }
     const { data, error } = await supabase.auth.verifyOtp({
       phone,
       token,

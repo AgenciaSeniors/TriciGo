@@ -111,7 +111,8 @@ export function useNotificationSetup(userId: string | null | undefined) {
     );
 
     // Handle cold-start: notification that launched the app
-    Notifications.getLastNotificationResponseAsync().then((response) => {
+    // getLastNotificationResponseAsync is not available on web
+    (Platform.OS !== 'web' ? Notifications.getLastNotificationResponseAsync() : Promise.resolve(null)).then((response) => {
       if (response && !cancelled) {
         const data = response.notification.request.content.data;
         handleNotificationNavigation(data as Record<string, unknown>);

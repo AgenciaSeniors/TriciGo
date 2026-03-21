@@ -60,6 +60,9 @@ export function getSupabaseClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false, // Disable for React Native
+      // Prevent "Lock broken by another request with the 'steal' option" on Expo Web
+      // by providing a longer timeout so the lock doesn't get stolen on remounts
+      storageKey: 'sb-tricigo-auth',
       ...(storageAdapter ? { storage: storageAdapter } : {}),
     },
     realtime: {

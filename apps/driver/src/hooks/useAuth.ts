@@ -63,7 +63,27 @@ export function useAuthInit() {
         } else if (mounted) {
           reset();
         }
-      } catch {
+      } catch (err) {
+        // On web, "Lock broken" errors happen during remounts — retry instead of resetting
+        const isLockError = err instanceof Error && err.message?.includes('Lock broken');
+        if (isLockError) {
+          console.warn('[Auth] Lock contention during init, retrying...');
+          setTimeout(async () => {
+            if (!mounted) return;
+            try {
+              const session = await authService.getSession();
+              if (session && mounted) {
+                const user = await authService.getCurrentUser();
+                if (mounted) setUser(user);
+              } else if (mounted) {
+                reset();
+              }
+            } catch {
+              if (mounted) reset();
+            }
+          }, 500);
+          return;
+        }
         if (mounted) reset();
       }
     }
