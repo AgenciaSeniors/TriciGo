@@ -12,21 +12,21 @@ import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle } from
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 
-/* Dynamic import — Leaflet requires `window` */
+/* Dynamic import — Mapbox GL JS requires `window` */
 const BookingMap = dynamic(() => import('./BookingMap'), {
   ssr: false,
   loading: () => (
     <div
       style={{
-        height: 350,
+        height: 420,
         width: '100%',
         borderRadius: '0.75rem',
-        border: '1px solid #ddd',
+        border: '1px solid #333',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f5f5f5',
-        color: '#888',
+        background: '#1a1a2e',
+        color: '#666',
         fontSize: '0.875rem',
       }}
     >

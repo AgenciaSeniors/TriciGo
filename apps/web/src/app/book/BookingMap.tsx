@@ -1,22 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
-import L from 'leaflet';
-import {
-  MapContainer,
-  TileLayer,
-  CircleMarker,
-  Polyline,
-  Marker,
-  useMapEvents,
-  useMap,
-  Tooltip,
-} from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
-import { HAVANA_CENTER, HAVANA_PRESETS, findNearestPreset, formatCUP } from '@tricigo/utils';
+import { HAVANA_CENTER, HAVANA_PRESETS, findNearestPreset } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
+
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
 type SelectionStep = 'pickup' | 'dropoff' | 'done';
 
@@ -38,105 +30,103 @@ export interface BookingMapProps {
   selectedServiceType?: ServiceTypeSlug;
 }
 
-/* ─── Custom Leaflet DivIcons (Uber-style) ─── */
+/* ── Marker HTML builders ── */
 
-const pickupIcon = L.divIcon({
-  className: '',
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-  html: `<div style="
-    width: 24px; height: 24px; border-radius: 50%;
-    background: #22c55e; border: 3px solid white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    display: flex; align-items: center; justify-content: center;
-  "><div style="width: 8px; height: 8px; border-radius: 50%; background: white;"></div></div>`,
-});
+function createPickupMarkerEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.innerHTML = `
+    <div style="position:relative;width:28px;height:28px;">
+      <div style="
+        position:absolute;inset:0;border-radius:50%;
+        background:rgba(34,197,94,0.3);
+        animation:pulse-green 2s ease-out infinite;
+      "></div>
+      <div style="
+        position:relative;width:28px;height:28px;border-radius:50%;
+        background:#22c55e;border:3px solid white;
+        box-shadow:0 2px 8px rgba(0,0,0,0.4);
+        display:flex;align-items:center;justify-content:center;
+      "><div style="width:8px;height:8px;border-radius:50%;background:white;"></div></div>
+    </div>`;
+  return el;
+}
 
-const dropoffIcon = L.divIcon({
-  className: '',
-  iconSize: [28, 36],
-  iconAnchor: [14, 36],
-  html: `<div style="
-    width: 28px; height: 36px; position: relative;
-    display: flex; align-items: flex-start; justify-content: center;
-  ">
-    <div style="
-      width: 24px; height: 24px; border-radius: 50%;
-      background: #FF4D00; border: 3px solid white;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      position: relative; z-index: 1;
-    "></div>
-    <div style="
-      position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-      width: 0; height: 0;
-      border-left: 7px solid transparent; border-right: 7px solid transparent;
-      border-top: 12px solid #FF4D00;
-    "></div>
-  </div>`,
-});
+function createDropoffMarkerEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.innerHTML = `
+    <div style="position:relative;width:28px;height:40px;">
+      <div style="
+        width:28px;height:28px;border-radius:50%;
+        background:#FF4D00;border:3px solid white;
+        box-shadow:0 3px 10px rgba(255,77,0,0.4);
+        position:relative;z-index:1;
+      "></div>
+      <div style="
+        position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+        width:0;height:0;
+        border-left:8px solid transparent;border-right:8px solid transparent;
+        border-top:12px solid #FF4D00;
+      "></div>
+    </div>`;
+  return el;
+}
 
-/* ─── Vehicle DivIcons by type ─── */
-const VEHICLE_EMOJI: Record<string, string> = {
-  triciclo: '\uD83D\uDEFA',
-  moto: '\uD83C\uDFCD\uFE0F',
-  auto: '\uD83D\uDE97',
+function createUserLocationEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.innerHTML = `
+    <div style="position:relative;width:20px;height:20px;">
+      <div style="
+        position:absolute;inset:-6px;border-radius:50%;
+        background:rgba(59,130,246,0.2);
+        animation:pulse-blue 2s ease-out infinite;
+      "></div>
+      <div style="
+        width:20px;height:20px;border-radius:50%;
+        background:#3b82f6;border:3px solid white;
+        box-shadow:0 2px 6px rgba(0,0,0,0.3);
+      "></div>
+    </div>`;
+  return el;
+}
+
+const VEHICLE_IMAGES: Record<string, string> = {
+  triciclo: '/images/vehicles/markers/triciclo@2x.png',
+  moto: '/images/vehicles/markers/moto@2x.png',
+  auto: '/images/vehicles/markers/auto@2x.png',
+  confort: '/images/vehicles/markers/confort@2x.png',
 };
 
-function makeVehicleIcon(vehicleType: string, heading: number | null): L.DivIcon {
-  const emoji = VEHICLE_EMOJI[vehicleType] ?? '\uD83D\uDE97';
+function createVehicleMarkerEl(vehicleType: string, heading: number | null): HTMLDivElement {
+  const el = document.createElement('div');
+  const imgSrc = VEHICLE_IMAGES[vehicleType] ?? VEHICLE_IMAGES.auto;
   const rotation = heading ?? 0;
-  return L.divIcon({
-    className: '',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    html: `<div style="
-      width: 32px; height: 32px; border-radius: 50%;
-      background: #FF4D00; border: 2px solid white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-      transform: rotate(${rotation}deg);
-    ">${emoji}</div>`,
-  });
+  el.innerHTML = `
+    <div style="
+      width:40px;height:40px;
+      filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      transform:rotate(${rotation}deg);
+      transition:transform 0.5s ease-out;
+    ">
+      <img src="${imgSrc}" alt="${vehicleType}" width="40" height="40" style="width:40px;height:40px;object-fit:contain;" />
+    </div>`;
+  return el;
 }
 
-/* ─── inner component: captures map clicks ─── */
-function MapClickHandler({
-  onMapClick,
-}: {
-  onMapClick: (lat: number, lng: number) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
+/* ── CSS animations ── */
+const PULSE_STYLES = `
+  @keyframes pulse-green {
+    0% { transform: scale(1); opacity: 0.6; }
+    70% { transform: scale(2.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+  @keyframes pulse-blue {
+    0% { transform: scale(1); opacity: 0.5; }
+    70% { transform: scale(3); opacity: 0; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+`;
 
-/* ─── inner component: auto-fit bounds when both markers are set ─── */
-function FitBounds({
-  pickup,
-  dropoff,
-}: {
-  pickup: LocationPreset | null;
-  dropoff: LocationPreset | null;
-}) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!pickup || !dropoff) return;
-    const bounds = L.latLngBounds(
-      [pickup.latitude, pickup.longitude],
-      [dropoff.latitude, dropoff.longitude],
-    );
-    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
-  }, [map, pickup, dropoff]);
-
-  return null;
-}
-
-/* ─── main component ─── */
+/* ── Main component ── */
 export default function BookingMap({
   pickup,
   dropoff,
@@ -155,230 +145,258 @@ export default function BookingMap({
   selectedServiceType,
 }: BookingMapProps) {
   const { t } = useTranslation('web');
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const userLocMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const presetMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const [mapReady, setMapReady] = useState(false);
 
-  const handleMapClick = useCallback(
-    (lat: number, lng: number) => {
+  /* ── Initialize map ── */
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [HAVANA_CENTER.longitude, HAVANA_CENTER.latitude],
+      zoom: 12.5,
+      attributionControl: false,
+      maxBounds: [[-83.5, 22.0], [-81.0, 23.8]], // Cuba bounds
+    });
+
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+
+    map.on('load', () => {
+      setMapReady(true);
+
+      // Add route source (empty initially)
+      map.addSource('route', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+
+      // Route shadow
+      map.addLayer({
+        id: 'route-shadow',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-color': '#000',
+          'line-width': 8,
+          'line-opacity': 0.15,
+          'line-blur': 3,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      });
+
+      // Route line
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-color': '#FF4D00',
+          'line-width': 5,
+          'line-opacity': 0.9,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      });
+
+      // Add preset location markers
+      HAVANA_PRESETS.forEach((p) => {
+        const el = document.createElement('div');
+        el.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.2);cursor:pointer;transition:all 0.2s;';
+        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.5)'; el.style.background = 'rgba(255,255,255,0.7)'; });
+        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; el.style.background = 'rgba(255,255,255,0.4)'; });
+
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([p.longitude, p.latitude])
+          .setPopup(new mapboxgl.Popup({ offset: 10, closeButton: false }).setText(p.label))
+          .addTo(map);
+
+        presetMarkersRef.current.push(marker);
+      });
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  /* ── Map click handler ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const handleClick = (e: mapboxgl.MapMouseEvent) => {
       if (selectionStep === 'done') return;
-
-      const point = { latitude: lat, longitude: lng };
-      const preset = findNearestPreset(point) ?? {
+      const { lat, lng } = e.lngLat;
+      const preset = findNearestPreset({ latitude: lat, longitude: lng }) ?? {
         label: t('book.map_custom_location'),
         address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
         latitude: lat,
         longitude: lng,
       };
+      if (selectionStep === 'pickup') onSetPickup(preset);
+      else onSetDropoff(preset);
+    };
 
-      if (selectionStep === 'pickup') {
-        onSetPickup(preset);
-      } else {
-        onSetDropoff(preset);
-      }
-    },
-    [selectionStep, onSetPickup, onSetDropoff, t],
-  );
+    map.on('click', handleClick);
+    return () => { map.off('click', handleClick); };
+  }, [mapReady, selectionStep, onSetPickup, onSetDropoff, t]);
 
+  /* ── Pickup marker ── */
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    if (pickupMarkerRef.current) { pickupMarkerRef.current.remove(); pickupMarkerRef.current = null; }
+    if (!pickup) return;
+
+    pickupMarkerRef.current = new mapboxgl.Marker({ element: createPickupMarkerEl(), anchor: 'center' })
+      .setLngLat([pickup.longitude, pickup.latitude])
+      .addTo(mapRef.current);
+  }, [pickup, mapReady]);
+
+  /* ── Dropoff marker ── */
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    if (dropoffMarkerRef.current) { dropoffMarkerRef.current.remove(); dropoffMarkerRef.current = null; }
+    if (!dropoff) return;
+
+    dropoffMarkerRef.current = new mapboxgl.Marker({ element: createDropoffMarkerEl(), anchor: 'bottom' })
+      .setLngLat([dropoff.longitude, dropoff.latitude])
+      .addTo(mapRef.current);
+  }, [dropoff, mapReady]);
+
+  /* ── User location marker ── */
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    if (userLocMarkerRef.current) { userLocMarkerRef.current.remove(); userLocMarkerRef.current = null; }
+    if (!userLocation) return;
+
+    userLocMarkerRef.current = new mapboxgl.Marker({ element: createUserLocationEl(), anchor: 'center' })
+      .setLngLat([userLocation.longitude, userLocation.latitude])
+      .addTo(mapRef.current);
+  }, [userLocation, mapReady]);
+
+  /* ── Route line ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const source = map.getSource('route') as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    if (routeCoords && routeCoords.length > 1) {
+      // routeCoords are [lat, lng] from OSRM — convert to [lng, lat] for Mapbox
+      const coords = routeCoords.map(([lat, lng]) => [lng, lat] as [number, number]);
+      source.setData({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: coords },
+      });
+    } else if (pickup && dropoff && !routeCoords) {
+      // Fallback dashed line
+      source.setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [pickup.longitude, pickup.latitude],
+            [dropoff.longitude, dropoff.latitude],
+          ],
+        },
+      });
+    } else {
+      source.setData({ type: 'FeatureCollection', features: [] });
+    }
+  }, [routeCoords, pickup, dropoff, mapReady]);
+
+  /* ── Fit bounds when both markers set ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !pickup || !dropoff) return;
+
+    const bounds = new mapboxgl.LngLatBounds();
+    bounds.extend([pickup.longitude, pickup.latitude]);
+    bounds.extend([dropoff.longitude, dropoff.latitude]);
+    map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 800 });
+  }, [pickup, dropoff, mapReady]);
+
+  /* ── Nearby vehicle markers ── */
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    // Remove old vehicle markers
+    vehicleMarkersRef.current.forEach((m) => m.remove());
+    vehicleMarkersRef.current = [];
+
+    nearbyVehicles.forEach((v) => {
+      const marker = new mapboxgl.Marker({
+        element: createVehicleMarkerEl(v.vehicle_type, v.heading),
+        anchor: 'center',
+      })
+        .setLngLat([v.longitude, v.latitude])
+        .addTo(mapRef.current!);
+      vehicleMarkersRef.current.push(marker);
+    });
+  }, [nearbyVehicles, mapReady]);
+
+  /* ── Preset click handler ── */
   const handlePresetClick = useCallback(
     (preset: LocationPreset) => {
-      if (selectionStep === 'pickup') {
-        onSetPickup(preset);
-      } else if (selectionStep === 'dropoff') {
-        onSetDropoff(preset);
-      }
+      if (selectionStep === 'pickup') onSetPickup(preset);
+      else if (selectionStep === 'dropoff') onSetDropoff(preset);
     },
     [selectionStep, onSetPickup, onSetDropoff],
   );
 
-  /* instruction text */
   const instructionKey =
-    selectionStep === 'pickup'
-      ? 'book.map_instruction_pickup'
-      : selectionStep === 'dropoff'
-        ? 'book.map_instruction_dropoff'
-        : 'book.map_instruction_done';
+    selectionStep === 'pickup' ? 'book.map_instruction_pickup'
+    : selectionStep === 'dropoff' ? 'book.map_instruction_dropoff'
+    : 'book.map_instruction_done';
 
   const instructionColor =
-    selectionStep === 'pickup'
-      ? '#22c55e'
-      : selectionStep === 'dropoff'
-        ? '#ef4444'
-        : 'var(--primary)';
-
-  /* Pickup tooltip text */
-  const pickupTooltip = useMemo(() => {
-    if (!pickup) return '';
-    if (pickupAddress) return `${pickup.label}\n${pickupAddress}`;
-    return pickup.label;
-  }, [pickup, pickupAddress]);
-
-  /* Dropoff tooltip text */
-  const dropoffTooltip = useMemo(() => {
-    if (!dropoff) return '';
-    if (dropoffAddress) return `${dropoff.label}\n${dropoffAddress}`;
-    return dropoff.label;
-  }, [dropoff, dropoffAddress]);
+    selectionStep === 'pickup' ? '#22c55e'
+    : selectionStep === 'dropoff' ? '#ef4444'
+    : 'var(--primary)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      {/* pulsing animation for user location marker */}
-      <style>{`
-        @keyframes pulse-blue {
-          0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
-          70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-        .booking-map-container .leaflet-interactive.user-loc {
-          animation: pulse-blue 2s infinite;
-        }
-        .booking-map-container .leaflet-tooltip {
-          font-size: 0.75rem;
-          max-width: 200px;
-          white-space: pre-line;
-        }
-      `}</style>
+      <style>{PULSE_STYLES}</style>
 
       {/* Instruction banner */}
       <div
         style={{
           padding: '0.625rem 0.75rem',
           borderRadius: '0.5rem',
-          background: '#f8f8f8',
+          background: '#1a1a2e',
           border: `1px solid ${instructionColor}`,
           fontSize: '0.8rem',
           fontWeight: 500,
-          color: '#333',
+          color: '#e5e5e5',
           textAlign: 'center',
         }}
       >
         {t(instructionKey)}
       </div>
 
-      {/* Leaflet map */}
-      <div
-        className="booking-map-container"
-        style={{ borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid #333', position: 'relative', background: '#1a1a2e' }}
-      >
-        <MapContainer
-          center={[HAVANA_CENTER.latitude, HAVANA_CENTER.longitude]}
-          zoom={13}
-          style={{ height: 420, width: '100%' }}
-          scrollWheelZoom
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.mapbox.com/">Mapbox</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          />
-          <MapClickHandler onMapClick={handleMapClick} />
-          <FitBounds pickup={pickup} dropoff={dropoff} />
-
-          {/* Pickup marker - green Uber-style */}
-          {pickup && (
-            <Marker
-              position={[pickup.latitude, pickup.longitude]}
-              icon={pickupIcon}
-            >
-              <Tooltip direction="top" offset={[0, -14]} permanent>
-                {pickupTooltip}
-              </Tooltip>
-            </Marker>
-          )}
-
-          {/* Dropoff marker - orange pin Uber-style */}
-          {dropoff && (
-            <Marker
-              position={[dropoff.latitude, dropoff.longitude]}
-              icon={dropoffIcon}
-            >
-              <Tooltip direction="top" offset={[0, -38]} permanent>
-                {dropoffTooltip}
-              </Tooltip>
-            </Marker>
-          )}
-
-          {/* User location - blue pulsing */}
-          {userLocation && (
-            <CircleMarker
-              center={[userLocation.latitude, userLocation.longitude]}
-              radius={8}
-              pathOptions={{ color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.9, weight: 2 }}
-              className="user-loc"
-            />
-          )}
-
-          {/* Route: OSRM real route or dashed fallback */}
-          {pickup && dropoff && routeCoords && (
-            <>
-              {/* Shadow */}
-              <Polyline
-                positions={routeCoords}
-                pathOptions={{
-                  color: '#000',
-                  weight: 8,
-                  opacity: 0.15,
-                  lineCap: 'round',
-                  lineJoin: 'round',
-                }}
-              />
-              {/* Main route line */}
-              <Polyline
-                positions={routeCoords}
-                pathOptions={{
-                  color: '#FF4D00',
-                  weight: 5,
-                  opacity: 0.85,
-                  lineCap: 'round',
-                  lineJoin: 'round',
-                }}
-              />
-            </>
-          )}
-          {/* Fallback dashed line when no route data */}
-          {pickup && dropoff && !routeCoords && !routeLoading && (
-            <Polyline
-              positions={[
-                [pickup.latitude, pickup.longitude],
-                [dropoff.latitude, dropoff.longitude],
-              ]}
-              pathOptions={{ color: '#888', weight: 2, dashArray: '8 6' }}
-            />
-          )}
-
-          {/* Preset location dots (small, grey, as reference points) */}
-          {HAVANA_PRESETS.map((p) => {
-            const isPickup = pickup?.label === p.label;
-            const isDropoff = dropoff?.label === p.label;
-            if (isPickup || isDropoff) return null;
-            return (
-              <CircleMarker
-                key={p.label}
-                center={[p.latitude, p.longitude]}
-                radius={4}
-                pathOptions={{ color: '#666', fillColor: '#888', fillOpacity: 0.8, weight: 1 }}
-              >
-                <Tooltip direction="top" offset={[0, -6]}>
-                  {p.label}
-                </Tooltip>
-              </CircleMarker>
-            );
-          })}
-
-          {/* Nearby vehicle markers */}
-          {nearbyVehicles.map((v) => (
-            <Marker
-              key={v.driver_profile_id}
-              position={[v.latitude, v.longitude]}
-              icon={makeVehicleIcon(v.vehicle_type, v.heading)}
-            >
-              <Tooltip direction="top" offset={[0, -18]}>
-                {v.vehicle_type === 'triciclo' ? t('book.vehicle_triciclo') :
-                 v.vehicle_type === 'moto' ? t('book.vehicle_moto') :
-                 t('book.vehicle_auto')}
-                {v.custom_per_km_rate_cup
-                  ? `\n${formatCUP(v.custom_per_km_rate_cup)}/km`
-                  : ''}
-              </Tooltip>
-            </Marker>
-          ))}
-        </MapContainer>
+      {/* Mapbox GL map */}
+      <div style={{ position: 'relative' }}>
+        <div
+          ref={mapContainerRef}
+          style={{
+            height: 420,
+            width: '100%',
+            borderRadius: '0.75rem',
+            overflow: 'hidden',
+          }}
+        />
 
         {/* Route loading overlay */}
         {routeLoading && (
@@ -390,11 +408,11 @@ export default function BookingMap({
               alignItems: 'center',
               justifyContent: 'center',
               background: 'rgba(26,26,46,0.7)',
-              zIndex: 1000,
+              zIndex: 10,
               borderRadius: '0.75rem',
               fontSize: '0.875rem',
               fontWeight: 600,
-              color: 'var(--primary)',
+              color: '#FF4D00',
             }}
           >
             {t('book.route_loading')}
@@ -411,12 +429,12 @@ export default function BookingMap({
           width: '100%',
           padding: '0.625rem',
           borderRadius: '0.5rem',
-          border: '1px solid #ddd',
-          background: 'white',
+          border: '1px solid #333',
+          background: '#1a1a2e',
           cursor: locationLoading || selectionStep === 'done' ? 'not-allowed' : 'pointer',
           fontSize: '0.85rem',
           fontWeight: 500,
-          color: selectionStep === 'done' ? '#aaa' : '#333',
+          color: selectionStep === 'done' ? '#555' : '#e5e5e5',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -424,62 +442,35 @@ export default function BookingMap({
           opacity: selectionStep === 'done' ? 0.5 : 1,
         }}
       >
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: '#3b82f6',
-            display: 'inline-block',
-          }}
-        />
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
         {locationLoading ? t('book.map_locating') : t('book.map_use_my_location')}
       </button>
 
       {/* Nearby vehicles count */}
       {nearbyVehicles.length > 0 && (
-        <p
-          style={{
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            color: 'var(--primary)',
-            textAlign: 'center',
-            margin: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.375rem',
-          }}
-        >
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: '#22c55e', display: 'inline-block',
-          }} />
+        <p style={{
+          fontSize: '0.8rem', fontWeight: 600, color: '#22c55e',
+          textAlign: 'center', margin: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
           {t('book.nearby_vehicles', { count: nearbyVehicles.length })}
         </p>
       )}
 
       {/* Location error */}
       {locationError && (
-        <p style={{ fontSize: '0.8rem', color: 'var(--primary-dark)', textAlign: 'center', margin: 0 }}>
-          {locationError === 'denied'
-            ? t('book.map_location_denied')
-            : t('book.map_location_unavailable')}
+        <p style={{ fontSize: '0.8rem', color: '#ef4444', textAlign: 'center', margin: 0 }}>
+          {locationError === 'denied' ? t('book.map_location_denied') : t('book.map_location_unavailable')}
         </p>
       )}
 
       {/* Quick-select preset buttons */}
       <div>
-        <p
-          style={{
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            color: '#888',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '0.5rem',
-          }}
-        >
+        <p style={{
+          fontSize: '0.75rem', fontWeight: 600, color: '#666',
+          textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem',
+        }}>
           {t('book.map_preset_buttons_label')}
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
@@ -508,12 +499,8 @@ export default function BookingMap({
                   opacity: selectionStep === 'done' && !isSelected ? 0.5 : 1,
                 }}
               >
-                {isPickup && (
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-                )}
-                {isDropoff && (
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
-                )}
+                {isPickup && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />}
+                {isDropoff && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />}
                 {p.label}
               </button>
             );
