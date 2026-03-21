@@ -26,14 +26,14 @@ export default function VehicleScreen() {
 
   const infoRows = vehicle
     ? [
-        { label: 'Tipo', value: vehicle.type },
-        { label: 'Marca', value: vehicle.make },
-        { label: 'Modelo', value: vehicle.model },
-        { label: 'Año', value: String(vehicle.year) },
-        { label: 'Color', value: vehicle.color },
-        { label: 'Placa', value: vehicle.plate_number },
-        { label: 'Capacidad', value: `${vehicle.capacity} pasajeros` },
-        { label: 'Acepta carga', value: vehicle.accepts_cargo ? `Si — ${vehicle.max_cargo_weight_kg ?? '?'} kg max` : 'No' },
+        { label: t('vehicle.type', { defaultValue: 'Tipo' }), value: vehicle.type },
+        { label: t('vehicle.make', { defaultValue: 'Marca' }), value: vehicle.make },
+        { label: t('vehicle.model', { defaultValue: 'Modelo' }), value: vehicle.model },
+        { label: t('vehicle.year', { defaultValue: 'Año' }), value: String(vehicle.year) },
+        { label: t('vehicle.color', { defaultValue: 'Color' }), value: vehicle.color },
+        { label: t('vehicle.plate', { defaultValue: 'Placa' }), value: vehicle.plate_number },
+        { label: t('vehicle.capacity', { defaultValue: 'Capacidad' }), value: `${vehicle.capacity} ${t('vehicle.passengers', { defaultValue: 'pasajeros' })}` },
+        { label: t('vehicle.accepts_cargo', { defaultValue: 'Acepta carga' }), value: vehicle.accepts_cargo ? `${t('common:yes', { defaultValue: 'Sí' })} — ${vehicle.max_cargo_weight_kg ?? '?'} kg max` : t('common:no', { defaultValue: 'No' }) },
       ]
     : [];
 

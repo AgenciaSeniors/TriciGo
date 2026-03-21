@@ -365,7 +365,7 @@ function NativeEarningsScreen() {
               <Pressable
                 key={p}
                 onPress={() => setPeriod(p)}
-                className={`flex-1 py-2.5 rounded-full items-center ${
+                className={`flex-1 py-3 min-h-[44px] justify-center rounded-full items-center ${
                   period === p ? 'bg-primary-500' : 'bg-neutral-800'
                 }`}
                 accessibilityRole="tab"
@@ -398,14 +398,14 @@ function NativeEarningsScreen() {
                 {formatCUP(periodStats.netEarnings)}
               </Text>
               {periodStats.totalCommission > 0 && (
-                <Text variant="caption" className="text-red-400 mt-0.5">
+                <Text variant="caption" className="text-red-500 mt-0.5">
                   {t('earnings.commission_label', { defaultValue: 'Comision' })}: {formatCUP(periodStats.totalCommission)}
                 </Text>
               )}
               {trendPct !== null && (
                 <Text
                   variant="caption"
-                  className={`mt-0.5 ${trendPct >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                  className={`mt-0.5 ${trendPct >= 0 ? 'text-green-500' : 'text-red-500'}`}
                 >
                   {trendPct >= 0
                     ? t('earnings.trend_up', { pct: trendPct, defaultValue: `+${trendPct}% vs anterior` })

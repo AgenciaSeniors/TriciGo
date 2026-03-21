@@ -28,15 +28,15 @@ const ICON_MAP: Record<NotificationType, { name: keyof typeof Ionicons.glyphMap;
   system: { name: 'information-circle', color: '#6b7280' },
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Ahora';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 1) return t('notifications.now', { defaultValue: 'Ahora' });
+  if (mins < 60) return `${mins}${t('notifications.minutes_short', { defaultValue: 'm' })}`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return `${hours}${t('notifications.hours_short', { defaultValue: 'h' })}`;
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return `${days}${t('notifications.days_short', { defaultValue: 'd' })}`;
 }
 
 function getDateGroup(dateStr: string, t: (key: string) => string): string {
@@ -152,7 +152,7 @@ export default function NotificationsScreen() {
           </Text>
         </View>
         <View className="items-end">
-          <Text variant="caption" color="inverse" className="opacity-40">{timeAgo(item.created_at)}</Text>
+          <Text variant="caption" color="inverse" className="opacity-40">{timeAgo(item.created_at, t)}</Text>
           {!item.read && (
             <View className="w-2 h-2 rounded-full bg-primary-500 mt-1" />
           )}
