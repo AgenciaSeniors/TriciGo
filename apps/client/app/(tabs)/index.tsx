@@ -813,6 +813,9 @@ function ReviewingView() {
         dropoffLocation={draft.dropoff?.location ?? null}
         routeCoordinates={routeCoordinates}
         nearbyVehicles={nearbyVehicles}
+        waypointLocations={draft.waypoints
+          .filter((wp) => wp.location)
+          .map((wp) => wp.location!)}
         height={isTablet ? 250 : 150}
       />
       {nearbyVehicles.length > 0 && (
@@ -984,8 +987,8 @@ function ReviewingView() {
         )}
       </Card>
 
-      {/* Split fare — only for tricicoin */}
-      {draft.paymentMethod === 'tricicoin' && fareEstimate && (
+      {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
+      {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
         <>
           <Pressable
             className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${

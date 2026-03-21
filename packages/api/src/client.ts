@@ -55,14 +55,27 @@ export function getSupabaseClient(): SupabaseClient {
   const supabaseUrl = getEnvVar('SUPABASE_URL');
   const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
 
+  // Expo Web (Metro bundler) doesn't polyfill navigator.locks, causing
+  // "this.lock is not a function" errors. Provide a no-op lock for web.
+  const isExpoWeb = typeof navigator !== 'undefined' &&
+    typeof navigator.locks === 'undefined' &&
+    typeof window !== 'undefined';
+
+  const lockConfig = isExpoWeb
+    ? {
+        lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
+          return await fn();
+        },
+      }
+    : {};
+
   clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false, // Disable for React Native
-      // Prevent "Lock broken by another request with the 'steal' option" on Expo Web
-      // by providing a longer timeout so the lock doesn't get stolen on remounts
       storageKey: 'sb-tricigo-auth',
+      ...lockConfig,
       ...(storageAdapter ? { storage: storageAdapter } : {}),
     },
     realtime: {
