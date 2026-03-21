@@ -17,6 +17,7 @@ const vehicleMarkerImages: Record<string, any> = {
   'marker-triciclo': require('../../assets/vehicles/markers/triciclo.png'),
   'marker-moto': require('../../assets/vehicles/markers/moto.png'),
   'marker-auto': require('../../assets/vehicles/markers/auto.png'),
+  'marker-confort': require('../../assets/vehicles/markers/confort.png'),
 };
 
 interface GeoPoint {
@@ -175,7 +176,7 @@ export function RideMapView({
     <View style={{ height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL={MapboxGL.StyleURL.Street}
+        styleURL="mapbox://styles/mapbox/dark-v11"
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}

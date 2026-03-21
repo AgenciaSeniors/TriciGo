@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text } from 'react-native';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { View, Text, Animated } from 'react-native';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 
@@ -59,6 +59,20 @@ export function RideMapView({
   height = 200,
 }: RideMapViewProps) {
   const { t } = useTranslation('driver');
+
+  // Pulse animation for driver marker
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!driverLocation) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.3, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [driverLocation, pulseAnim]);
 
   // Build route GeoJSON
   const routeGeoJSON = useMemo(() => {
@@ -213,26 +227,36 @@ export function RideMapView({
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Driver (own) location marker */}
+        {/* Driver (own) location marker with pulse */}
         {driverLocation && (
           <MapboxGL.PointAnnotation
             id="driver"
             coordinate={toCoord(driverLocation)}
           >
-            <View
+            <Animated.View
               style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: colors.info.DEFAULT,
-                borderWidth: 3,
-                borderColor: 'white',
-                shadowColor: colors.info.DEFAULT,
-                shadowOpacity: 0.4,
-                shadowRadius: 6,
-                elevation: 4,
+                width: 28,
+                height: 28,
+                alignItems: 'center',
+                justifyContent: 'center',
+                transform: [{ scale: pulseAnim }],
               }}
-            />
+            >
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: colors.info.DEFAULT,
+                  borderWidth: 3,
+                  borderColor: 'white',
+                  shadowColor: colors.info.DEFAULT,
+                  shadowOpacity: 0.5,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              />
+            </Animated.View>
           </MapboxGL.PointAnnotation>
         )}
 
