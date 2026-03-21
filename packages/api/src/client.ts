@@ -74,7 +74,8 @@ export function getSupabaseClient(): SupabaseClient {
   // Provide a simple no-op lock on web to avoid these issues entirely.
   const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
-  const lockConfig = isWeb
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lockConfig: any = isWeb
     ? {
         lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
           return await fn();

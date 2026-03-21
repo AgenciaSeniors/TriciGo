@@ -56,86 +56,90 @@ function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
   }, [callback, delayMs]);
 }
 
-// TEMP: Static web version for Play Store screenshots (all inline styles to bypass NativeWind web issues)
+// Web version of home screen — uses real data from stores
 function WebHomeScreen() {
+  const { t } = useTranslation('rider');
+  const user = useAuthStore((s) => s.user);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+
+  const [balance, setBalance] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    walletService.getBalance(user.id).then((b) => setBalance(b.available)).catch(() => {});
+  }, [user?.id]);
+
+  const firstName = user?.full_name?.split(' ')[0] ?? '';
+  const services = [
+    { name: 'Moto', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
+    { name: 'Triciclo', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
+    { name: 'Auto', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
+    { name: 'Confort', slug: 'auto_confort', img: require('../../assets/vehicles/selection/confort.png') },
+  ];
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#ffffff', paddingHorizontal: 16 }}>
-      <View style={{ paddingTop: 16 }}>
-        {/* Header with greeting and notifications */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <View style={{ fontSize: 24, fontWeight: '700', ...font } as any}>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: '#111', ...font }}>¡Hola, María!</Text>
+    <View style={{ flex: 1, backgroundColor: '#111111' }}>
+      {/* Map background — full height */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <WebMapView center={[-82.38, 23.13]} zoom={13} interactive={true} />
+      </View>
+
+      {/* Overlay UI */}
+      <View style={{ flex: 1, justifyContent: 'space-between' }}>
+        {/* Top section */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>
+              {firstName ? `¡Hola, ${firstName}!` : t('home.greeting', { defaultValue: 'Bienvenido' })}
+            </Text>
+            <Pressable onPress={() => router.push('/notifications')} style={{ position: 'relative', padding: 8 }}>
+              <Ionicons name="notifications" size={24} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', ...font }}>{unreadCount}</Text>
+                </View>
+              )}
+            </Pressable>
           </View>
-          <View style={{ position: 'relative', padding: 8 }}>
-            <Ionicons name="notifications" size={24} color={colors.neutral[700]} />
-            <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', ...font }}>3</Text>
+
+          {/* Balance badge */}
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 12, backdropFilter: 'blur(10px)' } as any}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>
+              T$ {(balance / 100).toFixed(2)}
+            </Text>
+          </View>
+
+          {/* Search bar */}
+          <Pressable style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
+            <Text style={{ fontSize: 16, color: '#9ca3af', ...font }}>{t('ride.where_to', { defaultValue: '¿A dónde vas?' })}</Text>
+          </Pressable>
+        </View>
+
+        {/* Bottom section — services */}
+        <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+          {/* Service type cards */}
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 12, ...font }}>
+              {t('ride.select_service', { defaultValue: 'Servicios' })}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {services.map((svc, i) => (
+                <View key={svc.slug} style={{
+                  flex: 1, borderRadius: 12, padding: 10, alignItems: 'center',
+                  backgroundColor: i === 1 ? '#FFF7ED' : '#fafafa',
+                  borderWidth: i === 1 ? 2 : 0,
+                  borderColor: i === 1 ? colors.brand.orange : 'transparent',
+                }}>
+                  <Image source={svc.img} style={{ width: 44, height: 44 }} resizeMode="contain" />
+                  <Text style={{ marginTop: 4, fontSize: 11, fontWeight: i === 1 ? '700' : '500', color: i === 1 ? colors.brand.orange : '#6b7280', ...font }}>
+                    {svc.name}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
-        </View>
-
-        {/* Balance badge */}
-        <View style={{ backgroundColor: '#FFF7ED', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 16 }}>
-          <Text style={{ fontSize: 16, fontWeight: '600', color: '#111', ...font }}>T$ 2,500.00</Text>
-        </View>
-
-        {/* Search bar */}
-        <Pressable style={{ backgroundColor: '#f5f5f5', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
-          <Text style={{ fontSize: 16, color: '#9ca3af', ...font }}>¿A dónde vas?</Text>
-        </Pressable>
-
-        {/* Interactive Mapbox map of Havana (dark style) */}
-        <View style={{ height: 260, borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
-          <WebMapView
-            center={[-82.38, 23.13]}
-            zoom={13}
-            interactive={true}
-          />
-        </View>
-
-        {/* Vehicles available */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', marginRight: 8 }} />
-          <Text style={{ fontSize: 12, color: '#6b7280', ...font }}>5 vehículos disponibles cerca de ti</Text>
-        </View>
-
-        {/* Route summary */}
-        <View style={{ backgroundColor: '#fafafa', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e', marginTop: 4, marginRight: 12 }} />
-            <Text style={{ fontSize: 14, color: '#333', ...font }}>Calle 23 esq. L, Vedado</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginTop: 4, marginRight: 12 }} />
-            <Text style={{ fontSize: 14, color: '#333', ...font }}>Parque Central, Habana Vieja</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
-            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>3.2 km — ~12 min</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.brand.orange, ...font }}>182 CUP</Text>
-          </View>
-        </View>
-
-        {/* Service types */}
-        <Text style={{ fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 12, ...font }}>Servicios</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {[
-            { name: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png'), selected: true },
-            { name: 'Moto', img: require('../../assets/vehicles/selection/moto.png'), selected: false },
-            { name: 'Auto', img: require('../../assets/vehicles/selection/auto.png'), selected: false },
-            { name: 'Delivery', img: require('../../assets/vehicles/selection/mensajeria.png'), selected: false },
-          ].map((svc, i) => (
-            <View key={i} style={{
-              flex: 1, borderRadius: 12, padding: 12, alignItems: 'center',
-              backgroundColor: svc.selected ? '#FFF7ED' : '#fafafa',
-              borderWidth: svc.selected ? 2 : 0,
-              borderColor: svc.selected ? colors.brand.orange : 'transparent',
-            }}>
-              <Image source={svc.img} style={{ width: 40, height: 40 }} resizeMode="contain" />
-              <Text style={{ marginTop: 4, fontSize: 12, fontWeight: svc.selected ? '700' : '500', color: svc.selected ? colors.brand.orange : '#6b7280', ...font }}>{svc.name}</Text>
-            </View>
-          ))}
         </View>
       </View>
     </View>

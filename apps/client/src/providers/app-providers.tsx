@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import { initI18n } from '@tricigo/i18n';
@@ -83,7 +84,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 
-  if (!POSTHOG_API_KEY) return inner;
+  // Skip PostHog on web in development (causes network error toasts)
+  const isWebDev = Platform.OS === 'web' && process.env.NODE_ENV === 'development';
+  if (!POSTHOG_API_KEY || isWebDev) return inner;
 
   return (
     <PostHogProvider
