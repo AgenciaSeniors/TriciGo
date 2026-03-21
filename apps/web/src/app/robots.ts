@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/login'],
     },
-    sitemap: 'https://tricigo.app/sitemap.xml',
+    sitemap: 'https://tricigo.com/sitemap.xml',
   };
 }

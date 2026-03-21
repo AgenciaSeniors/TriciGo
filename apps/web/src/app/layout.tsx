@@ -12,12 +12,12 @@ export const metadata: Metadata = {
   },
   description:
     'Solicita un viaje en La Habana con TriciGo. Triciclos, motos y autos al mejor precio. Rápido, seguro y confiable.',
-  keywords: ['TriciGo', 'viaje', 'La Habana', 'Cuba', 'triciclo', 'transporte', 'taxi'],
+  keywords: ['taxi La Habana', 'transporte Cuba', 'triciclo taxi', 'pedir taxi Cuba', 'TriciGo', 'ride hailing Havana', 'taxi app Cuba', 'triciclo La Habana'],
   icons: { icon: '/favicon.ico' },
   openGraph: {
     type: 'website',
     locale: 'es_CU',
-    url: 'https://tricigo.app',
+    url: 'https://tricigo.com',
     siteName: 'TriciGo',
     title: 'TriciGo — Pide tu viaje en La Habana',
     description:
@@ -29,15 +29,15 @@ export const metadata: Metadata = {
     description:
       'Solicita un viaje en La Habana con TriciGo. Rápido, seguro y al mejor precio.',
   },
-  metadataBase: new URL('https://tricigo.app'),
+  metadataBase: new URL('https://tricigo.com'),
 };
 
 const organizationJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'TriciGo',
-  url: 'https://tricigo.app',
-  logo: 'https://tricigo.app/logo.png',
+  url: 'https://tricigo.com',
+  logo: 'https://tricigo.com/logo.png',
   description:
     'Plataforma de transporte en La Habana. Solicita triciclos, motos y autos de forma rapida y segura.',
   address: {
@@ -57,7 +57,7 @@ const localBusinessJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
   name: 'TriciGo',
-  url: 'https://tricigo.app',
+  url: 'https://tricigo.com',
   description:
     'Servicio de transporte bajo demanda en La Habana, Cuba. Triciclos, motos y autos.',
   address: {
