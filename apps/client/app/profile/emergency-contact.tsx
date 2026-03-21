@@ -8,6 +8,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService, trustedContactService } from '@tricigo/api';
+import { isValidCubanPhone } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { CustomerProfile, TrustedContact } from '@tricigo/types';
 
@@ -49,6 +50,14 @@ export default function EmergencyContactScreen() {
 
   const handleSave = async () => {
     if (!profile || !user) return;
+    if (!name.trim() || name.trim().length < 2) {
+      Alert.alert(t('error'), t('emergency.name_required', { defaultValue: 'Ingresa el nombre del contacto' }));
+      return;
+    }
+    if (!isValidCubanPhone(phone.trim())) {
+      Alert.alert(t('error'), t('emergency.invalid_phone', { defaultValue: 'Ingresa un número de teléfono cubano válido' }));
+      return;
+    }
     setSaving(true);
     try {
       // 1. Update customer_profiles JSONB (backward compat)

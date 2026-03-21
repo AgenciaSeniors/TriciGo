@@ -20,6 +20,7 @@ export default function LoginScreen() {
   const { isPhone } = useResponsive();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSendCode = async () => {
@@ -146,19 +147,21 @@ export default function LoginScreen() {
             <View className="flex-row gap-3">
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 active:bg-neutral-100"
-                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined)}
+                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
+                disabled={socialLoading || loading}
+                onPress={async () => { setSocialLoading(true); try { await authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
-                <Text variant="body" className="font-medium">Google</Text>
+                <Text variant="body" className="font-medium">{socialLoading ? '...' : 'Google'}</Text>
               </Pressable>
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-900 active:bg-neutral-800"
-                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined)}
+                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
+                disabled={socialLoading || loading}
+                onPress={async () => { setSocialLoading(true); try { await authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
               >
                 <Ionicons name="logo-apple" size={20} color="#fff" />
-                <Text variant="body" className="font-medium" style={{ color: '#fff' }}>Apple</Text>
+                <Text variant="body" className="font-medium" style={{ color: '#fff' }}>{socialLoading ? '...' : 'Apple'}</Text>
               </Pressable>
             </View>
 

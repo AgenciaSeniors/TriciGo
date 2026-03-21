@@ -155,7 +155,7 @@ export default function VerifyOTPScreen() {
           title={resendTimer > 0 ? `${t('auth.resend_code')} (${resendTimer}s)` : t('auth.resend_code')}
           variant="ghost"
           onPress={handleResend}
-          disabled={resendTimer > 0}
+          disabled={resendTimer > 0 || loading}
           className="mt-4"
           fullWidth
         />

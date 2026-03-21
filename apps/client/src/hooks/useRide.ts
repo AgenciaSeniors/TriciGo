@@ -153,8 +153,34 @@ export function useRideActions() {
     if (isSubmittingRef.current) return; // Block double-tap
     isSubmittingRef.current = true;
 
-    const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
+    const { draft: d, fareEstimate, promoResult, validatingPromo } = useRideStore.getState();
     if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; return; }
+
+    // Bug 12: Block confirm while promo is validating
+    if (validatingPromo) {
+      isSubmittingRef.current = false;
+      Toast.show({ type: 'info', text1: i18next.t('rider:ride.wait_promo', { defaultValue: 'Espera, validando código...' }) });
+      return;
+    }
+
+    // Bug 9: Validate TRC balance before booking
+    if (d.paymentMethod === 'tricicoin' && fareEstimate) {
+      try {
+        const { walletService } = await import('@tricigo/api');
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          const bal = await walletService.getBalance(userId);
+          if (bal.available < (fareEstimate.estimated_fare_trc ?? 0)) {
+            isSubmittingRef.current = false;
+            Alert.alert(
+              i18next.t('rider:ride.insufficient_balance_title', { defaultValue: 'Saldo insuficiente' }),
+              i18next.t('rider:ride.insufficient_balance_msg', { defaultValue: 'No tienes suficiente TriciCoin para este viaje. Recarga tu wallet o cambia a efectivo.' }),
+            );
+            return;
+          }
+        }
+      } catch { /* continue if balance check fails */ }
+    }
 
     setLoading(true);
     setError(null);
@@ -256,6 +282,18 @@ export function useRideActions() {
             text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
           });
           trackEvent('ride_tropipay_paid', { ride_id: updated.id });
+        }
+
+        // Bug 10: Show alert when driver cancels the ride
+        if (updated.status === 'canceled' && prevRide?.status !== 'canceled') {
+          triggerHaptic('error');
+          Alert.alert(
+            i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+            i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
+            [
+              { text: i18next.t('rider:common.ok', { defaultValue: 'Entendido' }) },
+            ],
+          );
         }
 
         // When driver accepts, load driver info

@@ -11,6 +11,7 @@ import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
+import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
@@ -201,9 +202,15 @@ function NativeWalletScreen() {
     setRechargeSheetVisible(true);
   };
 
+  const MAX_RECHARGE_CUP = 50000;
+
   const submitRecharge = useCallback(async () => {
     const amountNum = parseInt(rechargeAmount, 10);
     if (!amountNum || amountNum <= 0 || !userId) return;
+    if (amountNum > MAX_RECHARGE_CUP) {
+      Alert.alert(t('error'), t('wallet.recharge_max_exceeded', { defaultValue: `El máximo por recarga es ${MAX_RECHARGE_CUP.toLocaleString()} CUP` }));
+      return;
+    }
     setRechargeSubmitting(true);
     try {
       await walletService.requestRecharge(userId, amountNum * 100);
@@ -303,6 +310,25 @@ function NativeWalletScreen() {
       const url = result.shortUrl || result.paymentUrl;
       if (url) {
         await Linking.openURL(url);
+        // Poll balance every 5s for 2 minutes to detect payment
+        const prevBalance = balance.available;
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          if (pollCount >= 24) { // 2 minutes (24 × 5s)
+            clearInterval(pollInterval);
+            Toast.show({ type: 'info', text1: t('wallet.tropipay_check_later', { defaultValue: 'Verifica tu recarga en unos minutos' }) });
+            return;
+          }
+          try {
+            const newBalance = await walletService.getBalance(userId!);
+            if (newBalance.available > prevBalance) {
+              clearInterval(pollInterval);
+              setBalance(newBalance);
+              Toast.show({ type: 'success', text1: t('wallet.tropipay_success', { defaultValue: 'Recarga exitosa' }) });
+            }
+          } catch { /* polling error, continue */ }
+        }, 5000);
       }
     } catch (err) {
       console.error('Error creating TropiPay link:', err);

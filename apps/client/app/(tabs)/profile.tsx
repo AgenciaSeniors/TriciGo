@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -64,6 +65,19 @@ function NativeProfileScreen() {
     setLoggingOut(true);
     try {
       await authService.signOut();
+      // Clear sensitive data from AsyncStorage
+      const keysToRemove = [
+        '@tricigo/notifications_enabled',
+        '@tricigo/sms_enabled',
+        '@tricigo/notification_pref_ride_updates',
+        '@tricigo/notification_pref_promotions',
+        '@tricigo/notification_pref_chat',
+        '@tricigo/notification_pref_payment',
+        '@tricigo/notification_permission_shown',
+        '@tricigo/recent_addresses',
+        '@tricigo/prediction_cache',
+      ];
+      await AsyncStorage.multiRemove(keysToRemove).catch(() => {});
       reset();
       // Auth guard handles redirect
     } catch {
