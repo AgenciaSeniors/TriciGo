@@ -9,8 +9,20 @@ import type { StorageAdapter } from './storage';
 
 declare const process: { env: Record<string, string | undefined> };
 
-let clientInstance: SupabaseClient | null = null;
-let storageAdapter: StorageAdapter | undefined;
+// Use globalThis to survive Metro hot reloads (prevents "Multiple GoTrueClient instances")
+const GLOBAL_KEY = '__tricigo_supabase_client__';
+const STORAGE_KEY = '__tricigo_storage_adapter__';
+
+function getClientInstance(): SupabaseClient | null {
+  return (globalThis as Record<string, unknown>)[GLOBAL_KEY] as SupabaseClient | null ?? null;
+}
+
+function setClientInstance(client: SupabaseClient): void {
+  (globalThis as Record<string, unknown>)[GLOBAL_KEY] = client;
+}
+
+let storageAdapter: StorageAdapter | undefined =
+  (globalThis as Record<string, unknown>)[STORAGE_KEY] as StorageAdapter | undefined;
 
 /**
  * Configure a custom storage adapter for Supabase auth.
@@ -18,6 +30,7 @@ let storageAdapter: StorageAdapter | undefined;
  */
 export function configureStorage(adapter: StorageAdapter): void {
   storageAdapter = adapter;
+  (globalThis as Record<string, unknown>)[STORAGE_KEY] = adapter;
 }
 
 // Static env references using dot notation so bundlers (webpack/metro)
@@ -50,7 +63,8 @@ function getEnvVar(name: string): string {
  * Uses singleton pattern for client-side usage.
  */
 export function getSupabaseClient(): SupabaseClient {
-  if (clientInstance) return clientInstance;
+  const existing = getClientInstance();
+  if (existing) return existing;
 
   const supabaseUrl = getEnvVar('SUPABASE_URL');
   const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
@@ -68,7 +82,7 @@ export function getSupabaseClient(): SupabaseClient {
       }
     : {};
 
-  clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+  const clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -84,6 +98,7 @@ export function getSupabaseClient(): SupabaseClient {
     },
   });
 
+  setClientInstance(clientInstance);
   return clientInstance;
 }
 

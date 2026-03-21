@@ -43,6 +43,14 @@ export function useAuthInit() {
   useEffect(() => {
     let mounted = true;
 
+    // Safety timeout: if auth init takes >5s, force loading to false
+    const safetyTimeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('[Auth] Safety timeout: forcing isLoading=false after 5s');
+        reset();
+      }
+    }, 5000);
+
     async function init() {
       try {
         const session = await authService.getSession();
@@ -107,6 +115,7 @@ export function useAuthInit() {
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, [setUser, reset]);
