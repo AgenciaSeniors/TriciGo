@@ -20,3 +20,4 @@ export type {
 } from './destinationPredictor';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
 export type { QuickReply } from './chatQuickReplies';
+export { getErrorMessage } from './errors';

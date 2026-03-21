@@ -379,6 +379,16 @@ function SelectingView() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  // Bug 11: Re-estimate fare when payment method changes
+  const prevPaymentRef = useRef(draft.paymentMethod);
+  useEffect(() => {
+    if (draft.paymentMethod !== prevPaymentRef.current) {
+      prevPaymentRef.current = draft.paymentMethod;
+      const fe = useRideStore.getState().fareEstimate;
+      if (fe) requestEstimate();
+    }
+  }, [draft.paymentMethod, requestEstimate]);
+
   // Load saved locations from customer profile
   useEffect(() => {
     if (!user?.id) return;

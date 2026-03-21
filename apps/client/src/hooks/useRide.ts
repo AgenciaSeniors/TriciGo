@@ -98,6 +98,17 @@ export function useRideActions() {
   const requestEstimate = useCallback(async () => {
     if (!draft.pickup || !draft.dropoff) return;
 
+    // Bug 8: Validate pickup ≠ dropoff (min 200m)
+    const { haversineDistance } = await import('@tricigo/utils');
+    const dist = haversineDistance(draft.pickup.location, draft.dropoff.location);
+    if (dist < 200) {
+      Alert.alert(
+        i18next.t('rider:ride.too_close_title', { defaultValue: 'Destino muy cercano' }),
+        i18next.t('rider:ride.too_close_msg', { defaultValue: 'El destino está a menos de 200m del punto de recogida. Selecciona un destino más lejano.' }),
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
