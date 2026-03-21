@@ -190,7 +190,15 @@ export function useRideActions() {
             return;
           }
         }
-      } catch { /* continue if balance check fails */ }
+      } catch (balErr) {
+        console.warn('[Ride] Balance check failed:', balErr);
+        isSubmittingRef.current = false;
+        Alert.alert(
+          i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),
+          i18next.t('rider:ride.balance_check_failed_msg', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo o cambia a efectivo.' }),
+        );
+        return;
+      }
     }
 
     setLoading(true);

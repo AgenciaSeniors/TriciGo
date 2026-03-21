@@ -323,16 +323,26 @@ export const rideService = {
       .single();
     if (error) throw error;
 
-    // Record promo usage if applicable
+    // Record promo usage if applicable (both ops must succeed or neither)
     if (params.promo_code_id && data) {
-      await supabase.from('promotion_uses').insert({
-        promotion_id: params.promo_code_id,
-        user_id: user.id,
-        ride_id: (data as Ride).id,
-      });
-      await supabase.rpc('increment_promo_uses', {
-        p_promo_id: params.promo_code_id,
-      });
+      try {
+        await supabase.from('promotion_uses').insert({
+          promotion_id: params.promo_code_id,
+          user_id: user.id,
+          ride_id: (data as Ride).id,
+        });
+        await supabase.rpc('increment_promo_uses', {
+          p_promo_id: params.promo_code_id,
+        });
+      } catch (promoErr) {
+        // Rollback: delete the promotion_use record if increment failed
+        await supabase.from('promotion_uses')
+          .delete()
+          .eq('ride_id', (data as Ride).id)
+          .eq('promotion_id', params.promo_code_id)
+          .catch(() => {});
+        console.warn('[Ride] Promo usage recording failed:', promoErr);
+      }
     }
 
     // Insert waypoints if provided
@@ -844,7 +854,10 @@ export const rideService = {
     // Calculate discount
     let discountAmount = 0;
     if (promotion.type === 'percentage_discount' && promotion.discount_percent) {
-      discountAmount = Math.round(params.fareAmount * promotion.discount_percent / 100);
+      discountAmount = Math.min(
+        Math.round(params.fareAmount * promotion.discount_percent / 100),
+        params.fareAmount, // Cap at 100% of fare
+      );
     } else if (promotion.type === 'fixed_discount' && promotion.discount_fixed_cup) {
       discountAmount = Math.min(promotion.discount_fixed_cup, params.fareAmount);
     }
