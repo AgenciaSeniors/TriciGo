@@ -147,7 +147,7 @@ export default function LoginScreen() {
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 active:bg-neutral-100"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithGoogle()}
+                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined)}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">Google</Text>
@@ -155,7 +155,7 @@ export default function LoginScreen() {
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-900 active:bg-neutral-800"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithApple()}
+                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined)}
               >
                 <Ionicons name="logo-apple" size={20} color="#fff" />
                 <Text variant="body" className="font-medium" style={{ color: '#fff' }}>Apple</Text>

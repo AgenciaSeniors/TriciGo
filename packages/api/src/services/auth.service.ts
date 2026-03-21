@@ -10,7 +10,7 @@ declare const __DEV__: boolean | undefined;
 
 export const authService = {
   /**
-   * Send OTP to a phone number.
+   * Send OTP to a phone number via SMSPM Edge Function.
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
@@ -19,22 +19,20 @@ export const authService = {
     // Dev bypass: skip SMS in development
     if (isDev) {
       console.log('[DEV] OTP bypass active — use code 000000');
-      // Still call signInWithOtp to create/find the user, but don't fail if SMS fails
-      try {
-        await supabase.auth.signInWithOtp({ phone });
-      } catch {
-        console.log('[DEV] SMS send failed (expected without Vonage in dev), continuing...');
-      }
       return;
     }
 
-    // Send OTP via Supabase Auth (uses Vonage SMS provider configured in dashboard)
-    const { error } = await supabase.auth.signInWithOtp({ phone });
+    // Send OTP via Edge Function (SMSPM)
+    const { data, error } = await supabase.functions.invoke('send-sms-otp', {
+      body: { phone },
+    });
+
     if (error) throw error;
+    if (data?.error) throw new Error(data.error);
   },
 
   /**
-   * Verify the OTP code and establish a session via WhatsApp OTP.
+   * Verify OTP code and establish a session.
    */
   async verifyOTP(phone: string, token: string) {
     const supabase = getSupabaseClient();
@@ -51,13 +49,22 @@ export const authService = {
       console.log('[DEV] Password login failed, trying real OTP...');
     }
 
-    // Verify OTP via Supabase Auth (Vonage SMS provider)
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token,
-      type: 'sms',
+    // Verify OTP via Edge Function (validates against otp_codes table, creates session)
+    const { data, error } = await supabase.functions.invoke('verify-whatsapp-otp', {
+      body: { phone, code: token },
     });
+
     if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+
+    // Set the session from the Edge Function response
+    if (data?.session) {
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+    }
+
     return data;
   },
 

@@ -87,7 +87,8 @@ export function getSupabaseClient(): SupabaseClient {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false, // Disable for React Native
+      detectSessionInUrl: isWeb, // Enable on web for OAuth redirects, disable on native
+      ...(isWeb ? { flowType: 'implicit' as const } : {}), // Implicit flow for web (no server to exchange PKCE code)
       storageKey: 'sb-tricigo-auth',
       ...lockConfig,
       ...(storageAdapter ? { storage: storageAdapter } : {}),
