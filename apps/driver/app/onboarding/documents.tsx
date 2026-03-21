@@ -103,12 +103,13 @@ export default function DocumentsScreen() {
     const fileName = asset.fileName ?? `${docType}_${Date.now()}.jpg`;
     setDocumentUri(docType, asset.uri, fileName);
 
-    // Upload immediately
+    // Upload immediately (with guard against unmount)
     setDocumentUploading(docType, true);
     try {
       await driverService.uploadDocument(driverProfileId, docType, asset.uri, fileName);
       setDocumentUploaded(docType);
-    } catch {
+    } catch (err) {
+      console.warn('[Documents] Upload failed:', docType, err);
       setDocumentError(docType, t('onboarding.error_upload_failed'));
     }
   };

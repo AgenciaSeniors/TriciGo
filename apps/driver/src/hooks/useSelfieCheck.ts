@@ -27,10 +27,14 @@ export function useSelfieCheck() {
   const needsCheck = check?.status === 'pending' || check?.status === 'failed';
   const isProcessing = check?.status === 'processing';
 
-  // Poll while processing to detect when check completes
+  // Poll while processing to detect when check completes (max 60 attempts = 5min)
   useEffect(() => {
     if (!isProcessing || !driverProfileId) return;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60;
     const interval = setInterval(async () => {
+      attempts++;
+      if (attempts >= MAX_ATTEMPTS) { clearInterval(interval); return; }
       try {
         const data = await driverService.getLatestSelfieCheck(driverProfileId);
         if (data && data.status !== 'processing') {

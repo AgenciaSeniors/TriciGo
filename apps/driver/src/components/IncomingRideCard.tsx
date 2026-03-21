@@ -32,12 +32,13 @@ interface IncomingRideCardProps {
 
 export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
-  const lastAcceptPressRef = useRef(0);
+  const acceptingRef = useRef(false);
   const debouncedAccept = useCallback(() => {
-    const now = Date.now();
-    if (now - lastAcceptPressRef.current < 1000) return;
-    lastAcceptPressRef.current = now;
+    if (acceptingRef.current) return;
+    acceptingRef.current = true;
     onAccept(ride.id);
+    // Reset after 3s in case accept fails silently
+    setTimeout(() => { acceptingRef.current = false; }, 3000);
   }, [onAccept, ride.id]);
 
   const handleReject = useCallback(() => {

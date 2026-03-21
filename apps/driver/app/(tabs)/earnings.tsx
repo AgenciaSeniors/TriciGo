@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -271,6 +272,7 @@ function NativeEarningsScreen() {
       }
     } catch (err) {
       console.error('Error fetching earnings:', err);
+      Toast.show({ type: 'error', text1: 'Error cargando ganancias', text2: 'Desliza para reintentar' });
     } finally {
       setLoading(false);
       setRefreshing(false);

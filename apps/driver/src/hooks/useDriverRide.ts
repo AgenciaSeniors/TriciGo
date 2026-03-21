@@ -142,8 +142,12 @@ export function useDriverRideActions() {
       triggerHaptic('success');
       playSound('ride_accepted');
 
-      // Subscribe to this ride's updates
-      channelRef.current?.unsubscribe();
+      // Clean up previous subscription before creating new one
+      if (channelRef.current) {
+        const oldChannel = channelRef.current;
+        channelRef.current = null;
+        oldChannel.unsubscribe();
+      }
       channelRef.current = rideService.subscribeToRide(ride.id, (updated) => {
         useDriverRideStore.getState().updateActiveTrip(updated);
       });

@@ -48,13 +48,17 @@ export function RiderRatingSheet({
 
   // Fetch dynamic tag definitions from DB
   useEffect(() => {
-    Promise.all([
+    const fetchTags = () => Promise.all([
       reviewService.getTagDefinitions('driver_to_rider', 'positive'),
       reviewService.getTagDefinitions('driver_to_rider', 'negative'),
     ]).then(([pos, neg]) => {
       if (pos.length > 0) setPositiveTags(pos.map((t) => t.key));
       if (neg.length > 0) setNegativeTags(neg.map((t) => t.key));
-    }).catch(() => { /* use fallback tags */ });
+    });
+    fetchTags().catch(() => {
+      // Retry once after 2s
+      setTimeout(() => fetchTags().catch(() => { /* use fallback tags */ }), 2000);
+    });
   }, []);
 
   // Reset tags when crossing the positive/negative boundary

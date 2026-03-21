@@ -43,13 +43,20 @@ export function NavigationOverlay({
 
   if (!currentStep) return null;
 
-  const icon = getManeuverIcon(currentStep.maneuver_type, currentStep.maneuver_modifier);
-  const label = getManeuverLabel(
-    currentStep.maneuver_type,
-    currentStep.maneuver_modifier,
-    currentStep.name,
-    t as (key: string, opts?: Record<string, unknown>) => string,
-  );
+  let icon: string;
+  let label: string;
+  try {
+    icon = getManeuverIcon(currentStep.maneuver_type, currentStep.maneuver_modifier) ?? 'navigate-outline';
+    label = getManeuverLabel(
+      currentStep.maneuver_type,
+      currentStep.maneuver_modifier,
+      currentStep.name,
+      t as (key: string, opts?: Record<string, unknown>) => string,
+    ) ?? currentStep.name ?? '';
+  } catch {
+    icon = 'navigate-outline';
+    label = currentStep.name ?? '';
+  }
 
   return (
     <View className="absolute top-0 left-0 right-0 z-50">
