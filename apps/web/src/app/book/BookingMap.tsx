@@ -255,7 +255,7 @@ export default function BookingMap({
       {/* Leaflet map */}
       <div
         className="booking-map-container"
-        style={{ borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid #ddd', position: 'relative' }}
+        style={{ borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid #333', position: 'relative', background: '#1a1a2e' }}
       >
         <MapContainer
           center={[HAVANA_CENTER.latitude, HAVANA_CENTER.longitude]}
@@ -264,8 +264,10 @@ export default function BookingMap({
           scrollWheelZoom
         >
           <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.mapbox.com/">Mapbox</a>'
+            url={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''}`}
+            tileSize={512}
+            zoomOffset={-1}
           />
           <MapClickHandler onMapClick={handleMapClick} />
           <FitBounds pickup={pickup} dropoff={dropoff} />
@@ -352,7 +354,7 @@ export default function BookingMap({
                 key={p.label}
                 center={[p.latitude, p.longitude]}
                 radius={4}
-                pathOptions={{ color: '#999', fillColor: '#bbb', fillOpacity: 0.6, weight: 1 }}
+                pathOptions={{ color: '#666', fillColor: '#888', fillOpacity: 0.8, weight: 1 }}
               >
                 <Tooltip direction="top" offset={[0, -6]}>
                   {p.label}
@@ -389,7 +391,7 @@ export default function BookingMap({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(255,255,255,0.6)',
+              background: 'rgba(26,26,46,0.7)',
               zIndex: 1000,
               borderRadius: '0.75rem',
               fontSize: '0.875rem',
