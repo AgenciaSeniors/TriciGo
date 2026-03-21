@@ -7,11 +7,11 @@ import { JsonLd } from '../components/JsonLd';
 
 export const metadata: Metadata = {
   title: {
-    default: 'TriciGo — Pide tu viaje en La Habana',
+    default: 'TriciGo — Taxi en La Habana | Pide triciclos, motos y autos',
     template: '%s | TriciGo',
   },
   description:
-    'Solicita un viaje en La Habana con TriciGo. Triciclos, motos y autos al mejor precio. Rápido, seguro y confiable.',
+    'Pide un taxi en La Habana con TriciGo. Triciclos, motos y autos disponibles 24/7. La app de transporte #1 en Cuba. Descarga gratis.',
   keywords: ['taxi La Habana', 'transporte Cuba', 'triciclo taxi', 'pedir taxi Cuba', 'TriciGo', 'ride hailing Havana', 'taxi app Cuba', 'triciclo La Habana'],
   icons: { icon: '/favicon.ico' },
   openGraph: {
@@ -30,6 +30,13 @@ export const metadata: Metadata = {
       'Solicita un viaje en La Habana con TriciGo. Rápido, seguro y al mejor precio.',
   },
   metadataBase: new URL('https://tricigo.com'),
+  alternates: {
+    canonical: 'https://tricigo.com',
+    languages: {
+      'es': 'https://tricigo.com',
+      'en': 'https://tricigo.com',
+    },
+  },
 };
 
 const organizationJsonLd = {

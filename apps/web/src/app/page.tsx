@@ -133,7 +133,7 @@ export default function HomePage() {
               <div className="hero__phone-frame">
                 <Image
                   src="/images/screenshots/02-home.png"
-                  alt="TriciGo app"
+                  alt="TriciGo - App de taxi en La Habana, Cuba. Pide triciclos, motos y autos."
                   width={390}
                   height={844}
                   priority
