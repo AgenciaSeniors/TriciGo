@@ -55,13 +55,12 @@ export function getSupabaseClient(): SupabaseClient {
   const supabaseUrl = getEnvVar('SUPABASE_URL');
   const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
 
-  // Expo Web (Metro bundler) doesn't polyfill navigator.locks, causing
-  // "this.lock is not a function" errors. Provide a no-op lock for web.
-  const isExpoWeb = typeof navigator !== 'undefined' &&
-    typeof navigator.locks === 'undefined' &&
-    typeof window !== 'undefined';
+  // Expo Web (Metro bundler) has issues with Supabase's navigator.locks usage,
+  // causing "this.lock is not a function" or "Lock broken" errors.
+  // Provide a simple no-op lock on web to avoid these issues entirely.
+  const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
 
-  const lockConfig = isExpoWeb
+  const lockConfig = isWeb
     ? {
         lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
           return await fn();
