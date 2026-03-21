@@ -146,9 +146,15 @@ export function useRideActions() {
     }
   }, [user, setPromoResult]);
 
+  // Synchronous flag to prevent double-submission (state updates are async)
+  const isSubmittingRef = useRef(false);
+
   const confirmRide = useCallback(async () => {
+    if (isSubmittingRef.current) return; // Block double-tap
+    isSubmittingRef.current = true;
+
     const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
-    if (!d.pickup || !d.dropoff) return;
+    if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; return; }
 
     setLoading(true);
     setError(null);
@@ -290,6 +296,7 @@ export function useRideActions() {
       setFlowStep('reviewing');
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   }, [setActiveRide, setFlowStep, setLoading, setError]);
 

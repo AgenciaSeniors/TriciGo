@@ -1,4 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
+import i18next from 'i18next';
+import Toast from 'react-native-toast-message';
 import { chatService } from '@tricigo/api';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -58,10 +60,19 @@ export function useChatActions(rideId: string) {
         const msg = await chatService.sendMessage(rideId, user.id, body.trim());
         addMessage(msg);
       } catch {
-        // silent
+        // Show optimistic message with error indicator
+        addMessage({
+          id: `local-${Date.now()}`,
+          ride_id: rideId,
+          sender_id: user.id,
+          body: body.trim(),
+          created_at: new Date().toISOString(),
+          _failed: true,
+        } as any);
+        Toast.show({ type: 'error', text1: i18next.t('rider:chat.send_failed', { defaultValue: 'Mensaje no enviado' }) });
       }
     },
-    [rideId, user],
+    [rideId, user, addMessage],
   );
 
   /** Call on every keystroke — internally debounces broadcasts */

@@ -898,8 +898,9 @@ function ReviewingView() {
           perKmRateCup={fareEstimate.per_km_rate_cup}
           durationS={fareEstimate.estimated_duration_s}
           perMinRateCup={fareEstimate.per_minute_rate_cup}
-          surgeMultiplier={1}
-          surgeLabel={undefined}
+          surgeMultiplier={fareEstimate.surge_multiplier ?? 1}
+          surgeLabel={fareEstimate.surge_multiplier && fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { defaultValue: 'Tarifa dinámica' }) : undefined}
+          surgeType={fareEstimate.surge_type}
           totalCup={fareEstimate.estimated_fare_cup}
           totalTrc={fareEstimate.estimated_fare_trc}
           totalLabel={t('ride.estimated_fare')}

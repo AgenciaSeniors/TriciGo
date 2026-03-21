@@ -83,9 +83,10 @@ export function RideCompleteView() {
   }, [activeRide?.id, activeRide?.is_split]);
 
   // Reset tags when crossing the positive/negative boundary
+  const ratingCategory = selectedRating ? (selectedRating >= 4 ? 'positive' : 'negative') : null;
   useEffect(() => {
     setSelectedTags([]);
-  }, [selectedRating && selectedRating >= 4 ? 'positive' : 'negative']);
+  }, [ratingCategory]);
 
   if (!activeRide) return null;
 

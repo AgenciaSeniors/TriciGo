@@ -112,6 +112,14 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (!user) return;
+    if (fullName.trim().length < 2) {
+      Alert.alert('Error', t('profile.name_too_short', { defaultValue: 'El nombre debe tener al menos 2 caracteres' }));
+      return;
+    }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      Alert.alert('Error', t('profile.invalid_email', { defaultValue: 'Ingresa un email válido' }));
+      return;
+    }
     setSaving(true);
     try {
       const updated = await authService.updateProfile(user.id, {

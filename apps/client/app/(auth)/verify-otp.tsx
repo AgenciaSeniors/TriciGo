@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Pressable } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@tricigo/ui/Screen';
@@ -90,6 +90,18 @@ export default function VerifyOTPScreen() {
       />
 
       <View className="flex-1 justify-center px-6">
+        {/* Back button */}
+        <Pressable
+          onPress={() => router.back()}
+          className="flex-row items-center mb-6"
+          hitSlop={16}
+        >
+          <Ionicons name="arrow-back" size={20} color={colors.neutral[400]} />
+          <Text variant="bodySmall" color="secondary" className="ml-1">
+            {t('auth.back_to_login', { defaultValue: 'Volver' })}
+          </Text>
+        </Pressable>
+
         {/* Shield icon */}
         <View
           className="w-20 h-20 rounded-full items-center justify-center mb-6"
