@@ -38,10 +38,20 @@ export function useDriverRideInit() {
         const trip = await driverService.getActiveTrip(profile!.id);
         if (!trip || !mounted) return;
 
+        // If trip already completed/canceled, don't set as active
+        if (trip.status === 'completed' || trip.status === 'canceled') {
+          useDriverRideStore.getState().reset();
+          return;
+        }
+
         setActiveTrip(trip);
 
         // Subscribe to trip updates
-        channelRef.current?.unsubscribe();
+        if (channelRef.current) {
+          const old = channelRef.current;
+          channelRef.current = null;
+          old.unsubscribe();
+        }
         channelRef.current = rideService.subscribeToRide(trip.id, (ride) => {
           useDriverRideStore.getState().updateActiveTrip(ride);
         });
@@ -132,8 +142,15 @@ export function useDriverRideActions() {
     };
   }, []);
 
+  const completingRef = useRef(false);
+
   const acceptRide = useCallback(async (rideId: string) => {
     if (!profile || profile.status !== 'approved') return;
+    // Bug 22: Block accept while completing previous ride
+    if (completingRef.current) {
+      Toast.show({ type: 'info', text1: i18next.t('driver:common.completing_ride', { defaultValue: 'Completando viaje anterior...' }) });
+      return;
+    }
 
     try {
       const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
@@ -166,6 +183,7 @@ export function useDriverRideActions() {
 
     try {
       if (nextStatus === 'completed') {
+        completingRef.current = true;
         // Calculate actual duration from pickup_at
         const pickupTime = activeTrip.pickup_at
           ? new Date(activeTrip.pickup_at).getTime()
@@ -226,6 +244,8 @@ export function useDriverRideActions() {
       }
     } catch (err) {
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.status_update_failed') });
+    } finally {
+      completingRef.current = false;
     }
   }, [profile]);
 

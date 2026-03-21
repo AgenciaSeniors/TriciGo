@@ -71,7 +71,7 @@ export function NavigationOverlay({
             <Text className="text-white text-lg font-bold" numberOfLines={2}>
               {label}
             </Text>
-            {currentStep.distance_m > 0 && (
+            {(currentStep.distance_m ?? 0) > 0 && (
               <Text className="text-neutral-400 text-sm mt-0.5">
                 {formatDistance(currentStep.distance_m)}
               </Text>

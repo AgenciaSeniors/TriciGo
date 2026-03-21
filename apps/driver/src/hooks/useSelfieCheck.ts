@@ -30,20 +30,21 @@ export function useSelfieCheck() {
   // Poll while processing to detect when check completes (max 60 attempts = 5min)
   useEffect(() => {
     if (!isProcessing || !driverProfileId) return;
+    let mounted = true;
     let attempts = 0;
     const MAX_ATTEMPTS = 60;
     const interval = setInterval(async () => {
       attempts++;
-      if (attempts >= MAX_ATTEMPTS) { clearInterval(interval); return; }
+      if (!mounted || attempts >= MAX_ATTEMPTS) { clearInterval(interval); return; }
       try {
         const data = await driverService.getLatestSelfieCheck(driverProfileId);
-        if (data && data.status !== 'processing') {
+        if (mounted && data && data.status !== 'processing') {
           setCheck(data);
           clearInterval(interval);
         }
       } catch { /* continue polling */ }
     }, 5000);
-    return () => clearInterval(interval);
+    return () => { mounted = false; clearInterval(interval); };
   }, [isProcessing, driverProfileId]);
 
   const submitSelfie = useCallback(async () => {
@@ -83,7 +84,7 @@ export function useSelfieCheck() {
       );
       setCheck(updated);
     } catch (err) {
-      console.error('Selfie check error:', err);
+      console.warn('[SelfieCheck] Error:', err instanceof Error ? err.message : 'unknown');
     } finally {
       setLoading(false);
     }
