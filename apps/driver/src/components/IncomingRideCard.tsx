@@ -52,8 +52,8 @@ export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup
     }
 
     const effectiveRate = driverCustomRateCup ?? serviceConfig.per_km_rate_cup;
-    const distKm = ride.estimated_distance_m / 1000;
-    const durMin = ride.estimated_duration_s / 60;
+    const distKm = (ride.estimated_distance_m ?? 0) / 1000;
+    const durMin = (ride.estimated_duration_s ?? 0) / 60;
 
     const rawFare = Math.round(
       serviceConfig.base_fare_cup +

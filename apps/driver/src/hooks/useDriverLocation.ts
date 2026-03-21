@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
 import {
@@ -76,6 +77,12 @@ export function useDriverLocationTracking(
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setError('location_denied');
+          // Alert driver that GPS is required for rides
+          Alert.alert(
+            'Ubicación requerida',
+            'Debes permitir el acceso a tu ubicación para recibir viajes. Activa la ubicación en la configuración de tu dispositivo.',
+            [{ text: 'Entendido' }],
+          );
           return;
         }
 

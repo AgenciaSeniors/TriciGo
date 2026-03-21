@@ -33,8 +33,21 @@ export default function PendingScreen() {
       }
 
       if (profile.status === 'rejected') {
-        // Try to get rejection reason from admin_actions
-        setRejectionReason(null); // Placeholder — the reason comes from the notification
+        // Fetch rejection reason from admin_actions
+        try {
+          const { getSupabaseClient } = await import('@tricigo/api');
+          const supabase = getSupabaseClient();
+          const { data: actions } = await supabase
+            .from('admin_actions')
+            .select('reason')
+            .eq('target_id', profile.id)
+            .eq('action', 'reject_driver')
+            .order('created_at', { ascending: false })
+            .limit(1);
+          setRejectionReason(actions?.[0]?.reason ?? null);
+        } catch {
+          setRejectionReason(null);
+        }
       }
 
       if (profile.status === 'suspended') {

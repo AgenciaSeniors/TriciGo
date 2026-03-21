@@ -191,7 +191,12 @@ function NativeDriverHomeScreen() {
   const { acceptRide } = useDriverRideActions();
 
   const handleToggleOnline = useCallback(async () => {
-    if (!profile) return;
+    if (!profile || toggling) return; // Bug 38: Prevent rapid toggle
+    // Bug 12: Block going offline during active ride
+    if (isOnline && activeTrip) {
+      Toast.show({ type: 'error', text1: t('driver.cannot_offline_active_ride', { defaultValue: 'No puedes desconectarte durante un viaje activo' }) });
+      return;
+    }
     setToggling(true);
     try {
       const newStatus = !isOnline;
