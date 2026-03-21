@@ -23,7 +23,7 @@
     "phone_placeholder": "Phone number",
     "phone_label": "Your phone number",
     "otp_title": "Verification",
-    "otp_subtitle": "Enter the code sent to {{phone}}",
+    "otp_subtitle": "We sent a code via WhatsApp to {{phone}}",
     "otp_placeholder": "6-digit code",
     "send_code": "Send code",
     "verify": "Verify",
