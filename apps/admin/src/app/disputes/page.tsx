@@ -108,6 +108,9 @@ export default function DisputesPage() {
     setResolving(true);
     try {
       const amount = resolution === 'no_action' ? 0 : parseInt(refundAmount || '0', 10);
+      if (amount < 0) { alert('El monto no puede ser negativo'); setResolving(false); return; }
+      const maxRefund = selected.ride_final_fare_trc ?? selected.ride_estimated_fare_trc ?? 100000;
+      if (amount > maxRefund) { alert(`El reembolso no puede superar ${maxRefund} TRC`); setResolving(false); return; }
       await disputeService.resolveDispute(
         selected.id,
         adminUserId,

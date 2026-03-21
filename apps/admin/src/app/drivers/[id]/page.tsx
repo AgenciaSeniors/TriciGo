@@ -581,7 +581,7 @@ export default function DriverDetailPage() {
               </button>
               {!allDocsVerified && (
                 <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                  {verifiedDocsCount}/{totalDocsCount} docs verificados
+                  {verifiedDocsCount}/{totalDocsCount} {t('drivers.docs_verified', { defaultValue: 'docs verificados' })}
                 </span>
               )}
             </div>
@@ -609,9 +609,9 @@ export default function DriverDetailPage() {
 
       {/* Reason modal */}
       {showReasonModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="reason-modal-title">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">
+            <h3 id="reason-modal-title" className="text-lg font-bold mb-4">
               {showReasonModal === 'reject' ? t('drivers.reject_reason_title') : t('drivers.suspend_reason_title')}
             </h3>
             <textarea

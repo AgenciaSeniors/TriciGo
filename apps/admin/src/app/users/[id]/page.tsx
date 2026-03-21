@@ -87,6 +87,8 @@ export default function UserDetailPage() {
 
   const handleLevelChange = async () => {
     if (!id || !detail || selectedLevel === detail.user.level) return;
+    const confirmed = window.confirm(`¿Cambiar nivel de ${detail.user.level} a ${selectedLevel}?`);
+    if (!confirmed) return;
     setLevelUpdating(true);
     try {
       await adminService.updateUserLevel(id, selectedLevel);

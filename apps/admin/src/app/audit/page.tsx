@@ -112,7 +112,9 @@ export default function AuditPage() {
           <input
             type="date"
             value={dateTo}
+            min={dateFrom || undefined}
             onChange={(e) => {
+              if (dateFrom && e.target.value < dateFrom) return;
               setDateTo(e.target.value);
               setPage(0);
             }}
