@@ -119,9 +119,18 @@ export function useIncomingRequests(isOnline: boolean) {
       },
     );
 
+    // Fallback polling every 30s in case realtime disconnects silently
+    const pollInterval = setInterval(async () => {
+      try {
+        const rides = await rideService.getSearchingRides();
+        for (const ride of rides) addRequest(ride);
+      } catch { /* best-effort fallback */ }
+    }, 30000);
+
     return () => {
       channelRef.current?.unsubscribe();
       channelRef.current = null;
+      clearInterval(pollInterval);
     };
   }, [isOnline, addRequest, removeRequest, clearRequests]);
 }
@@ -198,13 +207,25 @@ export function useDriverRideActions() {
 
         // Calculate distance from GPS trail, fall back to estimate
         let actualDistanceM = activeTrip.estimated_distance_m;
+        let gpsPointCount = 0;
         try {
           const distResult = await locationService.calculateRideDistance(activeTrip.id);
-          if (distResult.point_count >= 2) {
+          gpsPointCount = distResult.point_count ?? 0;
+          if (gpsPointCount >= 2) {
             actualDistanceM = distResult.distance_m;
           }
         } catch {
           // Fall back to estimated distance
+        }
+
+        // Warn if GPS trail is suspiciously short (possible fraud or GPS issue)
+        const estimatedM = activeTrip.estimated_distance_m ?? 0;
+        if (gpsPointCount < 10 && estimatedM > 0 && actualDistanceM < estimatedM * 0.5) {
+          console.warn(`[DriverRide] Low GPS quality: ${gpsPointCount} points, actual=${actualDistanceM}m vs estimated=${estimatedM}m`);
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.low_gps_warning', { defaultValue: 'GPS limitado — la tarifa se ajustará automáticamente' }),
+          });
         }
 
         // Retry logic — trip completion is critical and must survive transient failures
