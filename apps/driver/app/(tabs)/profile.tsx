@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -64,7 +64,7 @@ function NativeDriverProfileScreen() {
   const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
+  const doLogout = async () => {
     setLoggingOut(true);
     try {
       // Mark driver offline before signing out so backend stops routing rides
@@ -83,6 +83,17 @@ function NativeDriverProfileScreen() {
     } finally {
       setLoggingOut(false);
     }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      td('profile.logout_confirm_title', { defaultValue: 'Cerrar sesión' }),
+      td('profile.logout_confirm_msg', { defaultValue: '¿Estás seguro? Dejarás de recibir viajes.' }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: td('profile.logout', { defaultValue: 'Cerrar sesión' }), style: 'destructive', onPress: doLogout },
+      ],
+    );
   };
 
   const menuItems = [

@@ -94,9 +94,9 @@ export function useDriverLocationTracking(
           },
           (loc) => {
             if (cancelled) return;
-            // Bug 6: Ignore stale locations older than 30s
+            // Ignore stale locations older than 90s (30s was too aggressive for slow traffic)
             const locationAge = Date.now() - loc.timestamp;
-            if (locationAge > 30000) return;
+            if (locationAge > 90000) return;
 
             const pos: LocationState = {
               latitude: loc.coords.latitude,

@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('CORS_ORIGIN') ?? 'https://tricigo.com',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
         phone: normalizedPhone,
         phone_confirm: true,
         email_confirm: true,
-        password: `whatsapp_${Date.now()}_${Math.random().toString(36)}`,
+        password: `whatsapp_${Date.now()}_${crypto.randomUUID()}`,
         user_metadata: { phone: normalizedPhone },
       });
 
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     if (linkError || !linkData) {
       console.error('Failed to generate session link:', linkError);
       // Fallback: sign in with password
-      const tempPassword = `otp_${code}_${Date.now()}`;
+      const tempPassword = `otp_${crypto.randomUUID()}`;
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
 
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
 
     if (!token) {
       // Fallback approach
-      const tempPassword = `otp_${code}_${Date.now()}`;
+      const tempPassword = `otp_${crypto.randomUUID()}`;
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
       const { data: fbData } = await supabase.auth.signInWithPassword({
         email: devEmail,

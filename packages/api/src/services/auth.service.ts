@@ -14,10 +14,8 @@ export const authService = {
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
-    const isDev = (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV === 'development';
-
-    // Dev bypass: skip SMS in development
-    if (isDev) {
+    // Dev bypass: ONLY in React Native __DEV__ mode (never process.env which can leak to production)
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.log('[DEV] OTP bypass active — use code 000000');
       return;
     }
@@ -36,10 +34,8 @@ export const authService = {
    */
   async verifyOTP(phone: string, token: string) {
     const supabase = getSupabaseClient();
-    const isDev = (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV === 'development';
-
-    // Dev bypass: accept "000000" and sign in with email/password
-    if (isDev && token === '000000') {
+    // Dev bypass: ONLY in React Native __DEV__ mode
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && token === '000000') {
       const devEmail = `dev_${phone.replace(/\+/g, '')}@tricigo.test`;
       const { data: pwData, error: pwError } = await supabase.auth.signInWithPassword({
         email: devEmail,

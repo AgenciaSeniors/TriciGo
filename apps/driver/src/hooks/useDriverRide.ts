@@ -175,11 +175,15 @@ export function useDriverRideActions() {
   }, [profile, setActiveTrip, removeRequest]);
 
   const advanceStatus = useCallback(async () => {
+    if (completingRef.current) return; // Prevent double execution
     const { activeTrip } = useDriverRideStore.getState();
     if (!activeTrip || !profile) return;
 
     const nextStatus = NEXT_STATUS[activeTrip.status];
-    if (!nextStatus) return;
+    if (!nextStatus) {
+      console.warn('[DriverRide] No valid next status for:', activeTrip.status);
+      return;
+    }
 
     try {
       if (nextStatus === 'completed') {
