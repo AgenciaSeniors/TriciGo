@@ -27,6 +27,21 @@ export function useSelfieCheck() {
   const needsCheck = check?.status === 'pending' || check?.status === 'failed';
   const isProcessing = check?.status === 'processing';
 
+  // Poll while processing to detect when check completes
+  useEffect(() => {
+    if (!isProcessing || !driverProfileId) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await driverService.getLatestSelfieCheck(driverProfileId);
+        if (data && data.status !== 'processing') {
+          setCheck(data);
+          clearInterval(interval);
+        }
+      } catch { /* continue polling */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isProcessing, driverProfileId]);
+
   const submitSelfie = useCallback(async () => {
     if (!driverProfileId) return;
 

@@ -165,7 +165,9 @@ export function useDriverRideActions() {
         // Calculate actual duration from pickup_at
         const pickupTime = activeTrip.pickup_at
           ? new Date(activeTrip.pickup_at).getTime()
-          : Date.now() - 60000;
+          : activeTrip.accepted_at
+            ? new Date(activeTrip.accepted_at).getTime()
+            : Date.now() - 60000;
         const actualDurationS = Math.round((Date.now() - pickupTime) / 1000);
 
         // Calculate distance from GPS trail, fall back to estimate

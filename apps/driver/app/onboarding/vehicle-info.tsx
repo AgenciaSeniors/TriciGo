@@ -60,11 +60,11 @@ export default function VehicleInfoScreen() {
     const y = parseInt(year, 10);
     if (!y || y < 1990 || y > new Date().getFullYear()) e.year = t('onboarding.error_year_invalid');
     if (!sanitizeText(color)) e.color = t('onboarding.error_color_required');
-    if (!isValidPlateNumber(plateNumber.toUpperCase())) e.plate = t('onboarding.error_plate_invalid');
+    if (!isValidPlateNumber(plateNumber.trim().toUpperCase())) e.plate = t('onboarding.error_plate_invalid');
     const c = parseInt(capacity, 10);
     const maxCap = vehicleType === 'moto' ? 1 : vehicleType === 'triciclo' ? 8 : 4;
     if (!c || c < 1 || c > maxCap) e.capacity = t('onboarding.error_capacity_invalid');
-    if (acceptsCargo && (!maxCargoWeight || parseInt(maxCargoWeight, 10) <= 0)) {
+    if (acceptsCargo && (!maxCargoWeight || parseFloat(maxCargoWeight) <= 0 || isNaN(parseFloat(maxCargoWeight)))) {
       e.cargo_weight = t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingrese el peso maximo de carga' });
     }
     setErrors(e);

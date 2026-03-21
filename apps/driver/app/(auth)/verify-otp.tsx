@@ -24,7 +24,7 @@ export default function VerifyOTPScreen() {
   useEffect(() => {
     if (resendTimer <= 0) return;
     const interval = setInterval(() => {
-      setResendTimer((prev) => prev - 1);
+      setResendTimer((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
   }, [resendTimer]);

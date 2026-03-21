@@ -231,8 +231,9 @@ function NativeEarningsScreen() {
       const parsedRate = commRateStr ? parseFloat(String(commRateStr).replace(/"/g, '')) : NaN;
       setCommissionRate(!isNaN(parsedRate) && parsedRate > 0 && parsedRate < 1 ? parsedRate : 0.15);
 
-      // Total trips (all time) — use profile field instead of fetching all trips
-      const driverProfileData = useDriverStore.getState().profile;
+      // Total trips (all time) — refresh profile to get latest count
+      const freshProfile = await driverService.getProfile(userId).catch(() => null);
+      const driverProfileData = freshProfile ?? useDriverStore.getState().profile;
       setTotalTripsCount(driverProfileData?.total_rides_completed ?? driverProfileData?.total_rides ?? 0);
 
       if (ratingData) {
