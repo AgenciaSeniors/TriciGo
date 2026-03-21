@@ -128,9 +128,14 @@ export function DriverTripView() {
       },
     );
 
-    // Then fetch existing waypoints
+    // Then fetch existing waypoints (merge with any that arrived via subscription)
     rideService.getRideWaypoints(activeTrip.id)
-      .then((wps) => setWaypoints(wps))
+      .then((wps) => setWaypoints((prev) => {
+        // Merge: keep subscription waypoints that aren't in the fetch result
+        const fetchedIds = new Set(wps.map((w: any) => w.id));
+        const subscriptionOnly = prev.filter((w) => !fetchedIds.has(w.id));
+        return [...wps, ...subscriptionOnly];
+      }))
       .catch(() => {});
 
     return () => {

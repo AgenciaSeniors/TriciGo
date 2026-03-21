@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, driverService, locationService } from '@tricigo/api';
@@ -51,9 +52,15 @@ export function useDriverRideInit() {
 
     checkActive();
 
+    // Bug 36: Re-check active trip when app returns from background
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && mounted) checkActive();
+    });
+
     return () => {
       mounted = false;
       channelRef.current?.unsubscribe();
+      appStateSub.remove();
     };
   }, [isInitialized, profile, setActiveTrip]);
 }

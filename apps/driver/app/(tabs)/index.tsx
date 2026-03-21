@@ -146,13 +146,19 @@ function NativeDriverHomeScreen() {
       });
   }, []);
 
-  // Check financial eligibility on mount and when profile changes
+  // Check financial eligibility on mount and every 60s while online
   useEffect(() => {
     if (!profile?.id) return;
-    driverService.getEligibilityStatus(profile.id).then((status) => {
-      setIsIneligible(!status.is_eligible);
-    }).catch((err) => console.warn('[Driver] Failed to check eligibility:', err));
-  }, [profile?.id]);
+    const checkEligibility = () => {
+      driverService.getEligibilityStatus(profile.id).then((status) => {
+        setIsIneligible(!status.is_eligible);
+      }).catch((err) => console.warn('[Driver] Failed to check eligibility:', err));
+    };
+    checkEligibility();
+    if (!isOnline) return;
+    const interval = setInterval(checkEligibility, 60000);
+    return () => clearInterval(interval);
+  }, [profile?.id, isOnline]);
 
   // Fetch unread count + subscribe to realtime notifications
   useEffect(() => {
