@@ -16,29 +16,21 @@ export const authService = {
     const supabase = getSupabaseClient();
     const isDev = (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.NODE_ENV === 'development';
 
-    // Dev bypass: skip WhatsApp in development
+    // Dev bypass: skip SMS in development
     if (isDev) {
       console.log('[DEV] OTP bypass active — use code 000000');
+      // Still call signInWithOtp to create/find the user, but don't fail if SMS fails
+      try {
+        await supabase.auth.signInWithOtp({ phone });
+      } catch {
+        console.log('[DEV] SMS send failed (expected without Vonage in dev), continuing...');
+      }
       return;
     }
 
-    // Send OTP via WhatsApp Edge Function
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-
-    const response = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-      },
-      body: JSON.stringify({ phone }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error((errorData as { error?: string }).error ?? 'Failed to send OTP');
-    }
+    // Send OTP via Supabase Auth (uses Vonage SMS provider configured in dashboard)
+    const { error } = await supabase.auth.signInWithOtp({ phone });
+    if (error) throw error;
   },
 
   /**
@@ -56,40 +48,17 @@ export const authService = {
         password: 'dev000000',
       });
       if (!pwError && pwData.session) return pwData;
-      console.log('[DEV] Password login failed, trying WhatsApp OTP...');
+      console.log('[DEV] Password login failed, trying real OTP...');
     }
 
-    // Verify OTP via Edge Function
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-
-    const response = await fetch(`${supabaseUrl}/functions/v1/verify-whatsapp-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-      },
-      body: JSON.stringify({ phone, code: token }),
+    // Verify OTP via Supabase Auth (Vonage SMS provider)
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone,
+      token,
+      type: 'sms',
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error((errorData as { error?: string }).error ?? 'Invalid code');
-    }
-
-    const { session } = await response.json() as { session: { access_token: string; refresh_token: string } };
-
-    if (session?.access_token && session?.refresh_token) {
-      // Set the session in the Supabase client
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-      if (sessionError) throw sessionError;
-    }
-
-    const { data: currentSession } = await supabase.auth.getSession();
-    return { session: currentSession.session, user: currentSession.session?.user ?? null };
+    if (error) throw error;
+    return data;
   },
 
   /**
