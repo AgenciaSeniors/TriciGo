@@ -43,13 +43,15 @@ export function useAuthInit() {
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout: if auth init takes >5s, force loading to false
+    // Safety timeout: if auth init takes >15s, stop loading spinner
+    // Use setLoading(false) instead of reset() to avoid clearing a valid session
+    const setLoading = useAuthStore.getState().setLoading;
     const safetyTimeout = setTimeout(() => {
-      if (mounted) {
-        console.warn('[Auth] Safety timeout: forcing isLoading=false after 5s');
-        reset();
+      if (mounted && useAuthStore.getState().isLoading) {
+        console.warn('[Auth] Safety timeout: forcing isLoading=false after 15s');
+        setLoading(false);
       }
-    }, 5000);
+    }, 15000);
 
     async function init() {
       try {
