@@ -157,7 +157,9 @@ function NativeTripsScreen() {
     if (trips.length === 0) return;
     try {
       const csv = generateHistoryCSV(trips, 'es');
-      const fileUri = (FileSystem.cacheDirectory ?? '') + 'historial_viajes.csv';
+      const cacheDir = FileSystem.cacheDirectory;
+      if (!cacheDir) { Alert.alert('Error', 'No se puede acceder al almacenamiento'); return; }
+      const fileUri = cacheDir + 'historial_viajes.csv';
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
     } catch (err) {

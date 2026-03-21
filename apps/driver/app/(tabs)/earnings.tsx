@@ -311,11 +311,13 @@ function NativeEarningsScreen() {
   // Convert dailyData to BarChartDataPoint[]
   const chartData: BarChartDataPoint[] = useMemo(() => {
     const today = new Date().toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit' });
-    return Array.from(dailyData.entries()).map(([label, val]) => ({
-      label,
-      value: val.earnings,
-      isToday: label === today,
-    }));
+    return Array.from(dailyData.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, val]) => ({
+        label,
+        value: val.earnings,
+        isToday: label === today,
+      }));
   }, [dailyData]);
 
   // Trend percentage
