@@ -67,7 +67,9 @@
     "admin_panel": "Painel de administra\u00e7\u00e3o",
     "businesses": "Empresas",
     "reviews": "Avalia\u00e7\u00f5es",
-    "cities": "Cidades"
+    "cities": "Cidades",
+    "segments": "Segmentos",
+    "campaigns": "Campanhas"
   },
 
   "referrals": {
@@ -1093,5 +1095,63 @@
     "show": "Mostrar",
     "feature": "Destacar",
     "unfeature": "Remover destaque"
+  },
+
+  "segments": {
+    "title": "Segmenta\u00e7\u00e3o de Usu\u00e1rios",
+    "new_users": "Novos",
+    "power_users": "Power Users",
+    "inactive": "Inativos",
+    "by_city": "Por Cidade",
+    "select_city": "Selecionar cidade",
+    "view_users": "Ver usu\u00e1rios",
+    "export_csv": "Exportar CSV",
+    "no_users": "N\u00e3o h\u00e1 usu\u00e1rios neste segmento",
+    "col_name": "Nome",
+    "col_email": "Email",
+    "col_phone": "Telefone",
+    "col_rides": "Viagens",
+    "col_last_ride": "\u00daltima viagem",
+    "col_city": "Cidade"
+  },
+
+  "campaigns": {
+    "title": "Campanhas",
+    "new_campaign": "Nova campanha",
+    "no_campaigns": "N\u00e3o h\u00e1 campanhas",
+    "label_name": "Nome",
+    "name_placeholder": "Nome da campanha",
+    "label_segment": "Segmento",
+    "segment_new_users": "Novos usu\u00e1rios",
+    "segment_power_users": "Power Users",
+    "segment_inactive": "Inativos",
+    "segment_all": "Todos",
+    "segment_by_city": "Por Cidade",
+    "label_city": "Cidade",
+    "label_channel": "Canal",
+    "channel_push": "Push",
+    "channel_email": "Email",
+    "channel_both": "Push + Email",
+    "label_msg_title": "T\u00edtulo da mensagem",
+    "msg_title_placeholder": "T\u00edtulo da notifica\u00e7\u00e3o",
+    "label_msg_body": "Corpo da mensagem",
+    "msg_body_placeholder": "Escreva a mensagem...",
+    "label_promo": "C\u00f3digo promocional (opcional)",
+    "no_promo": "Sem c\u00f3digo promocional",
+    "send_now": "Enviar agora",
+    "btn_send": "Enviar",
+    "btn_schedule": "Agendar",
+    "send_success": "Campanha enviada com sucesso",
+    "send_error": "Erro ao enviar campanha",
+    "col_name": "Nome",
+    "col_segment": "Segmento",
+    "col_channel": "Canal",
+    "col_status": "Status",
+    "col_sent_count": "Enviados",
+    "col_created": "Criada",
+    "status_draft": "Rascunho",
+    "status_scheduled": "Agendada",
+    "status_sent": "Enviada",
+    "status_cancelled": "Cancelada"
   }
 }

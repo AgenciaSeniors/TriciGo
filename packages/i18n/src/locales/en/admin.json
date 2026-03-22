@@ -67,7 +67,9 @@
     "admin_panel": "Admin Panel",
     "businesses": "Businesses",
     "reviews": "Reviews",
-    "cities": "Cities"
+    "cities": "Cities",
+    "segments": "Segments",
+    "campaigns": "Campaigns"
   },
 
   "referrals": {
@@ -1093,5 +1095,63 @@
     "show": "Show",
     "feature": "Feature",
     "unfeature": "Unfeature"
+  },
+
+  "segments": {
+    "title": "User Segmentation",
+    "new_users": "New Users",
+    "power_users": "Power Users",
+    "inactive": "Inactive",
+    "by_city": "By City",
+    "select_city": "Select city",
+    "view_users": "View users",
+    "export_csv": "Export CSV",
+    "no_users": "No users in this segment",
+    "col_name": "Name",
+    "col_email": "Email",
+    "col_phone": "Phone",
+    "col_rides": "Rides",
+    "col_last_ride": "Last ride",
+    "col_city": "City"
+  },
+
+  "campaigns": {
+    "title": "Campaigns",
+    "new_campaign": "New campaign",
+    "no_campaigns": "No campaigns",
+    "label_name": "Name",
+    "name_placeholder": "Campaign name",
+    "label_segment": "Segment",
+    "segment_new_users": "New users",
+    "segment_power_users": "Power Users",
+    "segment_inactive": "Inactive",
+    "segment_all": "All",
+    "segment_by_city": "By City",
+    "label_city": "City",
+    "label_channel": "Channel",
+    "channel_push": "Push",
+    "channel_email": "Email",
+    "channel_both": "Push + Email",
+    "label_msg_title": "Message title",
+    "msg_title_placeholder": "Notification title",
+    "label_msg_body": "Message body",
+    "msg_body_placeholder": "Write the message...",
+    "label_promo": "Promo code (optional)",
+    "no_promo": "No promo code",
+    "send_now": "Send now",
+    "btn_send": "Send",
+    "btn_schedule": "Schedule",
+    "send_success": "Campaign sent successfully",
+    "send_error": "Error sending campaign",
+    "col_name": "Name",
+    "col_segment": "Segment",
+    "col_channel": "Channel",
+    "col_status": "Status",
+    "col_sent_count": "Sent",
+    "col_created": "Created",
+    "status_draft": "Draft",
+    "status_scheduled": "Scheduled",
+    "status_sent": "Sent",
+    "status_cancelled": "Cancelled"
   }
 }

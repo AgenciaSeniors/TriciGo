@@ -25,6 +25,7 @@ import {
   Trophy,
   Newspaper,
   Building2,
+  Megaphone,
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -49,6 +50,8 @@ const navItems: NavItem[] = [
   { href: '/fraud', labelKey: 'sidebar.fraud', icon: ShieldAlert },
   { href: '/lost-found', labelKey: 'sidebar.lost_found', icon: PackageSearch },
   { href: '/referrals', labelKey: 'sidebar.referrals', icon: Gift },
+  { href: '/segments', labelKey: 'sidebar.segments', icon: Users },
+  { href: '/campaigns', labelKey: 'sidebar.campaigns', icon: Megaphone },
   { href: '/notifications', labelKey: 'sidebar.notifications', icon: Bell },
   { href: '/content', labelKey: 'sidebar.content', icon: FileText },
   { href: '/blog', labelKey: 'sidebar.blog', icon: Newspaper },

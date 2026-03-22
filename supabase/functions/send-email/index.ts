@@ -131,6 +131,134 @@ function formatDistance(km: unknown): string {
   return `${val.toFixed(1)} km`;
 }
 
+function renderWelcomeEmail(data: Record<string, unknown>): string {
+  const name = escapeHtml(data.full_name ?? data.name ?? 'usuario');
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenido a TriciGo</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f4f5;">
+    <tr>
+      <td align="center" style="padding:24px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#F97316;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">TriciGo</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 16px;font-size:22px;color:#333333;font-weight:700;">\u00a1Bienvenido/a, ${name}!</h2>
+              <p style="margin:0 0 16px;font-size:15px;color:#555555;line-height:1.6;">
+                Estamos encantados de tenerte en TriciGo, la forma m\u00e1s r\u00e1pida y segura de moverte por Cuba.
+              </p>
+              <p style="margin:0 0 8px;font-size:15px;color:#555555;line-height:1.6;">As\u00ed de f\u00e1cil es usar la app:</p>
+              <ol style="margin:0 0 24px;padding-left:20px;font-size:14px;color:#555555;line-height:1.8;">
+                <li>Abre la app y escribe tu destino</li>
+                <li>Elige el tipo de veh\u00edculo que prefieras</li>
+                <li>Confirma y espera a tu conductor</li>
+              </ol>
+
+              <!-- CTA Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td align="center" style="padding:8px 0 16px;">
+                    <a href="https://tricigo.app" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                      Solicitar tu primer viaje
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 32px 24px;text-align:center;border-top:1px solid #e4e4e7;">
+              <p style="margin:0;font-size:14px;color:#888888;">\u00a1Gracias por unirte a TriciGo!</p>
+              <p style="margin:12px 0 0;font-size:12px;color:#bbbbbb;">TriciGo &copy; ${new Date().getFullYear()}</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function renderWinBackEmail(data: Record<string, unknown>): string {
+  const name = escapeHtml(data.full_name ?? data.name ?? 'usuario');
+  const days = Number(data.days_since_last_ride ?? 7);
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Te extrañamos - TriciGo</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f4f5;">
+    <tr>
+      <td align="center" style="padding:24px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#F97316;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">TriciGo</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 16px;font-size:22px;color:#333333;font-weight:700;">\u00a1Te extra\u00f1amos, ${name}!</h2>
+              <p style="margin:0 0 16px;font-size:15px;color:#555555;line-height:1.6;">
+                Han pasado <strong>${days} d\u00edas</strong> desde tu \u00faltimo viaje con TriciGo.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;color:#555555;line-height:1.6;">
+                Tu conductor favorito te est\u00e1 esperando. Vuelve a viajar c\u00f3modo y seguro.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td align="center" style="padding:8px 0 16px;">
+                    <a href="https://tricigo.app" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                      Volver a viajar
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 32px 24px;text-align:center;border-top:1px solid #e4e4e7;">
+              <p style="margin:0;font-size:14px;color:#888888;">\u00a1Te esperamos en TriciGo!</p>
+              <p style="margin:12px 0 0;font-size:12px;color:#bbbbbb;">TriciGo &copy; ${new Date().getFullYear()}</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 function renderRideReceipt(data: Record<string, unknown>, locale: string): string {
   const l = getLabels(locale);
 
@@ -403,6 +531,10 @@ Deno.serve(async (req) => {
     let html = '';
     if (template === 'ride_receipt') {
       html = renderRideReceipt(data, locale ?? 'es');
+    } else if (template === 'welcome') {
+      html = renderWelcomeEmail(data);
+    } else if (template === 'win_back') {
+      html = renderWinBackEmail(data);
     } else {
       // Generic template: render data as key-value pairs with TriciGo branding
       html = `<!DOCTYPE html>

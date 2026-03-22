@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, Pressable, ActivityIndicator, Platform, Switch, Image } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen } from '@tricigo/ui/Screen';
@@ -39,6 +40,7 @@ import type { SavedLocation, ServiceTypeSlug, CorporateAccount } from '@tricigo/
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
 // Surge is calculated backend-side but not shown to users
 // import { useSurgeZones } from '@/hooks/useSurgeZones';
@@ -158,6 +160,14 @@ function NativeHomeScreen() {
 
   const flowStep = useRideStore((s) => s.flowStep);
 
+  // Onboarding overlay — shows once on first app launch
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem('@tricigo/onboarding_completed').then((v) => {
+      if (!v) setShowOnboarding(true);
+    });
+  }, []);
+
   return (
     <Screen bg="white" padded scroll>
       {flowStep === 'idle' && <IdleView />}
@@ -168,6 +178,15 @@ function NativeHomeScreen() {
       {flowStep === 'completed' && <RideCompleteView />}
       {/* Notification permission prompt (shows once on first visit) */}
       {flowStep === 'idle' && <NotificationPermissionSheet />}
+      {/* Onboarding tutorial (shows once on first app launch) */}
+      {showOnboarding && (
+        <OnboardingOverlay
+          onComplete={() => {
+            setShowOnboarding(false);
+            AsyncStorage.setItem('@tricigo/onboarding_completed', 'true');
+          }}
+        />
+      )}
     </Screen>
   );
 }
