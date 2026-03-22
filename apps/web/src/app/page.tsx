@@ -206,6 +206,53 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Social Proof / Stats ── */}
+      <section className="section">
+        <div className="container">
+          <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'La Habana confía en TriciGo' })}</h2>
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', marginTop: '2rem', textAlign: 'center' }}>
+            <div>
+              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>500+</p>
+              <p style={{ fontSize: '0.9rem', color: '#666' }}>{t('home.stat_drivers', { defaultValue: 'Conductores registrados' })}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>10,000+</p>
+              <p style={{ fontSize: '0.9rem', color: '#666' }}>{t('home.stat_rides', { defaultValue: 'Viajes completados' })}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>4.8★</p>
+              <p style={{ fontSize: '0.9rem', color: '#666' }}>{t('home.stat_rating', { defaultValue: 'Calificación promedio' })}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>24/7</p>
+              <p style={{ fontSize: '0.9rem', color: '#666' }}>{t('home.stat_available', { defaultValue: 'Disponible siempre' })}</p>
+            </div>
+          </div>
+
+          {/* Testimonials */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '3rem' }}>
+            <div style={{ background: '#f8f8f8', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                {t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' })}
+              </p>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#333' }}>— María G., Vedado</p>
+            </div>
+            <div style={{ background: '#f8f8f8', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                {t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' })}
+              </p>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#333' }}>— Carlos R., Centro Habana</p>
+            </div>
+            <div style={{ background: '#f8f8f8', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                {t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' })}
+              </p>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#333' }}>— Ana P., Miramar</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Download CTA ── */}
       <section className="section section--orange">
         <div className="container">
