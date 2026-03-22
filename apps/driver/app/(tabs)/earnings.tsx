@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
+import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -356,11 +357,13 @@ function NativeEarningsScreen() {
             </View>
           ) : (
           <>
-          <BalanceBadge
-            balance={balance}
-            size="lg"
-            className="mb-6"
-          />
+          <AnimatedCard delay={0}>
+            <BalanceBadge
+              balance={balance}
+              size="lg"
+              className="mb-6"
+            />
+          </AnimatedCard>
 
           {/* Period Tabs */}
           <View className="flex-row gap-2 mb-4" accessibilityRole="tablist">

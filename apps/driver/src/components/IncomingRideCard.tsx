@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useCallback } from 'react';
 import { View } from 'react-native';
+import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -77,6 +78,7 @@ export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup
   }, [ride, driverCustomRateCup, serviceConfig]);
 
   return (
+    <AnimatedCard delay={0} duration={300}>
     <Card variant="filled" padding="md" className="bg-neutral-800 mb-3">
       {/* Rider info */}
       {riderName && (
@@ -212,5 +214,6 @@ export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup
         </View>
       </View>
     </Card>
+    </AnimatedCard>
   );
 }

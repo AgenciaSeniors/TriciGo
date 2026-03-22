@@ -60,19 +60,22 @@ export default function SurgeDashboardPage() {
   const [surgeStatus, setSurgeStatus] = useState<SurgeStatus[]>([]);
   const [metrics, setMetrics] = useState<LiveMetrics>({ searching_rides: 0, in_progress_rides: 0, online_drivers: 0 });
   const [weather, setWeather] = useState<WeatherStatus | null>(null);
+  const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const [zonesData, metricsData, weatherData] = await Promise.all([
+      const [zonesData, metricsData, weatherData, predictionsData] = await Promise.all([
         adminService.getZones(),
         adminService.getLiveMetrics(),
         adminService.getWeatherStatus().catch(() => null),
+        adminService.getSurgePredictions().catch(() => []),
       ]);
 
       setWeather(weatherData);
+      setPredictions(predictionsData);
 
       setZones(zonesData as ZoneRow[]);
       setMetrics(metricsData);
@@ -192,6 +195,35 @@ export default function SurgeDashboardPage() {
                 </p>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Surge Predictions */}
+      {predictions.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-6">
+          <h3 className="font-semibold text-amber-800 mb-3">
+            {t('surge_dashboard.predictions_title', { defaultValue: 'Surge probable (próximas horas)' })}
+          </h3>
+          <div className="space-y-2">
+            {predictions.map((p: any) => (
+              <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-600 font-mono text-sm">
+                    {String(p.hour_of_day).padStart(2, '0')}:00
+                  </span>
+                  <span className="text-sm text-neutral-600">
+                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][p.day_of_week]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-amber-700">{p.predicted_multiplier}x</span>
+                  <span className="text-xs text-neutral-400">
+                    {Math.round(p.confidence * 100)}% conf
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

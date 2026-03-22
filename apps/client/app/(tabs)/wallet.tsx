@@ -13,6 +13,7 @@ import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
+import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
@@ -421,14 +422,16 @@ function NativeWalletScreen() {
           </Text>
         </View>
 
-        <BalanceBadge
-          balance={balance.available}
-          held={balance.held}
-          size="lg"
-          showHeld
-          coinIcon={tricoinSmall}
+        <AnimatedCard delay={0}>
+          <BalanceBadge
+            balance={balance.available}
+            held={balance.held}
+            size="lg"
+            showHeld
+            coinIcon={tricoinSmall}
           className="mb-6"
         />
+        </AnimatedCard>
 
         <View className="flex-row gap-3 mb-3">
           <Button
