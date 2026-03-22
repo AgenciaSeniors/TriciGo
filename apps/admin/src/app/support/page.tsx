@@ -5,6 +5,8 @@ import { supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { formatAdminDate } from '@/lib/formatDate';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const statusBadge: Record<string, string> = {
   open: 'bg-blue-50 text-blue-700',
@@ -40,14 +42,6 @@ const categoryLabelKeys: Record<string, string> = {
   other: 'support.category_other',
 };
 
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('es-CU', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function SupportPage() {
   const { userId: adminUserId } = useAdminUser();
@@ -156,9 +150,13 @@ export default function SupportPage() {
         {/* Ticket list */}
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
           <div className="max-h-[600px] overflow-y-auto">
-            {tickets.length === 0 ? (
+            {loading ? (
+              <div className="px-4 py-4">
+                <AdminTableSkeleton rows={5} columns={4} />
+              </div>
+            ) : tickets.length === 0 ? (
               <div className="text-center py-12 text-neutral-400">
-                {loading ? t('common.loading') : t('support.no_tickets')}
+                {t('support.no_tickets')}
               </div>
             ) : (
               tickets.map((ticket) => (
@@ -187,7 +185,7 @@ export default function SupportPage() {
                       {ticket.priority}
                     </span>
                     <span className="text-xs text-neutral-400 ml-auto">
-                      {formatDate(ticket.created_at)}
+                      {formatAdminDate(ticket.created_at)}
                     </span>
                   </div>
                 </button>
@@ -249,7 +247,7 @@ export default function SupportPage() {
                     }`}
                   >
                     <p className="text-xs text-neutral-400 mb-1">
-                      {msg.is_admin ? t('support.support_label') : t('support.user_label')} · {formatDate(msg.created_at)}
+                      {msg.is_admin ? t('support.support_label') : t('support.user_label')} · {formatAdminDate(msg.created_at)}
                     </p>
                     <p>{msg.message}</p>
                   </div>

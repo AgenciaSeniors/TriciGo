@@ -96,7 +96,7 @@ export function Sidebar() {
             <img src="/logo-wordmark-white.png" alt="TriciGo" className="h-8 w-auto" />
             <p className="text-xs text-neutral-500 mt-1">{t('sidebar.admin_panel')}</p>
           </div>
-          <button onClick={close} className="md:hidden p-1 text-neutral-400 hover:text-white">
+          <button onClick={close} className="md:hidden p-1 text-neutral-400 hover:text-white" aria-label={t('sidebar.close_menu', { defaultValue: 'Cerrar menú' })}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -110,6 +110,7 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 onClick={close}
+                aria-label={t(item.labelKey)}
                 className={`
                   flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors
                   ${isActive

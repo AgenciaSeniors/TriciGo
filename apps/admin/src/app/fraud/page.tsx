@@ -5,8 +5,10 @@ import { fraudService } from '@tricigo/api';
 import type { FraudAlert } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const severityBadge: Record<string, string> = {
   low: 'bg-blue-50 text-blue-700',
@@ -15,15 +17,6 @@ const severityBadge: Record<string, string> = {
   critical: 'bg-red-50 text-red-700',
 };
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function FraudAlertsPage() {
   const { userId: adminUserId } = useAdminUser();
@@ -134,17 +127,23 @@ export default function FraudAlertsPage() {
             </tr>
           </thead>
           <tbody>
-            {alerts.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={6} />
+                </td>
+              </tr>
+            ) : alerts.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {loading ? t('fraud.loading') : t('fraud.no_alerts')}
+                  {t('fraud.no_alerts')}
                 </td>
               </tr>
             ) : (
               alerts.map((alert) => (
                 <tr key={alert.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                   <td className="px-4 py-3 text-neutral-600 text-xs hidden lg:table-cell">
-                    {formatDate(alert.created_at)}
+                    {formatAdminDate(alert.created_at)}
                   </td>
                   <td className="px-4 py-3 font-medium">
                     {getAlertTypeLabel(alert.alert_type)}

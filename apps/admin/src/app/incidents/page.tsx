@@ -6,6 +6,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const PAGE_SIZE = 20;
 
@@ -132,8 +133,8 @@ export default function IncidentsPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-neutral-400">
-                  {t('incidents.loading')}
+                <td colSpan={7} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={7} />
                 </td>
               </tr>
             ) : incidents.length === 0 ? (

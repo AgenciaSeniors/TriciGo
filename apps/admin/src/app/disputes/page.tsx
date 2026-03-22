@@ -6,8 +6,10 @@ import { useTranslation } from '@tricigo/i18n';
 import type { RideDispute, DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatTRC } from '@tricigo/utils';
+import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 
 const statusBadge: Record<string, string> = {
@@ -47,14 +49,6 @@ const RESOLUTION_OPTIONS: DisputeResolution[] = [
   'warning_issued',
 ];
 
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('es-CU', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function getSlaStatus(deadline: string | null): 'ok' | 'warning' | 'expired' {
   if (!deadline) return 'ok';
@@ -217,9 +211,13 @@ export default function DisputesPage() {
         {/* Dispute list */}
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
           <div className="max-h-[650px] overflow-y-auto">
-            {sortedDisputes.length === 0 ? (
+            {loading ? (
+              <div className="px-4 py-4">
+                <AdminTableSkeleton rows={5} columns={4} />
+              </div>
+            ) : sortedDisputes.length === 0 ? (
               <div className="text-center py-12 text-neutral-400">
-                {loading ? t('common.loading') : t('disputes.no_disputes')}
+                {t('disputes.no_disputes')}
               </div>
             ) : (
               sortedDisputes.map((dispute) => {
@@ -255,7 +253,7 @@ export default function DisputesPage() {
                         <span className="text-[10px] font-bold text-orange-600">{t('disputes.sla_warning')}</span>
                       )}
                       <span className="text-xs text-neutral-400 ml-auto">
-                        {formatDate(dispute.created_at)}
+                        {formatAdminDate(dispute.created_at)}
                       </span>
                     </div>
                   </button>

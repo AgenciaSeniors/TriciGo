@@ -2,6 +2,7 @@ import type { Config } from 'tailwindcss';
 import tricigoPreset from '@tricigo/theme/tailwind-preset';
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/**/*.{ts,tsx}',
   ],

@@ -5,6 +5,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
 
@@ -21,15 +23,6 @@ type SegmentUser = {
 type City = { id: string; name: string; slug: string };
 
 const PAGE_SIZE = 20;
-
-function formatDate(dateString: string | null): string {
-  if (!dateString) return '\u2014';
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 export default function SegmentsPage() {
   const { t } = useTranslation('admin');
@@ -427,8 +420,8 @@ export default function SegmentsPage() {
               <tbody>
                 {usersLoading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-neutral-400">
-                      {t('common.loading')}
+                    <td colSpan={6} className="px-0 py-0">
+                      <AdminTableSkeleton rows={5} columns={6} />
                     </td>
                   </tr>
                 ) : users.length === 0 ? (
@@ -452,7 +445,7 @@ export default function SegmentsPage() {
                       <td className="px-6 py-4 text-sm text-neutral-600">{user.phone ?? '\u2014'}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{user.rides_count}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                        {formatDate(user.last_ride_date)}
+                        {formatAdminDate(user.last_ride_date)}
                       </td>
                       <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                         {user.city_name ?? '\u2014'}

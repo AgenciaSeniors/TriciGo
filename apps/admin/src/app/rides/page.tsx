@@ -9,6 +9,7 @@ import type { Ride } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -89,10 +90,10 @@ export default function RidesPage() {
       type: 'select',
       placeholder: t('filters.all'),
       options: [
-        { label: 'Triciclo Básico', value: 'triciclo_basico' },
-        { label: 'Moto', value: 'moto_standard' },
-        { label: 'Auto', value: 'auto_standard' },
-        { label: 'Mensajería', value: 'mensajeria' },
+        { label: t('rides.filter_triciclo'), value: 'triciclo_basico' },
+        { label: t('rides.filter_moto'), value: 'moto_standard' },
+        { label: t('rides.filter_auto'), value: 'auto_standard' },
+        { label: t('rides.filter_mensajeria'), value: 'mensajeria' },
       ],
     },
     {
@@ -220,10 +221,16 @@ export default function RidesPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedData.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={6} />
+                </td>
+              </tr>
+            ) : sortedData.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {loading ? t('common.loading') : t('rides.no_rides')}
+                  {t('rides.no_rides')}
                 </td>
               </tr>
             ) : (

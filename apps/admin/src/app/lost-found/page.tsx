@@ -6,8 +6,10 @@ import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatCUP } from '@tricigo/utils';
 import type { LostItem, LostItemStatus } from '@tricigo/types';
+import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const statusBadge: Record<string, string> = {
   reported: 'bg-blue-50 text-blue-700',
@@ -29,15 +31,6 @@ const categoryIcons: Record<string, string> = {
   keys: '🔑',
   other: '❓',
 };
-
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('es-CU', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function LostFoundPage() {
   const { userId: adminUserId } = useAdminUser();
@@ -139,9 +132,13 @@ export default function LostFoundPage() {
         {/* Item list */}
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
           <div className="max-h-[650px] overflow-y-auto">
-            {items.length === 0 ? (
+            {loading ? (
+              <div className="px-4 py-4">
+                <AdminTableSkeleton rows={5} columns={4} />
+              </div>
+            ) : items.length === 0 ? (
               <div className="text-center py-12 text-neutral-400">
-                {loading ? t('common.loading') : t('lost_found.no_items')}
+                {t('lost_found.no_items')}
               </div>
             ) : (
               items.map((item) => (
@@ -167,7 +164,7 @@ export default function LostFoundPage() {
                       Ride: {item.ride_id.slice(0, 8)}…
                     </span>
                     <span className="text-xs text-neutral-400 ml-auto">
-                      {formatDate(item.created_at)}
+                      {formatAdminDate(item.created_at)}
                     </span>
                   </div>
                 </button>

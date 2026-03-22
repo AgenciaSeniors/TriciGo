@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
+import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { formatAdminDate } from '@/lib/formatDate';
 
 type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
@@ -31,16 +33,6 @@ const roleBadgeClasses: Record<string, string> = {
   admin: 'bg-purple-50 text-purple-700',
   super_admin: 'bg-red-50 text-red-700',
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function formatCurrency(centavos: number): string {
   return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
@@ -146,15 +138,7 @@ export default function UserDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.push('/users')}
-          className="text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
-        >
-          &larr; {t('common.back_to_list')}
-        </button>
-      </div>
+      <AdminBreadcrumb items={[{ label: 'Usuarios', href: '/users' }, { label: user.full_name || user.phone }]} />
 
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -226,7 +210,7 @@ export default function UserDetailPage() {
             </div>
             <div>
               <dt className="text-sm text-neutral-500">{t('users.label_registered')}</dt>
-              <dd className="text-sm font-medium">{formatDate(user.created_at)}</dd>
+              <dd className="text-sm font-medium">{formatAdminDate(user.created_at)}</dd>
             </div>
           </dl>
         </div>
@@ -343,7 +327,7 @@ export default function UserDetailPage() {
                   return (
                     <tr key={tx.id} className="border-b border-neutral-50">
                       <td className="px-4 py-3 text-sm text-neutral-600">
-                        {formatDate(tx.created_at)}
+                        {formatAdminDate(tx.created_at)}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -390,7 +374,7 @@ export default function UserDetailPage() {
                 {penalties.map((p) => (
                   <tr key={p.id} className="border-b border-neutral-50">
                     <td className="px-4 py-3 text-sm text-neutral-600">
-                      {formatDate(p.created_at)}
+                      {formatAdminDate(p.created_at)}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-red-600">
                       {p.amount > 0 ? `-${formatCurrency(p.amount)}` : t('users.no_charge')}

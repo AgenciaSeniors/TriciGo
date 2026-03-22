@@ -7,17 +7,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { SurgeZone } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { formatAdminDate } from '@/lib/formatDate';
 
-function formatDate(d: string | null): string {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function SurgeZonesPage() {
   const { t } = useTranslation('admin');
@@ -209,8 +200,8 @@ export default function SurgeZonesPage() {
                     <span className="text-yellow-600 font-bold">{Number(s.multiplier).toFixed(1)}x</span>
                   </td>
                   <td className="px-4 py-3 text-neutral-600">{s.reason || '—'}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatDate(s.starts_at)}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatDate(s.ends_at)}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatAdminDate(s.starts_at)}</td>
+                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatAdminDate(s.ends_at)}</td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(s)}

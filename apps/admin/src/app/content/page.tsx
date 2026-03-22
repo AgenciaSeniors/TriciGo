@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { cmsService, type CmsContent } from '@tricigo/api/services/cms';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 export default function ContentPage() {
   const { t } = useTranslation('admin');
@@ -156,7 +157,7 @@ export default function ContentPage() {
       <h1 className="text-3xl font-bold mb-8">{t('content.title_page', { defaultValue: 'Contenido CMS' })}</h1>
 
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <AdminTableSkeleton rows={5} columns={3} />
       ) : (
         <div className="space-y-4">
           {contents.map((item) => (

@@ -3,11 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { formatAdminDate } from '@/lib/formatDate';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const PAGE_SIZE = 20;
 
@@ -28,15 +31,6 @@ const STAR_COLORS: Record<number, string> = {
   1: 'text-red-400',
 };
 
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('es-CU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function Stars({ rating }: { rating: number }) {
   const color = STAR_COLORS[rating] ?? 'text-yellow-500';
@@ -307,9 +301,9 @@ export default function ReviewsPage() {
 
       {/* Table */}
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <AdminTableSkeleton rows={5} columns={4} />
       ) : reviews.length === 0 ? (
-        <p className="text-neutral-400 py-12 text-center">{t('reviews.no_reviews')}</p>
+        <AdminEmptyState icon="⭐" title={t('reviews.no_reviews')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -329,7 +323,7 @@ export default function ReviewsPage() {
               {sortedData.map((review) => (
                 <tr key={review.id} className="border-b hover:bg-neutral-50">
                   <td className="py-3 pr-4 text-neutral-500 text-xs whitespace-nowrap">
-                    {formatDate(review.created_at)}
+                    {formatAdminDate(review.created_at)}
                   </td>
                   <td className="py-3 pr-4 text-xs">
                     {review.reviewer_name ?? review.reviewer_id.substring(0, 8) + '...'}

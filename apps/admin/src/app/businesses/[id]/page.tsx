@@ -6,6 +6,8 @@ import { corporateService, walletService } from '@tricigo/api';
 import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { formatAdminDate } from '@/lib/formatDate';
 import type {
   CorporateAccount,
   CorporateAccountStatus,
@@ -19,13 +21,6 @@ const statusClasses: Record<CorporateAccountStatus, string> = {
   suspended: 'bg-red-100 text-red-800',
   rejected: 'bg-neutral-200 text-neutral-600',
 };
-
-function formatDate(d: string): string {
-  return new Date(d).toLocaleDateString('es-CU', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 export default function BusinessDetailPage() {
   const { t } = useTranslation('admin');
@@ -119,15 +114,11 @@ export default function BusinessDetailPage() {
 
   return (
     <div className="space-y-6">
+      <AdminBreadcrumb items={[{ label: 'Empresas', href: '/businesses' }, { label: account.name }]} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <button
-            className="text-sm text-neutral-500 hover:text-neutral-700 mb-2"
-            onClick={() => router.push('/businesses')}
-          >
-            &larr; {t('businesses.title')}
-          </button>
           <h1 className="text-2xl font-bold flex items-center gap-3">
             {account.name}
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[account.status]}`}>
@@ -185,7 +176,7 @@ export default function BusinessDetailPage() {
           <p className="font-medium">{account.contact_phone}</p>
           {account.contact_email && <p className="text-sm text-neutral-600">{account.contact_email}</p>}
           {account.tax_id && <p className="text-sm text-neutral-500 mt-1">RIF: {account.tax_id}</p>}
-          <p className="text-xs text-neutral-400 mt-2">{t('common.created_at', { defaultValue: 'Creado' })}: {formatDate(account.created_at)}</p>
+          <p className="text-xs text-neutral-400 mt-2">{t('common.created_at', { defaultValue: 'Creado' })}: {formatAdminDate(account.created_at)}</p>
         </div>
 
         {/* Wallet */}
@@ -293,7 +284,7 @@ export default function BusinessDetailPage() {
             <tbody>
               {rides.map((ride) => (
                 <tr key={ride.id} className="border-b last:border-0">
-                  <td className="py-2 text-neutral-600">{formatDate(ride.created_at)}</td>
+                  <td className="py-2 text-neutral-600">{formatAdminDate(ride.created_at)}</td>
                   <td className="py-2 font-mono">{formatTriciCoin(ride.fare_trc)}</td>
                 </tr>
               ))}

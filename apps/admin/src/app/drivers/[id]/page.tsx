@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { formatCUP } from '@tricigo/utils';
 import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus, SelfieCheck, ReviewTagSummaryItem } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { formatAdminDate } from '@/lib/formatDate';
 
 type DriverDetail = {
   profile: DriverProfile & { users: { full_name: string; phone: string; email: string | null } };
@@ -43,16 +46,6 @@ const DOC_TYPE_KEY: Record<string, string> = {
   selfie: 'drivers.doc_selfie',
   vehicle_photo: 'drivers.doc_vehicle_photo',
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function DriverDetailPage() {
   const { t } = useTranslation('admin');
@@ -195,15 +188,7 @@ export default function DriverDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.push('/drivers')}
-          className="text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
-        >
-          &larr; {t('drivers.back_to_list')}
-        </button>
-      </div>
+      <AdminBreadcrumb items={[{ label: 'Conductores', href: '/drivers' }, { label: profile.users.full_name || '—' }]} />
 
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -269,7 +254,7 @@ export default function DriverDetailPage() {
             </div>
             <div>
               <dt className="text-sm text-neutral-500">{t('drivers.label_registered')}</dt>
-              <dd className="text-sm font-medium">{formatDate(profile.created_at)}</dd>
+              <dd className="text-sm font-medium">{formatAdminDate(profile.created_at)}</dd>
             </div>
           </dl>
         </div>
@@ -376,7 +361,7 @@ export default function DriverDetailPage() {
                       )}
 
                       <p className="text-xs text-neutral-400 mb-2">
-                        {t('drivers.doc_uploaded_at')} {formatDate(doc.uploaded_at)}
+                        {t('drivers.doc_uploaded_at')} {formatAdminDate(doc.uploaded_at)}
                       </p>
 
                       {/* Face match score */}
@@ -459,7 +444,7 @@ export default function DriverDetailPage() {
               <tbody>
                 {selfieChecks.map((check) => (
                   <tr key={check.id} className="border-b border-neutral-50">
-                    <td className="py-2 text-neutral-700">{formatDate(check.requested_at)}</td>
+                    <td className="py-2 text-neutral-700">{formatAdminDate(check.requested_at)}</td>
                     <td className="py-2">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         check.status === 'passed' ? 'bg-green-100 text-green-700' :
@@ -512,7 +497,7 @@ export default function DriverDetailPage() {
           </span>
           {profile.negative_balance_since && (
             <span className="text-sm text-neutral-500">
-              {t('drivers.negative_balance_since')} {formatDate(profile.negative_balance_since)}
+              {t('drivers.negative_balance_since')} {formatAdminDate(profile.negative_balance_since)}
             </span>
           )}
         </div>
@@ -600,7 +585,7 @@ export default function DriverDetailPage() {
                       {evt.delta > 0 ? '+' : ''}{Number(evt.delta).toFixed(1)}
                     </span>
                     <span className="text-xs text-neutral-400">
-                      {formatDate(evt.created_at)}
+                      {formatAdminDate(evt.created_at)}
                     </span>
                   </div>
                 </div>

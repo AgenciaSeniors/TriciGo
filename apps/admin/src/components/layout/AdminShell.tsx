@@ -48,7 +48,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // Show loading spinner while checking auth
   if (authLoading || !user) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-neutral-50 dark:bg-neutral-900">
         <div className="animate-spin h-8 w-8 border-4 border-orange-500 border-t-transparent rounded-full" />
       </div>
     );
@@ -61,7 +61,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
             <Header />
-            <main className="flex-1 overflow-y-auto p-4 md:p-6">
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-neutral-50 dark:bg-neutral-900">
               {children}
             </main>
           </div>

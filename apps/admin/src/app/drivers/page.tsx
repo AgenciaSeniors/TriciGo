@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { DriverProfileWithUser } from '@tricigo/types';
+import { formatAdminDate } from '@/lib/formatDate';
 import type { DriverStatus } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -41,14 +43,6 @@ const statusLabelKeys: Record<DriverStatus, string> = {
   rejected: 'drivers.status_rejected',
   suspended: 'drivers.status_suspended',
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 const EMPTY_FILTERS: Record<string, string> = {
   search: '',
@@ -219,8 +213,8 @@ export default function DriversPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-neutral-400">
-                  {t('common.loading')}
+                <td colSpan={7} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={7} />
                 </td>
               </tr>
             ) : sortedData.length === 0 ? (
@@ -265,7 +259,7 @@ export default function DriversPage() {
                       {Number(driver.rating_avg).toFixed(1)}
                     </td>
                     <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {formatDate(driver.created_at)}
+                      {formatAdminDate(driver.created_at)}
                     </td>
                     <td className="px-6 py-4">
                       <Link

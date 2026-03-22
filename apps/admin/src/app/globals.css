@@ -7,3 +7,15 @@
 body {
   font-family: 'Montserrat', sans-serif;
 }
+
+/* Focus visible styles for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #FF4D00;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

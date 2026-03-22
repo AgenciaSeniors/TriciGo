@@ -6,6 +6,7 @@ import { formatCUP, formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -276,7 +277,7 @@ export default function ReportsPage() {
             disabled={exporting}
             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
           >
-            {exporting ? '...' : 'Exportar CSV'}
+            {exporting ? '...' : t('reports.export_csv')}
           </button>
         </div>
 
@@ -321,7 +322,7 @@ export default function ReportsPage() {
       )}
 
       {loading && (
-        <div className="text-center py-12 text-neutral-400">{t('common.loading')}</div>
+        <AdminTableSkeleton rows={5} columns={4} />
       )}
 
       {/* System Health — always visible, auto-refreshes every 30s */}

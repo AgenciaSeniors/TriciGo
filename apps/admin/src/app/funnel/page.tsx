@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 type FunnelStep = {
   key: string;
@@ -117,7 +118,7 @@ export default function FunnelPage() {
       )}
 
       {loading && (
-        <div className="text-center py-12 text-neutral-400">{t('common.loading')}</div>
+        <AdminTableSkeleton rows={5} columns={4} />
       )}
 
       {!loading && steps.length > 0 && (

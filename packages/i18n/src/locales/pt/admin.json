@@ -24,7 +24,13 @@
     "back_to_list": "Voltar para a lista",
     "saving": "Salvando...",
     "error_generic": "Erro ao fazer login. Tente novamente.",
-    "status": "Status"
+    "status": "Status",
+    "search_placeholder": "Buscar..."
+  },
+
+  "header": {
+    "light_mode": "Modo claro",
+    "dark_mode": "Modo escuro"
   },
 
   "filters": {
@@ -70,7 +76,10 @@
     "cities": "Cidades",
     "segments": "Segmentos",
     "campaigns": "Campanhas",
-    "funnel": "Conversão"
+    "funnel": "Conversão",
+    "logout": "Sair",
+    "close_menu": "Fechar menu",
+    "open_menu": "Abrir menu"
   },
 
   "referrals": {

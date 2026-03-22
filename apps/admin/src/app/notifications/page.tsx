@@ -6,10 +6,12 @@ import { notificationService } from '@tricigo/api';
 import { adminService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
+import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 type NotificationLog = {
   id: string;
@@ -195,16 +197,6 @@ export default function NotificationsPage() {
     }
   };
 
-  function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('es-CU', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
   return (
     <div className="max-w-4xl">
       <h1 className="text-3xl font-bold mb-8">{t('notifications.title')}</h1>
@@ -345,7 +337,7 @@ export default function NotificationsPage() {
         <h2 className="text-lg font-bold mb-4">{t('notifications.inbox_stats')}</h2>
 
         {statsLoading ? (
-          <p className="text-sm text-neutral-400">{t('common.loading')}</p>
+          <AdminTableSkeleton rows={3} columns={3} />
         ) : inboxStats ? (
           <>
             {/* Stat cards */}
@@ -398,7 +390,7 @@ export default function NotificationsPage() {
                   <tbody>
                     {inboxStats.recent.map((n) => (
                       <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-                        <td className="px-3 py-2 text-xs text-neutral-600">{formatDate(n.created_at)}</td>
+                        <td className="px-3 py-2 text-xs text-neutral-600">{formatAdminDate(n.created_at)}</td>
                         <td className="px-3 py-2">
                           <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-600">
                             {n.type}
@@ -433,7 +425,7 @@ export default function NotificationsPage() {
         <h2 className="text-lg font-bold mb-4">{t('notifications.history')}</h2>
 
         {historyLoading ? (
-          <p className="text-sm text-neutral-400">{t('common.loading')}</p>
+          <AdminTableSkeleton rows={5} columns={4} />
         ) : history.length === 0 ? (
           <p className="text-sm text-neutral-400">{t('notifications.no_notifications')}</p>
         ) : (
@@ -451,7 +443,7 @@ export default function NotificationsPage() {
                 {sortedHistory.map((n) => (
                   <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                     <td className="px-4 py-3 text-sm text-neutral-600">
-                      {formatDate(n.created_at)}
+                      {formatAdminDate(n.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium">{n.title}</p>

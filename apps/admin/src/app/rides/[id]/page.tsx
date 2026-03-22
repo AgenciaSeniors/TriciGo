@@ -6,6 +6,8 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
+import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { formatAdminDate } from '@/lib/formatDate';
 
 const STATUS_BADGE: Record<string, string> = {
   searching: 'bg-yellow-100 text-yellow-700',
@@ -33,13 +35,6 @@ const PAYMENT_KEY: Record<string, string> = {
   cash: 'rides.payment_cash',
   tricicoin: 'rides.payment_tricicoin',
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 type RideDetail = {
   ride: Ride;
@@ -96,15 +91,7 @@ export default function RideDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.push('/rides')}
-          className="text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
-        >
-          &larr; {t('rides.back_to_rides')}
-        </button>
-      </div>
+      <AdminBreadcrumb items={[{ label: 'Viajes', href: '/rides' }, { label: 'Detalle del viaje' }]} />
 
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -225,7 +212,7 @@ export default function RideDetailPage() {
                     <span className="text-xs text-neutral-400 ml-2">({tr.reason})</span>
                   )}
                 </div>
-                <span className="text-xs text-neutral-400">{formatDate(tr.created_at)}</span>
+                <span className="text-xs text-neutral-400">{formatAdminDate(tr.created_at)}</span>
               </div>
             ))}
           </div>
@@ -238,36 +225,36 @@ export default function RideDetailPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-neutral-500">{t('rides.label_created')}</p>
-            <p className="text-sm font-medium">{formatDate(ride.created_at)}</p>
+            <p className="text-sm font-medium">{formatAdminDate(ride.created_at)}</p>
           </div>
           {ride.accepted_at && (
             <div>
               <p className="text-sm text-neutral-500">{t('rides.label_accepted')}</p>
-              <p className="text-sm font-medium">{formatDate(ride.accepted_at)}</p>
+              <p className="text-sm font-medium">{formatAdminDate(ride.accepted_at)}</p>
             </div>
           )}
           {ride.driver_arrived_at && (
             <div>
               <p className="text-sm text-neutral-500">{t('rides.label_driver_arrived')}</p>
-              <p className="text-sm font-medium">{formatDate(ride.driver_arrived_at)}</p>
+              <p className="text-sm font-medium">{formatAdminDate(ride.driver_arrived_at)}</p>
             </div>
           )}
           {ride.pickup_at && (
             <div>
               <p className="text-sm text-neutral-500">{t('rides.label_pickup')}</p>
-              <p className="text-sm font-medium">{formatDate(ride.pickup_at)}</p>
+              <p className="text-sm font-medium">{formatAdminDate(ride.pickup_at)}</p>
             </div>
           )}
           {ride.completed_at && (
             <div>
               <p className="text-sm text-neutral-500">{t('rides.label_completed_at')}</p>
-              <p className="text-sm font-medium">{formatDate(ride.completed_at)}</p>
+              <p className="text-sm font-medium">{formatAdminDate(ride.completed_at)}</p>
             </div>
           )}
           {ride.canceled_at && (
             <div>
               <p className="text-sm text-neutral-500">{t('rides.label_canceled_at')}</p>
-              <p className="text-sm font-medium">{formatDate(ride.canceled_at)}</p>
+              <p className="text-sm font-medium">{formatAdminDate(ride.canceled_at)}</p>
               {ride.cancellation_reason && (
                 <p className="text-xs text-neutral-400">{ride.cancellation_reason}</p>
               )}

@@ -7,6 +7,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -159,9 +161,9 @@ export default function ReferralsPage() {
 
       {/* Table */}
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <AdminTableSkeleton rows={5} columns={4} />
       ) : referrals.length === 0 ? (
-        <p className="text-neutral-400 py-12 text-center">{t('referrals.no_referrals')}</p>
+        <AdminEmptyState icon="🎁" title={t('referrals.no_referrals')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

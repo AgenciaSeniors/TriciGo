@@ -6,7 +6,9 @@ import { getSupabaseClient } from '@tricigo/api';
 import { notificationService } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
+import { formatAdminDate } from '@/lib/formatDate';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 type Campaign = {
   id: string;
@@ -54,16 +56,6 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-700',
 };
 
-function formatDate(dateString: string | null): string {
-  if (!dateString) return '\u2014';
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const PAGE_SIZE = 20;
 
@@ -516,8 +508,8 @@ export default function CampaignsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-neutral-400">
-                    {t('common.loading')}
+                  <td colSpan={6} className="px-0 py-0">
+                    <AdminTableSkeleton rows={5} columns={6} />
                   </td>
                 </tr>
               ) : campaigns.length === 0 ? (
@@ -552,7 +544,7 @@ export default function CampaignsPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-neutral-600">{campaign.sent_count}</td>
                     <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {formatDate(campaign.created_at)}
+                      {formatAdminDate(campaign.created_at)}
                     </td>
                   </tr>
                 ))

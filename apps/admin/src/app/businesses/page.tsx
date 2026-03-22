@@ -6,6 +6,7 @@ import { corporateService } from '@tricigo/api';
 import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { CorporateAccount, CorporateAccountStatus } from '@tricigo/types';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const PAGE_SIZE = 20;
 
@@ -67,9 +68,7 @@ export default function BusinessesPage() {
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-12 text-neutral-500">
-          {t('common.loading', { defaultValue: 'Cargando...' })}
-        </div>
+        <AdminTableSkeleton rows={5} columns={4} />
       ) : accounts.length === 0 ? (
         <div className="text-center py-12 text-neutral-500">
           {t('businesses.no_businesses')}

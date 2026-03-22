@@ -5,18 +5,11 @@ import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { AdminAction } from '@tricigo/types';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 
 const PAGE_SIZE = 20;
 
-function formatDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const ACTION_LABEL_KEYS: Record<string, string> = {
   approve_driver: 'audit.action_approve_driver',
@@ -168,11 +161,8 @@ export default function AuditPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td
-                  colSpan={5}
-                  className="text-center py-12 text-neutral-400"
-                >
-                  {t('common.loading')}
+                <td colSpan={5} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={5} />
                 </td>
               </tr>
             ) : actions.length === 0 ? (
@@ -191,7 +181,7 @@ export default function AuditPage() {
                   className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"
                 >
                   <td className="px-6 py-4 text-sm text-neutral-600">
-                    {formatDateTime(action.created_at)}
+                    {formatAdminDate(action.created_at)}
                   </td>
                   <td className="px-6 py-4 text-sm text-neutral-600 font-mono hidden lg:table-cell">
                     {action.admin_id.slice(0, 8)}...

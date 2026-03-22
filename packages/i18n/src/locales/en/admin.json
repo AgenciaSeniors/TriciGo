@@ -24,7 +24,13 @@
     "back_to_list": "Back to list",
     "saving": "Saving...",
     "error_generic": "Error logging in. Please try again.",
-    "status": "Status"
+    "status": "Status",
+    "search_placeholder": "Search..."
+  },
+
+  "header": {
+    "light_mode": "Light mode",
+    "dark_mode": "Dark mode"
   },
 
   "filters": {
@@ -70,7 +76,10 @@
     "cities": "Cities",
     "segments": "Segments",
     "campaigns": "Campaigns",
-    "funnel": "Conversion"
+    "funnel": "Conversion",
+    "logout": "Log out",
+    "close_menu": "Close menu",
+    "open_menu": "Open menu"
   },
 
   "referrals": {

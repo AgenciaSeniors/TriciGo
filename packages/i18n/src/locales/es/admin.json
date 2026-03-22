@@ -24,7 +24,13 @@
     "back_to_list": "Volver a la lista",
     "saving": "Guardando...",
     "error_generic": "Error al iniciar sesión. Intenta de nuevo.",
-    "status": "Estado"
+    "status": "Estado",
+    "search_placeholder": "Buscar..."
+  },
+
+  "header": {
+    "light_mode": "Modo claro",
+    "dark_mode": "Modo oscuro"
   },
 
   "filters": {
@@ -70,7 +76,10 @@
     "cities": "Ciudades",
     "segments": "Segmentos",
     "campaigns": "Campa\u00f1as",
-    "funnel": "Conversión"
+    "funnel": "Conversión",
+    "logout": "Cerrar sesión",
+    "close_menu": "Cerrar menú",
+    "open_menu": "Abrir menú"
   },
 
   "referrals": {

@@ -5,6 +5,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -134,7 +135,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : recentRides.length === 0 ? (
-            <p className="text-neutral-400">{t('dashboard.no_recent_rides')}</p>
+            <AdminEmptyState icon="🚗" title={t('dashboard.no_recent_rides')} />
           ) : (
             <div className="space-y-3">
               {recentRides.map((ride) => (
@@ -168,7 +169,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : pendingDrivers.length === 0 ? (
-            <p className="text-neutral-400">{t('dashboard.no_pending_drivers')}</p>
+            <AdminEmptyState icon="✅" title={t('dashboard.no_pending_drivers')} />
           ) : (
             <div className="space-y-3">
               {pendingDrivers.map((driver) => (
@@ -197,7 +198,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <h2 className="text-lg font-bold mb-4">{t('dashboard_auto.recent_auto_actions')}</h2>
           {autoActions.length === 0 ? (
-            <p className="text-neutral-400">{t('dashboard_auto.no_auto_actions')}</p>
+            <AdminEmptyState icon="🤖" title={t('dashboard_auto.no_auto_actions')} />
           ) : (
             <div className="space-y-3">
               {autoActions.map((action) => {

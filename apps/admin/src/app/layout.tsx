@@ -18,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className="bg-neutral-50 text-neutral-900">
+      <body className="bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
         <AdminShell>{children}</AdminShell>
       </body>
     </html>

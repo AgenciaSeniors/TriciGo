@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const PAGE_SIZE = 20;
 
@@ -341,10 +342,16 @@ export default function WalletPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedTransactions.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="px-0 py-0">
+                    <AdminTableSkeleton rows={5} columns={4} />
+                  </td>
+                </tr>
+              ) : sortedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
-                    {loading ? t('common.loading') : t('wallet_admin.no_ledger')}
+                    {t('wallet_admin.no_ledger')}
                   </td>
                 </tr>
               ) : (
@@ -380,10 +387,16 @@ export default function WalletPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedTropipay.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-0 py-0">
+                    <AdminTableSkeleton rows={5} columns={6} />
+                  </td>
+                </tr>
+              ) : sortedTropipay.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-neutral-400">
-                    {loading ? t('common.loading') : t('wallet_admin.tropipay_no_intents')}
+                    {t('wallet_admin.tropipay_no_intents')}
                   </td>
                 </tr>
               ) : (

@@ -6,6 +6,8 @@ import { questService } from '@tricigo/api/services/quest';
 import type { Quest } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { useSortableTable } from '@/hooks/useSortableTable';
 
 const QUEST_TYPES = ['trip_count', 'earnings', 'rating', 'hours_online', 'peak_hours'] as const;
@@ -204,9 +206,9 @@ export default function QuestsPage() {
 
       {/* Quests List */}
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <AdminTableSkeleton rows={5} columns={4} />
       ) : quests.length === 0 ? (
-        <p className="text-neutral-400">{t('quests.no_quests', { defaultValue: 'No hay misiones creadas' })}</p>
+        <AdminEmptyState icon="🏆" title={t('quests.no_quests', { defaultValue: 'No hay misiones creadas' })} />
       ) : (
         <>
         <div className="flex gap-2 mb-4">

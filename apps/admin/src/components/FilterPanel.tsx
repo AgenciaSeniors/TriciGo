@@ -38,6 +38,8 @@ export function FilterPanel({
       {/* Toggle button */}
       <button
         onClick={() => setExpanded((v) => !v)}
+        aria-label={toggleLabel}
+        aria-expanded={expanded}
         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white border border-neutral-200 hover:border-neutral-300 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,6 +66,7 @@ export function FilterPanel({
                   <select
                     value={values[field.key] ?? ''}
                     onChange={(e) => onChange(field.key, e.target.value)}
+                    aria-label={field.label}
                     className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   >
                     <option value="">{field.placeholder ?? '—'}</option>
@@ -78,6 +81,7 @@ export function FilterPanel({
                     type="date"
                     value={values[field.key] ?? ''}
                     onChange={(e) => onChange(field.key, e.target.value)}
+                    aria-label={field.label}
                     className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 ) : (
@@ -86,6 +90,7 @@ export function FilterPanel({
                     value={values[field.key] ?? ''}
                     onChange={(e) => onChange(field.key, e.target.value)}
                     placeholder={field.placeholder}
+                    aria-label={field.label}
                     className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 )}

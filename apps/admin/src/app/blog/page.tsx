@@ -6,6 +6,7 @@ import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 
 const emptyForm = {
   slug: '',
@@ -260,7 +261,7 @@ export default function BlogAdminPage() {
       )}
 
       {loading ? (
-        <p className="text-neutral-500">{t('common.loading')}</p>
+        <AdminTableSkeleton rows={5} columns={4} />
       ) : (
         <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">

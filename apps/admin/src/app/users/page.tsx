@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { User } from '@tricigo/types';
+import { formatAdminDate } from '@/lib/formatDate';
 import type { UserRole } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -27,14 +29,6 @@ const roleBadgeClasses: Record<UserRole, string> = {
   admin: 'bg-purple-50 text-purple-700',
   super_admin: 'bg-red-50 text-red-700',
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('es-CU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 const EMPTY_FILTERS: Record<string, string> = {
   search: '',
@@ -180,8 +174,8 @@ export default function UsersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {t('common.loading')}
+                <td colSpan={6} className="px-0 py-0">
+                  <AdminTableSkeleton rows={5} columns={6} />
                 </td>
               </tr>
             ) : sortedData.length === 0 ? (
@@ -224,7 +218,7 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                    {formatDate(user.created_at)}
+                    {formatAdminDate(user.created_at)}
                   </td>
                   <td className="px-6 py-4">
                     <Link
