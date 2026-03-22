@@ -191,6 +191,27 @@ export const notificationService = {
   },
 
   /**
+   * Send notification to multiple users (e.g., nearby drivers for a new ride).
+   */
+  async sendToMultipleUsers(
+    userIds: string[],
+    category: string,
+    options: { title: string; body: string; data?: Record<string, string> },
+  ): Promise<{ sent: number; failed: number }> {
+    let sent = 0;
+    let failed = 0;
+    for (const userId of userIds) {
+      try {
+        await this.sendToUser(userId, options.title, options.body, 'system', options.data);
+        sent++;
+      } catch {
+        failed++;
+      }
+    }
+    return { sent, failed };
+  },
+
+  /**
    * Get notification history for admin panel.
    */
   async getNotificationHistory(

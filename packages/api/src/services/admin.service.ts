@@ -219,10 +219,10 @@ export const adminService = {
       await notificationService.sendToUser(
         profile.user_id,
         'Cuenta aprobada',
-        'Tu cuenta de conductor ha sido aprobada. Ya puedes empezar a recibir viajes.',
+        '¡Tu cuenta de conductor ha sido aprobada. Ya puedes recibir viajes!',
         adminId,
         { type: 'driver_status', status: 'approved' },
-      ).catch(() => {/* non-critical */});
+      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
     }
   },
 
@@ -259,10 +259,10 @@ export const adminService = {
       await notificationService.sendToUser(
         rejProfile.user_id,
         'Solicitud rechazada',
-        `Tu solicitud de conductor fue rechazada. Razon: ${reason}`,
+        'Tu solicitud de conductor no fue aprobada. Revisa tus documentos.',
         adminId,
         { type: 'driver_status', status: 'rejected', reason },
-      ).catch(() => {/* non-critical */});
+      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
     }
   },
 
@@ -304,10 +304,10 @@ export const adminService = {
       await notificationService.sendToUser(
         susProfile.user_id,
         'Cuenta suspendida',
-        `Tu cuenta de conductor ha sido suspendida. Razon: ${reason}`,
+        'Tu cuenta ha sido suspendida. Contacta soporte para más información.',
         adminId,
         { type: 'driver_status', status: 'suspended', reason },
-      ).catch(() => {/* non-critical */});
+      ).catch(err => console.warn('[Admin] Failed to notify driver:', err));
     }
   },
 

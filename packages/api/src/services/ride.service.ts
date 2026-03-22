@@ -37,6 +37,8 @@ import {
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { corporateService } from './corporate.service';
+import { matchingService } from './matching.service';
+import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 
 export interface CreateRideParams {
@@ -361,7 +363,57 @@ export const rideService = {
       await supabase.from('ride_waypoints').insert(waypointRows);
     }
 
+    // ── Match drivers (async, non-blocking) ──
+    // Find best drivers and notify them via push. If no drivers found,
+    // the ride stays in 'searching' status and cancel-stale-rides will
+    // handle timeout after the configured window.
+    this._matchDriversForRide(rideData, validParams).catch((err) => {
+      console.warn('[Ride] Driver matching failed for ride', rideData.id, err);
+    });
+
     return rideData;
+  },
+
+  /**
+   * Internal: find and notify best drivers for a new ride.
+   * Runs async after ride creation — failure here doesn't block the ride.
+   */
+  async _matchDriversForRide(
+    ride: Ride,
+    params: { pickup_latitude: number; pickup_longitude: number; service_type: string; pickup_address: string; dropoff_address: string },
+  ): Promise<void> {
+    try {
+      const drivers = await matchingService.findBestDrivers({
+        pickup_lat: params.pickup_latitude,
+        pickup_lng: params.pickup_longitude,
+        service_type: params.service_type,
+        limit: 10,
+        radius_m: 5000,
+      });
+
+      if (drivers.length === 0) {
+        console.warn('[Ride] No drivers found for ride', ride.id);
+        return;
+      }
+
+      // Notify each matched driver via push notification
+      const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
+      if (driverUserIds.length > 0) {
+        await notificationService.sendToMultipleUsers(
+          driverUserIds,
+          'new_ride',
+          {
+            title: 'Nuevo viaje disponible',
+            body: `De ${params.pickup_address} a ${params.dropoff_address}`,
+            data: { ride_id: ride.id, type: 'new_ride' },
+          },
+        ).catch((err) => {
+          console.warn('[Ride] Failed to notify drivers:', err);
+        });
+      }
+    } catch (err) {
+      console.warn('[Ride] _matchDriversForRide error:', err);
+    }
   },
 
   /**

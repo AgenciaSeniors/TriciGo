@@ -56,6 +56,10 @@ Deno.serve(async (req) => {
           .eq('tropipay_reference', refFromQuery)
           .single();
 
+        if (intent && intent.status !== 'pending') {
+          console.log(`[Idempotency] Redirect for ${refFromQuery} — status already ${intent.status}, skipping processing`);
+        }
+
         if (intent && intent.status === 'pending') {
           const isRidePayment = intent.intent_type === 'ride_payment';
 
@@ -202,6 +206,22 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ ok: false, error: 'intent_not_found', reference }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ─── Idempotency: skip if this payment intent was already processed ───
+    if (intent.status === 'completed') {
+      console.log(`[Idempotency] Payment intent ${reference} already completed — skipping`);
+      return new Response(
+        JSON.stringify({ ok: true, action: 'already_processed', reference }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    if (intent.status === 'failed') {
+      console.log(`[Idempotency] Payment intent ${reference} already marked failed — skipping`);
+      return new Response(
+        JSON.stringify({ ok: true, action: 'already_failed', reference }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 

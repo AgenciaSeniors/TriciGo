@@ -1,6 +1,11 @@
 // supabase/functions/verify-selfie/index.ts
 // Processes a selfie check: compares submitted selfie against onboarding selfie.
-// MVP: placeholder scoring. Replace with AWS Rekognition / Google Vision for production.
+//
+// MANUAL REVIEW: In the current flow, selfie verification results are reviewed
+// manually by an admin from the admin panel (Drivers > Pending Verifications).
+// The admin approves or rejects drivers after inspecting the selfie match.
+// Automated face comparison (AWS Rekognition / Google Vision) can be integrated
+// later by enabling SELFIE_VERIFICATION_ENABLED and implementing the API calls below.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
@@ -117,7 +122,10 @@ Deno.serve(async (req) => {
       faceMatchScore = 0.85 + Math.random() * 0.15;
       livenessScore = Math.random() > 0.05;
     } else {
-      // TODO: Replace with real face comparison API call
+      // Face comparison API integration point:
+      // When ready, download both images from storage and call a face comparison service
+      // (AWS Rekognition CompareFaces, Google Cloud Vision, or Azure Face API).
+      // Until then, the admin reviews selfies manually from the admin panel.
       // const checkImageUrl = supabase.storage.from('driver-documents').getPublicUrl(check.storage_path);
       // const refImageUrl = supabase.storage.from('driver-documents').getPublicUrl(onboardingSelfie.storage_path);
       // const result = await faceComparisonApi.compare(checkImageUrl, refImageUrl);
