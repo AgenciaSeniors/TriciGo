@@ -29,7 +29,7 @@ const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
 export function WebMapView({
   center = HAVANA_CENTER,
-  zoom = 13,
+  zoom = 14,
   pickup,
   dropoff,
   routeCoords,

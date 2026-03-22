@@ -81,7 +81,7 @@ function WebHomeScreen() {
     <View style={{ flex: 1, backgroundColor: '#111111' }}>
       {/* Map background — full height */}
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <WebMapView center={[-82.38, 23.13]} zoom={13} interactive={true} />
+        <WebMapView center={[-82.38, 23.13]} zoom={14} interactive={true} />
       </View>
 
       {/* Overlay UI */}

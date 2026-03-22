@@ -185,7 +185,7 @@ export function RideMapView({
         <MapboxGL.Camera
           defaultSettings={{
             centerCoordinate: HAVANA_CENTER,
-            zoomLevel: 13,
+            zoomLevel: 14,
           }}
           bounds={
             bounds

@@ -162,7 +162,7 @@ export default function BookingMap({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
       center: [HAVANA_CENTER.longitude, HAVANA_CENTER.latitude],
-      zoom: 12.5,
+      zoom: 13,
       attributionControl: false,
       maxBounds: [[-83.5, 22.0], [-81.0, 23.8]], // Cuba bounds
     });
