@@ -12,6 +12,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 type NotificationLog = {
   id: string;
@@ -49,9 +50,9 @@ export default function NotificationsPage() {
 
   function validateNotificationForm() {
     const errors: Record<string, string> = {};
-    if (!title.trim()) errors.title = 'Campo requerido';
-    if (!body.trim()) errors.body = 'Campo requerido';
-    if (targetType === 'user' && !targetUserId) errors.target = 'Debe seleccionar un usuario';
+    if (!title.trim()) errors.title = t('common.field_required');
+    if (!body.trim()) errors.body = t('common.field_required');
+    if (targetType === 'user' && !targetUserId) errors.target = t('common.select_user');
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -80,7 +81,7 @@ export default function NotificationsPage() {
       const data = await notificationService.getNotificationHistory(0, 50);
       setHistory(data);
     } catch (err) {
-      console.error('Error loading notification history:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar historial');
     } finally {
       setHistoryLoading(false);
@@ -129,7 +130,7 @@ export default function NotificationsPage() {
         recent: (recentRes.data ?? []) as AppNotification[],
       });
     } catch (err) {
-      console.error('Error loading inbox stats:', err);
+      // Error handled by UI
     } finally {
       setStatsLoading(false);
     }
@@ -189,7 +190,7 @@ export default function NotificationsPage() {
       setFormErrors({});
       loadHistory();
     } catch (err) {
-      console.error('Error sending notification:', err);
+      // Error handled by UI
       showToast('error', 'Error al enviar notificación');
       setSendResult({ success: 0, error: -1 });
     } finally {
@@ -427,7 +428,7 @@ export default function NotificationsPage() {
         {historyLoading ? (
           <AdminTableSkeleton rows={5} columns={4} />
         ) : history.length === 0 ? (
-          <p className="text-sm text-neutral-400">{t('notifications.no_notifications')}</p>
+          <AdminEmptyState icon="🔔" title={t('notifications.no_notifications')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

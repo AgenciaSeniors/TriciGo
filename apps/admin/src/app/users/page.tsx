@@ -94,7 +94,7 @@ export default function UsersPage() {
         const data = await adminService.getUsers(page, PAGE_SIZE, filters);
         if (!cancelled) setUsers(data);
       } catch (err) {
-        console.error('Error fetching users:', err);
+        // Error handled by UI
         if (!cancelled) { setUsers([]); setError(err instanceof Error ? err.message : 'Error al cargar usuarios'); }
       } finally {
         if (!cancelled) setLoading(false);

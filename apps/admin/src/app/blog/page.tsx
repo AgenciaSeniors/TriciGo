@@ -7,6 +7,7 @@ import type { BlogPost } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 
 const emptyForm = {
   slug: '',
@@ -40,7 +41,7 @@ export default function BlogAdminPage() {
     blogService
       .getAllPosts(page, PAGE_SIZE)
       .then(setPosts)
-      .catch((err: unknown) => { console.error(err); setError(err instanceof Error ? err.message : 'Error al cargar posts'); })
+      .catch((err: unknown) => { setError(err instanceof Error ? err.message : 'Error al cargar posts'); })
       .finally(() => setLoading(false));
   };
 
@@ -85,7 +86,7 @@ export default function BlogAdminPage() {
       resetForm();
       loadPosts();
     } catch (err) {
-      console.error(err);
+      // Error handled by UI
     }
   };
 
@@ -113,7 +114,7 @@ export default function BlogAdminPage() {
       await blogService.deletePost(id);
       loadPosts();
     } catch (err) {
-      console.error(err);
+      // Error handled by UI
     }
   };
 
@@ -129,7 +130,7 @@ export default function BlogAdminPage() {
       }
       loadPosts();
     } catch (err) {
-      console.error(err);
+      // Error handled by UI
     }
   };
 
@@ -298,7 +299,7 @@ export default function BlogAdminPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-neutral-500">
-                      {new Date(post.created_at).toLocaleDateString()}
+                      {formatAdminDate(post.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">

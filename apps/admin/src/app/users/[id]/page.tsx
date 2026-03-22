@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
@@ -40,6 +42,7 @@ function formatCurrency(centavos: number): string {
 
 export default function UserDetailPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [detail, setDetail] = useState<UserDetail | null>(null);
@@ -50,6 +53,7 @@ export default function UserDetailPage() {
   const [blockReason, setBlockReason] = useState('');
   const [blockUpdating, setBlockUpdating] = useState(false);
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string}>({open: false, action: () => {}, title: '', message: ''});
 
   useEffect(() => {
     if (!id) return;
@@ -67,7 +71,7 @@ export default function UserDetailPage() {
           if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
         }
       } catch (err) {
-        console.error('Error loading user:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -79,21 +83,23 @@ export default function UserDetailPage() {
 
   const handleLevelChange = async () => {
     if (!id || !detail || selectedLevel === detail.user.level) return;
-    const confirmed = window.confirm(`¿Cambiar nivel de ${detail.user.level} a ${selectedLevel}?`);
-    if (!confirmed) return;
-    setLevelUpdating(true);
-    try {
-      await adminService.updateUserLevel(id, selectedLevel);
-      setDetail((prev) =>
-        prev
-          ? { ...prev, user: { ...prev.user, level: selectedLevel } }
-          : null,
-      );
-    } catch (err) {
-      console.error('Error updating level:', err);
-    } finally {
-      setLevelUpdating(false);
-    }
+    setConfirmModal({open: true, title: t('users.change_level'), message: `${detail.user.level} → ${selectedLevel}`, action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      setLevelUpdating(true);
+      try {
+        await adminService.updateUserLevel(id, selectedLevel);
+        setDetail((prev) =>
+          prev
+            ? { ...prev, user: { ...prev.user, level: selectedLevel } }
+            : null,
+        );
+        showToast('success', t('users.level_updated', { defaultValue: 'Nivel actualizado' }));
+      } catch {
+        // Error handled silently
+      } finally {
+        setLevelUpdating(false);
+      }
+    }});
   };
 
   const handleToggleActive = async () => {
@@ -110,8 +116,9 @@ export default function UserDetailPage() {
       );
       setBlockModalOpen(false);
       setBlockReason('');
+      showToast('success', newActive ? t('users.unblocked', { defaultValue: 'Usuario desbloqueado' }) : t('users.blocked', { defaultValue: 'Usuario bloqueado' }));
     } catch (err) {
-      console.error('Error toggling user active:', err);
+      // Error handled by UI
     } finally {
       setBlockUpdating(false);
     }
@@ -389,6 +396,14 @@ export default function UserDetailPage() {
           </div>
         </div>
       )}
+
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
 
       {/* Block User Modal */}
       {blockModalOpen && (

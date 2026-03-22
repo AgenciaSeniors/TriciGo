@@ -9,6 +9,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 const severityBadge: Record<string, string> = {
   low: 'bg-blue-50 text-blue-700',
@@ -44,7 +45,7 @@ export default function FraudAlertsPage() {
       });
       setAlerts(data);
     } catch (err) {
-      console.error('Error fetching alerts:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar alertas de fraude');
     } finally {
       setLoading(false);
@@ -65,7 +66,7 @@ export default function FraudAlertsPage() {
       setShowResolveModal(null);
       setResolutionNote('');
     } catch (err) {
-      console.error('Error resolving alert:', err);
+      // Error handled by UI
     } finally {
       setResolving(null);
     }
@@ -135,9 +136,7 @@ export default function FraudAlertsPage() {
               </tr>
             ) : alerts.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {t('fraud.no_alerts')}
-                </td>
+                <td colSpan={6}><AdminEmptyState icon="🛡️" title={t('fraud.no_alerts')} /></td>
               </tr>
             ) : (
               alerts.map((alert) => (

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { corporateService, walletService } from '@tricigo/api';
 import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -24,6 +25,7 @@ const statusClasses: Record<CorporateAccountStatus, string> = {
 
 export default function BusinessDetailPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { userId: adminUserId } = useAdminUser();
@@ -54,7 +56,7 @@ export default function BusinessDetailPage() {
       setRides(rds);
       setBalance(bal);
     } catch (err) {
-      console.error('Error loading business detail:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }
@@ -68,6 +70,7 @@ export default function BusinessDetailPage() {
     try {
       await corporateService.approveAccount(id, adminUserId);
       await fetchData();
+      showToast('success', t('businesses.approved_success', { defaultValue: 'Empresa aprobada' }));
     } finally { setActionLoading(false); }
   }
 
@@ -78,6 +81,7 @@ export default function BusinessDetailPage() {
       await corporateService.rejectAccount(id, adminUserId, rejectReason);
       setShowRejectModal(false);
       await fetchData();
+      showToast('success', t('businesses.rejected_success', { defaultValue: 'Empresa rechazada' }));
     } finally { setActionLoading(false); }
   }
 
@@ -88,6 +92,7 @@ export default function BusinessDetailPage() {
       await corporateService.suspendAccount(id, adminUserId, suspendReason);
       setShowSuspendModal(false);
       await fetchData();
+      showToast('success', t('businesses.suspended_success', { defaultValue: 'Empresa suspendida' }));
     } finally { setActionLoading(false); }
   }
 
@@ -97,6 +102,7 @@ export default function BusinessDetailPage() {
     try {
       await corporateService.approveAccount(id, adminUserId);
       await fetchData();
+      showToast('success', t('businesses.reactivated_success', { defaultValue: 'Empresa reactivada' }));
     } finally { setActionLoading(false); }
   }
 

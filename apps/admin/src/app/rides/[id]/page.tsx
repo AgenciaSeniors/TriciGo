@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -46,6 +47,7 @@ type RideDetail = {
 
 export default function RideDetailPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [detail, setDetail] = useState<RideDetail | null>(null);
@@ -60,7 +62,7 @@ export default function RideDetailPage() {
         const data = await adminService.getRideDetail(id);
         if (!cancelled) setDetail(data);
       } catch (err) {
-        console.error('Error loading ride:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }

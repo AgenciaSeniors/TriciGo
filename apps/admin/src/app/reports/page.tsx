@@ -7,6 +7,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -152,7 +153,7 @@ export default function ReportsPage() {
           setUtilization(util);
         }
       } catch (err) {
-        console.error('Error fetching reports:', err);
+        // Error handled by UI
         if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar reportes');
       } finally {
         if (!cancelled) setLoading(false);
@@ -261,7 +262,7 @@ export default function ReportsPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('CSV export failed:', err);
+      // Error handled by UI
     } finally {
       setExporting(false);
     }

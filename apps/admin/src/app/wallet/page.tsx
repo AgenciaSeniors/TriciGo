@@ -11,6 +11,8 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +44,7 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string; variant?: 'danger' | 'warning' | 'default'; inputValue?: string; onInputChange?: (val: string) => void; inputPlaceholder?: string}>({open: false, action: () => {}, title: '', message: ''});
 
   const { sortedData: sortedRedemptions, toggleSort: toggleSortRedemptions, sortKey: sortKeyRedemptions, sortDirection: sortDirRedemptions } = useSortableTable(redemptions, 'requested_at' as keyof RedemptionRow);
   const { sortedData: sortedRecharges, toggleSort: toggleSortRecharges, sortKey: sortKeyRecharges, sortDirection: sortDirRecharges } = useSortableTable(recharges, 'created_at' as keyof RechargeRow);
@@ -56,7 +59,7 @@ export default function WalletPage() {
         const data = await adminService.getWalletStats();
         if (!cancelled) setStats(data);
       } catch (err) {
-        console.error('Error fetching wallet stats:', err);
+        // Error handled by UI
       }
     }
     fetchStats();
@@ -84,7 +87,7 @@ export default function WalletPage() {
           if (!cancelled) setTropipayIntents(data);
         }
       } catch (err) {
-        console.error('Error fetching wallet data:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar datos de wallet');
       } finally {
         if (!cancelled) setLoading(false);
@@ -95,70 +98,71 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [tab, page]);
 
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
+
   async function handleRedemption(id: string, action: 'approved' | 'rejected') {
     if (action === 'approved') {
-      if (!window.confirm(t('wallet_admin.confirm_approve_redemption'))) return;
+      setConfirmModal({open: true, title: t('wallet_admin.confirm_approve_redemption'), message: t('wallet_admin.confirm_approve_redemption'), action: async () => {
+        setConfirmModal(prev => ({...prev, open: false}));
+        setProcessing(id);
+        try {
+          await adminService.processRedemption(id, adminUserId, action);
+          setRedemptions((prev) => prev.filter((r) => r.id !== id));
+          const newStats = await adminService.getWalletStats();
+          setStats(newStats);
+        } catch (err) {
+          showToast('error', t('wallet_admin.error_processing_redemption'));
+        } finally {
+          setProcessing(null);
+        }
+      }});
     } else {
-      const reason = window.prompt(t('wallet_admin.reject_reason_redemption'));
-      if (reason === null) return;
-      setProcessing(id);
-      try {
-        await adminService.processRedemption(id, adminUserId, action, reason);
-        setRedemptions((prev) => prev.filter((r) => r.id !== id));
-        // Refresh stats
-        const newStats = await adminService.getWalletStats();
-        setStats(newStats);
-      } catch (err) {
-        console.error('Error processing redemption:', err);
-        showToast('error', t('wallet_admin.error_processing_redemption'));
-      } finally {
-        setProcessing(null);
-      }
-      return;
-    }
-
-    setProcessing(id);
-    try {
-      await adminService.processRedemption(id, adminUserId, action);
-      setRedemptions((prev) => prev.filter((r) => r.id !== id));
-      const newStats = await adminService.getWalletStats();
-      setStats(newStats);
-    } catch (err) {
-      console.error('Error processing redemption:', err);
-      showToast('error', t('wallet_admin.error_processing_redemption'));
-    } finally {
-      setProcessing(null);
+      setRejectReasonInput('');
+      setConfirmModal({open: true, title: t('wallet_admin.reject_reason_redemption'), message: t('wallet_admin.reject_reason_redemption'), variant: 'danger', inputValue: '', onInputChange: (val) => { setRejectReasonInput(val); setConfirmModal(prev => ({...prev, inputValue: val})); }, inputPlaceholder: t('wallet_admin.reject_reason_redemption'), action: async () => {
+        setConfirmModal(prev => ({...prev, open: false}));
+        setProcessing(id);
+        try {
+          await adminService.processRedemption(id, adminUserId, action, rejectReasonInput);
+          setRedemptions((prev) => prev.filter((r) => r.id !== id));
+          const newStats = await adminService.getWalletStats();
+          setStats(newStats);
+        } catch (err) {
+          showToast('error', t('wallet_admin.error_processing_redemption'));
+        } finally {
+          setProcessing(null);
+        }
+      }});
     }
   }
 
   async function handleRecharge(id: string, action: 'approved' | 'rejected') {
     if (action === 'approved') {
-      if (!window.confirm(t('wallet_admin.confirm_approve_recharge'))) return;
+      setConfirmModal({open: true, title: t('wallet_admin.confirm_approve_recharge'), message: t('wallet_admin.confirm_approve_recharge'), action: async () => {
+        setConfirmModal(prev => ({...prev, open: false}));
+        setProcessing(id);
+        try {
+          await adminService.processRecharge(id, adminUserId, true);
+          setRecharges((prev) => prev.filter((r) => r.id !== id));
+        } catch (err) {
+          showToast('error', t('wallet_admin.error_processing_recharge'));
+        } finally {
+          setProcessing(null);
+        }
+      }});
     } else {
-      const reason = window.prompt(t('wallet_admin.reject_reason_recharge'));
-      if (reason === null) return;
-      setProcessing(id);
-      try {
-        await adminService.processRecharge(id, adminUserId, false, reason);
-        setRecharges((prev) => prev.filter((r) => r.id !== id));
-      } catch (err) {
-        console.error('Error processing recharge:', err);
-        showToast('error', t('wallet_admin.error_processing_recharge'));
-      } finally {
-        setProcessing(null);
-      }
-      return;
-    }
-
-    setProcessing(id);
-    try {
-      await adminService.processRecharge(id, adminUserId, true);
-      setRecharges((prev) => prev.filter((r) => r.id !== id));
-    } catch (err) {
-      console.error('Error processing recharge:', err);
-      showToast('error', t('wallet_admin.error_processing_recharge'));
-    } finally {
-      setProcessing(null);
+      setRejectReasonInput('');
+      setConfirmModal({open: true, title: t('wallet_admin.reject_reason_recharge'), message: t('wallet_admin.reject_reason_recharge'), variant: 'danger', inputValue: '', onInputChange: (val) => { setRejectReasonInput(val); setConfirmModal(prev => ({...prev, inputValue: val})); }, inputPlaceholder: t('wallet_admin.reject_reason_recharge'), action: async () => {
+        setConfirmModal(prev => ({...prev, open: false}));
+        setProcessing(id);
+        try {
+          await adminService.processRecharge(id, adminUserId, false, rejectReasonInput);
+          setRecharges((prev) => prev.filter((r) => r.id !== id));
+        } catch (err) {
+          showToast('error', t('wallet_admin.error_processing_recharge'));
+        } finally {
+          setProcessing(null);
+        }
+      }});
     }
   }
 
@@ -254,7 +258,7 @@ export default function WalletPage() {
                       {formatTriciCoin(r.amount)}
                     </td>
                     <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                      {new Date(r.requested_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {formatAdminDate(r.requested_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
@@ -306,7 +310,7 @@ export default function WalletPage() {
                       {formatTriciCoin(r.amount)}
                     </td>
                     <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                      {new Date(r.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {formatAdminDate(r.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
@@ -367,7 +371,7 @@ export default function WalletPage() {
                       {tx.reference_id ? tx.reference_id.slice(0, 8) : '—'}
                     </td>
                     <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                      {new Date(tx.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {formatAdminDate(tx.created_at)}
                     </td>
                   </tr>
                 ))
@@ -429,7 +433,7 @@ export default function WalletPage() {
                         {pi.tropipay_reference ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                        {new Date(pi.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {formatAdminDate(pi.created_at)}
                       </td>
                     </tr>
                   );
@@ -461,6 +465,18 @@ export default function WalletPage() {
           {t('common.next')}
         </button>
       </div>
+
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        inputValue={confirmModal.inputValue}
+        onInputChange={confirmModal.onInputChange}
+        inputPlaceholder={confirmModal.inputPlaceholder}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
     </div>
   );
 }

@@ -25,7 +25,12 @@
     "saving": "Saving...",
     "error_generic": "Error logging in. Please try again.",
     "status": "Status",
-    "search_placeholder": "Search..."
+    "search_placeholder": "Search...",
+    "load_error": "Error loading data",
+    "field_required": "Field required",
+    "must_be_future": "Must be a future date",
+    "must_be_positive": "Must be greater than or equal to 0",
+    "select_user": "Must select a user"
   },
 
   "header": {

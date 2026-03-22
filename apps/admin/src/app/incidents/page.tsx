@@ -7,6 +7,8 @@ import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 const PAGE_SIZE = 20;
 
@@ -67,7 +69,7 @@ export default function IncidentsPage() {
       .then((data) => {
         if (!cancelled) setIncidents(data as unknown as Incident[]);
       })
-      .catch((err: unknown) => { console.error(err); setError(err instanceof Error ? err.message : 'Error al cargar incidentes'); })
+      .catch((err: unknown) => { setError(err instanceof Error ? err.message : 'Error al cargar incidentes'); })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -82,7 +84,7 @@ export default function IncidentsPage() {
         prev.map((i) => (i.id === incidentId ? { ...i, status: newStatus } : i)),
       );
     } catch (err) {
-      console.error('Error updating incident:', err);
+      // Error handled by UI
     }
   };
 
@@ -139,9 +141,7 @@ export default function IncidentsPage() {
               </tr>
             ) : incidents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-neutral-400">
-                  {t('incidents.no_incidents')}
-                </td>
+                <td colSpan={7}><AdminEmptyState icon="🚨" title={t('incidents.no_incidents')} /></td>
               </tr>
             ) : (
               incidents.map((incident) => (
@@ -166,12 +166,7 @@ export default function IncidentsPage() {
                     {incident.description}
                   </td>
                   <td className="px-4 py-3 text-sm text-neutral-500 hidden lg:table-cell">
-                    {new Date(incident.created_at).toLocaleDateString('es-CU', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatAdminDate(incident.created_at)}
                   </td>
                   <td className="px-4 py-3">
                     {incident.status === 'open' && (

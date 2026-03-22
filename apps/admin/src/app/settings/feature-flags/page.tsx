@@ -26,7 +26,7 @@ export default function FeatureFlagsPage() {
         const data = await adminService.getFeatureFlags();
         if (!cancelled) setFlags(data);
       } catch (err) {
-        console.error('Error fetching flags:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar feature flags');
       } finally {
         if (!cancelled) setLoading(false);
@@ -42,7 +42,7 @@ export default function FeatureFlagsPage() {
     try {
       await adminService.updateFeatureFlag(flag.id, { value: newValue });
     } catch (err) {
-      console.error('Error toggling flag:', err);
+      // Error handled by UI
       setFlags((prev) => prev.map((f) => f.id === flag.id ? { ...f, value: !newValue } : f));
     }
   }
@@ -62,7 +62,7 @@ export default function FeatureFlagsPage() {
       setNewDesc('');
       setShowCreate(false);
     } catch (err) {
-      console.error('Error creating flag:', err);
+      // Error handled by UI
       showToast('error', 'Error al crear flag');
     } finally {
       setCreating(false);

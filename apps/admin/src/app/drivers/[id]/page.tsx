@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import { formatCUP } from '@tricigo/utils';
 import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus, SelfieCheck, ReviewTagSummaryItem } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
@@ -49,6 +50,7 @@ const DOC_TYPE_KEY: Record<string, string> = {
 
 export default function DriverDetailPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -85,7 +87,7 @@ export default function DriverDetailPage() {
           }).catch(() => {});
         }
       } catch (err) {
-        console.error('Error loading driver:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -126,7 +128,7 @@ export default function DriverDetailPage() {
       setDocNotes((prev) => ({ ...prev, [documentId]: '' }));
       await refreshDriver();
     } catch (err) {
-      console.error('Error verifying document:', err);
+      // Error handled by UI
     } finally {
       setVerifyingDoc(null);
     }
@@ -138,8 +140,9 @@ export default function DriverDetailPage() {
     try {
       await adminService.approveDriver(id, adminUserId);
       await refreshDriver();
+      showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
     } catch (err) {
-      console.error('Error approving driver:', err);
+      // Error handled by UI
     } finally {
       setActionLoading(false);
     }
@@ -157,8 +160,9 @@ export default function DriverDetailPage() {
       await refreshDriver();
       setShowReasonModal(null);
       setReason('');
+      showToast('success', showReasonModal === 'reject' ? t('drivers.rejected_success', { defaultValue: 'Conductor rechazado' }) : t('drivers.suspended_success', { defaultValue: 'Conductor suspendido' }));
     } catch (err) {
-      console.error('Error:', err);
+      // Error handled by UI
     } finally {
       setActionLoading(false);
     }

@@ -25,7 +25,12 @@
     "saving": "Guardando...",
     "error_generic": "Error al iniciar sesión. Intenta de nuevo.",
     "status": "Estado",
-    "search_placeholder": "Buscar..."
+    "search_placeholder": "Buscar...",
+    "load_error": "Error al cargar datos",
+    "field_required": "Campo requerido",
+    "must_be_future": "Debe ser una fecha futura",
+    "must_be_positive": "Debe ser mayor o igual a 0",
+    "select_user": "Debe seleccionar un usuario"
   },
 
   "header": {

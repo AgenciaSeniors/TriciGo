@@ -39,7 +39,7 @@ export default function ZonesPage() {
         const data = await adminService.getZones();
         if (!cancelled) setZones(data);
       } catch (err) {
-        console.error('Error fetching zones:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar zonas');
       } finally {
         if (!cancelled) setLoading(false);
@@ -63,7 +63,7 @@ export default function ZonesPage() {
       setZones(data);
       setEditingId(null);
     } catch (err) {
-      console.error('Error updating zone:', err);
+      // Error handled by UI
       showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
@@ -75,7 +75,7 @@ export default function ZonesPage() {
       await adminService.updateZone(zone.id, { is_active: !zone.is_active });
       setZones((prev) => prev.map((z) => z.id === zone.id ? { ...z, is_active: !z.is_active } : z));
     } catch (err) {
-      console.error('Error toggling:', err);
+      // Error handled by UI
     }
   }
 

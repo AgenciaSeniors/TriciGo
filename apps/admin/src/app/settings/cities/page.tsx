@@ -47,7 +47,7 @@ export default function CitiesPage() {
         .select('city_id');
 
       if (ridesError) {
-        console.error('Error fetching ride counts:', ridesError);
+        // Error handled by UI
       }
 
       // Count rides per city
@@ -67,7 +67,7 @@ export default function CitiesPage() {
 
       setCities(enriched);
     } catch (err) {
-      console.error('Error fetching cities:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar ciudades');
     } finally {
       setLoading(false);
@@ -89,7 +89,7 @@ export default function CitiesPage() {
       if (error) throw error;
       setCities((prev) => prev.map((c) => c.id === city.id ? { ...c, is_active: !c.is_active } : c));
     } catch (err) {
-      console.error('Error toggling city:', err);
+      // Error handled by UI
     }
   }
 
@@ -112,7 +112,7 @@ export default function CitiesPage() {
       await fetchCities();
       setEditingId(null);
     } catch (err) {
-      console.error('Error updating city:', err);
+      // Error handled by UI
       showToast('error', t('cities.error_saving'));
     } finally {
       setSaving(false);

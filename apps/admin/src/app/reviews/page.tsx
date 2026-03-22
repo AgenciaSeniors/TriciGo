@@ -167,7 +167,7 @@ export default function ReviewsPage() {
 
       setReviews(rows);
     } catch (err) {
-      console.error('Error fetching reviews:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar reseñas');
     } finally {
       setLoading(false);
@@ -196,7 +196,7 @@ export default function ReviewsPage() {
         prev.map((r) => (r.id === review.id ? { ...r, is_visible: newVisibility } : r)),
       );
     } catch (err) {
-      console.error('Error toggling visibility:', err);
+      // Error handled by UI
       showToast('error', 'Error al cambiar visibilidad');
     } finally {
       setActionLoading(null);
@@ -217,7 +217,7 @@ export default function ReviewsPage() {
         prev.map((r) => (r.id === review.id ? { ...r, is_featured: newFeatured } : r)),
       );
     } catch (err) {
-      console.error('Error toggling featured:', err);
+      // Error handled by UI
       showToast('error', 'Error al cambiar destacado');
     } finally {
       setActionLoading(null);

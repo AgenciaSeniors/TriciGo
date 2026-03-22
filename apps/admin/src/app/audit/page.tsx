@@ -54,7 +54,7 @@ export default function AuditPage() {
           setActions(data);
         }
       } catch (err) {
-        console.error('Error fetching admin actions:', err);
+        // Error handled by UI
         if (!cancelled) {
           setActions([]);
           setError(err instanceof Error ? err.message : 'Error al cargar auditoría');

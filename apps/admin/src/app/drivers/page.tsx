@@ -125,7 +125,7 @@ export default function DriversPage() {
         const data = await adminService.getAllDrivers(page, PAGE_SIZE, filters);
         if (!cancelled) setDrivers(data);
       } catch (err) {
-        console.error('Error fetching drivers:', err);
+        // Error handled by UI
         if (!cancelled) { setDrivers([]); setError(err instanceof Error ? err.message : 'Error al cargar conductores'); }
       } finally {
         if (!cancelled) setLoading(false);

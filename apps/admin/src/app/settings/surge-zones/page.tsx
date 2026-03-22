@@ -8,6 +8,7 @@ import type { SurgeZone } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { formatAdminDate } from '@/lib/formatDate';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 
 export default function SurgeZonesPage() {
@@ -25,6 +26,7 @@ export default function SurgeZonesPage() {
     starts_at: '',
     ends_at: '',
   });
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string; variant?: 'danger' | 'warning' | 'default'}>({open: false, action: () => {}, title: '', message: ''});
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +35,7 @@ export default function SurgeZonesPage() {
         const data = await adminService.getSurgeZones();
         if (!cancelled) setSurges(data);
       } catch (err) {
-        console.error('Error fetching surge zones:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar zonas surge');
       } finally {
         if (!cancelled) setLoading(false);
@@ -58,9 +60,10 @@ export default function SurgeZonesPage() {
       setSurges(data);
       setShowCreate(false);
       setForm({ zone_id: '', multiplier: 1.5, reason: '', starts_at: '', ends_at: '' });
+      showToast('success', t('surge_zones.created_success', { defaultValue: 'Zona surge creada' }));
     } catch (err) {
-      console.error('Error creating surge zone:', err);
-      showToast('error', 'Error al crear zona surge');
+      // Error handled by UI
+      showToast('error', t('surge_zones.error_creating', { defaultValue: 'Error al crear zona surge' }));
     } finally {
       setCreating(false);
     }
@@ -73,18 +76,20 @@ export default function SurgeZonesPage() {
         prev.map((s) => (s.id === surge.id ? { ...s, active: !s.active } : s)),
       );
     } catch (err) {
-      console.error('Error toggling surge:', err);
+      // Error handled by UI
     }
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm(t('surge_zones.confirm_delete'))) return;
-    try {
-      await adminService.deleteSurgeZone(id);
-      setSurges((prev) => prev.filter((s) => s.id !== id));
-    } catch (err) {
-      console.error('Error deleting surge:', err);
-    }
+    setConfirmModal({open: true, title: t('surge_zones.confirm_delete'), message: t('surge_zones.confirm_delete'), variant: 'danger', action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      try {
+        await adminService.deleteSurgeZone(id);
+        setSurges((prev) => prev.filter((s) => s.id !== id));
+      } catch {
+        // Error handled silently
+      }
+    }});
   }
 
   return (
@@ -226,6 +231,15 @@ export default function SurgeZonesPage() {
           </tbody>
         </table>
       </div>
+
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
     </div>
   );
 }

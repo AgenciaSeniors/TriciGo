@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { formatAdminDate } from '@/lib/formatDate';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 
 type Campaign = {
   id: string;
@@ -107,7 +108,7 @@ export default function CampaignsPage() {
         .range(from, to);
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
-      console.error('Error loading campaigns:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar campañas');
     } finally {
       setLoading(false);
@@ -131,7 +132,7 @@ export default function CampaignsPage() {
       setCities(citiesData);
       setPromotions(promoData);
     } catch (err) {
-      console.error('Error loading reference data:', err);
+      // Error handled by UI
     }
   };
 
@@ -195,14 +196,14 @@ export default function CampaignsPage() {
 
   function validateCampaignForm() {
     const errors: Record<string, string> = {};
-    if (!formName.trim()) errors.name = 'Campo requerido';
-    if (!formTitle.trim()) errors.title = 'Campo requerido';
-    if (!formBody.trim()) errors.body = 'Campo requerido';
-    if (formSegment === 'by_city' && !formCityId) errors.city = 'Campo requerido';
+    if (!formName.trim()) errors.name = t('common.field_required');
+    if (!formTitle.trim()) errors.title = t('common.field_required');
+    if (!formBody.trim()) errors.body = t('common.field_required');
+    if (formSegment === 'by_city' && !formCityId) errors.city = t('common.field_required');
     if (!formSendNow && formSchedule) {
       const scheduleDate = new Date(formSchedule);
       if (scheduleDate <= new Date()) {
-        errors.schedule = 'Debe ser una fecha futura';
+        errors.schedule = t('common.must_be_future');
       }
     }
     setFormErrors(errors);
@@ -268,7 +269,7 @@ export default function CampaignsPage() {
       loadCampaigns();
       showToast('success', t('campaigns.send_success'));
     } catch (err) {
-      console.error('Error sending campaign:', err);
+      // Error handled by UI
       showToast('error', t('campaigns.send_error'));
     } finally {
       setSending(false);
@@ -514,9 +515,7 @@ export default function CampaignsPage() {
                 </tr>
               ) : campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-neutral-400">
-                    {t('campaigns.no_campaigns')}
-                  </td>
+                  <td colSpan={6}><AdminEmptyState icon="📢" title={t('campaigns.no_campaigns')} /></td>
                 </tr>
               ) : (
                 campaigns.map((campaign) => (

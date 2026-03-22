@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 
 type ConfigEntry = { key: string; value: string };
 
@@ -19,6 +20,7 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
 
 export default function PlatformConfigPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
@@ -38,7 +40,7 @@ export default function PlatformConfigPage() {
           setEditValues(vals);
         }
       } catch (err) {
-        console.error('Error fetching platform config:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -61,6 +63,7 @@ export default function PlatformConfigPage() {
         prev.map((c) => c.key === key ? { ...c, value } : c),
       );
       setSavedKey(key);
+      showToast('success', t('platform_config.saved'));
       setTimeout(() => setSavedKey(null), 3000);
     } catch {
       setErrorKey(key);

@@ -25,7 +25,12 @@
     "saving": "Salvando...",
     "error_generic": "Erro ao fazer login. Tente novamente.",
     "status": "Status",
-    "search_placeholder": "Buscar..."
+    "search_placeholder": "Buscar...",
+    "load_error": "Erro ao carregar dados",
+    "field_required": "Campo obrigat\u00f3rio",
+    "must_be_future": "Deve ser uma data futura",
+    "must_be_positive": "Deve ser maior ou igual a 0",
+    "select_user": "Deve selecionar um usu\u00e1rio"
   },
 
   "header": {

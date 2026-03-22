@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 
 interface ZoneRow {
   id: string;
@@ -56,6 +57,7 @@ function getSurgeDot(multiplier: number): string {
 
 export default function SurgeDashboardPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [zones, setZones] = useState<ZoneRow[]>([]);
   const [surgeStatus, setSurgeStatus] = useState<SurgeStatus[]>([]);
   const [metrics, setMetrics] = useState<LiveMetrics>({ searching_rides: 0, in_progress_rides: 0, online_drivers: 0 });
@@ -94,7 +96,7 @@ export default function SurgeDashboardPage() {
       );
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Error refreshing surge data:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }

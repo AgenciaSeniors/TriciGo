@@ -11,6 +11,8 @@ import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { formatAdminDate } from '@/lib/formatDate';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 const PAGE_SIZE = 20;
 
@@ -45,6 +47,8 @@ export default function ReferralsPage() {
     total_bonus_paid_cup: 0,
   });
 
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string; variant?: 'danger' | 'warning' | 'default'}>({open: false, action: () => {}, title: '', message: ''});
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -57,7 +61,7 @@ export default function ReferralsPage() {
       setTotal(result.total);
       setStats(statsData);
     } catch (err) {
-      console.error('Error fetching referrals:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar referidos');
     } finally {
       setLoading(false);
@@ -69,27 +73,29 @@ export default function ReferralsPage() {
   }, [fetchData]);
 
   const handleReward = async (ref: Referral) => {
-    if (!window.confirm(t('referrals.reward_confirm'))) return;
-    try {
-      await referralService.rewardReferral(ref.id);
-      showToast('success', t('referrals.reward_success'));
-      fetchData();
-    } catch (err) {
-      console.error('Error rewarding referral:', err);
-      showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
-    }
+    setConfirmModal({open: true, title: t('referrals.reward_confirm'), message: t('referrals.reward_confirm'), action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      try {
+        await referralService.rewardReferral(ref.id);
+        showToast('success', t('referrals.reward_success'));
+        fetchData();
+      } catch (err) {
+        showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
+      }
+    }});
   };
 
   const handleInvalidate = async (ref: Referral) => {
-    if (!window.confirm(t('referrals.invalidate_confirm'))) return;
-    try {
-      await referralService.invalidateReferral(ref.id);
-      showToast('success', t('referrals.invalidate_success'));
-      fetchData();
-    } catch (err) {
-      console.error('Error invalidating referral:', err);
-      showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
-    }
+    setConfirmModal({open: true, title: t('referrals.invalidate_confirm'), message: t('referrals.invalidate_confirm'), variant: 'danger', action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      try {
+        await referralService.invalidateReferral(ref.id);
+        showToast('success', t('referrals.invalidate_success'));
+        fetchData();
+      } catch (err) {
+        showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
+      }
+    }});
   };
 
   const conversionRate =
@@ -201,11 +207,7 @@ export default function ReferralsPage() {
                   </td>
                   <td className="py-3 pr-4">{formatCUP(ref.bonus_amount)}</td>
                   <td className="py-3 pr-4 text-neutral-500">
-                    {new Date(ref.created_at).toLocaleDateString('es-CU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatAdminDate(ref.created_at)}
                   </td>
                   <td className="py-3">
                     {ref.status === 'pending' && (
@@ -262,6 +264,14 @@ export default function ReferralsPage() {
           </button>
         </div>
       )}
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
     </div>
   );
 }

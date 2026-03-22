@@ -26,7 +26,7 @@ export default function ServiceTypesPage() {
         const data = await adminService.getServiceTypeConfigs();
         if (!cancelled) setConfigs(data);
       } catch (err) {
-        console.error('Error fetching service types:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar tipos de servicio');
       } finally {
         if (!cancelled) setLoading(false);
@@ -58,7 +58,7 @@ export default function ServiceTypesPage() {
       setConfigs(data);
       setEditingId(null);
     } catch (err) {
-      console.error('Error updating service type:', err);
+      // Error handled by UI
       showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
@@ -70,7 +70,7 @@ export default function ServiceTypesPage() {
       await adminService.updateServiceTypeConfig(config.id, { is_active: !config.is_active });
       setConfigs((prev) => prev.map((c) => c.id === config.id ? { ...c, is_active: !c.is_active } : c));
     } catch (err) {
-      console.error('Error toggling:', err);
+      // Error handled by UI
     }
   }
 

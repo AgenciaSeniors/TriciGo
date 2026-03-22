@@ -7,6 +7,7 @@ import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { CorporateAccount, CorporateAccountStatus } from '@tricigo/types';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 
 const PAGE_SIZE = 20;
 
@@ -35,7 +36,7 @@ export default function BusinessesPage() {
       .then((data) => {
         if (!cancelled) setAccounts(data);
       })
-      .catch((err) => console.error('Error fetching accounts:', err))
+      .catch(() => { /* Error handled silently */ })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -109,11 +110,7 @@ export default function BusinessesPage() {
                     )}
                   </td>
                   <td className="py-3 text-neutral-500">
-                    {new Date(acc.created_at).toLocaleDateString('es-CU', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {formatAdminDate(acc.created_at)}
                   </td>
                 </tr>
               ))}

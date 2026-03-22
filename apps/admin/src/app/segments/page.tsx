@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { formatAdminDate } from '@/lib/formatDate';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
@@ -46,7 +47,7 @@ export default function SegmentsPage() {
 
   // Load cities on mount
   useEffect(() => {
-    cityService.getAllCities().then(setCities).catch(console.error);
+    cityService.getAllCities().then(setCities).catch(() => {});
   }, []);
 
   // Load segment counts
@@ -106,7 +107,7 @@ export default function SegmentsPage() {
         by_city: 0,
       });
     } catch (err) {
-      console.error('Error loading segment counts:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar segmentos');
     } finally {
       setCountsLoading(false);
@@ -229,7 +230,7 @@ export default function SegmentsPage() {
 
         setUsers(result);
       } catch (err) {
-        console.error('Error loading segment users:', err);
+        // Error handled by UI
         setUsers([]);
       } finally {
         setUsersLoading(false);
@@ -426,9 +427,7 @@ export default function SegmentsPage() {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-neutral-400">
-                      {t('segments.no_users')}
-                    </td>
+                    <td colSpan={6}><AdminEmptyState icon="👥" title={t('segments.no_users')} /></td>
                   </tr>
                 ) : (
                   users.map((user) => (

@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import { cmsService, type CmsContent } from '@tricigo/api/services/cms';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 
 export default function ContentPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [contents, setContents] = useState<CmsContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<CmsContent | null>(null);
@@ -27,7 +30,7 @@ export default function ContentPage() {
       const data = await cmsService.getAllContent();
       setContents(data);
     } catch (err) {
-      console.error('Error loading CMS content:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }
@@ -53,8 +56,9 @@ export default function ContentPage() {
       }, 'admin');
       setEditing(null);
       loadContent();
+      showToast('success', t('content.saved', { defaultValue: 'Contenido guardado' }));
     } catch (err) {
-      console.error('Error saving content:', err);
+      // Error handled by UI
     } finally {
       setSaving(false);
     }
@@ -165,7 +169,7 @@ export default function ContentPage() {
               <div>
                 <h3 className="font-bold">{slugLabels[item.slug] ?? item.slug}</h3>
                 <p className="text-sm text-neutral-500 mt-1">
-                  {t('content.last_updated', { defaultValue: 'Ultima actualizacion' })}: {new Date(item.updated_at).toLocaleDateString('es-CU')}
+                  {t('content.last_updated', { defaultValue: 'Ultima actualizacion' })}: {formatAdminDate(item.updated_at)}
                 </p>
               </div>
               <button

@@ -9,6 +9,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const QUEST_TYPES = ['trip_count', 'earnings', 'rating', 'hours_online', 'peak_hours'] as const;
 
@@ -53,7 +54,7 @@ export default function QuestsPage() {
       const data = await questService.getAllQuests(page, PAGE_SIZE);
       setQuests(data);
     } catch (err) {
-      console.error('Error loading quests:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar misiones');
     } finally {
       setLoading(false);
@@ -81,7 +82,7 @@ export default function QuestsPage() {
       setPage(0);
       loadQuests();
     } catch (err) {
-      console.error('Error creating quest:', err);
+      // Error handled by UI
       showToast('error', 'Error al crear misión');
     } finally {
       setCreating(false);
@@ -93,7 +94,7 @@ export default function QuestsPage() {
       await questService.toggleQuest(id, !current);
       loadQuests();
     } catch (err) {
-      console.error('Error toggling quest:', err);
+      // Error handled by UI
     }
   };
 
@@ -212,12 +213,8 @@ export default function QuestsPage() {
       ) : (
         <>
         <div className="flex gap-2 mb-4">
-          <button onClick={() => toggleSort('start_date' as keyof Quest)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortKey === 'start_date' ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-            {t('quests.sort_date', { defaultValue: 'Fecha' })} {sortKey === 'start_date' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-          </button>
-          <button onClick={() => toggleSort('is_active' as keyof Quest)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortKey === 'is_active' ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-            {t('quests.sort_status', { defaultValue: 'Estado' })} {sortKey === 'is_active' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-          </button>
+          <SortableHeader label={t('quests.sort_date', { defaultValue: 'Fecha' })} sortKey="start_date" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600" />
+          <SortableHeader label={t('quests.sort_status', { defaultValue: 'Estado' })} sortKey="is_active" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600" />
         </div>
         <div className="space-y-3">
           {sortedData.map((q) => (

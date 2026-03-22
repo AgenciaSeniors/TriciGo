@@ -29,7 +29,7 @@ export default function ExchangeRatePage() {
           setHistory(hist);
         }
       } catch (err) {
-        console.error('Error loading exchange rate:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }

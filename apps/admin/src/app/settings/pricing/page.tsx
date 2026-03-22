@@ -8,6 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import type { PricingRule, Zone, ServiceTypeSlug } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 const PAGE_SIZE = 20;
 
@@ -146,21 +147,22 @@ export default function PricingPage() {
   });
   const [creating, setCreating] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string; variant?: 'danger' | 'warning' | 'default'}>({open: false, action: () => {}, title: '', message: ''});
 
   function validatePricingForm() {
     const errors: Record<string, string> = {};
-    if (!createForm.service_type) errors.service_type = 'Campo requerido';
-    if (createForm.base_fare_cup < 0) errors.base_fare_cup = 'Debe ser positivo';
-    if (createForm.per_km_rate_cup < 0) errors.per_km_rate_cup = 'Debe ser positivo';
-    if (createForm.per_minute_rate_cup < 0) errors.per_minute_rate_cup = 'Debe ser positivo';
-    if (createForm.min_fare_cup < 0) errors.min_fare_cup = 'Debe ser positivo';
+    if (!createForm.service_type) errors.service_type = t('common.field_required');
+    if (createForm.base_fare_cup < 0) errors.base_fare_cup = t('common.must_be_positive');
+    if (createForm.per_km_rate_cup < 0) errors.per_km_rate_cup = t('common.must_be_positive');
+    if (createForm.per_minute_rate_cup < 0) errors.per_minute_rate_cup = t('common.must_be_positive');
+    if (createForm.min_fare_cup < 0) errors.min_fare_cup = t('common.must_be_positive');
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
 
   // Fetch zones once for name mapping
   useEffect(() => {
-    adminService.getZones().then(setZones).catch(console.error);
+    adminService.getZones().then(setZones).catch(() => {});
   }, []);
 
   const fetchRules = useCallback(async () => {
@@ -169,7 +171,7 @@ export default function PricingPage() {
       const data = await adminService.getPricingRules(page, PAGE_SIZE);
       setRules(data);
     } catch (err) {
-      console.error('Error fetching pricing rules:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar reglas de precios');
     } finally {
       setLoading(false);
@@ -206,7 +208,7 @@ export default function PricingPage() {
       await fetchRules();
       setEditingId(null);
     } catch (err) {
-      console.error('Error updating pricing rule:', err);
+      // Error handled by UI
       showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
@@ -218,19 +220,20 @@ export default function PricingPage() {
       await adminService.updatePricingRule(rule.id, { is_active: !rule.is_active });
       setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
     } catch (err) {
-      console.error('Error toggling:', err);
+      // Error handled by UI
     }
   }
 
   async function handleDelete(rule: PricingRule) {
-    if (!window.confirm(t('pricing.confirm_delete'))) return;
-    try {
-      await adminService.deletePricingRule(rule.id);
-      await fetchRules();
-    } catch (err) {
-      console.error('Error deleting:', err);
-      showToast('error', t('pricing.error_deleting'));
-    }
+    setConfirmModal({open: true, title: t('pricing.confirm_delete'), message: t('pricing.confirm_delete'), variant: 'danger', action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      try {
+        await adminService.deletePricingRule(rule.id);
+        await fetchRules();
+      } catch (err) {
+        showToast('error', t('pricing.error_deleting'));
+      }
+    }});
   }
 
   async function handleCreate() {
@@ -264,7 +267,7 @@ export default function PricingPage() {
         day_of_week: [],
       });
     } catch (err) {
-      console.error('Error creating:', err);
+      // Error handled by UI
       showToast('error', t('pricing.error_creating'));
     } finally {
       setCreating(false);
@@ -650,6 +653,15 @@ export default function PricingPage() {
           {t('common.next')}
         </button>
       </div>
+
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
     </div>
   );
 }

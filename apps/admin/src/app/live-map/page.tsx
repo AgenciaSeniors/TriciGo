@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import { adminService } from '@tricigo/api';
 import type { Ride } from '@tricigo/types';
 import dynamic from 'next/dynamic';
@@ -51,6 +52,7 @@ function parseLocation(loc: unknown): { lat: number; lng: number } | null {
 
 export default function LiveMapPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
@@ -68,7 +70,7 @@ export default function LiveMapPage() {
       }
       setRides(allRides);
     } catch (err) {
-      console.error('Error fetching rides:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }

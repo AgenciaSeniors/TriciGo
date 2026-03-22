@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 
 type ConfigEntry = { key: string; value: string };
 
@@ -48,6 +49,7 @@ const RULES: AutomationRule[] = [
 
 export default function AutomationPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [configs, setConfigs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function AutomationPage() {
           setConfigs(vals);
         }
       } catch (err) {
-        console.error('Error fetching config:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -86,9 +88,10 @@ export default function AutomationPage() {
       await adminService.updatePlatformConfig(key, JSON.stringify(value));
       setConfigs((prev) => ({ ...prev, [key]: value }));
       setSavedKey(key);
+      showToast('success', t('automation.saved'));
       setTimeout(() => setSavedKey(null), 3000);
     } catch (err) {
-      console.error('Error saving:', err);
+      // Error handled by UI
     } finally {
       setSavingKey(null);
     }

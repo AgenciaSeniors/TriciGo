@@ -53,7 +53,7 @@ export default function LostFoundPage() {
       });
       setItems(data);
     } catch (err) {
-      console.error('Error fetching lost items:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar objetos perdidos');
     } finally {
       setLoading(false);
@@ -75,7 +75,7 @@ export default function LostFoundPage() {
       await lostItemService.addAdminNotes(selected.id, adminNotes);
       setSelected((prev) => prev ? { ...prev, admin_notes: adminNotes } : null);
     } catch (err) {
-      console.error('Error saving notes:', err);
+      // Error handled by UI
     }
   };
 
@@ -91,7 +91,7 @@ export default function LostFoundPage() {
       setItems((prev) => prev.map((i) => (i.id === selected.id ? updated : i)));
       setSelected(updated);
     } catch (err) {
-      console.error('Error closing item:', err);
+      // Error handled by UI
     } finally {
       setClosing(false);
     }

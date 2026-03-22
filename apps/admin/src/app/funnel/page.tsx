@@ -80,7 +80,7 @@ export default function FunnelPage() {
           { key: 'completed', labelKey: 'funnel.completed', count: completedRes.count ?? 0 },
         ]);
       } catch (err) {
-        console.error('Error fetching funnel data:', err);
+        // Error handled by UI
         if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar embudo');
       } finally {
         if (!cancelled) setLoading(false);

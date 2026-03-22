@@ -10,6 +10,8 @@ import type { PromotionType } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { formatAdminDate } from '@/lib/formatDate';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
 const PAGE_SIZE = 20;
 
@@ -58,23 +60,24 @@ export default function PromotionsPage() {
   const [form, setForm] = useState<CreateForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string; variant?: 'danger' | 'warning' | 'default'}>({open: false, action: () => {}, title: '', message: ''});
 
   function validatePromotionForm() {
     const errors: Record<string, string> = {};
-    if (!form.code.trim()) errors.code = 'Campo requerido';
+    if (!form.code.trim()) errors.code = t('common.field_required');
     if (form.type === 'percentage_discount') {
       const pct = parseFloat(form.discount_percent);
       if (!form.discount_percent || isNaN(pct) || pct < 1 || pct > 100) {
-        errors.discount_percent = 'Debe ser entre 1 y 100';
+        errors.discount_percent = t('promotions.must_be_1_100', { defaultValue: 'Debe ser entre 1 y 100' });
       }
     }
     if (form.max_uses) {
       const mu = parseInt(form.max_uses);
-      if (isNaN(mu) || mu <= 0) errors.max_uses = 'Debe ser mayor a 0';
+      if (isNaN(mu) || mu <= 0) errors.max_uses = t('common.must_be_positive');
     }
     if (form.valid_until && form.valid_from) {
       if (new Date(form.valid_until) <= new Date(form.valid_from)) {
-        errors.valid_until = 'Debe ser posterior a la fecha de inicio';
+        errors.valid_until = t('promotions.must_be_after_start', { defaultValue: 'Debe ser posterior a la fecha de inicio' });
       }
     }
     setFormErrors(errors);
@@ -89,7 +92,7 @@ export default function PromotionsPage() {
         const data = await adminService.getPromotions(page, PAGE_SIZE);
         if (!cancelled) setPromotions(data);
       } catch (err) {
-        console.error('Error fetching promotions:', err);
+        // Error handled by UI
         setError(err instanceof Error ? err.message : 'Error al cargar promociones');
       } finally {
         if (!cancelled) setLoading(false);
@@ -134,7 +137,7 @@ export default function PromotionsPage() {
       setFormErrors({});
       setShowCreate(false);
     } catch (err) {
-      console.error('Error creating promotion:', err);
+      // Error handled by UI
       showToast('error', t('promotions.error_creating'));
     } finally {
       setSaving(false);
@@ -146,20 +149,21 @@ export default function PromotionsPage() {
       await adminService.updatePromotion(promo.id, { is_active: !promo.is_active });
       setPromotions((prev) => prev.map((p) => p.id === promo.id ? { ...p, is_active: !p.is_active } : p));
     } catch (err) {
-      console.error('Error toggling:', err);
+      // Error handled by UI
     }
   }
 
   async function handleDelete(promo: Promotion) {
     if (promo.current_uses > 0) return;
-    if (!window.confirm(t('promotions.confirm_delete', { code: promo.code }))) return;
-    try {
-      await adminService.deletePromotion(promo.id);
-      setPromotions((prev) => prev.filter((p) => p.id !== promo.id));
-    } catch (err) {
-      console.error('Error deleting:', err);
-      showToast('error', t('promotions.error_deleting'));
-    }
+    setConfirmModal({open: true, title: t('promotions.confirm_delete', { code: promo.code }), message: t('promotions.confirm_delete', { code: promo.code }), variant: 'danger', action: async () => {
+      setConfirmModal(prev => ({...prev, open: false}));
+      try {
+        await adminService.deletePromotion(promo.id);
+        setPromotions((prev) => prev.filter((p) => p.id !== promo.id));
+      } catch (err) {
+        showToast('error', t('promotions.error_deleting'));
+      }
+    }});
   }
 
   function formatDiscount(p: Promotion) {
@@ -356,7 +360,7 @@ export default function PromotionsPage() {
                   </td>
                   <td className="px-4 py-3 text-neutral-500">
                     {p.valid_until
-                      ? new Date(p.valid_until).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })
+                      ? formatAdminDate(p.valid_until)
                       : t('promotions.no_limit')}
                   </td>
                   <td className="px-4 py-3">
@@ -406,6 +410,15 @@ export default function PromotionsPage() {
           {t('common.next')}
         </button>
       </div>
+
+      <AdminConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        onConfirm={confirmModal.action}
+        onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
     </div>
   );
 }

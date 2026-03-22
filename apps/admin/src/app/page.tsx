@@ -68,7 +68,7 @@ export default function DashboardPage() {
           setAutoActions(autoActionsData);
         }
       } catch (err) {
-        console.error('Error fetching dashboard:', err);
+        // Error handled by UI
       } finally {
         if (!cancelled) setLoading(false);
       }

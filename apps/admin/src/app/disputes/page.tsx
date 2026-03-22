@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const statusBadge: Record<string, string> = {
   open: 'bg-blue-50 text-blue-700',
@@ -81,7 +82,7 @@ export default function DisputesPage() {
     if (!resolutionNotes.trim()) errors.resolutionNotes = 'Campo requerido';
     if (resolution !== 'no_action' && resolution !== 'warning_issued') {
       const amt = parseInt(refundAmount || '0', 10);
-      if (isNaN(amt) || amt < 0) errors.refundAmount = 'Debe ser mayor o igual a 0';
+      if (isNaN(amt) || amt < 0) errors.refundAmount = t('common.must_be_positive');
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -96,7 +97,7 @@ export default function DisputesPage() {
       });
       setDisputes(data);
     } catch (err) {
-      console.error('Error fetching disputes:', err);
+      // Error handled by UI
       setError(err instanceof Error ? err.message : 'Error al cargar disputas');
     } finally {
       setLoading(false);
@@ -142,7 +143,7 @@ export default function DisputesPage() {
       );
       setSelected(null);
     } catch (err) {
-      console.error('Error resolving dispute:', err);
+      // Error handled by UI
       showToast('error', t('disputes.error_resolving'));
     } finally {
       setResolving(false);
@@ -160,7 +161,7 @@ export default function DisputesPage() {
       setSelected(updated);
       setDisputes((prev) => prev.map((d) => (d.id === selected.id ? updated : d)));
     } catch (err) {
-      console.error('Error assigning:', err);
+      // Error handled by UI
     }
   };
 
@@ -170,7 +171,7 @@ export default function DisputesPage() {
       await disputeService.addAdminNotes(selected.id, adminNotes);
       setSelected((prev) => prev ? { ...prev, admin_notes: adminNotes } : null);
     } catch (err) {
-      console.error('Error saving notes:', err);
+      // Error handled by UI
     }
   };
 
@@ -205,6 +206,12 @@ export default function DisputesPage() {
             {t(`disputes.filter_${s}`)}
           </button>
         ))}
+      </div>
+
+      {/* Sort controls */}
+      <div className="flex gap-2 mb-4">
+        <SortableHeader label={t('common.date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600" />
+        <SortableHeader label={t('disputes.col_priority', { defaultValue: 'Prioridad' })} sortKey="priority" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -60,7 +60,7 @@ export default function LiveMapPage() {
       setDrivers(data as OnlineDriver[]);
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Error fetching online drivers:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }

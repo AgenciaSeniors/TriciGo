@@ -10,6 +10,7 @@ import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { formatAdminDate } from '@/lib/formatDate';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -139,7 +140,7 @@ export default function RidesPage() {
         const data = await adminService.getRides(filters, page, PAGE_SIZE);
         if (!cancelled) setRides(data);
       } catch (err) {
-        console.error('Error fetching rides:', err);
+        // Error handled by UI
         if (!cancelled) { setRides([]); setError(err instanceof Error ? err.message : 'Error al cargar viajes'); }
       } finally {
         if (!cancelled) setLoading(false);
@@ -270,7 +271,7 @@ export default function RidesPage() {
                     {ride.payment_method === 'cash' ? t('rides.payment_cash') : t('rides.payment_tricicoin')}
                   </td>
                   <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                    {new Date(ride.created_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {formatAdminDate(ride.created_at)}
                   </td>
                 </tr>
               ))

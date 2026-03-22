@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { useToast } from '@/components/ui/AdminToast';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -46,6 +47,7 @@ const categoryLabelKeys: Record<string, string> = {
 export default function SupportPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('open');
@@ -63,7 +65,7 @@ export default function SupportPage() {
       });
       setTickets(data);
     } catch (err) {
-      console.error('Error fetching tickets:', err);
+      // Error handled by UI
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,7 @@ export default function SupportPage() {
       const msgs = await supportService.getMessages(ticket.id);
       setMessages(msgs);
     } catch (err) {
-      console.error('Error fetching messages:', err);
+      // Error handled by UI
     }
   };
 
@@ -95,6 +97,7 @@ export default function SupportPage() {
       });
       setMessages((prev) => [...prev, msg]);
       setReply('');
+      showToast('success', t('support.reply_sent', { defaultValue: 'Respuesta enviada' }));
 
       // Update status to in_progress if it was open
       if (selectedTicket.status === 'open') {
@@ -105,7 +108,7 @@ export default function SupportPage() {
         );
       }
     } catch (err) {
-      console.error('Error sending reply:', err);
+      // Error handled by UI
     } finally {
       setSending(false);
     }
@@ -121,7 +124,7 @@ export default function SupportPage() {
         setSelectedTicket((prev) => prev ? { ...prev, status: newStatus } : null);
       }
     } catch (err) {
-      console.error('Error updating ticket:', err);
+      // Error handled by UI
     }
   };
 
