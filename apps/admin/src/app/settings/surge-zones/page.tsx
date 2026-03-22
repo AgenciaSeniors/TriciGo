@@ -94,7 +94,7 @@ export default function SurgeZonesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -210,6 +210,7 @@ export default function SurgeZonesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(s)}
+                      aria-label={s.active ? t('common.deactivate', { defaultValue: 'Deactivate' }) : t('common.activate', { defaultValue: 'Activate' })}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         s.active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}

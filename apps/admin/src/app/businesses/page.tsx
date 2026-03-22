@@ -60,6 +60,8 @@ export default function BusinessesPage() {
                 ? 'bg-primary-500 text-white'
                 : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
             }`}
+            aria-pressed={tab === tb}
+            aria-label={t(`businesses.filter_${tb}`)}
             onClick={() => { setTab(tb); setPage(0); }}
           >
             {t(`businesses.filter_${tb}`)}
@@ -125,16 +127,18 @@ export default function BusinessesPage() {
           className="px-4 py-2 text-sm bg-neutral-100 rounded-lg disabled:opacity-50"
           disabled={page === 0}
           onClick={() => setPage(page - 1)}
+          aria-label={t('common.previous', { defaultValue: 'Anterior' })}
         >
           {t('common.previous', { defaultValue: 'Anterior' })}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page', { defaultValue: 'Página' })} {page + 1}
         </span>
         <button
           className="px-4 py-2 text-sm bg-neutral-100 rounded-lg disabled:opacity-50"
           disabled={accounts.length < PAGE_SIZE}
           onClick={() => setPage(page + 1)}
+          aria-label={t('common.next', { defaultValue: 'Siguiente' })}
         >
           {t('common.next', { defaultValue: 'Siguiente' })}
         </button>

@@ -76,6 +76,7 @@ export default function ContentPage() {
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => setEditing(null)}
+            aria-label={t('common.back_to_list')}
             className="text-sm text-neutral-500 hover:text-neutral-700"
           >
             &larr; {t('common.back_to_list')}

@@ -240,6 +240,7 @@ export default function QuestsPage() {
               </div>
               <button
                 onClick={() => handleToggle(q.id, q.is_active)}
+                aria-label={q.is_active ? `Desactivar ${q.title_es}` : `Activar ${q.title_es}`}
                 className={`ml-4 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   q.is_active
                     ? 'bg-red-50 text-red-700 hover:bg-red-100'
@@ -259,6 +260,7 @@ export default function QuestsPage() {
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoPrev
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
@@ -267,12 +269,13 @@ export default function QuestsPage() {
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} {page + 1}
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoNext
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'

@@ -71,7 +71,7 @@ export default function FeatureFlagsPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -148,6 +148,9 @@ export default function FeatureFlagsPage() {
               </div>
               <button
                 onClick={() => handleToggle(flag)}
+                role="switch"
+                aria-checked={flag.value}
+                aria-label={`Toggle ${flag.key}`}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
                   flag.value ? 'bg-primary-500' : 'bg-neutral-300'
                 }`}

@@ -197,6 +197,8 @@ export default function DisputesPage() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
+            aria-pressed={statusFilter === s}
+            aria-label={t(`disputes.filter_${s}`)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
                 ? 'bg-primary-500 text-white'
@@ -233,6 +235,7 @@ export default function DisputesPage() {
                   <button
                     key={dispute.id}
                     onClick={() => handleSelect(dispute)}
+                    aria-label={`${reasonLabelKeys[dispute.reason] ?? dispute.reason} - ${t(`disputes.filter_${dispute.status}`, { defaultValue: dispute.status })}`}
                     className={`w-full text-left px-4 py-3 border-b border-neutral-50 hover:bg-neutral-50 transition-colors ${
                       selected?.id === dispute.id ? 'bg-orange-50' : ''
                     }`}
@@ -271,7 +274,7 @@ export default function DisputesPage() {
         </div>
 
         {/* Dispute detail */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6" aria-label={t('disputes.detail_panel', { defaultValue: 'Dispute detail' })}>
           {selected ? (
             <div className="max-h-[650px] overflow-y-auto space-y-4">
               {/* Header */}
@@ -358,6 +361,7 @@ export default function DisputesPage() {
                   <select
                     value={resolution}
                     onChange={(e) => setResolution(e.target.value as DisputeResolution)}
+                    aria-label={t('disputes.resolution_type')}
                     className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                   >
                     {RESOLUTION_OPTIONS.map((r) => (
@@ -427,6 +431,7 @@ export default function DisputesPage() {
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
+                  aria-label={t('disputes.admin_notes')}
                   className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 min-h-[60px]"
                   placeholder={t('disputes.admin_notes_placeholder')}
                 />

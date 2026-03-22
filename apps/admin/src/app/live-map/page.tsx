@@ -114,6 +114,8 @@ export default function LiveMapPage() {
             <button
               key={s}
               onClick={() => setFilter(filter === s ? 'all' : s)}
+              aria-pressed={filter === s}
+              aria-label={`${statusLabels[s]}: ${statusCounts[s] ?? 0}`}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filter === s ? 'ring-2 ring-offset-1 ring-neutral-400' : ''
               }`}

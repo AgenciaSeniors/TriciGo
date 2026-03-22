@@ -400,6 +400,7 @@ export default function DriverDetailPage() {
                             value={docNotes[doc.id] || ''}
                             onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
                             placeholder={t('verification.verification_notes')}
+                            aria-label={t('verification.verification_notes')}
                             className="w-full border border-neutral-200 rounded px-2 py-1 text-xs mb-2 focus:outline-none focus:border-primary-500"
                           />
                           <div className="flex gap-2">
@@ -654,6 +655,7 @@ export default function DriverDetailPage() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('drivers.explain_reason_placeholder')}
+              aria-label={t('drivers.explain_reason_placeholder')}
             />
             <div className="flex gap-3 mt-4 justify-end">
               <button

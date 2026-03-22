@@ -156,6 +156,7 @@ export default function DriversPage() {
         <select
           value={selectedCity}
           onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
+          aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
           className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
         >
           <option value="">{t('cities.all_cities')}</option>
@@ -174,6 +175,8 @@ export default function DriversPage() {
               setStatusFilter(filter.value);
               setPage(0);
             }}
+            aria-pressed={statusFilter === filter.value}
+            aria-label={t(filter.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === filter.value
                 ? 'bg-primary-500 text-white'
@@ -198,7 +201,7 @@ export default function DriversPage() {
       {/* Drivers table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" aria-label={t('drivers.title')}>
           <thead>
             <tr className="border-b border-neutral-100">
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_name')}</th>
@@ -283,6 +286,7 @@ export default function DriversPage() {
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoPrev
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
@@ -291,10 +295,11 @@ export default function DriversPage() {
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">{t('common.page')} {page + 1}</span>
+        <span className="text-sm text-neutral-500" aria-live="polite">{t('common.page')} {page + 1}</span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoNext
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'

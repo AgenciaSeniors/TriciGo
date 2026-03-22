@@ -163,6 +163,7 @@ export default function RidesPage() {
         <select
           value={selectedCity}
           onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
+          aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
           className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
         >
           <option value="">{t('cities.all_cities')}</option>
@@ -186,6 +187,8 @@ export default function RidesPage() {
           <button
             key={filter.value}
             onClick={() => { setStatusFilter(filter.value); setPage(0); }}
+            aria-pressed={statusFilter === filter.value}
+            aria-label={t(filter.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === filter.value
                 ? 'bg-primary-500 text-white'
@@ -210,7 +213,7 @@ export default function RidesPage() {
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" aria-label={t('rides.title')}>
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_route')}</th>
@@ -286,16 +289,18 @@ export default function RidesPage() {
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.next')}

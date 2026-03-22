@@ -117,6 +117,8 @@ export default function LostFoundPage() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
+            aria-pressed={statusFilter === s}
+            aria-label={t(`lost_found.filter_${s}`)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
                 ? 'bg-primary-500 text-white'
@@ -145,6 +147,7 @@ export default function LostFoundPage() {
                 <button
                   key={item.id}
                   onClick={() => handleSelect(item)}
+                  aria-label={`${item.category}: ${item.description.slice(0, 30)}`}
                   className={`w-full text-left px-4 py-3 border-b border-neutral-50 hover:bg-neutral-50 transition-colors ${
                     selected?.id === item.id ? 'bg-amber-50' : ''
                   }`}
@@ -174,7 +177,7 @@ export default function LostFoundPage() {
         </div>
 
         {/* Item detail */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6" aria-label={t('lost_found.item_detail', { defaultValue: 'Item detail' })}>
           {selected ? (
             <div className="max-h-[650px] overflow-y-auto space-y-4">
               {/* Header */}
@@ -269,6 +272,7 @@ export default function LostFoundPage() {
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
+                  aria-label={t('lost_found.admin_notes')}
                   className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 min-h-[60px]"
                   placeholder={t('lost_found.admin_notes_placeholder')}
                 />

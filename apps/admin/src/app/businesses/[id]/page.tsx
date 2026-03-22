@@ -302,12 +302,13 @@ export default function BusinessDetailPage() {
       {/* Reject modal */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">{t('businesses.reject')}</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="reject-modal-title" className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 id="reject-modal-title" className="text-lg font-bold mb-4">{t('businesses.reject')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
               rows={3}
               placeholder={t('businesses.reject_reason', { defaultValue: 'Motivo del rechazo' })}
+              aria-label={t('businesses.reject_reason', { defaultValue: 'Motivo del rechazo' })}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
@@ -333,12 +334,13 @@ export default function BusinessDetailPage() {
       {/* Suspend modal */}
       {showSuspendModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">{t('businesses.suspend')}</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="suspend-modal-title" className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 id="suspend-modal-title" className="text-lg font-bold mb-4">{t('businesses.suspend')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
               rows={3}
               placeholder={t('businesses.suspend_reason', { defaultValue: 'Motivo de la suspensión' })}
+              aria-label={t('businesses.suspend_reason', { defaultValue: 'Motivo de la suspensión' })}
               value={suspendReason}
               onChange={(e) => setSuspendReason(e.target.value)}
             />

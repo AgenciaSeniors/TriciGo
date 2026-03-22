@@ -35,7 +35,7 @@ const STAR_COLORS: Record<number, string> = {
 function Stars({ rating }: { rating: number }) {
   const color = STAR_COLORS[rating] ?? 'text-yellow-500';
   return (
-    <span className={`${color} text-sm tracking-tight`}>
+    <span className={`${color} text-sm tracking-tight`} role="img" aria-label={`${rating} out of 5 stars`}>
       {'★'.repeat(rating)}
       {'☆'.repeat(5 - rating)}
     </span>
@@ -262,6 +262,8 @@ export default function ReviewsPage() {
           <button
             key={tab.value}
             onClick={() => { setRatingFilter(tab.value); setPage(0); }}
+            aria-pressed={ratingFilter === tab.value}
+            aria-label={t(tab.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               ratingFilter === tab.value
                 ? 'bg-primary-500 text-white'
@@ -280,6 +282,7 @@ export default function ReviewsPage() {
           type="date"
           value={dateFrom}
           onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+          aria-label={t('reviews.date_from')}
           className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500"
         />
         <label className="text-sm text-neutral-500">{t('reviews.date_to')}:</label>
@@ -287,6 +290,7 @@ export default function ReviewsPage() {
           type="date"
           value={dateTo}
           onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+          aria-label={t('reviews.date_to')}
           className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500"
         />
         {(dateFrom || dateTo) && (
@@ -372,6 +376,7 @@ export default function ReviewsPage() {
                       <button
                         onClick={() => handleToggleVisibility(review)}
                         disabled={actionLoading === review.id}
+                        aria-label={review.is_visible ? t('reviews.hide') : t('reviews.show')}
                         className={`px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
                           review.is_visible
                             ? 'bg-red-100 text-red-700 hover:bg-red-200'
@@ -383,6 +388,7 @@ export default function ReviewsPage() {
                       <button
                         onClick={() => handleToggleFeatured(review)}
                         disabled={actionLoading === review.id}
+                        aria-label={review.is_featured ? t('reviews.unfeature') : t('reviews.feature')}
                         className={`px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
                           review.is_featured
                             ? 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
@@ -406,6 +412,7 @@ export default function ReviewsPage() {
           <button
             disabled={!canGoPrev}
             onClick={() => setPage((p) => p - 1)}
+            aria-label={t('common.previous')}
             className={`px-4 py-2 rounded-lg ${
               canGoPrev
                 ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
@@ -414,12 +421,13 @@ export default function ReviewsPage() {
           >
             {t('common.previous')}
           </button>
-          <span className="text-neutral-500">
+          <span className="text-neutral-500" aria-live="polite">
             {t('common.page')} {page + 1}
           </span>
           <button
             disabled={!canGoNext}
             onClick={() => setPage((p) => p + 1)}
+            aria-label={t('common.next')}
             className={`px-4 py-2 rounded-lg ${
               canGoNext
                 ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'

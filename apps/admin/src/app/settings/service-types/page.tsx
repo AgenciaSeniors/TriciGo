@@ -75,9 +75,16 @@ export default function ServiceTypesPage() {
   }
 
   function cupInput(field: keyof ServiceTypeConfig) {
+    const labelMap: Record<string, string> = {
+      base_fare_cup: t('service_types.col_base'),
+      per_km_rate_cup: t('service_types.col_per_km'),
+      per_minute_rate_cup: t('service_types.col_per_min'),
+      min_fare_cup: t('service_types.col_min'),
+    };
     return (
       <input
         type="number"
+        aria-label={labelMap[field] ?? field}
         className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
         value={((editForm[field] as number) ?? 0) / 100}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
@@ -88,7 +95,7 @@ export default function ServiceTypesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -129,6 +136,7 @@ export default function ServiceTypesPage() {
                   <td className="px-4 py-3">
                     {editingId === c.id ? (
                       <input
+                        aria-label={t('service_types.col_name_es')}
                         className="w-32 px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.name_es ?? ''}
                         onChange={(e) => setEditForm((f) => ({ ...f, name_es: e.target.value }))}
@@ -151,6 +159,7 @@ export default function ServiceTypesPage() {
                     {editingId === c.id ? (
                       <input
                         type="number"
+                        aria-label={t('service_types.col_passengers')}
                         className="w-14 px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.max_passengers ?? 1}
                         onChange={(e) => setEditForm((f) => ({ ...f, max_passengers: parseInt(e.target.value) || 1 }))}
@@ -162,6 +171,7 @@ export default function ServiceTypesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(c)}
+                      aria-label={c.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${c.slug}` : `${t('common.activate', { defaultValue: 'Activate' })} ${c.slug}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         c.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}

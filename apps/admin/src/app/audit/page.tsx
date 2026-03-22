@@ -138,7 +138,7 @@ export default function AuditPage() {
       {/* Actions table */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" aria-label={t('audit.title')}>
           <thead>
             <tr className="border-b border-neutral-100">
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
@@ -225,6 +225,7 @@ export default function AuditPage() {
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoPrev
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
@@ -233,12 +234,13 @@ export default function AuditPage() {
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} {page + 1}
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoNext
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'

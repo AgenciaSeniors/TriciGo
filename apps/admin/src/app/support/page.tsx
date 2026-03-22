@@ -138,6 +138,8 @@ export default function SupportPage() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
+            aria-pressed={statusFilter === s}
+            aria-label={s === 'all' ? t('support.filter_all') : (statusLabelKeys[s] ? t(statusLabelKeys[s]) : s)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               statusFilter === s
                 ? 'bg-primary-500 text-white'
@@ -166,6 +168,7 @@ export default function SupportPage() {
                 <button
                   key={ticket.id}
                   onClick={() => openTicketDetail(ticket)}
+                  aria-label={`${ticket.subject} - ${statusLabelKeys[ticket.status] ? t(statusLabelKeys[ticket.status]!) : ticket.status}`}
                   className={`w-full text-left px-4 py-3 border-b border-neutral-50 hover:bg-neutral-50 transition-colors ${
                     selectedTicket?.id === ticket.id ? 'bg-orange-50' : ''
                   }`}
@@ -198,7 +201,7 @@ export default function SupportPage() {
         </div>
 
         {/* Ticket detail */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6" aria-label={t('support.ticket_detail', { defaultValue: 'Ticket detail' })}>
           {selectedTicket ? (
             <div className="flex flex-col h-[600px]">
               {/* Header */}
@@ -262,6 +265,7 @@ export default function SupportPage() {
                 <input
                   className="flex-1 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                   placeholder={t('support.reply_placeholder')}
+                  aria-label={t('support.reply_placeholder')}
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleReply()}

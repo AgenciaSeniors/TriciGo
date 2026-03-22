@@ -271,6 +271,7 @@ export default function UserDetailPage() {
               <select
                 value={selectedLevel}
                 onChange={(e) => setSelectedLevel(e.target.value as UserLevel)}
+                aria-label={t('users.change_level')}
                 className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
               >
                 <option value="bronce">{t('users.level_bronze')}</option>
@@ -408,13 +409,14 @@ export default function UserDetailPage() {
       {/* Block User Modal */}
       {blockModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="block-user-title" className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
             <p className="text-sm text-neutral-600 mb-4">{t('users.block_confirm')}</p>
             <textarea
               value={blockReason}
               onChange={(e) => setBlockReason(e.target.value)}
               placeholder={t('users.block_reason')}
+              aria-label={t('users.block_reason')}
               className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-primary-500"
               rows={3}
             />

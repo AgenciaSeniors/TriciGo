@@ -42,7 +42,7 @@ export function AdminToastProvider({ children }: { children: React.ReactNode }) 
       {children}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2" style={{ maxWidth: 400 }}>
         {toasts.map(t => (
-          <div key={t.id} className={`${colors[t.type]} border rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 text-sm animate-in slide-in-from-right`}>
+          <div key={t.id} role="alert" aria-live="assertive" className={`${colors[t.type]} border rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 text-sm animate-in slide-in-from-right`}>
             <span className="font-bold">{icons[t.type]}</span>
             <span>{t.message}</span>
           </div>

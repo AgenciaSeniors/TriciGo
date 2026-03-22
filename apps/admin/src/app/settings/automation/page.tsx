@@ -109,7 +109,7 @@ export default function AutomationPage() {
   if (loading) {
     return (
       <div>
-        <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+        <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
           &larr; {t('settings.back_to_settings')}
         </Link>
         <p className="text-neutral-400">{t('common.loading')}</p>
@@ -119,7 +119,7 @@ export default function AutomationPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('automation.title')}</h1>
@@ -153,6 +153,9 @@ export default function AutomationPage() {
                 <button
                   onClick={() => toggleEnabled(rule.enabledKey)}
                   disabled={savingKey === rule.enabledKey}
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={t(rule.titleKey)}
                   className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
                     enabled ? 'bg-green-500' : 'bg-neutral-300'
                   } ${savingKey === rule.enabledKey ? 'opacity-50' : ''}`}
@@ -172,6 +175,7 @@ export default function AutomationPage() {
                 </label>
                 <input
                   type="number"
+                  aria-label={t(rule.thresholdLabel)}
                   className="w-24 px-3 py-1.5 border border-neutral-300 rounded-lg text-sm font-mono text-right"
                   value={thresholdVal}
                   onChange={(e) => handleThresholdChange(rule.thresholdKey, e.target.value)}

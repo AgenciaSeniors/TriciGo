@@ -265,7 +265,7 @@ export default function BlogAdminPage() {
         <AdminTableSkeleton rows={5} columns={4} />
       ) : (
         <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label={t('blog.title')}>
             <thead className="bg-neutral-50 border-b border-neutral-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-neutral-600">Title</th>
@@ -336,6 +336,7 @@ export default function BlogAdminPage() {
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoPrev
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
@@ -344,12 +345,13 @@ export default function BlogAdminPage() {
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} {page + 1}
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             canGoNext
               ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'

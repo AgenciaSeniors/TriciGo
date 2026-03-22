@@ -275,9 +275,16 @@ export default function PricingPage() {
   }
 
   function cupInput(field: keyof PricingRule) {
+    const labelMap: Record<string, string> = {
+      base_fare_cup: t('pricing.col_base'),
+      per_km_rate_cup: t('pricing.col_per_km'),
+      per_minute_rate_cup: t('pricing.col_per_min'),
+      min_fare_cup: t('pricing.col_min'),
+    };
     return (
       <input
         type="number"
+        aria-label={labelMap[field] ?? field}
         className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
         value={((editForm[field] as number) ?? 0) / 100}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
@@ -287,9 +294,14 @@ export default function PricingPage() {
   }
 
   function numInput(field: keyof PricingRule, step = '0.1') {
+    const labelMap: Record<string, string> = {
+      max_surge_multiplier: t('pricing.col_surge'),
+      surge_threshold: 'Surge threshold',
+    };
     return (
       <input
         type="number"
+        aria-label={labelMap[field] ?? field}
         className="w-16 px-2 py-1 border border-neutral-300 rounded text-sm"
         value={(editForm[field] as number) ?? ''}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value ? parseFloat(e.target.value) : null }))}
@@ -303,7 +315,7 @@ export default function PricingPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -427,6 +439,8 @@ export default function PricingPage() {
                     <button
                       key={idx}
                       type="button"
+                      aria-label={`${label} ${selected ? '(selected)' : ''}`}
+                      aria-pressed={selected}
                       className={`px-2 py-1 rounded text-xs font-medium ${
                         selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
                       }`}
@@ -468,6 +482,8 @@ export default function PricingPage() {
           <button
             key={tab.value}
             onClick={() => { setFilter(tab.value); setPage(0); }}
+            aria-pressed={filter === tab.value}
+            aria-label={t(tab.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
                 ? 'bg-primary-500 text-white'
@@ -537,6 +553,7 @@ export default function PricingPage() {
                         <div className="flex gap-1 items-center">
                           <input
                             type="time"
+                            aria-label={t('pricing.label_time_start')}
                             className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
                             value={editForm.time_window_start ?? ''}
                             onChange={(e) => setEditForm((f) => ({ ...f, time_window_start: e.target.value || null }))}
@@ -544,6 +561,7 @@ export default function PricingPage() {
                           <span>-</span>
                           <input
                             type="time"
+                            aria-label={t('pricing.label_time_end')}
                             className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
                             value={editForm.time_window_end ?? ''}
                             onChange={(e) => setEditForm((f) => ({ ...f, time_window_end: e.target.value || null }))}
@@ -556,6 +574,8 @@ export default function PricingPage() {
                               <button
                                 key={idx}
                                 type="button"
+                                aria-label={`${label} ${selected ? '(selected)' : ''}`}
+                                aria-pressed={selected}
                                 className={`px-1 py-0.5 rounded text-[10px] ${
                                   selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
                                 }`}
@@ -585,6 +605,7 @@ export default function PricingPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(r)}
+                      aria-label={r.is_active ? t('pricing.deactivate_rule', { defaultValue: 'Deactivate rule' }) : t('pricing.activate_rule', { defaultValue: 'Activate rule' })}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         r.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
@@ -638,16 +659,18 @@ export default function PricingPage() {
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.next')}

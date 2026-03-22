@@ -260,6 +260,7 @@ export default function NotificationsPage() {
                         setUserSearch(u.full_name || u.phone);
                         setUserResults([]);
                       }}
+                      aria-label={`Select user: ${u.full_name || u.phone}`}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 border-b border-neutral-100 last:border-b-0"
                     >
                       {u.full_name || '\u2014'} \u00b7 {u.phone}
@@ -404,9 +405,9 @@ export default function NotificationsPage() {
                         <td className="px-3 py-2 text-xs text-neutral-500 font-mono">{n.user_id.slice(0, 8)}…</td>
                         <td className="px-3 py-2">
                           {n.read ? (
-                            <span className="inline-block w-2 h-2 rounded-full bg-green-400" title="Read" />
+                            <span className="inline-block w-2 h-2 rounded-full bg-green-400" title="Read" aria-label="Read" role="img" />
                           ) : (
-                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400" title="Unread" />
+                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400" title="Unread" aria-label="Unread" role="img" />
                           )}
                         </td>
                       </tr>

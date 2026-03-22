@@ -16,6 +16,7 @@ export function SortableHeader({ label, sortKey, currentSortKey, sortDirection, 
     <th
       className={`cursor-pointer select-none hover:bg-neutral-100 transition-colors ${className}`}
       onClick={() => onSort(sortKey)}
+      aria-sort={isActive ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
     >
       <span className="inline-flex items-center gap-1">
         {label}

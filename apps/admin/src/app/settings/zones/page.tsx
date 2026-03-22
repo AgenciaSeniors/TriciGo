@@ -81,7 +81,7 @@ export default function ZonesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -121,6 +121,7 @@ export default function ZonesPage() {
                   <td className="px-4 py-3 font-medium">
                     {editingId === z.id ? (
                       <input
+                        aria-label={t('zones.col_name')}
                         className="w-40 px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.name}
                         onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
@@ -136,6 +137,7 @@ export default function ZonesPage() {
                     {editingId === z.id ? (
                       <input
                         type="number"
+                        aria-label={t('zones.col_surge_multiplier')}
                         className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.surge_multiplier}
                         onChange={(e) => setEditForm((f) => ({ ...f, surge_multiplier: parseFloat(e.target.value) || 1 }))}
@@ -152,6 +154,7 @@ export default function ZonesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(z)}
+                      aria-label={z.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${z.name}` : `${t('common.activate', { defaultValue: 'Activate' })} ${z.name}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         z.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}

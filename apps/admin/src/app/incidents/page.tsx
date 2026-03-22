@@ -106,6 +106,8 @@ export default function IncidentsPage() {
           <button
             key={f.value}
             onClick={() => { setPage(0); setStatusFilter(f.value); }}
+            aria-pressed={statusFilter === f.value}
+            aria-label={t(f.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === f.value
                 ? 'bg-primary-500 text-white'
@@ -120,7 +122,7 @@ export default function IncidentsPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" aria-label={t('incidents.title')}>
           <thead>
             <tr className="bg-neutral-50 border-b">
               <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500 uppercase whitespace-nowrap">{t('incidents.col_type')}</th>
@@ -202,6 +204,7 @@ export default function IncidentsPage() {
         <button
           disabled={page === 0}
           onClick={() => setPage((p) => p - 1)}
+          aria-label={t('incidents.previous')}
           className="px-4 py-2 rounded-lg text-sm bg-neutral-100 disabled:opacity-30"
         >
           {t('incidents.previous')}
@@ -209,6 +212,7 @@ export default function IncidentsPage() {
         <button
           disabled={incidents.length < PAGE_SIZE}
           onClick={() => setPage((p) => p + 1)}
+          aria-label={t('incidents.next')}
           className="px-4 py-2 rounded-lg text-sm bg-neutral-100 disabled:opacity-30"
         >
           {t('incidents.next')}

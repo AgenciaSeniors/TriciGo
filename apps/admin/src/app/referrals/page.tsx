@@ -154,6 +154,8 @@ export default function ReferralsPage() {
           <button
             key={tab.value}
             onClick={() => { setFilter(tab.value); setPage(0); }}
+            aria-pressed={filter === tab.value}
+            aria-label={t(tab.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
                 ? 'bg-primary-500 text-white'
@@ -172,7 +174,7 @@ export default function ReferralsPage() {
         <AdminEmptyState icon="🎁" title={t('referrals.no_referrals')} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label={t('referrals.title')}>
             <thead>
               <tr className="border-b text-left text-neutral-500">
                 <th className="pb-3 pr-4">{t('referrals.col_referrer')}</th>
@@ -240,6 +242,7 @@ export default function ReferralsPage() {
           <button
             disabled={!canGoPrev}
             onClick={() => setPage((p) => p - 1)}
+            aria-label={t('common.previous')}
             className={`px-4 py-2 rounded-lg ${
               canGoPrev
                 ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
@@ -248,12 +251,13 @@ export default function ReferralsPage() {
           >
             {t('common.previous')}
           </button>
-          <span className="text-neutral-500">
+          <span className="text-neutral-500" aria-live="polite">
             {t('common.page')} {page + 1}
           </span>
           <button
             disabled={!canGoNext}
             onClick={() => setPage((p) => p + 1)}
+            aria-label={t('common.next')}
             className={`px-4 py-2 rounded-lg ${
               canGoNext
                 ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'

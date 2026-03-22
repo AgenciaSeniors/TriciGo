@@ -116,6 +116,7 @@ export function FilterPanel({
                       {f.label}: {displayValue}
                       <button
                         onClick={() => onChange(f.key, '')}
+                        aria-label={`Remove filter: ${f.label}`}
                         className="ml-0.5 hover:text-primary-900"
                       >
                         ×
@@ -125,6 +126,7 @@ export function FilterPanel({
                 })}
               <button
                 onClick={onClear}
+                aria-label={clearLabel}
                 className="text-xs text-neutral-500 hover:text-neutral-700 underline ml-2"
               >
                 {clearLabel}

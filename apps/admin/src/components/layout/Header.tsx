@@ -40,7 +40,7 @@ export function Header() {
   const initial = email.charAt(0).toUpperCase();
 
   return (
-    <header className="h-16 bg-white dark:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-700 flex items-center justify-between px-4 md:px-6">
+    <header aria-label="Admin header" className="h-16 bg-white dark:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-700 flex items-center justify-between px-4 md:px-6">
       <div className="flex items-center gap-3 flex-1">
         {/* Hamburger - mobile only */}
         <button

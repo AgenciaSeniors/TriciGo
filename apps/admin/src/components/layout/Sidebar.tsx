@@ -83,6 +83,7 @@ export function Sidebar() {
 
       {/* Sidebar */}
       <aside
+        aria-label="Sidebar"
         className={`
           fixed inset-y-0 left-0 z-50 w-64 bg-neutral-950 text-white flex flex-col
           transform transition-transform duration-200 ease-in-out
@@ -102,7 +103,7 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             return (
@@ -111,6 +112,7 @@ export function Sidebar() {
                 href={item.href}
                 onClick={close}
                 aria-label={t(item.labelKey)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`
                   flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors
                   ${isActive

@@ -93,6 +93,8 @@ export default function FraudAlertsPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setFilter('unresolved')}
+            aria-pressed={filter === 'unresolved'}
+            aria-label={t('fraud.filter_unresolved')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === 'unresolved'
                 ? 'bg-primary-500 text-white'
@@ -103,6 +105,8 @@ export default function FraudAlertsPage() {
           </button>
           <button
             onClick={() => setFilter('all')}
+            aria-pressed={filter === 'all'}
+            aria-label={t('fraud.filter_all')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === 'all'
                 ? 'bg-primary-500 text-white'
@@ -116,7 +120,7 @@ export default function FraudAlertsPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" aria-label={t('fraud.title')}>
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('fraud.col_date')}</th>
@@ -187,9 +191,10 @@ export default function FraudAlertsPage() {
       {/* Resolve modal */}
       {showResolveModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold mb-4">{t('fraud.resolve_title')}</h3>
+          <div role="dialog" aria-modal="true" aria-labelledby="fraud-resolve-title" className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 id="fraud-resolve-title" className="text-lg font-bold mb-4">{t('fraud.resolve_title')}</h3>
             <textarea
+              aria-label={t('fraud.resolve_note_placeholder')}
               className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500"
               rows={3}
               value={resolutionNote}

@@ -287,6 +287,7 @@ export default function ReportsPage() {
           <select
             value={selectedCity}
             onChange={(e) => setSelectedCity(e.target.value)}
+            aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
             className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
           >
             <option value="">{t('cities.all_cities')}</option>
@@ -301,6 +302,8 @@ export default function ReportsPage() {
             <button
               key={opt.value}
               onClick={() => setPeriod(opt.value)}
+              aria-pressed={period === opt.value}
+              aria-label={`${opt.label} ${t('reports.period', { defaultValue: 'period' })}`}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 period === opt.value
                   ? 'bg-white text-neutral-900 shadow-sm'

@@ -143,7 +143,7 @@ export default function ResetPasswordPage() {
             </div>
 
             {error && (
-              <p className="text-red-400 text-sm">{error}</p>
+              <p role="alert" className="text-red-400 text-sm">{error}</p>
             )}
 
             <button

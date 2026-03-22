@@ -121,7 +121,7 @@ export default function CitiesPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -162,6 +162,7 @@ export default function CitiesPage() {
                     {editingId === city.id ? (
                       <input
                         type="text"
+                        aria-label={t('cities.col_name')}
                         className="w-full px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.name}
                         onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
@@ -175,6 +176,7 @@ export default function CitiesPage() {
                     {editingId === city.id ? (
                       <input
                         type="text"
+                        aria-label={t('cities.col_timezone')}
                         className="w-40 px-2 py-1 border border-neutral-300 rounded text-sm"
                         value={editForm.timezone}
                         onChange={(e) => setEditForm((f) => ({ ...f, timezone: e.target.value }))}
@@ -190,6 +192,7 @@ export default function CitiesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(city)}
+                      aria-label={city.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${city.name}` : `${t('common.activate', { defaultValue: 'Activate' })} ${city.name}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         city.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}

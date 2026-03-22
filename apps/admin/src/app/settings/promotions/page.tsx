@@ -181,7 +181,7 @@ export default function PromotionsPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -313,6 +313,8 @@ export default function PromotionsPage() {
           <button
             key={tab.value}
             onClick={() => setFilter(tab.value)}
+            aria-pressed={filter === tab.value}
+            aria-label={t(tab.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
                 ? 'bg-primary-500 text-white'
@@ -366,6 +368,7 @@ export default function PromotionsPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(p)}
+                      aria-label={p.is_active ? t('promotions.deactivate', { defaultValue: 'Deactivate promotion' }) : t('promotions.activate', { defaultValue: 'Activate promotion' })}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         p.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
@@ -395,16 +398,18 @@ export default function PromotionsPage() {
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.next')}

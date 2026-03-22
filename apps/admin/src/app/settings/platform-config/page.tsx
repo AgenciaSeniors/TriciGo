@@ -81,7 +81,7 @@ export default function PlatformConfigPage() {
 
   return (
     <div>
-      <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('platform_config.title')}</h1>
@@ -122,6 +122,7 @@ export default function PlatformConfigPage() {
                     <input
                       type={known?.type ?? 'text'}
                       step={known?.type === 'number' ? 'any' : undefined}
+                      aria-label={getLabel(config.key)}
                       className="w-32 px-3 py-2 border border-neutral-300 rounded-lg text-sm text-right font-mono"
                       value={editValues[config.key] ?? config.value}
                       onChange={(e) =>

@@ -190,7 +190,7 @@ export default function WalletPage() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" aria-label={t('wallet_admin.summary', { defaultValue: 'Wallet summary' })}>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
           <p className="text-sm text-neutral-500 mb-1">{t('wallet_admin.label_circulation')}</p>
           <p className="text-2xl font-bold text-primary-500">
@@ -217,6 +217,8 @@ export default function WalletPage() {
           <button
             key={tb.value}
             onClick={() => { setTab(tb.value); setPage(0); }}
+            aria-pressed={tab === tb.value}
+            aria-label={t(tb.labelKey)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === tb.value
                 ? 'bg-primary-500 text-white'
@@ -450,16 +452,18 @@ export default function WalletPage() {
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
+          aria-label={t('common.previous')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-neutral-500" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
+          aria-label={t('common.next')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
         >
           {t('common.next')}
