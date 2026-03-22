@@ -57,6 +57,29 @@ export default function PromotionsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  function validatePromotionForm() {
+    const errors: Record<string, string> = {};
+    if (!form.code.trim()) errors.code = 'Campo requerido';
+    if (form.type === 'percentage_discount') {
+      const pct = parseFloat(form.discount_percent);
+      if (!form.discount_percent || isNaN(pct) || pct < 1 || pct > 100) {
+        errors.discount_percent = 'Debe ser entre 1 y 100';
+      }
+    }
+    if (form.max_uses) {
+      const mu = parseInt(form.max_uses);
+      if (isNaN(mu) || mu <= 0) errors.max_uses = 'Debe ser mayor a 0';
+    }
+    if (form.valid_until && form.valid_from) {
+      if (new Date(form.valid_until) <= new Date(form.valid_from)) {
+        errors.valid_until = 'Debe ser posterior a la fecha de inicio';
+      }
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +106,7 @@ export default function PromotionsPage() {
       : promotions.filter((p) => !p.is_active);
 
   async function handleCreate() {
-    if (!form.code.trim()) return;
+    if (!validatePromotionForm()) return;
     setSaving(true);
     try {
       const payload: Parameters<typeof adminService.createPromotion>[0] = {
@@ -108,6 +131,7 @@ export default function PromotionsPage() {
       const data = await adminService.getPromotions(page, PAGE_SIZE);
       setPromotions(data);
       setForm(emptyForm);
+      setFormErrors({});
       setShowCreate(false);
     } catch (err) {
       console.error('Error creating promotion:', err);
@@ -178,13 +202,14 @@ export default function PromotionsPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_code')}</label>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_code')}<span className="text-red-500 ml-1">*</span></label>
               <input
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm uppercase"
+                className={`w-full px-3 py-2 border rounded-lg text-sm uppercase ${formErrors.code ? 'border-red-500' : 'border-neutral-300'}`}
                 placeholder="PROMO2024"
                 value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                onChange={(e) => { setForm((f) => ({ ...f, code: e.target.value })); setFormErrors((prev) => { const { code, ...rest } = prev; return rest; }); }}
               />
+              {formErrors.code && <p className="text-red-500 text-xs mt-1">{formErrors.code}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_type')}</label>
@@ -201,16 +226,17 @@ export default function PromotionsPage() {
             <div>
               {form.type === 'percentage_discount' ? (
                 <>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_discount_percent')}</label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_discount_percent')}<span className="text-red-500 ml-1">*</span></label>
                   <input
                     type="number"
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                    className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.discount_percent ? 'border-red-500' : 'border-neutral-300'}`}
                     placeholder="10"
                     value={form.discount_percent}
-                    onChange={(e) => setForm((f) => ({ ...f, discount_percent: e.target.value }))}
+                    onChange={(e) => { setForm((f) => ({ ...f, discount_percent: e.target.value })); setFormErrors((prev) => { const { discount_percent, ...rest } = prev; return rest; }); }}
                     min="1"
                     max="100"
                   />
+                  {formErrors.discount_percent && <p className="text-red-500 text-xs mt-1">{formErrors.discount_percent}</p>}
                 </>
               ) : (
                 <>
@@ -232,11 +258,12 @@ export default function PromotionsPage() {
               <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_max_uses')}</label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.max_uses ? 'border-red-500' : 'border-neutral-300'}`}
                 placeholder={t('promotions.unlimited_placeholder')}
                 value={form.max_uses}
-                onChange={(e) => setForm((f) => ({ ...f, max_uses: e.target.value }))}
+                onChange={(e) => { setForm((f) => ({ ...f, max_uses: e.target.value })); setFormErrors((prev) => { const { max_uses, ...rest } = prev; return rest; }); }}
               />
+              {formErrors.max_uses && <p className="text-red-500 text-xs mt-1">{formErrors.max_uses}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_from')}</label>
@@ -251,22 +278,23 @@ export default function PromotionsPage() {
               <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_until')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.valid_until ? 'border-red-500' : 'border-neutral-300'}`}
                 value={form.valid_until}
-                onChange={(e) => setForm((f) => ({ ...f, valid_until: e.target.value }))}
+                onChange={(e) => { setForm((f) => ({ ...f, valid_until: e.target.value })); setFormErrors((prev) => { const { valid_until, ...rest } = prev; return rest; }); }}
               />
+              {formErrors.valid_until && <p className="text-red-500 text-xs mt-1">{formErrors.valid_until}</p>}
             </div>
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleCreate}
-              disabled={saving || !form.code.trim()}
+              disabled={saving || !form.code.trim() || (form.type === 'percentage_discount' && !form.discount_percent)}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
             >
               {t('common.create')}
             </button>
             <button
-              onClick={() => { setShowCreate(false); setForm(emptyForm); }}
+              onClick={() => { setShowCreate(false); setForm(emptyForm); setFormErrors({}); }}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
             >
               {t('common.cancel')}

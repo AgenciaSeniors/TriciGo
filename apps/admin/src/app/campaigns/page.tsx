@@ -88,6 +88,7 @@ export default function CampaignsPage() {
   const [formPromoId, setFormPromoId] = useState('');
   const [formSchedule, setFormSchedule] = useState('');
   const [formSendNow, setFormSendNow] = useState(true);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Reference data
   const [cities, setCities] = useState<City[]>([]);
@@ -200,9 +201,24 @@ export default function CampaignsPage() {
     return [];
   };
 
+  function validateCampaignForm() {
+    const errors: Record<string, string> = {};
+    if (!formName.trim()) errors.name = 'Campo requerido';
+    if (!formTitle.trim()) errors.title = 'Campo requerido';
+    if (!formBody.trim()) errors.body = 'Campo requerido';
+    if (formSegment === 'by_city' && !formCityId) errors.city = 'Campo requerido';
+    if (!formSendNow && formSchedule) {
+      const scheduleDate = new Date(formSchedule);
+      if (scheduleDate <= new Date()) {
+        errors.schedule = 'Debe ser una fecha futura';
+      }
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   const handleSend = async () => {
-    if (!formName.trim() || !formTitle.trim() || !formBody.trim()) return;
-    if (formSegment === 'by_city' && !formCityId) return;
+    if (!validateCampaignForm()) return;
 
     setSending(true);
     try {
@@ -253,6 +269,7 @@ export default function CampaignsPage() {
       setFormPromoId('');
       setFormSchedule('');
       setFormSendNow(true);
+      setFormErrors({});
       setShowForm(false);
 
       setPage(0);
@@ -303,15 +320,16 @@ export default function CampaignsPage() {
             {/* Name */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_name')}
+                {t('campaigns.label_name')}<span className="text-red-500 ml-1">*</span>
               </label>
               <input
                 type="text"
                 value={formName}
-                onChange={(e) => setFormName(e.target.value)}
+                onChange={(e) => { setFormName(e.target.value); setFormErrors((prev) => { const { name, ...rest } = prev; return rest; }); }}
                 placeholder={t('campaigns.name_placeholder')}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.name ? 'border-red-500' : 'border-neutral-200'}`}
               />
+              {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
             </div>
 
             {/* Segment */}
@@ -336,12 +354,12 @@ export default function CampaignsPage() {
             {formSegment === 'by_city' && (
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                  {t('campaigns.label_city')}
+                  {t('campaigns.label_city')}<span className="text-red-500 ml-1">*</span>
                 </label>
                 <select
                   value={formCityId}
-                  onChange={(e) => setFormCityId(e.target.value)}
-                  className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                  onChange={(e) => { setFormCityId(e.target.value); setFormErrors((prev) => { const { city, ...rest } = prev; return rest; }); }}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.city ? 'border-red-500' : 'border-neutral-200'}`}
                 >
                   <option value="">{t('segments.select_city')}</option>
                   {cities.map((city) => (
@@ -350,6 +368,7 @@ export default function CampaignsPage() {
                     </option>
                   ))}
                 </select>
+                {formErrors.city && <p className="text-red-500 text-xs mt-1">{formErrors.city}</p>}
               </div>
             )}
 
@@ -374,29 +393,31 @@ export default function CampaignsPage() {
             {/* Message title */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_msg_title')}
+                {t('campaigns.label_msg_title')}<span className="text-red-500 ml-1">*</span>
               </label>
               <input
                 type="text"
                 value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
+                onChange={(e) => { setFormTitle(e.target.value); setFormErrors((prev) => { const { title, ...rest } = prev; return rest; }); }}
                 placeholder={t('campaigns.msg_title_placeholder')}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.title ? 'border-red-500' : 'border-neutral-200'}`}
               />
+              {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
             </div>
 
             {/* Message body */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_msg_body')}
+                {t('campaigns.label_msg_body')}<span className="text-red-500 ml-1">*</span>
               </label>
               <textarea
                 value={formBody}
-                onChange={(e) => setFormBody(e.target.value)}
+                onChange={(e) => { setFormBody(e.target.value); setFormErrors((prev) => { const { body, ...rest } = prev; return rest; }); }}
                 placeholder={t('campaigns.msg_body_placeholder')}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.body ? 'border-red-500' : 'border-neutral-200'}`}
                 rows={3}
               />
+              {formErrors.body && <p className="text-red-500 text-xs mt-1">{formErrors.body}</p>}
             </div>
 
             {/* Promo code (optional) */}
@@ -432,12 +453,15 @@ export default function CampaignsPage() {
                 </span>
               </label>
               {!formSendNow && (
-                <input
-                  type="datetime-local"
-                  value={formSchedule}
-                  onChange={(e) => setFormSchedule(e.target.value)}
-                  className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
-                />
+                <>
+                  <input
+                    type="datetime-local"
+                    value={formSchedule}
+                    onChange={(e) => { setFormSchedule(e.target.value); setFormErrors((prev) => { const { schedule, ...rest } = prev; return rest; }); }}
+                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.schedule ? 'border-red-500' : 'border-neutral-200'}`}
+                  />
+                  {formErrors.schedule && <p className="text-red-500 text-xs mt-1">{formErrors.schedule}</p>}
+                </>
               )}
             </div>
 

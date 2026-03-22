@@ -145,6 +145,18 @@ export default function PricingPage() {
     day_of_week: [] as number[],
   });
   const [creating, setCreating] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  function validatePricingForm() {
+    const errors: Record<string, string> = {};
+    if (!createForm.service_type) errors.service_type = 'Campo requerido';
+    if (createForm.base_fare_cup < 0) errors.base_fare_cup = 'Debe ser positivo';
+    if (createForm.per_km_rate_cup < 0) errors.per_km_rate_cup = 'Debe ser positivo';
+    if (createForm.per_minute_rate_cup < 0) errors.per_minute_rate_cup = 'Debe ser positivo';
+    if (createForm.min_fare_cup < 0) errors.min_fare_cup = 'Debe ser positivo';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   // Fetch zones once for name mapping
   useEffect(() => {
@@ -222,6 +234,7 @@ export default function PricingPage() {
   }
 
   async function handleCreate() {
+    if (!validatePricingForm()) return;
     setCreating(true);
     try {
       await adminService.createPricingRule({
@@ -238,6 +251,7 @@ export default function PricingPage() {
       });
       await fetchRules();
       setShowCreate(false);
+      setFormErrors({});
       setCreateForm({
         service_type: 'triciclo_basico',
         zone_id: '',
@@ -315,11 +329,11 @@ export default function PricingPage() {
           <h3 className="text-lg font-semibold mb-4">{t('pricing.new_rule_title')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_service_type')}</label>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_service_type')}<span className="text-red-500 ml-1">*</span></label>
               <select
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.service_type ? 'border-red-500' : 'border-neutral-300'}`}
                 value={createForm.service_type}
-                onChange={(e) => setCreateForm((f) => ({ ...f, service_type: e.target.value }))}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, service_type: e.target.value })); setFormErrors((prev) => { const { service_type, ...rest } = prev; return rest; }); }}
               >
                 {SERVICE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
@@ -340,44 +354,48 @@ export default function PricingPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_base_fare')}</label>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_base_fare')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.base_fare_cup ? 'border-red-500' : 'border-neutral-300'}`}
                 value={createForm.base_fare_cup / 100 || ''}
-                onChange={(e) => setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { base_fare_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
               />
+              {formErrors.base_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.base_fare_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_km')}</label>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_km')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.per_km_rate_cup ? 'border-red-500' : 'border-neutral-300'}`}
                 value={createForm.per_km_rate_cup / 100 || ''}
-                onChange={(e) => setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_km_rate_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
               />
+              {formErrors.per_km_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_km_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_min')}</label>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_min')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.per_minute_rate_cup ? 'border-red-500' : 'border-neutral-300'}`}
                 value={createForm.per_minute_rate_cup / 100 || ''}
-                onChange={(e) => setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_minute_rate_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
               />
+              {formErrors.per_minute_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_minute_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_min_fare')}</label>
+              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_min_fare')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.min_fare_cup ? 'border-red-500' : 'border-neutral-300'}`}
                 value={createForm.min_fare_cup / 100 || ''}
-                onChange={(e) => setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) }))}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { min_fare_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
               />
+              {formErrors.min_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.min_fare_cup}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_time_start')}</label>
@@ -426,13 +444,13 @@ export default function PricingPage() {
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleCreate}
-              disabled={creating}
+              disabled={creating || !createForm.service_type}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
             >
               {creating ? t('pricing.creating') : t('common.create')}
             </button>
             <button
-              onClick={() => setShowCreate(false)}
+              onClick={() => { setShowCreate(false); setFormErrors({}); }}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
             >
               {t('common.cancel')}

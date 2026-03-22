@@ -41,6 +41,16 @@ export default function NotificationsPage() {
   const [userResults, setUserResults] = useState<User[]>([]);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: number; error: number } | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  function validateNotificationForm() {
+    const errors: Record<string, string> = {};
+    if (!title.trim()) errors.title = 'Campo requerido';
+    if (!body.trim()) errors.body = 'Campo requerido';
+    if (targetType === 'user' && !targetUserId) errors.target = 'Debe seleccionar un usuario';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   // History state
   const [history, setHistory] = useState<NotificationLog[]>([]);
@@ -142,8 +152,7 @@ export default function NotificationsPage() {
   };
 
   const handleSend = async () => {
-    if (!title.trim() || !body.trim()) return;
-    if (targetType === 'user' && !targetUserId) return;
+    if (!validateNotificationForm()) return;
 
     setSending(true);
     setSendResult(null);
@@ -172,6 +181,7 @@ export default function NotificationsPage() {
       setBody('');
       setTargetUserId('');
       setUserSearch('');
+      setFormErrors({});
       loadHistory();
     } catch (err) {
       console.error('Error sending notification:', err);
@@ -212,7 +222,7 @@ export default function NotificationsPage() {
           {/* Target audience */}
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.audience')}
+              {t('notifications.audience')}<span className="text-red-500 ml-1">*</span>
             </label>
             <select
               value={targetType}
@@ -220,6 +230,7 @@ export default function NotificationsPage() {
                 setTargetType(e.target.value as typeof targetType);
                 setTargetUserId('');
                 setUserSearch('');
+                setFormErrors((prev) => { const { target, ...rest } = prev; return rest; });
               }}
               className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
             >
@@ -265,35 +276,38 @@ export default function NotificationsPage() {
                   {t('notifications.user_selected')}
                 </p>
               )}
+              {formErrors.target && <p className="text-red-500 text-xs mt-1">{formErrors.target}</p>}
             </div>
           )}
 
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.label_title')}
+              {t('notifications.label_title')}<span className="text-red-500 ml-1">*</span>
             </label>
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); setFormErrors((prev) => { const { title, ...rest } = prev; return rest; }); }}
               placeholder={t('notifications.title_placeholder')}
-              className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.title ? 'border-red-500' : 'border-neutral-200'}`}
             />
+            {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
           </div>
 
           {/* Body */}
           <div>
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.label_body')}
+              {t('notifications.label_body')}<span className="text-red-500 ml-1">*</span>
             </label>
             <textarea
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => { setBody(e.target.value); setFormErrors((prev) => { const { body, ...rest } = prev; return rest; }); }}
               placeholder={t('notifications.body_placeholder')}
-              className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.body ? 'border-red-500' : 'border-neutral-200'}`}
               rows={3}
             />
+            {formErrors.body && <p className="text-red-500 text-xs mt-1">{formErrors.body}</p>}
           </div>
 
           {/* Send result */}

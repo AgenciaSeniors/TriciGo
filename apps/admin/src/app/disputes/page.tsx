@@ -79,6 +79,18 @@ export default function DisputesPage() {
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [resolving, setResolving] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  function validateResolveForm() {
+    const errors: Record<string, string> = {};
+    if (!resolutionNotes.trim()) errors.resolutionNotes = 'Campo requerido';
+    if (resolution !== 'no_action' && resolution !== 'warning_issued') {
+      const amt = parseInt(refundAmount || '0', 10);
+      if (isNaN(amt) || amt < 0) errors.refundAmount = 'Debe ser mayor o igual a 0';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   const fetchDisputes = async () => {
     setLoading(true);
@@ -106,10 +118,12 @@ export default function DisputesPage() {
     setRefundAmount('');
     setResolutionNotes('');
     setResolution('full_refund');
+    setFormErrors({});
   };
 
   const handleResolve = async () => {
     if (!selected) return;
+    if (!validateResolveForm()) return;
     setResolving(true);
     try {
       const amount = resolution === 'no_action' ? 0 : parseInt(refundAmount || '0', 10);
@@ -351,27 +365,29 @@ export default function DisputesPage() {
                       <input
                         type="number"
                         value={refundAmount}
-                        onChange={(e) => setRefundAmount(e.target.value)}
-                        className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                        onChange={(e) => { setRefundAmount(e.target.value); setFormErrors((prev) => { const { refundAmount, ...rest } = prev; return rest; }); }}
+                        className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.refundAmount ? 'border-red-500' : 'border-neutral-200'}`}
                         placeholder="0"
                       />
+                      {formErrors.refundAmount && <p className="text-red-500 text-xs mt-1">{formErrors.refundAmount}</p>}
                     </div>
                   )}
 
                   <div>
-                    <label className="text-xs text-neutral-500 mb-1 block">{t('disputes.resolution_notes_placeholder')}</label>
+                    <label className="text-xs text-neutral-500 mb-1 block">{t('disputes.resolution_notes_placeholder')}<span className="text-red-500 ml-1">*</span></label>
                     <textarea
                       value={resolutionNotes}
-                      onChange={(e) => setResolutionNotes(e.target.value)}
-                      className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 min-h-[80px]"
+                      onChange={(e) => { setResolutionNotes(e.target.value); setFormErrors((prev) => { const { resolutionNotes, ...rest } = prev; return rest; }); }}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 min-h-[80px] ${formErrors.resolutionNotes ? 'border-red-500' : 'border-neutral-200'}`}
                       placeholder={t('disputes.resolution_notes_placeholder')}
                     />
+                    {formErrors.resolutionNotes && <p className="text-red-500 text-xs mt-1">{formErrors.resolutionNotes}</p>}
                   </div>
 
                   <div className="flex gap-2">
                     <button
                       onClick={handleResolve}
-                      disabled={resolving}
+                      disabled={resolving || !resolutionNotes.trim()}
                       className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                     >
                       {resolution === 'no_action' ? t('disputes.deny') : t('disputes.resolve')}
