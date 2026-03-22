@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { AdminAction } from '@tricigo/types';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -40,6 +41,7 @@ export default function AuditPage() {
   const { t } = useTranslation('admin');
   const [actions, setActions] = useState<AdminAction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -62,6 +64,7 @@ export default function AuditPage() {
         console.error('Error fetching admin actions:', err);
         if (!cancelled) {
           setActions([]);
+          setError(err instanceof Error ? err.message : 'Error al cargar auditoría');
         }
       } finally {
         if (!cancelled) {
@@ -88,6 +91,14 @@ export default function AuditPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('audit.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Date range filters */}
       <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-end gap-4 mb-6">

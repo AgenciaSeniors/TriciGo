@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type City = {
   id: string;
@@ -18,7 +20,9 @@ type City = {
 
 export default function CitiesPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [cities, setCities] = useState<City[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ name: string; timezone: string }>({ name: '', timezone: '' });
@@ -64,6 +68,7 @@ export default function CitiesPage() {
       setCities(enriched);
     } catch (err) {
       console.error('Error fetching cities:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar ciudades');
     } finally {
       setLoading(false);
     }
@@ -108,7 +113,7 @@ export default function CitiesPage() {
       setEditingId(null);
     } catch (err) {
       console.error('Error updating city:', err);
-      window.alert(t('cities.error_saving'));
+      showToast('error', t('cities.error_saving'));
     } finally {
       setSaving(false);
     }
@@ -119,6 +124,13 @@ export default function CitiesPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchCities(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('cities.title')}</h1>
       </div>

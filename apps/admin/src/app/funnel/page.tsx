@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type FunnelStep = {
   key: string;
@@ -14,6 +15,7 @@ export default function FunnelPage() {
   const { t } = useTranslation('admin');
   const [loading, setLoading] = useState(true);
   const [steps, setSteps] = useState<FunnelStep[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +80,7 @@ export default function FunnelPage() {
         ]);
       } catch (err) {
         console.error('Error fetching funnel data:', err);
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar embudo');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,6 +107,14 @@ export default function FunnelPage() {
         <h1 className="text-2xl md:text-3xl font-bold">{t('funnel.title')}</h1>
         <span className="text-sm text-neutral-500">{t('funnel.last_30_days')}</span>
       </div>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {loading && (
         <div className="text-center py-12 text-neutral-400">{t('common.loading')}</div>

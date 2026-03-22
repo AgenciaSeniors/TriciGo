@@ -8,6 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -60,6 +61,7 @@ export default function RidesPage() {
   const { t } = useTranslation('admin');
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
@@ -135,7 +137,7 @@ export default function RidesPage() {
         if (!cancelled) setRides(data);
       } catch (err) {
         console.error('Error fetching rides:', err);
-        if (!cancelled) setRides([]);
+        if (!cancelled) { setRides([]); setError(err instanceof Error ? err.message : 'Error al cargar viajes'); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -163,6 +165,14 @@ export default function RidesPage() {
           ))}
         </select>
       </div>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-4">

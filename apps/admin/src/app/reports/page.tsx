@@ -5,6 +5,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP, formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -58,6 +59,7 @@ export default function ReportsPage() {
   const { t } = useTranslation('admin');
   const [period, setPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cities, setCities] = useState<{id: string, name: string}[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>('');
 
@@ -150,6 +152,7 @@ export default function ReportsPage() {
         }
       } catch (err) {
         console.error('Error fetching reports:', err);
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar reportes');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -308,6 +311,14 @@ export default function ReportsPage() {
         </div>
         </div>
       </div>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPeriod(p => p); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {loading && (
         <div className="text-center py-12 text-neutral-400">{t('common.loading')}</div>

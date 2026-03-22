@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
 import type { Review } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -59,8 +61,10 @@ interface ReviewStats {
 
 export default function ReviewsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
 
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [ratingFilter, setRatingFilter] = useState('all');
@@ -168,6 +172,7 @@ export default function ReviewsPage() {
       setReviews(rows);
     } catch (err) {
       console.error('Error fetching reviews:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar reseñas');
     } finally {
       setLoading(false);
     }
@@ -196,7 +201,7 @@ export default function ReviewsPage() {
       );
     } catch (err) {
       console.error('Error toggling visibility:', err);
-      window.alert('Error al cambiar visibilidad');
+      showToast('error', 'Error al cambiar visibilidad');
     } finally {
       setActionLoading(null);
     }
@@ -217,7 +222,7 @@ export default function ReviewsPage() {
       );
     } catch (err) {
       console.error('Error toggling featured:', err);
-      window.alert('Error al cambiar destacado');
+      showToast('error', 'Error al cambiar destacado');
     } finally {
       setActionLoading(null);
     }
@@ -229,6 +234,14 @@ export default function ReviewsPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">{t('reviews.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchReviews(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { questService } from '@tricigo/api/services/quest';
 import type { Quest } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const QUEST_TYPES = ['trip_count', 'earnings', 'rating', 'hours_online', 'peak_hours'] as const;
 
@@ -19,8 +21,10 @@ const PAGE_SIZE = 20;
 
 export default function QuestsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [quests, setQuests] = useState<Quest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -47,6 +51,7 @@ export default function QuestsPage() {
       setQuests(data);
     } catch (err) {
       console.error('Error loading quests:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar misiones');
     } finally {
       setLoading(false);
     }
@@ -74,6 +79,7 @@ export default function QuestsPage() {
       loadQuests();
     } catch (err) {
       console.error('Error creating quest:', err);
+      showToast('error', 'Error al crear misión');
     } finally {
       setCreating(false);
     }
@@ -106,6 +112,14 @@ export default function QuestsPage() {
 
   return (
     <div className="max-w-5xl">
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); loadQuests(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">{t('quests.title', { defaultValue: 'Misiones' })}</h1>
         <button

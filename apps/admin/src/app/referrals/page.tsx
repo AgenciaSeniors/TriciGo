@@ -5,6 +5,8 @@ import { referralService } from '@tricigo/api/services/referral';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -23,8 +25,10 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function ReferralsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
 
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -50,6 +54,7 @@ export default function ReferralsPage() {
       setStats(statsData);
     } catch (err) {
       console.error('Error fetching referrals:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar referidos');
     } finally {
       setLoading(false);
     }
@@ -63,11 +68,11 @@ export default function ReferralsPage() {
     if (!window.confirm(t('referrals.reward_confirm'))) return;
     try {
       await referralService.rewardReferral(ref.id);
-      window.alert(t('referrals.reward_success'));
+      showToast('success', t('referrals.reward_success'));
       fetchData();
     } catch (err) {
       console.error('Error rewarding referral:', err);
-      window.alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'));
+      showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
     }
   };
 
@@ -75,11 +80,11 @@ export default function ReferralsPage() {
     if (!window.confirm(t('referrals.invalidate_confirm'))) return;
     try {
       await referralService.invalidateReferral(ref.id);
-      window.alert(t('referrals.invalidate_success'));
+      showToast('success', t('referrals.invalidate_success'));
       fetchData();
     } catch (err) {
       console.error('Error invalidating referral:', err);
-      window.alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'));
+      showToast('error', 'Error: ' + (err instanceof Error ? err.message : 'Unknown'));
     }
   };
 
@@ -92,6 +97,14 @@ export default function ReferralsPage() {
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">{t('referrals.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchData(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">

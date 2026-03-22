@@ -5,10 +5,14 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { FeatureFlag } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 export default function FeatureFlagsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newKey, setNewKey] = useState('');
@@ -23,6 +27,7 @@ export default function FeatureFlagsPage() {
         if (!cancelled) setFlags(data);
       } catch (err) {
         console.error('Error fetching flags:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar feature flags');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -58,7 +63,7 @@ export default function FeatureFlagsPage() {
       setShowCreate(false);
     } catch (err) {
       console.error('Error creating flag:', err);
-      window.alert('Error al crear flag');
+      showToast('error', 'Error al crear flag');
     } finally {
       setCreating(false);
     }
@@ -69,6 +74,13 @@ export default function FeatureFlagsPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('feature_flags.title')}</h1>
         <button

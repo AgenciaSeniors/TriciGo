@@ -7,6 +7,7 @@ import { useTranslation } from '@tricigo/i18n';
 import type { User } from '@tricigo/types';
 import type { UserRole } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -43,6 +44,7 @@ export default function UsersPage() {
   const { t } = useTranslation('admin');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
@@ -95,7 +97,7 @@ export default function UsersPage() {
         if (!cancelled) setUsers(data);
       } catch (err) {
         console.error('Error fetching users:', err);
-        if (!cancelled) setUsers([]);
+        if (!cancelled) { setUsers([]); setError(err instanceof Error ? err.message : 'Error al cargar usuarios'); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -111,6 +113,14 @@ export default function UsersPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('users.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(p => p); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Role filter buttons */}
       <div className="flex flex-wrap gap-2 mb-4">

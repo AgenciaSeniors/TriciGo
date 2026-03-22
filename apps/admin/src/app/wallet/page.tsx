@@ -6,6 +6,8 @@ import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import type { LedgerTransaction, PaymentIntent, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -26,7 +28,9 @@ type RedemptionRow = WalletRedemption & { driver_name: string };
 export default function WalletPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [stats, setStats] = useState<WalletStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('redemptions');
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [recharges, setRecharges] = useState<RechargeRow[]>([]);
@@ -73,6 +77,7 @@ export default function WalletPage() {
         }
       } catch (err) {
         console.error('Error fetching wallet data:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar datos de wallet');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -97,7 +102,7 @@ export default function WalletPage() {
         setStats(newStats);
       } catch (err) {
         console.error('Error processing redemption:', err);
-        window.alert(t('wallet_admin.error_processing_redemption'));
+        showToast('error', t('wallet_admin.error_processing_redemption'));
       } finally {
         setProcessing(null);
       }
@@ -112,7 +117,7 @@ export default function WalletPage() {
       setStats(newStats);
     } catch (err) {
       console.error('Error processing redemption:', err);
-      window.alert(t('wallet_admin.error_processing_redemption'));
+      showToast('error', t('wallet_admin.error_processing_redemption'));
     } finally {
       setProcessing(null);
     }
@@ -130,7 +135,7 @@ export default function WalletPage() {
         setRecharges((prev) => prev.filter((r) => r.id !== id));
       } catch (err) {
         console.error('Error processing recharge:', err);
-        window.alert(t('wallet_admin.error_processing_recharge'));
+        showToast('error', t('wallet_admin.error_processing_recharge'));
       } finally {
         setProcessing(null);
       }
@@ -143,7 +148,7 @@ export default function WalletPage() {
       setRecharges((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       console.error('Error processing recharge:', err);
-      window.alert(t('wallet_admin.error_processing_recharge'));
+      showToast('error', t('wallet_admin.error_processing_recharge'));
     } finally {
       setProcessing(null);
     }
@@ -163,6 +168,14 @@ export default function WalletPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('wallet_admin.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -43,8 +45,10 @@ interface Incident {
 export default function IncidentsPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -62,7 +66,7 @@ export default function IncidentsPage() {
       .then((data) => {
         if (!cancelled) setIncidents(data as unknown as Incident[]);
       })
-      .catch(console.error)
+      .catch((err: unknown) => { console.error(err); setError(err instanceof Error ? err.message : 'Error al cargar incidentes'); })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -84,6 +88,14 @@ export default function IncidentsPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('incidents.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-6">

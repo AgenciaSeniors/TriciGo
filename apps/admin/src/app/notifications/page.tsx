@@ -6,6 +6,8 @@ import { notificationService } from '@tricigo/api';
 import { adminService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type NotificationLog = {
   id: string;
@@ -27,6 +29,8 @@ const TARGET_LABELS: Record<string, { es: string; en: string }> = {
 
 export default function NotificationsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
+  const [error, setError] = useState<string | null>(null);
 
   // Compose form state
   const [title, setTitle] = useState('');
@@ -62,6 +66,7 @@ export default function NotificationsPage() {
       setHistory(data);
     } catch (err) {
       console.error('Error loading notification history:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar historial');
     } finally {
       setHistoryLoading(false);
     }
@@ -170,6 +175,7 @@ export default function NotificationsPage() {
       loadHistory();
     } catch (err) {
       console.error('Error sending notification:', err);
+      showToast('error', 'Error al enviar notificación');
       setSendResult({ success: 0, error: -1 });
     } finally {
       setSending(false);
@@ -189,6 +195,14 @@ export default function NotificationsPage() {
   return (
     <div className="max-w-4xl">
       <h1 className="text-3xl font-bold mb-8">{t('notifications.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); loadHistory(); loadInboxStats(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Compose Form */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">

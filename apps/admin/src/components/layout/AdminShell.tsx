@@ -6,6 +6,7 @@ import { initI18n } from '@tricigo/i18n';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { SidebarProvider } from './SidebarContext';
+import { AdminToastProvider } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
 
 let i18nInitialized = false;
@@ -41,7 +42,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (!ready) return null;
 
   if (isAuthPage) {
-    return <>{children}</>;
+    return <AdminToastProvider>{children}</AdminToastProvider>;
   }
 
   // Show loading spinner while checking auth
@@ -54,16 +55,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-y-auto p-4 md:p-6">
-            {children}
-          </main>
+    <AdminToastProvider>
+      <SidebarProvider>
+        <div className="flex h-screen">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-4 md:p-6">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </AdminToastProvider>
   );
 }

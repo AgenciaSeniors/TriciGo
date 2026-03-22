@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { SurgeZone } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 function formatDate(d: string | null): string {
   if (!d) return '—';
@@ -19,7 +21,9 @@ function formatDate(d: string | null): string {
 
 export default function SurgeZonesPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [surges, setSurges] = useState<SurgeZone[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -39,6 +43,7 @@ export default function SurgeZonesPage() {
         if (!cancelled) setSurges(data);
       } catch (err) {
         console.error('Error fetching surge zones:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar zonas surge');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -64,7 +69,7 @@ export default function SurgeZonesPage() {
       setForm({ zone_id: '', multiplier: 1.5, reason: '', starts_at: '', ends_at: '' });
     } catch (err) {
       console.error('Error creating surge zone:', err);
-      window.alert('Error al crear zona surge');
+      showToast('error', 'Error al crear zona surge');
     } finally {
       setCreating(false);
     }
@@ -96,6 +101,13 @@ export default function SurgeZonesPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('surge_zones.title')}</h1>
         <button

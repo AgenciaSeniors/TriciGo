@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const emptyForm = {
   slug: '',
@@ -23,8 +25,10 @@ const PAGE_SIZE = 20;
 
 export default function BlogAdminPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -35,7 +39,7 @@ export default function BlogAdminPage() {
     blogService
       .getAllPosts(page, PAGE_SIZE)
       .then(setPosts)
-      .catch(console.error)
+      .catch((err: unknown) => { console.error(err); setError(err instanceof Error ? err.message : 'Error al cargar posts'); })
       .finally(() => setLoading(false));
   };
 
@@ -130,6 +134,14 @@ export default function BlogAdminPage() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); loadPosts(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('blog.title')}</h1>
         {!showForm && (

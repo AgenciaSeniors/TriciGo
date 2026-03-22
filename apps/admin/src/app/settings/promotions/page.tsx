@@ -8,6 +8,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Promotion } from '@tricigo/types';
 import type { PromotionType } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -46,7 +48,9 @@ const emptyForm: CreateForm = {
 export default function PromotionsPage() {
   const { t } = useTranslation('admin');
   const { userId: adminUserId } = useAdminUser();
+  const { showToast } = useToast();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState('all');
@@ -63,6 +67,7 @@ export default function PromotionsPage() {
         if (!cancelled) setPromotions(data);
       } catch (err) {
         console.error('Error fetching promotions:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar promociones');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -106,7 +111,7 @@ export default function PromotionsPage() {
       setShowCreate(false);
     } catch (err) {
       console.error('Error creating promotion:', err);
-      window.alert(t('promotions.error_creating'));
+      showToast('error', t('promotions.error_creating'));
     } finally {
       setSaving(false);
     }
@@ -129,7 +134,7 @@ export default function PromotionsPage() {
       setPromotions((prev) => prev.filter((p) => p.id !== promo.id));
     } catch (err) {
       console.error('Error deleting:', err);
-      window.alert(t('promotions.error_deleting'));
+      showToast('error', t('promotions.error_deleting'));
     }
   }
 
@@ -151,6 +156,13 @@ export default function PromotionsPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('promotions.title')}</h1>
         <button

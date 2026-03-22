@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
 
@@ -32,6 +33,7 @@ function formatDate(dateString: string | null): string {
 
 export default function SegmentsPage() {
   const { t } = useTranslation('admin');
+  const [error, setError] = useState<string | null>(null);
 
   const [counts, setCounts] = useState<Record<SegmentType, number>>({
     new_users: 0,
@@ -112,6 +114,7 @@ export default function SegmentsPage() {
       });
     } catch (err) {
       console.error('Error loading segment counts:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar segmentos');
     } finally {
       setCountsLoading(false);
     }
@@ -319,6 +322,14 @@ export default function SegmentsPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('segments.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Segment cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

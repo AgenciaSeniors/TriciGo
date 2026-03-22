@@ -6,10 +6,14 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { ServiceTypeConfig } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 export default function ServiceTypesPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ServiceTypeConfig>>({});
@@ -23,6 +27,7 @@ export default function ServiceTypesPage() {
         if (!cancelled) setConfigs(data);
       } catch (err) {
         console.error('Error fetching service types:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar tipos de servicio');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,7 +59,7 @@ export default function ServiceTypesPage() {
       setEditingId(null);
     } catch (err) {
       console.error('Error updating service type:', err);
-      window.alert('Error al guardar');
+      showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -86,6 +91,13 @@ export default function ServiceTypesPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">

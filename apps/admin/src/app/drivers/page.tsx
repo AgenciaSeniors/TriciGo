@@ -8,6 +8,7 @@ import type { DriverProfileWithUser } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -56,6 +57,7 @@ export default function DriversPage() {
   const { t } = useTranslation('admin');
   const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
@@ -126,7 +128,7 @@ export default function DriversPage() {
         if (!cancelled) setDrivers(data);
       } catch (err) {
         console.error('Error fetching drivers:', err);
-        if (!cancelled) setDrivers([]);
+        if (!cancelled) { setDrivers([]); setError(err instanceof Error ? err.message : 'Error al cargar conductores'); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -141,6 +143,14 @@ export default function DriversPage() {
 
   return (
     <div>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); setPage(0); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">{t('drivers.title')}</h1>
         <select

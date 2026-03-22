@@ -6,6 +6,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatCUP } from '@tricigo/utils';
 import type { LostItem, LostItemStatus } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const statusBadge: Record<string, string> = {
   reported: 'bg-blue-50 text-blue-700',
@@ -40,8 +42,10 @@ function formatDate(d: string): string {
 export default function LostFoundPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [items, setItems] = useState<LostItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<LostItemStatus | 'all'>('reported');
   const [selected, setSelected] = useState<LostItem | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
@@ -57,6 +61,7 @@ export default function LostFoundPage() {
       setItems(data);
     } catch (err) {
       console.error('Error fetching lost items:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar objetos perdidos');
     } finally {
       setLoading(false);
     }
@@ -104,6 +109,14 @@ export default function LostFoundPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('lost_found.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchItems(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">

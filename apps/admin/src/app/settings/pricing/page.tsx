@@ -6,6 +6,8 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { PricingRule, Zone, ServiceTypeSlug } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const PAGE_SIZE = 20;
 
@@ -120,7 +122,9 @@ function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) =>
 
 export default function PricingPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [rules, setRules] = useState<PricingRule[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [zones, setZones] = useState<ZoneRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -154,6 +158,7 @@ export default function PricingPage() {
       setRules(data);
     } catch (err) {
       console.error('Error fetching pricing rules:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar reglas de precios');
     } finally {
       setLoading(false);
     }
@@ -190,7 +195,7 @@ export default function PricingPage() {
       setEditingId(null);
     } catch (err) {
       console.error('Error updating pricing rule:', err);
-      window.alert('Error al guardar');
+      showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -212,7 +217,7 @@ export default function PricingPage() {
       await fetchRules();
     } catch (err) {
       console.error('Error deleting:', err);
-      window.alert(t('pricing.error_deleting'));
+      showToast('error', t('pricing.error_deleting'));
     }
   }
 
@@ -246,7 +251,7 @@ export default function PricingPage() {
       });
     } catch (err) {
       console.error('Error creating:', err);
-      window.alert(t('pricing.error_creating'));
+      showToast('error', t('pricing.error_creating'));
     } finally {
       setCreating(false);
     }
@@ -284,6 +289,13 @@ export default function PricingPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchRules(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('pricing.title')}</h1>
         <button

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { Zone } from '@tricigo/types';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const TYPE_BADGE: Record<string, string> = {
   operational: 'bg-green-100 text-green-700',
@@ -22,7 +24,9 @@ type ZoneRow = Omit<Zone, 'boundary'>;
 
 export default function ZonesPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [zones, setZones] = useState<ZoneRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ name: string; surge_multiplier: number }>({ name: '', surge_multiplier: 1 });
@@ -36,6 +40,7 @@ export default function ZonesPage() {
         if (!cancelled) setZones(data);
       } catch (err) {
         console.error('Error fetching zones:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar zonas');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -59,7 +64,7 @@ export default function ZonesPage() {
       setEditingId(null);
     } catch (err) {
       console.error('Error updating zone:', err);
-      window.alert('Error al guardar');
+      showToast('error', 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -79,6 +84,13 @@ export default function ZonesPage() {
       <Link href="/settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <h1 className="text-3xl font-bold mb-6">{t('zones.title')}</h1>
 
       <p className="text-sm text-neutral-500 mb-4">

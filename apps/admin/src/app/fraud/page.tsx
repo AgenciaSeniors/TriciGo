@@ -5,6 +5,8 @@ import { fraudService } from '@tricigo/api';
 import type { FraudAlert } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const severityBadge: Record<string, string> = {
   low: 'bg-blue-50 text-blue-700',
@@ -26,8 +28,10 @@ function formatDate(dateString: string): string {
 export default function FraudAlertsPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [alerts, setAlerts] = useState<FraudAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'unresolved' | 'all'>('unresolved');
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState('');
@@ -48,6 +52,7 @@ export default function FraudAlertsPage() {
       setAlerts(data);
     } catch (err) {
       console.error('Error fetching alerts:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar alertas de fraude');
     } finally {
       setLoading(false);
     }
@@ -77,6 +82,13 @@ export default function FraudAlertsPage() {
 
   return (
     <div>
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchAlerts(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">{t('fraud.title')}</h1>

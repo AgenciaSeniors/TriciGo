@@ -5,6 +5,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { notificationService } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 type Campaign = {
   id: string;
@@ -67,8 +69,10 @@ const PAGE_SIZE = 20;
 
 export default function CampaignsPage() {
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
@@ -111,6 +115,7 @@ export default function CampaignsPage() {
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
       console.error('Error loading campaigns:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar campañas');
     } finally {
       setLoading(false);
     }
@@ -252,10 +257,10 @@ export default function CampaignsPage() {
 
       setPage(0);
       loadCampaigns();
-      window.alert(t('campaigns.send_success'));
+      showToast('success', t('campaigns.send_success'));
     } catch (err) {
       console.error('Error sending campaign:', err);
-      window.alert(t('campaigns.send_error'));
+      showToast('error', t('campaigns.send_error'));
     } finally {
       setSending(false);
     }
@@ -280,6 +285,14 @@ export default function CampaignsPage() {
           {showForm ? t('common.cancel') : t('campaigns.new_campaign')}
         </button>
       </div>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); loadCampaigns(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* New Campaign Form */}
       {showForm && (

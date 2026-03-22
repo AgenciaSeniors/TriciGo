@@ -6,6 +6,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { RideDispute, DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatTRC } from '@tricigo/utils';
+import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const statusBadge: Record<string, string> = {
   open: 'bg-blue-50 text-blue-700',
@@ -64,7 +66,9 @@ function getSlaStatus(deadline: string | null): 'ok' | 'warning' | 'expired' {
 export default function DisputesPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
+  const { showToast } = useToast();
   const [disputes, setDisputes] = useState<RideDispute[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<DisputeStatus | 'all'>('open');
   const [selected, setSelected] = useState<RideDispute | null>(null);
@@ -86,6 +90,7 @@ export default function DisputesPage() {
       setDisputes(data);
     } catch (err) {
       console.error('Error fetching disputes:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar disputas');
     } finally {
       setLoading(false);
     }
@@ -108,9 +113,9 @@ export default function DisputesPage() {
     setResolving(true);
     try {
       const amount = resolution === 'no_action' ? 0 : parseInt(refundAmount || '0', 10);
-      if (amount < 0) { alert('El monto no puede ser negativo'); setResolving(false); return; }
+      if (amount < 0) { showToast('warning', 'El monto no puede ser negativo'); setResolving(false); return; }
       const maxRefund = selected.ride_final_fare_trc ?? selected.ride_estimated_fare_trc ?? 100000;
-      if (amount > maxRefund) { alert(`El reembolso no puede superar ${maxRefund} TRC`); setResolving(false); return; }
+      if (amount > maxRefund) { showToast('warning', `El reembolso no puede superar ${maxRefund} TRC`); setResolving(false); return; }
       await disputeService.resolveDispute(
         selected.id,
         adminUserId,
@@ -129,7 +134,7 @@ export default function DisputesPage() {
       setSelected(null);
     } catch (err) {
       console.error('Error resolving dispute:', err);
-      alert(t('disputes.error_resolving'));
+      showToast('error', t('disputes.error_resolving'));
     } finally {
       setResolving(false);
     }
@@ -165,6 +170,14 @@ export default function DisputesPage() {
   return (
     <div>
       <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('disputes.title')}</h1>
+
+      {error && (
+        <AdminErrorBanner
+          message={error}
+          onRetry={() => { setError(null); fetchDisputes(); }}
+          onDismiss={() => setError(null)}
+        />
+      )}
 
       {/* Filter tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
