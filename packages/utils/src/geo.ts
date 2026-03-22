@@ -228,11 +228,67 @@ const CUBA_VIEWBOX = '-85.0,19.5,-74.0,23.5';
 /* ─── OSRM Routing ─── */
 
 /**
- * Fetch a driving route between two points using the OSRM public API.
- * Returns the route geometry (lat/lng pairs) + distance/duration,
- * or null if the request fails.
+ * Fetch route via Mapbox Directions API (primary) with OSRM fallback.
+ * Mapbox provides traffic-aware routing and more accurate ETAs.
  */
 export async function fetchRoute(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): Promise<RouteResult | null> {
+  // Try Mapbox first (traffic-aware, better accuracy)
+  const mapboxResult = await fetchRouteMapbox(from, to);
+  if (mapboxResult) return mapboxResult;
+
+  // Fallback to OSRM (free, no auth)
+  return fetchRouteOSRM(from, to);
+}
+
+/**
+ * Fetch route via Mapbox Directions API.
+ * Requires EXPO_PUBLIC_MAPBOX_TOKEN or NEXT_PUBLIC_MAPBOX_TOKEN env var.
+ */
+export async function fetchRouteMapbox(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): Promise<RouteResult | null> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return null;
+
+    const url =
+      `https://api.mapbox.com/directions/v5/mapbox/driving/` +
+      `${from.lng},${from.lat};${to.lng},${to.lat}` +
+      `?overview=full&geometries=geojson&access_token=${token}`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    if (!route) return null;
+
+    const coordinates: [number, number][] = route.geometry.coordinates.map(
+      (c: [number, number]) => [c[1], c[0]] as [number, number],
+    );
+
+    return {
+      coordinates,
+      distance_m: Math.round(route.distance),
+      duration_s: Math.round(route.duration),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch route via OSRM public API (fallback, no auth needed).
+ */
+export async function fetchRouteOSRM(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
@@ -249,7 +305,6 @@ export async function fetchRoute(
     const route = data?.routes?.[0];
     if (!route) return null;
 
-    // GeoJSON coordinates are [lng, lat] — convert to [lat, lng]
     const coordinates: [number, number][] = route.geometry.coordinates.map(
       (c: [number, number]) => [c[1], c[0]] as [number, number],
     );

@@ -33,6 +33,7 @@ import {
   calculateFareRange,
   maskPhone,
   isLocationInCuba,
+  fetchRoute,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
@@ -131,9 +132,27 @@ export const rideService = {
     const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };
     const dropoff = { latitude: params.dropoff_lat, longitude: params.dropoff_lng };
 
-    const straightLine = haversineDistance(pickup, dropoff);
-    const roadDistance = estimateRoadDistance(straightLine);
-    const duration = estimateDuration(roadDistance, params.service_type);
+    // Try real route distance from Mapbox/OSRM, fallback to haversine×1.3
+    let roadDistance: number;
+    let duration: number;
+    try {
+      const route = await fetchRoute(
+        { lat: params.pickup_lat, lng: params.pickup_lng },
+        { lat: params.dropoff_lat, lng: params.dropoff_lng },
+      );
+      if (route) {
+        roadDistance = route.distance_m;
+        duration = route.duration_s;
+      } else {
+        const straightLine = haversineDistance(pickup, dropoff);
+        roadDistance = estimateRoadDistance(straightLine);
+        duration = estimateDuration(roadDistance, params.service_type);
+      }
+    } catch {
+      const straightLine = haversineDistance(pickup, dropoff);
+      roadDistance = estimateRoadDistance(straightLine);
+      duration = estimateDuration(roadDistance, params.service_type);
+    }
 
     const distanceKm = roadDistance / 1000;
     const durationMin = duration / 60;
