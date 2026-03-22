@@ -89,7 +89,7 @@ export default function RideDetailPage() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
@@ -113,9 +113,9 @@ export default function RideDetailPage() {
 
         {/* Loading */}
         {loading && (
-          <div style={{ textAlign: 'center', padding: '3rem 0', color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-tertiary)' }}>
             <div style={{
-              width: 32, height: 32, border: '3px solid #eee', borderTopColor: 'var(--primary)',
+              width: 32, height: 32, border: '3px solid var(--border-light)', borderTopColor: 'var(--primary)',
               borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.75rem',
             }} />
             <p style={{ fontSize: '0.875rem' }}>Cargando viaje...</p>
@@ -125,7 +125,7 @@ export default function RideDetailPage() {
 
         {/* Error */}
         {!loading && error && (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-tertiary)' }}>
             <p style={{ fontSize: '1rem', fontWeight: 600, color: '#dc2626' }}>{error}</p>
             <Link
               href="/rides"
@@ -142,7 +142,7 @@ export default function RideDetailPage() {
 
         {/* Ride detail */}
         {!loading && ride && (() => {
-          const statusInfo = STATUS_CONFIG[ride.status] ?? { label: ride.status, bg: '#f3f4f6', color: '#666' };
+          const statusInfo = STATUS_CONFIG[ride.status] ?? { label: ride.status, bg: '#f3f4f6', color: 'var(--text-secondary)' };
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -154,27 +154,27 @@ export default function RideDetailPage() {
                 }}>
                   {statusInfo.label}
                 </span>
-                <span style={{ fontSize: '0.8rem', color: '#999' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
                   {SERVICE_LABELS[ride.service_type] ?? ride.service_type}
                 </span>
               </div>
 
               {/* Addresses */}
-              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white' }}>
+              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0, marginTop: 4 }} />
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--success)', flexShrink: 0, marginTop: 4 }} />
                     <div>
-                      <p style={{ fontSize: '0.75rem', color: '#999', margin: 0 }}>Recogida</p>
-                      <p style={{ fontSize: '0.875rem', color: '#333', margin: 0 }}>{ride.pickup_address}</p>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0 }}>Recogida</p>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: 0 }}>{ride.pickup_address}</p>
                     </div>
                   </div>
-                  <div style={{ borderLeft: '2px dashed #ddd', marginLeft: 4, height: 16 }} />
+                  <div style={{ borderLeft: '2px dashed var(--border)', marginLeft: 4, height: 16 }} />
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0, marginTop: 4 }} />
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--error)', flexShrink: 0, marginTop: 4 }} />
                     <div>
-                      <p style={{ fontSize: '0.75rem', color: '#999', margin: 0 }}>Destino</p>
-                      <p style={{ fontSize: '0.875rem', color: '#333', margin: 0 }}>{ride.dropoff_address}</p>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0 }}>Destino</p>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: 0 }}>{ride.dropoff_address}</p>
                     </div>
                   </div>
                 </div>
@@ -182,11 +182,11 @@ export default function RideDetailPage() {
 
               {/* Driver info */}
               {ride.driver_name && (
-                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white' }}>
-                  <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 0.5rem' }}>Conductor</p>
+                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem' }}>Conductor</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <div style={{
-                      width: 44, height: 44, borderRadius: '50%', background: '#f3f4f6',
+                      width: 44, height: 44, borderRadius: '50%', background: 'var(--bg-hover)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)', flexShrink: 0,
                       overflow: 'hidden',
@@ -199,7 +199,7 @@ export default function RideDetailPage() {
                     <div>
                       <p style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0 }}>{ride.driver_name}</p>
                       {ride.driver_rating != null && (
-                        <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: 0 }}>
                           ★ {ride.driver_rating.toFixed(1)}
                           {ride.driver_total_rides != null && ` · ${ride.driver_total_rides} viajes`}
                         </p>
@@ -207,7 +207,7 @@ export default function RideDetailPage() {
                     </div>
                   </div>
                   {(ride.vehicle_make || ride.vehicle_plate) && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#666' }}>
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       {[
                         ride.vehicle_color,
                         [ride.vehicle_make, ride.vehicle_model].filter(Boolean).join(' '),
@@ -215,7 +215,7 @@ export default function RideDetailPage() {
                       ].filter(Boolean).join(' · ')}
                       {ride.vehicle_plate && (
                         <span style={{
-                          marginLeft: '0.5rem', padding: '0.15rem 0.4rem', background: '#f3f4f6',
+                          marginLeft: '0.5rem', padding: '0.15rem 0.4rem', background: 'var(--bg-hover)',
                           borderRadius: '0.25rem', fontWeight: 600, fontSize: '0.75rem',
                         }}>
                           {ride.vehicle_plate}
@@ -227,14 +227,14 @@ export default function RideDetailPage() {
               )}
 
               {/* Fare breakdown */}
-              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white' }}>
-                <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 0.75rem' }}>Tarifa</p>
+              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>Tarifa</p>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#666' }}>Estimada</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Estimada</span>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
                     {formatTRC(ride.estimated_fare_trc ?? 0)}
-                    <span style={{ color: '#999', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.75rem' }}>
+                    <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.75rem' }}>
                       ({formatCUP(ride.estimated_fare_cup)})
                     </span>
                   </span>
@@ -242,10 +242,10 @@ export default function RideDetailPage() {
 
                 {ride.final_fare_trc != null && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#666' }}>Final</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Final</span>
                     <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--primary)' }}>
                       {formatTRC(ride.final_fare_trc)}
-                      <span style={{ color: '#999', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.75rem' }}>
                         ({formatCUP(ride.final_fare_cup ?? 0)})
                       </span>
                     </span>
@@ -254,7 +254,7 @@ export default function RideDetailPage() {
 
                 {ride.final_fare_trc != null && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#999' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                       ~{formatTRCasUSD(ride.final_fare_trc)}
                     </span>
                   </div>
@@ -267,15 +267,15 @@ export default function RideDetailPage() {
                 )}
 
                 {ride.tip_amount > 0 && (
-                  <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: '#666' }}>
+                  <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                     Propina: {formatTRC(ride.tip_amount)}
                   </div>
                 )}
               </div>
 
               {/* Details */}
-              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white' }}>
-                <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 0.75rem' }}>Detalles</p>
+              <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>Detalles</p>
 
                 {[
                   { label: 'Metodo de pago', value: PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method },
@@ -289,8 +289,8 @@ export default function RideDetailPage() {
                     : { label: 'Duracion estimada', value: `${Math.round(ride.estimated_duration_s / 60)} min` },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#999' }}>{item.label}</span>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#333' }}>{item.value}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{item.label}</span>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)' }}>{item.value}</span>
                   </div>
                 ))}
               </div>

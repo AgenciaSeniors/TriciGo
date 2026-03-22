@@ -149,7 +149,7 @@ export default function WalletPage() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
@@ -296,7 +296,7 @@ export default function WalletPage() {
         {/* ═══ Recharge section ═══ */}
         <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Recargar billetera</p>
-          <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 0.5rem' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem' }}>
             Tasa actual: 1 USD = {exchangeRate} CUP
           </p>
           <div className="wallet-input-row">
@@ -306,7 +306,7 @@ export default function WalletPage() {
               value={rechargeCup}
               onChange={(e) => setRechargeCup(e.target.value)}
               style={{
-                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #ddd',
+                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.875rem', outline: 'none',
               }}
             />
@@ -324,7 +324,7 @@ export default function WalletPage() {
             </button>
           </div>
           {rechargeCup && !isNaN(parseInt(rechargeCup)) && parseInt(rechargeCup) > 0 && (
-            <p style={{ fontSize: '0.75rem', color: '#666', margin: '0.35rem 0 0' }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.35rem 0 0' }}>
               Recibiras aprox. {formatTRC(Math.round((parseInt(rechargeCup) / exchangeRate) * 100))}
             </p>
           )}
@@ -344,7 +344,7 @@ export default function WalletPage() {
               value={transferPhone}
               onChange={(e) => { setTransferPhone(e.target.value); setTransferRecipient(null); setTransferError(null); }}
               style={{
-                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #ddd',
+                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.875rem', outline: 'none',
               }}
             />
@@ -367,7 +367,7 @@ export default function WalletPage() {
             <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f0fdf4', border: '1px solid #86efac', marginBottom: '0.5rem' }}>
               <p style={{ fontSize: '0.8rem', margin: 0 }}>
                 <span style={{ fontWeight: 600 }}>{transferRecipient.full_name}</span>
-                <span style={{ color: '#999', marginLeft: '0.35rem' }}>{transferRecipient.phone}</span>
+                <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>{transferRecipient.phone}</span>
               </p>
             </div>
           )}
@@ -381,12 +381,12 @@ export default function WalletPage() {
                 value={transferAmount}
                 onChange={(e) => setTransferAmount(e.target.value)}
                 style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #ddd',
+                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                   fontSize: '0.875rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box',
                 }}
               />
               {transferAmount && !isNaN(parseInt(transferAmount)) && parseInt(transferAmount) > 0 && (
-                <p style={{ fontSize: '0.75rem', color: '#666', margin: '0 0 0.5rem' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
                   = {formatTRC(parseInt(transferAmount))} (~{formatTRCasUSD(parseInt(transferAmount))})
                 </p>
               )}
@@ -396,7 +396,7 @@ export default function WalletPage() {
                 value={transferNote}
                 onChange={(e) => setTransferNote(e.target.value)}
                 style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #ddd',
+                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                   fontSize: '0.875rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box',
                 }}
               />
@@ -431,7 +431,7 @@ export default function WalletPage() {
                 onClick={() => setFilter(tab.key)}
                 style={{
                   padding: '0.4rem 0.75rem', borderRadius: '1rem', border: 'none',
-                  background: filter === tab.key ? 'var(--primary)' : '#f3f4f6',
+                  background: filter === tab.key ? 'var(--primary)' : 'var(--bg-hover)',
                   color: filter === tab.key ? 'white' : '#666',
                   fontWeight: filter === tab.key ? 600 : 400,
                   fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -444,9 +444,9 @@ export default function WalletPage() {
 
           {/* Loading */}
           {txLoading && (
-            <div style={{ textAlign: 'center', padding: '2rem 0', color: '#999' }}>
+            <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-tertiary)' }}>
               <div style={{
-                width: 28, height: 28, border: '3px solid #eee', borderTopColor: 'var(--primary)',
+                width: 28, height: 28, border: '3px solid var(--border-light)', borderTopColor: 'var(--primary)',
                 borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.5rem',
               }} />
               <p style={{ fontSize: '0.8rem' }}>Cargando transacciones...</p>
@@ -456,7 +456,7 @@ export default function WalletPage() {
 
           {/* Empty */}
           {!txLoading && filteredTx.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#999' }}>
+            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-tertiary)' }}>
               <p style={{ fontSize: '0.875rem' }}>Sin transacciones {filter !== 'all' ? 'en esta categoria' : ''}</p>
             </div>
           )}
@@ -470,15 +470,15 @@ export default function WalletPage() {
                 return (
                   <div key={tx.id} className="wallet-tx-item">
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0, color: '#333' }}>
+                      <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
                         {TYPE_LABELS[tx.type] ?? tx.type}
                       </p>
                       {tx.description && (
-                        <p style={{ fontSize: '0.7rem', color: '#999', margin: '0.15rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', margin: '0.15rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {tx.description}
                         </p>
                       )}
-                      <p style={{ fontSize: '0.7rem', color: '#bbb', margin: '0.15rem 0 0' }}>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', margin: '0.15rem 0 0' }}>
                         {getRelativeDay(tx.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(tx.created_at)}
                       </p>
                     </div>
@@ -501,7 +501,7 @@ export default function WalletPage() {
                   disabled={txLoadingMore}
                   style={{
                     width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                    border: '1px solid #ddd', background: 'white',
+                    border: '1px solid var(--border)', background: 'white',
                     cursor: txLoadingMore ? 'not-allowed' : 'pointer',
                     fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
                   }}

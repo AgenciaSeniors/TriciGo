@@ -22,12 +22,12 @@ const BookingMap = dynamic(() => import('./BookingMap'), {
         height: 420,
         width: '100%',
         borderRadius: '0.75rem',
-        border: '1px solid #333',
+        border: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: '#1a1a2e',
-        color: '#666',
+        color: 'var(--text-secondary)',
         fontSize: '0.875rem',
       }}
     >
@@ -296,7 +296,7 @@ export default function BookPage() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d1a' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
@@ -331,7 +331,7 @@ export default function BookPage() {
         >
           {t('book.title')}
         </h1>
-        <p style={{ color: '#888', marginBottom: '1.5rem' }}>{t('book.subtitle')}</p>
+        <p style={{ color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>{t('book.subtitle')}</p>
 
         {/* ═══ MAP ═══ */}
         <BookingMap
@@ -362,11 +362,11 @@ export default function BookPage() {
               marginTop: '0.5rem',
               padding: '0.5rem',
               borderRadius: '0.5rem',
-              border: '1px solid #ddd',
-              background: 'white',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
               cursor: 'pointer',
               fontSize: '0.8rem',
-              color: '#666',
+              color: 'var(--text-secondary)',
             }}
           >
             {t('book.map_reset')}
@@ -399,15 +399,15 @@ export default function BookPage() {
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: '#22c55e',
+                      background: 'var(--success)',
                       flexShrink: 0,
                     }}
                   />
                   <span style={{ fontWeight: 600 }}>{t('book.map_pickup_label')}:</span>
-                  <span style={{ color: '#555' }}>{pickup.label}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{pickup.label}</span>
                 </div>
                 {pickupAddress && (
-                  <p style={{ margin: '0.25rem 0 0 1.375rem', fontSize: '0.75rem', color: '#888' }}>
+                  <p style={{ margin: '0.25rem 0 0 1.375rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                     {pickupAddress}
                   </p>
                 )}
@@ -429,15 +429,15 @@ export default function BookPage() {
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: '#ef4444',
+                      background: 'var(--error)',
                       flexShrink: 0,
                     }}
                   />
                   <span style={{ fontWeight: 600 }}>{t('book.map_dropoff_label')}:</span>
-                  <span style={{ color: '#555' }}>{dropoff.label}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{dropoff.label}</span>
                 </div>
                 {dropoffAddress && (
-                  <p style={{ margin: '0.25rem 0 0 1.375rem', fontSize: '0.75rem', color: '#888' }}>
+                  <p style={{ margin: '0.25rem 0 0 1.375rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                     {dropoffAddress}
                   </p>
                 )}
@@ -497,7 +497,7 @@ export default function BookPage() {
                     border:
                       serviceType === svc.slug
                         ? '2px solid var(--primary)'
-                        : '1px solid #ddd',
+                        : '1px solid var(--border)',
                     background: serviceType === svc.slug ? '#FFF5F0' : 'white',
                     cursor: 'pointer',
                     textAlign: 'center',
@@ -513,7 +513,7 @@ export default function BookPage() {
                       width: '2rem',
                       height: '2rem',
                       borderRadius: '50%',
-                      background: serviceType === svc.slug ? 'var(--primary)' : '#e5e5e5',
+                      background: serviceType === svc.slug ? 'var(--primary)' : 'var(--border)',
                       color: serviceType === svc.slug ? 'white' : '#666',
                       fontWeight: 700,
                       fontSize: '0.7rem',
@@ -580,7 +580,7 @@ export default function BookPage() {
                   marginBottom: '0.75rem',
                 }}
               >
-                <span style={{ fontSize: '0.875rem', color: '#666' }}>
+                <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                   {t('book.estimated_fare')}
                 </span>
                 <span
@@ -591,14 +591,14 @@ export default function BookPage() {
               </div>
               <div
                 className="booking-fare-details"
-                style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: '#666', flexWrap: 'wrap' }}
+                style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}
               >
                 <span>{(estimate.estimated_distance_m / 1000).toFixed(1)} km</span>
                 <span>{Math.round(estimate.estimated_duration_s / 60)} min</span>
-                <span style={{ color: '#999' }}>
+                <span style={{ color: 'var(--text-tertiary)' }}>
                   ~{formatTRCasUSD(estimate.estimated_fare_trc)}
                 </span>
-                <span style={{ color: '#999' }}>
+                <span style={{ color: 'var(--text-tertiary)' }}>
                   ≈ {formatCUP(estimate.estimated_fare_cup)}
                 </span>
                 {estimate.surge_multiplier > 1 && (
@@ -617,7 +617,7 @@ export default function BookPage() {
                 )}
               </div>
               {estimate.per_km_rate_cup > 0 && (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#999' }}>
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                   {t('book.per_km_rate', {
                     rate: formatCUP(estimate.per_km_rate_cup),
                   })}
@@ -650,7 +650,7 @@ export default function BookPage() {
                       border:
                         paymentMethod === 'cash'
                           ? '2px solid var(--primary)'
-                          : '1px solid #ddd',
+                          : '1px solid var(--border)',
                       background: paymentMethod === 'cash' ? '#FFF5F0' : 'white',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
@@ -669,7 +669,7 @@ export default function BookPage() {
                       border:
                         paymentMethod === 'tricicoin'
                           ? '2px solid var(--primary)'
-                          : '1px solid #ddd',
+                          : '1px solid var(--border)',
                       background: paymentMethod === 'tricicoin' ? '#FFF5F0' : 'white',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
@@ -708,10 +708,10 @@ export default function BookPage() {
           style={{
             marginTop: '2rem',
             padding: '1rem',
-            background: '#f9f9f9',
+            background: 'var(--bg-page)',
             borderRadius: '0.75rem',
             fontSize: '0.875rem',
-            color: '#888',
+            color: 'var(--text-tertiary)',
             textAlign: 'center',
           }}
         >

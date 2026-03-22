@@ -87,4 +87,33 @@ export const colors = {
   },
 } as const;
 
+// ============================================================
+// Dark Mode Tokens — Foundation
+// Used by mobile (NativeWind dark:) and web (CSS variables)
+// ============================================================
+
+export const darkColors = {
+  background: {
+    primary: '#0d0d1a',
+    secondary: '#1a1a2e',
+    tertiary: '#252540',
+    dark: '#0d0d1a',
+    darkSecondary: '#1a1a2e',
+  },
+  text: {
+    primary: '#f5f5f5',
+    secondary: '#a0a0a0',
+    tertiary: '#666666',
+    inverse: '#111111',
+    accent: '#FF6D38',
+  },
+  border: {
+    default: '#333333',
+    light: '#222222',
+  },
+  card: '#1a1a2e',
+  hover: '#252540',
+} as const;
+
 export type ColorToken = typeof colors;
+export type DarkColorToken = typeof darkColors;

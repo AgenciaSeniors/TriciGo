@@ -12,6 +12,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
@@ -154,9 +155,12 @@ export default function SavedLocationsScreen() {
           )}
           ListEmptyComponent={
             !loading ? (
-              <Text variant="body" color="secondary" className="text-center py-8">
-                {t('profile.no_saved_locations')}
-              </Text>
+              <EmptyState
+                icon="location-outline"
+                title={t('profile.no_saved_locations')}
+                description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar más rápido.' })}
+                action={{ label: t('profile.add_location'), onPress: () => handleOpenSheet() }}
+              />
             ) : null
           }
         />

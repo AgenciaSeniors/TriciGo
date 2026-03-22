@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -10,6 +10,7 @@ import { driverService } from '@tricigo/api/services/driver';
 import { formatCUP, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useDriverStore } from '@/stores/driver.store';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
@@ -279,8 +280,10 @@ function NativeTripsScreen() {
             retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
           />
         ) : loading && page === 0 ? (
-          <View className="items-center py-20">
-            <ActivityIndicator size="large" color={colors.brand.orange} />
+          <View className="px-1 pt-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonListItem key={i} />
+            ))}
           </View>
         ) : (
           <FlatList

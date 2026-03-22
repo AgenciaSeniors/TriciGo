@@ -14,6 +14,7 @@ import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
@@ -113,7 +114,11 @@ function WebWalletScreen() {
             <SkeletonListItem />
           </View>
         ) : transactions.length === 0 ? (
-          <Text variant="body" color="secondary">{t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}</Text>
+          <EmptyState
+            icon="receipt-outline"
+            title={t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}
+            description={t('wallet.no_transactions_desc', { defaultValue: 'Tus movimientos aparecerán aquí.' })}
+          />
         ) : (
           transactions.map((tx) => {
             const entry = tx.ledger_entries?.[0];
@@ -499,11 +504,11 @@ function NativeWalletScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />
           }
           ListEmptyComponent={
-            <View className="items-center py-10">
-              <Text variant="body" color="tertiary">
-                {t('wallet.no_transactions')}
-              </Text>
-            </View>
+            <EmptyState
+              icon="receipt-outline"
+              title={t('wallet.no_transactions')}
+              description={t('wallet.no_transactions_desc', { defaultValue: 'Tus movimientos aparecerán aquí.' })}
+            />
           }
         />
       </View>

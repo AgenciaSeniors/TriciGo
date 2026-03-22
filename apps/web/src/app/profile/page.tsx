@@ -37,7 +37,7 @@ export default function ProfilePage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -45,7 +45,7 @@ export default function ProfilePage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver tu perfil</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tu perfil</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -67,7 +67,7 @@ export default function ProfilePage() {
           height: 80,
           borderRadius: '50%',
           overflow: 'hidden',
-          background: '#f0f0f0',
+          background: 'var(--border-light)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -82,8 +82,8 @@ export default function ProfilePage() {
             </svg>
           )}
         </div>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1a1a1a' }}>{fullName}</h1>
-        <p style={{ fontSize: '0.875rem', color: '#666', margin: '0.25rem 0 0' }}>{email}</p>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{fullName}</h1>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0' }}>{email}</p>
         {level && (
           <span style={{
             display: 'inline-block',
@@ -108,12 +108,12 @@ export default function ProfilePage() {
             href={item.href}
             className="profile-menu-item"
             style={{
-              borderBottom: index < menuItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+              borderBottom: index < menuItems.length - 1 ? '1px solid var(--border-light)' : 'none',
             }}
           >
             <span style={{ fontSize: '1.25rem', marginRight: '1rem', width: 28, textAlign: 'center' }}>{item.icon}</span>
             <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 500 }}>{item.label}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Link>

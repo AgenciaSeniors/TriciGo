@@ -23,6 +23,7 @@ import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import { useDemandHeatmap } from '@/hooks/useDemandHeatmap';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { Platform } from 'react-native';
@@ -364,11 +365,11 @@ function NativeDriverHomeScreen() {
               {heatmapData.length > 0 && (
                 <RideMapView heatmapData={heatmapData} height={200} />
               )}
-              <View className="flex-1 items-center justify-center">
-                <Text variant="body" color="inverse" className="opacity-30">
-                  {t('home.waiting_requests')}
-                </Text>
-              </View>
+              <EmptyState
+                icon="car-outline"
+                title={t('home.waiting_requests')}
+                description={t('home.waiting_requests_desc', { defaultValue: 'Las solicitudes de viaje aparecerán aquí.' })}
+              />
             </View>
           )
         ) : (

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification, NotificationType } from '@tricigo/types';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 
 const ICON_MAP: Record<NotificationType, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
   ride_update: { name: 'car', color: colors.brand.orange },
@@ -209,7 +210,13 @@ export default function NotificationsScreen() {
         ))}
       </View>
 
-      {filtered.length === 0 && !isLoading ? (
+      {isLoading && filtered.length === 0 ? (
+        <View className="px-4 pt-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonListItem key={i} />
+          ))}
+        </View>
+      ) : filtered.length === 0 && !isLoading ? (
         <EmptyState
           icon="notifications-off-outline"
           title={t('notifications.empty')}

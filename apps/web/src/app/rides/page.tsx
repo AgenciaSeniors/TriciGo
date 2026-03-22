@@ -71,7 +71,7 @@ export default function RidesPage() {
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
@@ -111,9 +111,9 @@ export default function RidesPage() {
 
         {/* Loading */}
         {loading && (
-          <div style={{ textAlign: 'center', padding: '3rem 0', color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-tertiary)' }}>
             <div style={{
-              width: 32, height: 32, border: '3px solid #eee', borderTopColor: 'var(--primary)',
+              width: 32, height: 32, border: '3px solid var(--border-light)', borderTopColor: 'var(--primary)',
               borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.75rem',
             }} />
             <p style={{ fontSize: '0.875rem' }}>Cargando viajes...</p>
@@ -123,7 +123,7 @@ export default function RidesPage() {
 
         {/* Empty state */}
         {!loading && rides.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-tertiary)' }}>
             <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🚗</div>
             <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Sin viajes todavia</p>
             <p style={{ fontSize: '0.875rem' }}>Cuando completes un viaje, aparecera aqui.</p>
@@ -153,7 +153,7 @@ export default function RidesPage() {
                 >
                   {/* Header: date + status */}
                   <div className="ride-card-header">
-                    <span style={{ fontSize: '0.8rem', color: '#999' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
                       {getRelativeDay(ride.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(ride.created_at)}
                     </span>
                     <span style={{
@@ -167,14 +167,14 @@ export default function RidesPage() {
                   {/* Addresses */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.85rem', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {ride.pickup_address}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.85rem', color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--error)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {ride.dropoff_address}
                       </span>
                     </div>
@@ -185,7 +185,7 @@ export default function RidesPage() {
                     <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary)' }}>
                       {ride.final_fare_trc != null ? formatTRC(ride.final_fare_trc) : formatTRC(ride.estimated_fare_trc ?? 0)}
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: '#999' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                       {PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method}
                     </span>
                   </div>
@@ -200,7 +200,7 @@ export default function RidesPage() {
                 disabled={loadingMore}
                 style={{
                   width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                  border: '1px solid #ddd', background: 'white', cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--border)', background: 'white', cursor: loadingMore ? 'not-allowed' : 'pointer',
                   fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
                 }}
               >

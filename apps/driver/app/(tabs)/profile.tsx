@@ -7,6 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { authService, driverService } from '@tricigo/api';
 import { Platform } from 'react-native';
 import { useAuthStore } from '@/stores/auth.store';
@@ -58,11 +59,23 @@ function NativeDriverProfileScreen() {
   const { t } = useTranslation('common');
   const { t: td } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
   const reset = useAuthStore((s) => s.reset);
   const driverProfile = useDriverStore((s) => s.profile);
   const resetDriver = useDriverStore((s) => s.reset);
   const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  if (isLoading) {
+    return (
+      <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+        <View className="pt-4">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={3} />
+        </View>
+      </Screen>
+    );
+  }
 
   const doLogout = async () => {
     setLoggingOut(true);

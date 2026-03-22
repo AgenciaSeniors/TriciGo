@@ -141,7 +141,7 @@ export default function NotificationsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -149,7 +149,7 @@ export default function NotificationsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver tus notificaciones</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tus notificaciones</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -168,11 +168,11 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Link href="/" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+          <Link href="/" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -219,7 +219,7 @@ export default function NotificationsPage() {
       {/* Loading */}
       {loading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-          <p style={{ color: '#999' }}>Cargando notificaciones...</p>
+          <p style={{ color: 'var(--text-tertiary)' }}>Cargando notificaciones...</p>
         </div>
       )}
 
@@ -260,14 +260,14 @@ export default function NotificationsPage() {
           padding: '4rem 1rem',
           textAlign: 'center',
         }}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <p style={{ fontSize: '1rem', fontWeight: 600, color: '#999', margin: '1rem 0 0.25rem' }}>
+          <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-tertiary)', margin: '1rem 0 0.25rem' }}>
             No tienes notificaciones
           </p>
-          <p style={{ fontSize: '0.85rem', color: '#bbb', margin: 0 }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', margin: 0 }}>
             Aqui veras las actualizaciones de tus viajes y promociones.
           </p>
         </div>
@@ -279,16 +279,16 @@ export default function NotificationsPage() {
           <h2 style={{
             fontSize: '0.8rem',
             fontWeight: 600,
-            color: '#999',
+            color: 'var(--text-tertiary)',
             textTransform: 'capitalize',
             marginBottom: '0.5rem',
           }}>
             {dateLabel}
           </h2>
           <div style={{
-            background: '#fff',
+            background: 'var(--bg-card)',
             borderRadius: '1rem',
-            border: '1px solid #eee',
+            border: '1px solid var(--border-light)',
             overflow: 'hidden',
           }}>
             {items.map((notif, index) => (
@@ -303,7 +303,7 @@ export default function NotificationsPage() {
                   width: '100%',
                   background: notif.read ? 'transparent' : '#fffbf0',
                   border: 'none',
-                  borderBottom: index < items.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  borderBottom: index < items.length - 1 ? '1px solid var(--border-light)' : 'none',
                   cursor: 'pointer',
                   textAlign: 'left',
                 }}
@@ -312,7 +312,7 @@ export default function NotificationsPage() {
                   width: 40,
                   height: 40,
                   borderRadius: '50%',
-                  background: '#f7f7f7',
+                  background: 'var(--bg-hover)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -326,21 +326,21 @@ export default function NotificationsPage() {
                       margin: 0,
                       fontSize: '0.9rem',
                       fontWeight: notif.read ? 500 : 700,
-                      color: '#1a1a1a',
+                      color: 'var(--text-primary)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                     }}>
                       {notif.title}
                     </p>
-                    <span style={{ fontSize: '0.75rem', color: '#bbb', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       {formatTime(notif.created_at)}
                     </span>
                   </div>
                   <p style={{
                     margin: '0.2rem 0 0',
                     fontSize: '0.85rem',
-                    color: '#777',
+                    color: 'var(--text-secondary)',
                     lineHeight: 1.4,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',

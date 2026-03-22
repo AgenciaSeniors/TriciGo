@@ -11,6 +11,7 @@ import { authService } from '@tricigo/api';
 import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { Platform } from 'react-native';
 import { colors } from '@tricigo/theme';
 
@@ -77,8 +78,20 @@ function WebProfileScreen() {
 function NativeProfileScreen() {
   const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
   const reset = useAuthStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  if (isLoading) {
+    return (
+      <Screen scroll bg="white" padded>
+        <View className="pt-4">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={3} />
+        </View>
+      </Screen>
+    );
+  }
 
   const handleLogout = async () => {
     setLoggingOut(true);

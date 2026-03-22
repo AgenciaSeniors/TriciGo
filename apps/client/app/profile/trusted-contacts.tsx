@@ -7,6 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
@@ -137,17 +138,12 @@ export default function TrustedContactsScreen() {
 
         {/* Empty state */}
         {!loading && contacts.length === 0 && (
-          <Card variant="outlined" padding="lg" className="mb-3">
-            <View className="items-center py-4">
-              <Ionicons name="people-outline" size={40} color={colors.neutral[300]} />
-              <Text variant="body" color="secondary" className="mt-3 text-center">
-                {t('trusted_contacts.no_contacts')}
-              </Text>
-              <Text variant="caption" color="secondary" className="text-center mt-1">
-                {t('trusted_contacts.no_contacts_desc')}
-              </Text>
-            </View>
-          </Card>
+          <EmptyState
+            icon="people-outline"
+            title={t('trusted_contacts.no_contacts')}
+            description={t('trusted_contacts.no_contacts_desc')}
+            action={{ label: t('trusted_contacts.add_contact'), onPress: () => setAddSheetVisible(true) }}
+          />
         )}
 
         {/* Add button */}

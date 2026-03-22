@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, ActivityIndicator, Share } from 'react-native';
+import { View, Pressable, Share } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -18,6 +18,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { colors } from '@tricigo/theme';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 
 export default function RideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -105,8 +106,10 @@ export default function RideDetailScreen() {
   if (loading) {
     return (
       <Screen bg="white" padded>
-        <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator size="large" color={colors.brand.orange} />
+        <View className="pt-4">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={3} />
+          <SkeletonCard lines={4} />
         </View>
       </Screen>
     );
