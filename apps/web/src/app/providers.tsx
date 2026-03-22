@@ -3,6 +3,7 @@
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { initI18n } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 
 let i18nInitialized = false;
@@ -32,7 +33,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = createBrowserClient();
+    // Use the shared API client so session is consistent with @tricigo/api services
+    const supabase = getSupabaseClient();
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -52,7 +54,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    const supabase = createBrowserClient();
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     setUser(null);
   };
