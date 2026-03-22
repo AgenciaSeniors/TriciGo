@@ -65,7 +65,8 @@
     "quests": "Misiones",
     "blog": "Blog",
     "admin_panel": "Panel de administraci\u00f3n",
-    "businesses": "Empresas"
+    "businesses": "Empresas",
+    "reviews": "Rese\u00f1as"
   },
 
   "referrals": {
@@ -1036,5 +1037,36 @@
     "auto_approve_redemption": "Retiro auto-aprobado",
     "auto_resolve_fraud": "Fraude auto-resuelto",
     "auto_close_incident": "Incidente auto-cerrado"
+  },
+
+  "reviews": {
+    "title": "Rese\u00f1as",
+    "stat_total": "Total de rese\u00f1as",
+    "stat_average": "Calificaci\u00f3n promedio",
+    "stat_today": "Rese\u00f1as hoy",
+    "filter_all": "Todas",
+    "filter_5": "5 estrellas",
+    "filter_4": "4 estrellas",
+    "filter_3": "3 estrellas",
+    "filter_2": "2 estrellas",
+    "filter_1": "1 estrella",
+    "date_from": "Desde",
+    "date_to": "Hasta",
+    "clear_dates": "Limpiar fechas",
+    "no_reviews": "No hay rese\u00f1as",
+    "col_date": "Fecha",
+    "col_reviewer": "Autor",
+    "col_reviewee": "Evaluado",
+    "col_rating": "Calificaci\u00f3n",
+    "col_comment": "Comentario",
+    "col_tags": "Etiquetas",
+    "col_status": "Estado",
+    "col_actions": "Acciones",
+    "visible": "Visible",
+    "hidden": "Oculta",
+    "hide": "Ocultar",
+    "show": "Mostrar",
+    "feature": "Destacar",
+    "unfeature": "Quitar destacado"
   }
 }

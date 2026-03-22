@@ -65,7 +65,8 @@
     "quests": "Quests",
     "blog": "Blog",
     "admin_panel": "Admin Panel",
-    "businesses": "Businesses"
+    "businesses": "Businesses",
+    "reviews": "Reviews"
   },
 
   "referrals": {
@@ -1036,5 +1037,36 @@
     "auto_approve_redemption": "Redemption auto-approved",
     "auto_resolve_fraud": "Fraud alert auto-resolved",
     "auto_close_incident": "Incident auto-closed"
+  },
+
+  "reviews": {
+    "title": "Reviews",
+    "stat_total": "Total reviews",
+    "stat_average": "Average rating",
+    "stat_today": "Reviews today",
+    "filter_all": "All",
+    "filter_5": "5 stars",
+    "filter_4": "4 stars",
+    "filter_3": "3 stars",
+    "filter_2": "2 stars",
+    "filter_1": "1 star",
+    "date_from": "From",
+    "date_to": "To",
+    "clear_dates": "Clear dates",
+    "no_reviews": "No reviews",
+    "col_date": "Date",
+    "col_reviewer": "Reviewer",
+    "col_reviewee": "Reviewee",
+    "col_rating": "Rating",
+    "col_comment": "Comment",
+    "col_tags": "Tags",
+    "col_status": "Status",
+    "col_actions": "Actions",
+    "visible": "Visible",
+    "hidden": "Hidden",
+    "hide": "Hide",
+    "show": "Show",
+    "feature": "Feature",
+    "unfeature": "Unfeature"
   }
 }

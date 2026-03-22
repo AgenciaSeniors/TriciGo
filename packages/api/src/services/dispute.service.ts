@@ -11,6 +11,7 @@ import type {
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { validate, createDisputeSchema } from '../schemas';
+import { notificationService } from './notification.service';
 
 export const disputeService = {
   /**
@@ -154,6 +155,18 @@ export const disputeService = {
       .eq('id', disputeId)
       .eq('respondent_id', userId);
     if (error) throw error;
+
+    // Notify the opener that the respondent replied
+    const { data: dispute } = await supabase
+      .from('ride_disputes')
+      .select('opened_by')
+      .eq('id', disputeId)
+      .single();
+    if (dispute?.opened_by) {
+      notificationService
+        .sendToUser(dispute.opened_by, 'Respuesta en tu disputa', 'El otro usuario respondió a tu disputa del viaje', 'system')
+        .catch((err) => console.warn('[Dispute] notification failed:', err));
+    }
   },
 
   /**
@@ -169,6 +182,21 @@ export const disputeService = {
       .update({ ...updates })
       .eq('id', disputeId);
     if (error) throw error;
+
+    // Notify both parties about the status change
+    const { data: dispute } = await supabase
+      .from('ride_disputes')
+      .select('opened_by, respondent_id')
+      .eq('id', disputeId)
+      .single();
+    if (dispute) {
+      const userIds = [dispute.opened_by, dispute.respondent_id].filter(Boolean) as string[];
+      for (const uid of userIds) {
+        notificationService
+          .sendToUser(uid, 'Actualización de disputa', 'El estado de tu disputa ha cambiado', 'system')
+          .catch((err) => console.warn('[Dispute] notification failed:', err));
+      }
+    }
   },
 
   /**
@@ -184,6 +212,26 @@ export const disputeService = {
     notes?: string,
   ): Promise<string | null> {
     const supabase = getSupabaseClient();
+
+    // Helper: notify both parties after resolution
+    const notifyBothParties = async () => {
+      try {
+        const { data: d } = await supabase
+          .from('ride_disputes')
+          .select('opened_by, respondent_id')
+          .eq('id', disputeId)
+          .single();
+        if (!d) return;
+        const userIds = [d.opened_by, d.respondent_id].filter(Boolean) as string[];
+        for (const uid of userIds) {
+          notificationService
+            .sendToUser(uid, 'Disputa resuelta', 'Tu disputa ha sido resuelta. Revisa el resultado.', 'system')
+            .catch((err) => console.warn('[Dispute] notification failed:', err));
+        }
+      } catch (err) {
+        console.warn('[Dispute] notification failed:', err);
+      }
+    };
 
     if (resolution === 'no_action') {
       // Deny without refund
@@ -213,6 +261,7 @@ export const disputeService = {
           .eq('status', 'disputed');
       }
 
+      notifyBothParties();
       return null;
     }
 
@@ -225,6 +274,7 @@ export const disputeService = {
       p_resolution_notes: notes ?? null,
     });
     if (error) throw error;
+    notifyBothParties();
     return data as string;
   },
 
