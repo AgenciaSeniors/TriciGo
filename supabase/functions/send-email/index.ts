@@ -1,5 +1,6 @@
 // supabase/functions/send-email/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -349,6 +350,11 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Rate limit: 10 requests per IP per minute
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const rl = rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+
     // ── Auth: verify JWT or internal service-role call ──
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const apiKey = req.headers.get('apikey') ?? '';

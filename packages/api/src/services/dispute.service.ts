@@ -10,6 +10,7 @@ import type {
   DisputeResolution,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { validate, createDisputeSchema } from '../schemas';
 
 export const disputeService = {
   /**
@@ -24,19 +25,20 @@ export const disputeService = {
     description: string;
     evidence_urls?: string[];
   }): Promise<RideDispute> {
+    const validParams = validate(createDisputeSchema, params);
     const supabase = getSupabaseClient();
 
     // Fetch ride to determine respondent
     const { data: ride, error: rideError } = await supabase
       .from('rides')
       .select('customer_id, driver_id')
-      .eq('id', params.ride_id)
+      .eq('id', validParams.ride_id)
       .single();
     if (rideError) throw rideError;
 
     // Determine respondent: if opener is customer, respondent is driver (user_id)
     let respondentId: string | null = null;
-    if (ride.customer_id === params.opened_by && ride.driver_id) {
+    if (ride.customer_id === validParams.opened_by && ride.driver_id) {
       // Opener is customer → respondent is driver's user_id
       const { data: driverProfile } = await supabase
         .from('driver_profiles')
@@ -57,11 +59,11 @@ export const disputeService = {
     const { data, error } = await supabase
       .from('ride_disputes')
       .insert({
-        ride_id: params.ride_id,
-        opened_by: params.opened_by,
-        reason: params.reason,
-        description: params.description,
-        evidence_urls: params.evidence_urls ?? [],
+        ride_id: validParams.ride_id,
+        opened_by: validParams.opened_by,
+        reason: validParams.reason,
+        description: validParams.description,
+        evidence_urls: validParams.evidence_urls ?? [],
         respondent_id: respondentId,
         sla_first_response_at: slaFirstResponse,
         sla_resolution_deadline: slaResolutionDeadline,
@@ -74,7 +76,7 @@ export const disputeService = {
     await supabase
       .from('rides')
       .update({ status: 'disputed' })
-      .eq('id', params.ride_id);
+      .eq('id', validParams.ride_id);
 
     return data as RideDispute;
   },

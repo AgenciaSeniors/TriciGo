@@ -37,6 +37,7 @@ import {
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { corporateService } from './corporate.service';
+import { validate, createRideSchema } from '../schemas';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -259,11 +260,13 @@ export const rideService = {
    * Request a new ride.
    */
   async createRide(params: CreateRideParams): Promise<Ride> {
+    const validParams = validate(createRideSchema, params);
+
     // Validate coordinates are within Cuba
-    if (!isLocationInCuba(params.pickup_latitude, params.pickup_longitude)) {
+    if (!isLocationInCuba(validParams.pickup_latitude, validParams.pickup_longitude)) {
       throw new Error('Pickup location is outside the service area');
     }
-    if (!isLocationInCuba(params.dropoff_latitude, params.dropoff_longitude)) {
+    if (!isLocationInCuba(validParams.dropoff_latitude, validParams.dropoff_longitude)) {
       throw new Error('Dropoff location is outside the service area');
     }
 
@@ -275,18 +278,18 @@ export const rideService = {
 
     // Snapshot exchange rate at ride creation for consistent pricing
     const exchangeRate = await exchangeRateService.getUsdCupRate();
-    const estimatedFareTrc = params.estimated_fare_cup
-      ? cupToTrcCentavos(params.estimated_fare_cup, exchangeRate)
+    const estimatedFareTrc = validParams.estimated_fare_cup
+      ? cupToTrcCentavos(validParams.estimated_fare_cup, exchangeRate)
       : 0;
 
     // Corporate ride validation
-    let paymentMethod = params.payment_method;
-    if (params.corporate_account_id) {
+    let paymentMethod = validParams.payment_method;
+    if (validParams.corporate_account_id) {
       const validation = await corporateService.validateCorporateRide(
-        params.corporate_account_id,
+        validParams.corporate_account_id,
         user.id,
         estimatedFareTrc,
-        params.service_type,
+        validParams.service_type,
       );
       if (!validation.valid) {
         throw new Error(validation.reason ?? 'Corporate ride validation failed');
@@ -298,25 +301,25 @@ export const rideService = {
       .from('rides')
       .insert({
         customer_id: user.id,
-        service_type: params.service_type,
+        service_type: validParams.service_type,
         payment_method: paymentMethod,
-        pickup_location: `POINT(${params.pickup_longitude} ${params.pickup_latitude})`,
-        pickup_address: params.pickup_address,
-        dropoff_location: `POINT(${params.dropoff_longitude} ${params.dropoff_latitude})`,
-        dropoff_address: params.dropoff_address,
-        estimated_fare_cup: params.estimated_fare_cup ?? 0,
+        pickup_location: `POINT(${validParams.pickup_longitude} ${validParams.pickup_latitude})`,
+        pickup_address: validParams.pickup_address,
+        dropoff_location: `POINT(${validParams.dropoff_longitude} ${validParams.dropoff_latitude})`,
+        dropoff_address: validParams.dropoff_address,
+        estimated_fare_cup: validParams.estimated_fare_cup ?? 0,
         estimated_fare_trc: estimatedFareTrc,
         exchange_rate_usd_cup: exchangeRate,
-        estimated_distance_m: params.estimated_distance_m ?? 0,
-        estimated_duration_s: params.estimated_duration_s ?? 0,
-        scheduled_at: params.scheduled_at ?? null,
-        is_scheduled: !!params.scheduled_at,
-        promo_code_id: params.promo_code_id ?? null,
-        discount_amount_cup: params.discount_amount_cup ?? 0,
-        corporate_account_id: params.corporate_account_id ?? null,
-        insurance_selected: params.insurance_selected ?? false,
-        insurance_premium_cup: params.insurance_premium_cup ?? 0,
-        rider_preferences: params.rider_preferences ?? null,
+        estimated_distance_m: validParams.estimated_distance_m ?? 0,
+        estimated_duration_s: validParams.estimated_duration_s ?? 0,
+        scheduled_at: validParams.scheduled_at ?? null,
+        is_scheduled: !!validParams.scheduled_at,
+        promo_code_id: validParams.promo_code_id ?? null,
+        discount_amount_cup: validParams.discount_amount_cup ?? 0,
+        corporate_account_id: validParams.corporate_account_id ?? null,
+        insurance_selected: validParams.insurance_selected ?? false,
+        insurance_premium_cup: validParams.insurance_premium_cup ?? 0,
+        rider_preferences: validParams.rider_preferences ?? null,
         status: 'searching' as RideStatus,
       })
       .select()
@@ -324,15 +327,15 @@ export const rideService = {
     if (error) throw error;
 
     // Record promo usage if applicable (both ops must succeed or neither)
-    if (params.promo_code_id && data) {
+    if (validParams.promo_code_id && data) {
       try {
         await supabase.from('promotion_uses').insert({
-          promotion_id: params.promo_code_id,
+          promotion_id: validParams.promo_code_id,
           user_id: user.id,
           ride_id: (data as Ride).id,
         });
         await supabase.rpc('increment_promo_uses', {
-          p_promo_id: params.promo_code_id,
+          p_promo_id: validParams.promo_code_id,
         });
       } catch (promoErr) {
         // Rollback: delete the promotion_use record if increment failed
@@ -340,7 +343,7 @@ export const rideService = {
           await supabase.from('promotion_uses')
             .delete()
             .eq('ride_id', (data as Ride).id)
-            .eq('promotion_id', params.promo_code_id);
+            .eq('promotion_id', validParams.promo_code_id);
         } catch { /* best-effort rollback */ }
         console.warn('[Ride] Promo usage recording failed:', promoErr);
       }
@@ -348,8 +351,8 @@ export const rideService = {
 
     // Insert waypoints if provided
     const rideData = data as Ride;
-    if (params.waypoints && params.waypoints.length > 0) {
-      const waypointRows = params.waypoints.map((wp) => ({
+    if (validParams.waypoints && validParams.waypoints.length > 0) {
+      const waypointRows = validParams.waypoints.map((wp) => ({
         ride_id: rideData.id,
         sort_order: wp.sort_order,
         location: `POINT(${wp.longitude} ${wp.latitude})`,

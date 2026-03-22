@@ -1,4 +1,5 @@
 export { getSupabaseClient, getSupabaseAdmin } from './client';
+export * from './schemas';
 export type { SupabaseClient } from './client';
 export { authService } from './services/auth.service';
 export { walletService } from './services/wallet.service';

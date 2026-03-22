@@ -12,6 +12,7 @@ import type {
   WalletTransfer,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { validate, rechargeSchema, transferP2PSchema } from '../schemas';
 
 export const walletService = {
   /**
@@ -110,10 +111,11 @@ export const walletService = {
     userId: string,
     amount: number,
   ): Promise<WalletRechargeRequest> {
+    const valid = validate(rechargeSchema, { userId, amount });
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('wallet_recharge_requests')
-      .insert({ user_id: userId, amount })
+      .insert({ user_id: valid.userId, amount: valid.amount })
       .select()
       .single();
     if (error) throw error;
@@ -146,12 +148,13 @@ export const walletService = {
     amount: number,
     note?: string,
   ): Promise<string> {
+    const valid = validate(transferP2PSchema, { fromUserId, toUserId, amount, note });
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('transfer_wallet_p2p', {
-      p_from_user_id: fromUserId,
-      p_to_user_id: toUserId,
-      p_amount: amount,
-      p_note: note ?? null,
+      p_from_user_id: valid.fromUserId,
+      p_to_user_id: valid.toUserId,
+      p_amount: valid.amount,
+      p_note: valid.note ?? null,
     });
     if (error) throw error;
     return data as string;

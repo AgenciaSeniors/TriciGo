@@ -4,6 +4,7 @@
 
 import { getSupabaseClient } from '../client';
 import type { ChatMessage } from '@tricigo/types';
+import { validate, sendMessageSchema } from '../schemas';
 
 export const chatService = {
   async getMessages(rideId: string): Promise<ChatMessage[]> {
@@ -22,10 +23,11 @@ export const chatService = {
     senderId: string,
     body: string,
   ): Promise<ChatMessage> {
+    const valid = validate(sendMessageSchema, { rideId, senderId, body });
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('ride_messages')
-      .insert({ ride_id: rideId, sender_id: senderId, body })
+      .insert({ ride_id: valid.rideId, sender_id: valid.senderId, body: valid.body })
       .select()
       .single();
     if (error) throw error;

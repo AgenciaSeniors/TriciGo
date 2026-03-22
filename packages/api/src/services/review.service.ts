@@ -9,6 +9,7 @@ import type {
   ReviewTag,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { validate, submitReviewSchema } from '../schemas';
 
 export const reviewService = {
   /**
@@ -23,15 +24,16 @@ export const reviewService = {
     comment?: string;
     tags?: string[];
   }): Promise<Review> {
+    const validParams = validate(submitReviewSchema, params);
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('reviews')
       .insert({
-        ride_id: params.ride_id,
-        reviewer_id: params.reviewer_id,
-        reviewee_id: params.reviewee_id,
-        rating: params.rating,
-        comment: params.comment ?? null,
+        ride_id: validParams.ride_id,
+        reviewer_id: validParams.reviewer_id,
+        reviewee_id: validParams.reviewee_id,
+        rating: validParams.rating,
+        comment: validParams.comment ?? null,
         is_visible: true,
       })
       .select()
@@ -39,10 +41,10 @@ export const reviewService = {
     if (error) throw error;
 
     // Insert tags if provided — if this fails, delete the orphaned review
-    if (params.tags && params.tags.length > 0) {
+    if (validParams.tags && validParams.tags.length > 0) {
       const { error: tagError } = await supabase
         .from('review_tags')
-        .insert(params.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
+        .insert(validParams.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
       if (tagError) {
         // Rollback: delete the review to avoid orphaned record
         try {
@@ -52,7 +54,7 @@ export const reviewService = {
       }
     }
 
-    return { ...data, tags: params.tags ?? [] } as Review;
+    return { ...data, tags: validParams.tags ?? [] } as Review;
   },
 
   /**

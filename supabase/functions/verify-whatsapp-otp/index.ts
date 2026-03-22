@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('CORS_ORIGIN') ?? 'https://tricigo.com',
@@ -11,6 +12,11 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Rate limit: 10 requests per IP per minute
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const rl = rateLimit(`verify-whatsapp-otp:${clientIP}`, 10, 60 * 1000);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+
     const { phone, code } = await req.json();
 
     if (!phone || !code) {
