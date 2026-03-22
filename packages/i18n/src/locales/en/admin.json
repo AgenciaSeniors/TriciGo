@@ -497,7 +497,14 @@
     "util_busy": "Busy",
     "util_idle": "Idle",
     "util_offline": "Offline",
-    "total_online": "Total online"
+    "total_online": "Total online",
+    "system_health": "System Health",
+    "api_status": "API Status",
+    "database_status": "Database",
+    "health_active_rides": "Active Rides",
+    "health_online_drivers": "Online Drivers",
+    "health_operational": "Operational",
+    "health_down": "Down"
   },
 
   "login": {

@@ -497,7 +497,14 @@
     "util_busy": "Ocupados",
     "util_idle": "Dispon\u00edveis",
     "util_offline": "Desconectados",
-    "total_online": "Total online"
+    "total_online": "Total online",
+    "system_health": "Saude do Sistema",
+    "api_status": "Status da API",
+    "database_status": "Banco de dados",
+    "health_active_rides": "Viagens Ativas",
+    "health_online_drivers": "Motoristas Online",
+    "health_operational": "Operacional",
+    "health_down": "Fora do ar"
   },
 
   "login": {

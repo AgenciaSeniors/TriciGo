@@ -13,6 +13,7 @@ import type {
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { validate, rechargeSchema, transferP2PSchema } from '../schemas';
+import { logger } from '@tricigo/utils';
 
 export const walletService = {
   /**
@@ -119,6 +120,7 @@ export const walletService = {
       .select()
       .single();
     if (error) throw error;
+    logger.info('recharge_requested', { userId: valid.userId, amount: valid.amount });
     return data as WalletRechargeRequest;
   },
 
@@ -157,6 +159,7 @@ export const walletService = {
       p_note: valid.note ?? null,
     });
     if (error) throw error;
+    logger.info('p2p_transfer', { from: valid.fromUserId, to: valid.toUserId, amount: valid.amount });
     return data as string;
   },
 

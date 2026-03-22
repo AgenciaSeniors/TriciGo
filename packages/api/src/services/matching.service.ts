@@ -9,6 +9,7 @@ import type {
   ScoreEventType,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { logger } from '@tricigo/utils';
 
 export const matchingService = {
   /**
@@ -32,6 +33,7 @@ export const matchingService = {
     });
     if (error) throw error;
     const rows = Array.isArray(data) ? data : data ? [data] : [];
+    logger.info('matching_completed', { driversFound: rows.length, serviceType: params.service_type });
     return rows as DriverMatchResult[];
   },
 

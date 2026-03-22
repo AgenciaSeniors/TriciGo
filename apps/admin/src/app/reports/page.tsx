@@ -53,6 +53,52 @@ export default function ReportsPage() {
     supabase.from('cities').select('id, name').eq('is_active', true).order('name')
       .then(({ data }) => { if (data) setCities(data); });
   }, []);
+  // System health state
+  const [health, setHealth] = useState({
+    apiOk: false,
+    dbOk: false,
+    activeRides: 0,
+    onlineDrivers: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchHealth() {
+      const supabase = createBrowserClient();
+      try {
+        const [healthRes, dbRes, activeRes, driversRes] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/health-check`).catch(() => null),
+          supabase.from('rides').select('*', { count: 'exact', head: true }),
+          supabase.from('rides')
+            .select('*', { count: 'exact', head: true })
+            .in('status', ['in_progress', 'driver_en_route', 'arrived_at_pickup']),
+          supabase.from('driver_profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_online', true),
+        ]);
+        if (!cancelled) {
+          setHealth({
+            apiOk: healthRes?.ok ?? false,
+            dbOk: !dbRes.error,
+            activeRides: activeRes.count ?? 0,
+            onlineDrivers: driversRes.count ?? 0,
+            loading: false,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setHealth((prev) => ({ ...prev, loading: false }));
+        }
+      }
+    }
+
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [walletStats, setWalletStats] = useState<WalletStats | null>(null);
   const [ridesByDay, setRidesByDay] = useState<DayData[]>([]);
@@ -218,6 +264,43 @@ export default function ReportsPage() {
       {loading && (
         <div className="text-center py-12 text-neutral-400">{t('common.loading')}</div>
       )}
+
+      {/* System Health — always visible, auto-refreshes every 30s */}
+      <section className="mb-6">
+        <h2 className="text-lg font-bold text-neutral-800 mb-3">{t('reports.system_health')}</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* API Status */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100 flex items-center gap-3">
+            <span className={`w-3 h-3 rounded-full shrink-0 ${health.loading ? 'bg-neutral-300 animate-pulse' : health.apiOk ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div>
+              <p className="text-xs text-neutral-500">{t('reports.api_status')}</p>
+              <p className={`text-sm font-semibold ${health.apiOk ? 'text-green-600' : 'text-red-600'}`}>
+                {health.loading ? '...' : health.apiOk ? t('reports.health_operational') : t('reports.health_down')}
+              </p>
+            </div>
+          </div>
+          {/* Database Status */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100 flex items-center gap-3">
+            <span className={`w-3 h-3 rounded-full shrink-0 ${health.loading ? 'bg-neutral-300 animate-pulse' : health.dbOk ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div>
+              <p className="text-xs text-neutral-500">{t('reports.database_status')}</p>
+              <p className={`text-sm font-semibold ${health.dbOk ? 'text-green-600' : 'text-red-600'}`}>
+                {health.loading ? '...' : health.dbOk ? t('reports.health_operational') : t('reports.health_down')}
+              </p>
+            </div>
+          </div>
+          {/* Active Rides */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
+            <p className="text-xs text-neutral-500 mb-1">{t('reports.health_active_rides')}</p>
+            <p className="text-2xl font-bold text-primary-500">{health.loading ? '...' : health.activeRides}</p>
+          </div>
+          {/* Online Drivers */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
+            <p className="text-xs text-neutral-500 mb-1">{t('reports.health_online_drivers')}</p>
+            <p className="text-2xl font-bold text-green-600">{health.loading ? '...' : health.onlineDrivers}</p>
+          </div>
+        </div>
+      </section>
 
       {!loading && (
         <>

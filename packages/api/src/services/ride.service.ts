@@ -40,6 +40,7 @@ import { corporateService } from './corporate.service';
 import { matchingService } from './matching.service';
 import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
+import { logger } from '@tricigo/utils';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -396,12 +397,18 @@ export const rideService = {
       await supabase.from('ride_waypoints').insert(waypointRows);
     }
 
+    logger.info('ride_created', {
+      rideId: rideData.id,
+      serviceType: validParams.service_type,
+      userId: user.id,
+    });
+
     // ── Match drivers (async, non-blocking) ──
     // Find best drivers and notify them via push. If no drivers found,
     // the ride stays in 'searching' status and cancel-stale-rides will
     // handle timeout after the configured window.
     this._matchDriversForRide(rideData, validParams).catch((err) => {
-      console.warn('[Ride] Driver matching failed for ride', rideData.id, err);
+      logger.error('ride_creation_failed', { error: (err as Error).message, rideId: rideData.id });
     });
 
     return rideData;
@@ -424,6 +431,8 @@ export const rideService = {
         radius_m: 5000,
       });
 
+      logger.info('drivers_matched', { rideId: ride.id, driversFound: drivers.length });
+
       if (drivers.length === 0) {
         console.warn('[Ride] No drivers found for ride', ride.id);
         return;
@@ -445,6 +454,7 @@ export const rideService = {
         });
       }
     } catch (err) {
+      logger.error('ride_creation_failed', { error: (err as Error).message, rideId: ride.id });
       console.warn('[Ride] _matchDriversForRide error:', err);
     }
   },
