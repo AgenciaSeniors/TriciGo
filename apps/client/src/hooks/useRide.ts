@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, playSound, getErrorMessage } from '@tricigo/utils';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
 import { useAuthStore } from '@/stores/auth.store';
@@ -122,7 +122,7 @@ export function useRideActions() {
       setFareEstimate(estimate);
       setFlowStep('reviewing');
     } catch (err) {
-      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -349,7 +349,7 @@ export function useRideActions() {
         }
       }, SEARCH_TIMEOUT_MS);
     } catch (err) {
-      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
+      setError(getErrorMessage(err));
       setFlowStep('reviewing');
     } finally {
       setLoading(false);
@@ -402,7 +402,7 @@ export function useRideActions() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : i18next.t('rider:common.error'));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

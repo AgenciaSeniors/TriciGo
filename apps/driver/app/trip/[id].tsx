@@ -177,6 +177,14 @@ export default function TripDetailScreen() {
                   {formatCUP(Math.round(((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000) * (pricing.per_km_rate_cup ?? 0)))}
                 </Text>
               </View>
+              <View className="flex-row justify-between mb-1">
+                <Text variant="caption" color="inverse" className="opacity-40">
+                  {t('trip.time_charge', { defaultValue: 'Tiempo' })} ({Math.round((ride.actual_duration_s ?? ride.estimated_duration_s ?? 0) / 60)} min)
+                </Text>
+                <Text variant="caption" color="inverse" className="opacity-40">
+                  {formatCUP(Math.round(((ride.actual_duration_s ?? ride.estimated_duration_s ?? 0) / 60) * (pricing.per_minute_rate_cup ?? 0)))}
+                </Text>
+              </View>
               {(ride.surge_multiplier ?? 1) > 1 && (
                 <View className="flex-row justify-between mb-1">
                   <Text variant="caption" className="text-orange-400">

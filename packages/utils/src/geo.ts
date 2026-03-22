@@ -31,8 +31,14 @@ export const HAVANA_PRESETS: readonly LocationPreset[] = [
   { label: 'Plaza de la Revolución', address: 'Plaza de la Revolución', latitude: 23.1210, longitude: -82.3826 },
 ] as const;
 
-/** Center of Havana (used as default driver location). */
+/** Center of Havana (used as default for Havana-specific features). */
 export const HAVANA_CENTER: GeoPoint = { latitude: 23.1136, longitude: -82.3666 };
+
+/** Center of Cuba (used as default map center for all-Cuba view). */
+export const CUBA_CENTER: GeoPoint = { latitude: 21.5, longitude: -79.5 };
+
+/** Default map zoom for Cuba-wide view */
+export const CUBA_DEFAULT_ZOOM = 7;
 
 /**
  * Haversine distance between two points in meters.
@@ -89,7 +95,7 @@ export function estimateDuration(
  * Format a Nominatim address into a Havana-style street address.
  * Example output: "Calle 23, Vedado" or "Obispo #302, Habana Vieja".
  */
-export function formatHavanaAddress(address: {
+export function formatCubanAddress(address: {
   road?: string;
   suburb?: string;
   city?: string;
@@ -216,8 +222,8 @@ const NOMINATIM_HEADERS: Record<string, string> = {
   'User-Agent': 'TriciGo/1.0 (https://tricigo.com)',
 };
 
-/** Havana bounding box for Nominatim search (SW lng, SW lat, NE lng, NE lat) */
-const HAVANA_VIEWBOX = '-82.55,22.95,-82.25,23.20';
+/** Cuba bounding box for Nominatim search (SW lng, SW lat, NE lng, NE lat) */
+const CUBA_VIEWBOX = '-85.0,19.5,-74.0,23.5';
 
 /* ─── OSRM Routing ─── */
 
@@ -362,7 +368,7 @@ export async function fetchNavigationRoute(
 
 /**
  * Reverse geocode coordinates to a human-readable address using Nominatim.
- * Formats the result with `formatHavanaAddress()`.
+ * Formats the result with `formatCubanAddress()`.
  * Returns null if the request fails.
  */
 export async function reverseGeocode(
@@ -380,7 +386,7 @@ export async function reverseGeocode(
     const data = await res.json();
     if (!data?.address) return null;
 
-    const formatted = formatHavanaAddress(data.address);
+    const formatted = formatCubanAddress(data.address);
     return formatted || null;
   } catch {
     return null;
@@ -406,7 +412,7 @@ export async function searchAddress(
       format: 'json',
       addressdetails: '1',
       limit: String(limit),
-      viewbox: HAVANA_VIEWBOX,
+      viewbox: CUBA_VIEWBOX,
       bounded: '1',
       'accept-language': 'es',
     });
@@ -421,7 +427,7 @@ export async function searchAddress(
     return data.map((item: Record<string, unknown>) => {
       const displayName = (item.display_name as string) ?? '';
       const formatted = item.address
-        ? formatHavanaAddress(item.address as Parameters<typeof formatHavanaAddress>[0])
+        ? formatCubanAddress(item.address as Parameters<typeof formatCubanAddress>[0])
         : displayName;
 
       return {
