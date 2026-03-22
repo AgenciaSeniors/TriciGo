@@ -52,7 +52,7 @@ export default function HelpPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -60,7 +60,7 @@ export default function HelpPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para acceder a la ayuda</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para acceder a la ayuda</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -69,10 +69,10 @@ export default function HelpPage() {
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -82,17 +82,17 @@ export default function HelpPage() {
 
       {/* FAQ Accordion */}
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Preguntas frecuentes
         </h2>
         <div style={{
-          background: '#fff',
+          background: 'var(--bg-card)',
           borderRadius: '1rem',
-          border: '1px solid #eee',
+          border: '1px solid var(--border-light)',
           overflow: 'hidden',
         }}>
           {faqItems.map((item, index) => (
-            <div key={index} style={{ borderBottom: index < faqItems.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+            <div key={index} style={{ borderBottom: index < faqItems.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
                 style={{
@@ -107,7 +107,7 @@ export default function HelpPage() {
                   textAlign: 'left',
                 }}
               >
-                <span style={{ fontSize: '0.95rem', fontWeight: 500, color: '#1a1a1a', flex: 1, paddingRight: '0.75rem' }}>
+                <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)', flex: 1, paddingRight: '0.75rem' }}>
                   {item.question}
                 </span>
                 <svg
@@ -115,7 +115,7 @@ export default function HelpPage() {
                   height="18"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#999"
+                  stroke="var(--text-tertiary)"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -129,7 +129,7 @@ export default function HelpPage() {
                 </svg>
               </button>
               {openIndex === index && (
-                <div style={{ padding: '0 1.25rem 1rem', fontSize: '0.9rem', color: '#666', lineHeight: 1.5 }}>
+                <div style={{ padding: '0 1.25rem 1rem', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                   {item.answer}
                 </div>
               )}
@@ -140,7 +140,7 @@ export default function HelpPage() {
 
       {/* Contact Section */}
       <div style={{
-        background: '#f7f7f7',
+        background: 'var(--bg-page)',
         borderRadius: '1rem',
         padding: '1.5rem',
         textAlign: 'center',
@@ -149,10 +149,10 @@ export default function HelpPage() {
           <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
           <polyline points="22,6 12,13 2,6" />
         </svg>
-        <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0.75rem 0 0.5rem', color: '#1a1a1a' }}>
+        <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0.75rem 0 0.5rem', color: 'var(--text-primary)' }}>
           Necesitas mas ayuda?
         </h3>
-        <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 0.75rem' }}>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
           Nuestro equipo de soporte esta disponible para ayudarte.
         </p>
         <a

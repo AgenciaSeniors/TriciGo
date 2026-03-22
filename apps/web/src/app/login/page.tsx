@@ -26,8 +26,8 @@ export default function LoginPage() {
 
   if (isLoading || isAuthenticated) {
     return (
-      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa' }}>
-        <p style={{ color: '#888', fontSize: '0.9rem' }}>Cargando...</p>
+      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-page)' }}>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>Cargando...</p>
       </main>
     );
   }
@@ -121,8 +121,8 @@ export default function LoginPage() {
     padding: '0.875rem',
     borderRadius: '0.75rem',
     border: 'none',
-    background: enabled ? 'var(--primary)' : '#e0e0e0',
-    color: enabled ? 'white' : '#999',
+    background: enabled ? 'var(--primary)' : 'var(--border)',
+    color: enabled ? 'white' : 'var(--text-tertiary)',
     fontSize: '1rem',
     fontWeight: 600 as const,
     cursor: enabled ? 'pointer' : ('not-allowed' as const),
@@ -132,9 +132,9 @@ export default function LoginPage() {
     width: '100%',
     padding: '0.875rem',
     borderRadius: '0.75rem',
-    border: '1px solid #ddd',
-    background: 'white',
-    color: '#333',
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+    color: 'var(--text-primary)',
     fontSize: '0.95rem',
     fontWeight: 500 as const,
     cursor: 'pointer' as const,
@@ -153,7 +153,7 @@ export default function LoginPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '2rem',
-        background: '#fafafa',
+        background: 'var(--bg-page)',
       }}
     >
       <div style={{ maxWidth: 400, width: '100%' }}>
@@ -162,7 +162,7 @@ export default function LoginPage() {
           <h1 style={{ fontSize: '2.5rem', fontWeight: 800, margin: 0 }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </h1>
-          <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
             Inicia sesión para solicitar viajes
           </p>
         </div>
@@ -189,9 +189,9 @@ export default function LoginPage() {
 
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div style={{ flex: 1, height: 1, background: '#ddd' }} />
-          <span style={{ color: '#999', fontSize: '0.8rem' }}>o con teléfono</span>
-          <div style={{ flex: 1, height: 1, background: '#ddd' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>o con teléfono</span>
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         </div>
 
         {step === 'phone' ? (
@@ -209,7 +209,7 @@ export default function LoginPage() {
                   width: '100%',
                   padding: '0.75rem 1rem',
                   borderRadius: '0.75rem',
-                  border: '1px solid #ddd',
+                  border: '1px solid var(--border)',
                   fontSize: '1.125rem',
                   outline: 'none',
                   letterSpacing: '0.05em',
@@ -226,7 +226,7 @@ export default function LoginPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <p style={{ color: '#666', fontSize: '0.875rem', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>
               Enviamos un código a <strong>{phone}</strong>
             </p>
             <input
@@ -239,7 +239,7 @@ export default function LoginPage() {
                 width: '100%',
                 padding: '0.75rem 1rem',
                 borderRadius: '0.75rem',
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 fontSize: '1.5rem',
                 outline: 'none',
                 textAlign: 'center',
@@ -271,13 +271,13 @@ export default function LoginPage() {
         )}
 
         {error && (
-          <p style={{ color: '#dc2626', fontSize: '0.875rem', textAlign: 'center', marginTop: '1rem' }}>
+          <p style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center', marginTop: '1rem' }}>
             {error}
           </p>
         )}
 
         <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-          <Link href="/" style={{ color: '#888', fontSize: '0.8rem', textDecoration: 'none' }}>
+          <Link href="/" style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem', textDecoration: 'none' }}>
             ← Volver al inicio
           </Link>
         </div>

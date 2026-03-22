@@ -56,14 +56,14 @@ export default function AuthCallbackPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#fafafa',
+        background: 'var(--bg-page)',
       }}
     >
       <div style={{ textAlign: 'center' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>
           Trici<span style={{ color: 'var(--primary)' }}>Go</span>
         </h1>
-        <p style={{ color: '#888', fontSize: '0.9rem' }}>Autenticando...</p>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>Autenticando...</p>
       </div>
     </main>
   );

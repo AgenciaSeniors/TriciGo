@@ -20,7 +20,7 @@ export default function SafetyPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -28,7 +28,7 @@ export default function SafetyPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver la configuracion de seguridad</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver la configuracion de seguridad</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -37,10 +37,10 @@ export default function SafetyPage() {
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -82,13 +82,13 @@ export default function SafetyPage() {
 
       {/* Emergency Contact */}
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Contacto de emergencia
         </h2>
         <div style={{
-          background: '#fff',
+          background: 'var(--bg-card)',
           borderRadius: '1rem',
-          border: '1px solid #eee',
+          border: '1px solid var(--border-light)',
           padding: '1.25rem',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -97,18 +97,18 @@ export default function SafetyPage() {
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                background: '#f0f0f0',
+                background: 'var(--border-light)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
                 </svg>
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: '#999' }}>No configurado</p>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#bbb' }}>Agrega un contacto de emergencia</p>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>No configurado</p>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Agrega un contacto de emergencia</p>
               </div>
             </div>
             <button style={{
@@ -129,23 +129,23 @@ export default function SafetyPage() {
 
       {/* Trusted Contacts */}
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Contactos de confianza
         </h2>
         <div style={{
-          background: '#fff',
+          background: 'var(--bg-card)',
           borderRadius: '1rem',
-          border: '1px solid #eee',
+          border: '1px solid var(--border-light)',
           padding: '2rem 1.25rem',
           textAlign: 'center',
         }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <path d="M23 21v-2a4 4 0 00-3-3.87" />
             <path d="M16 3.13a4 4 0 010 7.75" />
           </svg>
-          <p style={{ fontSize: '0.9rem', color: '#999', margin: '0.75rem 0 0' }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0.75rem 0 0' }}>
             Agrega personas de confianza que seran notificadas si activas el boton SOS.
           </p>
           <button style={{
@@ -175,10 +175,10 @@ export default function SafetyPage() {
           Consejos de seguridad
         </h3>
         <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <li style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.4 }}>Verifica siempre la placa del vehiculo antes de abordar</li>
-          <li style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.4 }}>Comparte tu viaje en tiempo real con tus contactos</li>
-          <li style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.4 }}>Usa el boton SOS si te sientes en peligro</li>
-          <li style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.4 }}>Califica a tu conductor despues de cada viaje</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Verifica siempre la placa del vehiculo antes de abordar</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Comparte tu viaje en tiempo real con tus contactos</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Usa el boton SOS si te sientes en peligro</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Califica a tu conductor despues de cada viaje</li>
         </ul>
       </div>
     </main>

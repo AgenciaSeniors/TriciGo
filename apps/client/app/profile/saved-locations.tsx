@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, FlatList, Alert, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CustomerProfile, SavedLocation } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 
@@ -25,6 +26,7 @@ export default function SavedLocationsScreen() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -32,13 +34,18 @@ export default function SavedLocationsScreen() {
   const [saving, setSaving] = useState(false);
   const { recentAddresses } = useRecentAddresses();
 
-  useEffect(() => {
+  const loadLocations = useCallback(() => {
     if (!user) return;
+    setLoading(true);
     customerService.ensureProfile(user.id).then((cp) => {
       setProfile(cp);
       setLocations(cp.saved_locations ?? []);
-    }).catch((err) => console.warn('[SavedLocations] Failed to load:', err)).finally(() => setLoading(false));
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido')).finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    loadLocations();
+  }, [loadLocations]);
 
   const handleSave = async () => {
     if (!profile || !newLabel.trim() || !selectedAddress) return;
@@ -111,6 +118,8 @@ export default function SavedLocationsScreen() {
     }
     setSheetVisible(true);
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadLocations(); }} />;
 
   return (
     <Screen bg="white" padded>

@@ -11,6 +11,7 @@ import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CancellationPenalty } from '@tricigo/types';
 
 export default function PenaltiesScreen() {
@@ -19,6 +20,7 @@ export default function PenaltiesScreen() {
 
   const [penalties, setPenalties] = useState<CancellationPenalty[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -27,7 +29,7 @@ export default function PenaltiesScreen() {
       const data = await driverService.getCancellationPenalties(userId, 50);
       setPenalties(data);
     } catch (err) {
-      console.warn('[Penalties] Failed to load:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -70,6 +72,8 @@ export default function PenaltiesScreen() {
       </View>
     </Card>
   );
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
     <Screen bg="dark" statusBarStyle="light-content">

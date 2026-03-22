@@ -9,6 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
 import { colors } from '@tricigo/theme';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review } from '@tricigo/types';
 
 const PAGE_SIZE = 20;
@@ -35,6 +36,7 @@ export default function DriverReviewsScreen() {
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -56,7 +58,7 @@ export default function DriverReviewsScreen() {
       setHasMore(data.length === PAGE_SIZE);
       setPage(pageNum);
     } catch (err) {
-      console.warn('[Reviews] Failed to load:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -113,6 +115,8 @@ export default function DriverReviewsScreen() {
       )}
     </Card>
   );
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchReviews(0, true); }} />;
 
   return (
     <Screen bg="dark" statusBarStyle="light-content">

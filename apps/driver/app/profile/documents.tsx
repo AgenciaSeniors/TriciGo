@@ -11,6 +11,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { DriverDocument, SelfieCheck, DocumentType } from '@tricigo/types';
 
 const DOC_TYPE_KEY: Record<string, string> = {
@@ -27,6 +28,7 @@ export default function DocumentsScreen() {
   const [documents, setDocuments] = useState<DriverDocument[]>([]);
   const [selfieChecks, setSelfieChecks] = useState<SelfieCheck[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [reuploading, setReuploading] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -39,7 +41,7 @@ export default function DocumentsScreen() {
       setDocuments(docs);
       setSelfieChecks(checks);
     } catch (err) {
-      console.error('Error fetching documents:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -99,6 +101,8 @@ export default function DocumentsScreen() {
       default: return { bg: 'bg-yellow-900', text: 'text-yellow-400', label: t('verification.doc_pending') };
     }
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
     <Screen scroll bg="dark" statusBarStyle="light-content" padded>

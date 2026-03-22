@@ -48,7 +48,7 @@ export default function EditProfilePage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -56,7 +56,7 @@ export default function EditProfilePage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para editar tu perfil</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para editar tu perfil</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -69,7 +69,7 @@ export default function EditProfilePage() {
   const phone = user?.phone || user?.user_metadata?.phone || '';
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Toast */}
       {toast && (
         <div style={{
@@ -77,7 +77,7 @@ export default function EditProfilePage() {
           top: 24,
           left: '50%',
           transform: 'translateX(-50%)',
-          background: toast === 'Guardado' ? '#38a169' : '#e53e3e',
+          background: toast === 'Guardado' ? 'var(--success)' : 'var(--error)',
           color: '#fff',
           padding: '0.75rem 1.5rem',
           borderRadius: '0.75rem',
@@ -92,7 +92,7 @@ export default function EditProfilePage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -107,7 +107,7 @@ export default function EditProfilePage() {
           height: 96,
           borderRadius: '50%',
           overflow: 'hidden',
-          background: '#f0f0f0',
+          background: 'var(--border-light)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -126,7 +126,7 @@ export default function EditProfilePage() {
       {/* Form */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#555', marginBottom: '0.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             Nombre completo
           </label>
           <input
@@ -136,7 +136,7 @@ export default function EditProfilePage() {
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               borderRadius: '0.75rem',
               fontSize: '0.95rem',
               outline: 'none',
@@ -146,7 +146,7 @@ export default function EditProfilePage() {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#555', marginBottom: '0.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             Correo electronico
           </label>
           <input
@@ -156,18 +156,18 @@ export default function EditProfilePage() {
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
-              border: '1px solid #eee',
+              border: '1px solid var(--border-light)',
               borderRadius: '0.75rem',
               fontSize: '0.95rem',
-              background: '#f7f7f7',
-              color: '#999',
+              background: 'var(--bg-page)',
+              color: 'var(--text-tertiary)',
               boxSizing: 'border-box',
             }}
           />
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#555', marginBottom: '0.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             Telefono
           </label>
           <input
@@ -177,11 +177,11 @@ export default function EditProfilePage() {
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
-              border: '1px solid #eee',
+              border: '1px solid var(--border-light)',
               borderRadius: '0.75rem',
               fontSize: '0.95rem',
-              background: '#f7f7f7',
-              color: '#999',
+              background: 'var(--bg-page)',
+              color: 'var(--text-tertiary)',
               boxSizing: 'border-box',
             }}
           />

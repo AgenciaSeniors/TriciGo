@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,6 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Vehicle } from '@tricigo/types';
 
 export default function VehicleScreen() {
@@ -14,15 +15,21 @@ export default function VehicleScreen() {
   const driverProfile = useDriverStore((s) => s.profile);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchVehicle = useCallback(() => {
     if (!driverProfile) return;
+    setLoading(true);
     driverService
       .getVehicle(driverProfile.id)
       .then(setVehicle)
-      .catch((err) => console.warn('[Vehicle] Failed to load:', err))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido'))
       .finally(() => setLoading(false));
   }, [driverProfile]);
+
+  useEffect(() => {
+    fetchVehicle();
+  }, [fetchVehicle]);
 
   const infoRows = vehicle
     ? [
@@ -36,6 +43,8 @@ export default function VehicleScreen() {
         { label: t('vehicle.accepts_cargo', { defaultValue: 'Acepta carga' }), value: vehicle.accepts_cargo ? `${t('common:yes', { defaultValue: 'Sí' })} — ${vehicle.max_cargo_weight_kg ?? '?'} kg max` : t('common:no', { defaultValue: 'No' }) },
       ]
     : [];
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchVehicle(); }} />;
 
   return (
     <Screen scroll bg="dark" padded>

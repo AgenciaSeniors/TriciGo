@@ -8,33 +8,33 @@ export function WebFooter() {
   return (
     <footer
       style={{
-        borderTop: '1px solid #eee',
+        borderTop: '1px solid var(--border-light)',
         padding: '2rem',
         textAlign: 'center',
-        color: '#999',
+        color: 'var(--text-tertiary)',
         fontSize: '0.8rem',
       }}
     >
       <div style={{ marginBottom: '0.75rem' }}>
-        <span style={{ fontWeight: 700, color: '#111' }}>
+        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
           Trici<span style={{ color: 'var(--primary)' }}>Go</span>
         </span>
         {' · '}{t('footer.location')}
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        <a href="/book" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+        <a href="/book" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.book_ride')}
         </a>
-        <a href="/login" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+        <a href="/login" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.login')}
         </a>
-        <a href="/privacy" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+        <a href="/privacy" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.privacy')}
         </a>
-        <a href="/terms" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+        <a href="/terms" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.terms')}
         </a>
-        <a href="/blog" style={{ color: '#666', textDecoration: 'none', fontSize: '0.8rem' }}>
+        <a href="/blog" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
           {t('footer.blog')}
         </a>
       </div>

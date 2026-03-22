@@ -30,8 +30,31 @@
 }
 
 /* ── Dark Mode Foundation ─────────────────────── */
+
+/* Class-based dark mode (toggled manually) */
+[data-theme="dark"] {
+  --primary: #FF6D38;
+  --primary-light: #FF8A5C;
+  --primary-dark: #FF4D00;
+  --text: #f5f5f5;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #666666;
+  --border: #333333;
+  --border-light: #222222;
+  --bg: #0d0d1a;
+  --bg-light: #1a1a2e;
+  --bg-page: #0d0d1a;
+  --bg-card: #1a1a2e;
+  --bg-hover: #252540;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #f59e0b;
+}
+
+/* System preference fallback (only when user hasn't explicitly chosen) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
     --primary: #FF6D38;
     --primary-light: #FF8A5C;
     --primary-dark: #FF4D00;
@@ -49,6 +72,42 @@
     --success: #22c55e;
     --error: #ef4444;
     --warning: #f59e0b;
+  }
+}
+
+/* Dark mode overrides for hardcoded colors */
+[data-theme="dark"] header {
+  background: var(--bg-card) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+[data-theme="dark"] .booking-estimate-card {
+  background: #2a1a10;
+}
+
+[data-theme="dark"] .booking-cta-fixed {
+  background: var(--bg-card);
+  border-top-color: var(--border);
+}
+
+[data-theme="dark"] .wallet-tx-item {
+  background: var(--bg-card);
+  border-color: var(--border-light);
+}
+
+[data-theme="dark"] .btn-store {
+  background: #f5f5f5;
+  color: #111;
+}
+
+[data-theme="dark"] .btn-store:hover {
+  background: #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) header {
+    background: #1a1a2e !important;
+    border-bottom-color: #333333 !important;
   }
 }
 

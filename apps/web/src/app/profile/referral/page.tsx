@@ -47,7 +47,7 @@ export default function ReferralPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -55,7 +55,7 @@ export default function ReferralPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver tu codigo de referido</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tu codigo de referido</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -64,10 +64,10 @@ export default function ReferralPage() {
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -99,15 +99,15 @@ export default function ReferralPage() {
 
       {/* Referral Code */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Tu codigo de referido
         </h2>
         <div style={{
-          background: '#f7f7f7',
+          background: 'var(--bg-page)',
           borderRadius: '0.75rem',
           padding: '1.25rem',
           textAlign: 'center',
-          border: '2px dashed #ddd',
+          border: '2px dashed var(--border)',
         }}>
           <p style={{
             fontSize: '1.75rem',
@@ -124,7 +124,7 @@ export default function ReferralPage() {
 
       {/* Share Link */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Enlace para compartir
         </h2>
         <div style={{
@@ -135,10 +135,10 @@ export default function ReferralPage() {
           <div style={{
             flex: 1,
             padding: '0.75rem 1rem',
-            background: '#f7f7f7',
+            background: 'var(--bg-page)',
             borderRadius: '0.75rem',
             fontSize: '0.85rem',
-            color: '#555',
+            color: 'var(--text-secondary)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -149,7 +149,7 @@ export default function ReferralPage() {
             onClick={handleCopy}
             style={{
               padding: '0.75rem 1.25rem',
-              background: copied ? '#38a169' : 'var(--primary)',
+              background: copied ? 'var(--success)' : 'var(--primary)',
               color: '#fff',
               border: 'none',
               borderRadius: '0.75rem',
@@ -167,12 +167,12 @@ export default function ReferralPage() {
 
       {/* How it works */}
       <div style={{
-        background: '#fff',
+        background: 'var(--bg-card)',
         borderRadius: '1rem',
-        border: '1px solid #eee',
+        border: '1px solid var(--border-light)',
         padding: '1.5rem',
       }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem', color: '#1a1a1a' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem', color: 'var(--text-primary)' }}>
           Como funciona
         </h2>
         {[
@@ -201,7 +201,7 @@ export default function ReferralPage() {
             }}>
               {step.num}
             </div>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#555' }}>{step.text}</p>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{step.text}</p>
           </div>
         ))}
       </div>

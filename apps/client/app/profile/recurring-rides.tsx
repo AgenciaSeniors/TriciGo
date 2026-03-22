@@ -11,6 +11,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { recurringRideService, useFeatureFlag } from '@tricigo/api';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { RecurringRide } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { CreateRecurringRideSheet } from '@/components/CreateRecurringRideSheet';
@@ -31,6 +32,7 @@ export default function RecurringRidesScreen() {
 
   const [rides, setRides] = useState<RecurringRide[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingRide, setEditingRide] = useState<RecurringRide | null>(null);
@@ -40,8 +42,8 @@ export default function RecurringRidesScreen() {
     try {
       const data = await recurringRideService.getRecurringRides(userId);
       setRides(data);
-    } catch {
-      setRides([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -100,6 +102,8 @@ export default function RecurringRidesScreen() {
     setEditingRide(null);
     fetchRides();
   }, [fetchRides]);
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchRides(); }} />;
 
   if (!enabled) {
     return (

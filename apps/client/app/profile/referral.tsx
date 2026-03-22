@@ -15,6 +15,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Referral } from '@tricigo/types';
 
 const STATUS_DISPLAY: Record<string, { bg: string; text: string; key: string }> = {
@@ -33,6 +34,7 @@ export default function ReferralScreen() {
   const [hasBeenReferred, setHasBeenReferred] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -46,7 +48,7 @@ export default function ReferralScreen() {
       setReferrals(history);
       setHasBeenReferred(referred);
     } catch (err) {
-      console.warn('[Referral] Failed to load:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -110,6 +112,8 @@ export default function ReferralScreen() {
       </Card>
     );
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
     <Screen bg="white" padded>

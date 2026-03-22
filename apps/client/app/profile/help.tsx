@@ -15,6 +15,7 @@ import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
@@ -44,6 +45,7 @@ export default function HelpScreen() {
   // Tickets state
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Create ticket state
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -59,7 +61,7 @@ export default function HelpScreen() {
       const data = await supportService.getUserTickets(userId);
       setTickets(data);
     } catch (err) {
-      console.warn('[Help] Failed to load tickets:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoadingTickets(false);
     }
@@ -123,6 +125,8 @@ export default function HelpScreen() {
       </Pressable>
     );
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchTickets(); }} />;
 
   return (
     <Screen bg="white" padded>

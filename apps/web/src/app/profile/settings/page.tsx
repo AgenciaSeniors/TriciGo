@@ -30,7 +30,7 @@ export default function SettingsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -38,7 +38,7 @@ export default function SettingsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver la configuracion</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver la configuracion</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -50,7 +50,7 @@ export default function SettingsPage() {
     width: 48,
     height: 28,
     borderRadius: 14,
-    background: enabled ? 'var(--primary)' : '#ddd',
+    background: enabled ? 'var(--primary)' : 'var(--border)',
     position: 'relative',
     cursor: 'pointer',
     transition: 'background 0.2s',
@@ -63,7 +63,7 @@ export default function SettingsPage() {
     width: 22,
     height: 22,
     borderRadius: '50%',
-    background: '#fff',
+    background: 'var(--bg-card)',
     position: 'absolute',
     top: 3,
     left: enabled ? 23 : 3,
@@ -72,10 +72,10 @@ export default function SettingsPage() {
   });
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -85,10 +85,10 @@ export default function SettingsPage() {
 
       {/* Language Section */}
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Idioma
         </h2>
-        <div style={{ background: '#fff', borderRadius: '1rem', border: '1px solid #eee', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden' }}>
           {languages.map((lang, index) => (
             <button
               key={lang.code}
@@ -101,10 +101,10 @@ export default function SettingsPage() {
                 padding: '1rem 1.25rem',
                 background: 'transparent',
                 border: 'none',
-                borderBottom: index < languages.length - 1 ? '1px solid #f0f0f0' : 'none',
+                borderBottom: index < languages.length - 1 ? '1px solid var(--border-light)' : 'none',
                 cursor: 'pointer',
                 fontSize: '0.95rem',
-                color: '#1a1a1a',
+                color: 'var(--text-primary)',
                 textAlign: 'left',
               }}
             >
@@ -121,21 +121,21 @@ export default function SettingsPage() {
 
       {/* Notification Preferences */}
       <div>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Notificaciones
         </h2>
-        <div style={{ background: '#fff', borderRadius: '1rem', border: '1px solid #eee', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden' }}>
           {/* Push */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '1rem 1.25rem',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: '1px solid var(--border-light)',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: '#1a1a1a' }}>Notificaciones push</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>Alertas en tiempo real</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>Notificaciones push</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Alertas en tiempo real</p>
             </div>
             <button onClick={() => setPushNotifications(!pushNotifications)} style={toggleStyle(pushNotifications)}>
               <div style={toggleKnobStyle(pushNotifications)} />
@@ -148,11 +148,11 @@ export default function SettingsPage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '1rem 1.25rem',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: '1px solid var(--border-light)',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: '#1a1a1a' }}>Correo electronico</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>Recibos y promociones</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>Correo electronico</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Recibos y promociones</p>
             </div>
             <button onClick={() => setEmailNotifications(!emailNotifications)} style={toggleStyle(emailNotifications)}>
               <div style={toggleKnobStyle(emailNotifications)} />
@@ -167,8 +167,8 @@ export default function SettingsPage() {
             padding: '1rem 1.25rem',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: '#1a1a1a' }}>SMS</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>Actualizaciones por mensaje de texto</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>SMS</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Actualizaciones por mensaje de texto</p>
             </div>
             <button onClick={() => setSmsNotifications(!smsNotifications)} style={toggleStyle(smsNotifications)}>
               <div style={toggleKnobStyle(smsNotifications)} />

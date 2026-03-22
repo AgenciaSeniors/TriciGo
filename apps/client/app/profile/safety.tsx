@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, Linking, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -12,6 +12,7 @@ import { colors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { IncidentReport } from '@tricigo/types';
 
 const SAFETY_TIPS = ['tip_1', 'tip_2', 'tip_3', 'tip_4', 'tip_5'] as const;
@@ -25,8 +26,9 @@ export default function SafetyCenterScreen() {
   const [incidents, setIncidents] = useState<IncidentReport[]>([]);
   const [tipsExpanded, setTipsExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadSafetyData = useCallback(() => {
     if (!user) return;
 
     // Load emergency contact
@@ -34,7 +36,7 @@ export default function SafetyCenterScreen() {
       if (cp.emergency_contact) {
         setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
       }
-    }).catch(() => {});
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido'));
 
     // Load trusted contacts count
     trustedContactService.getContacts(user.id).then((contacts) => {
@@ -49,6 +51,10 @@ export default function SafetyCenterScreen() {
     // Load incidents
     incidentService.getMyIncidents(user.id).then(setIncidents).catch(() => {});
   }, [user]);
+
+  useEffect(() => {
+    loadSafetyData();
+  }, [loadSafetyData]);
 
   const handleShareTrip = async () => {
     if (!activeRide) return;
@@ -76,6 +82,8 @@ export default function SafetyCenterScreen() {
     const key = `safety.report_status_${status}` as const;
     return t(key, { defaultValue: status });
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadSafetyData(); }} />;
 
   return (
     <Screen scroll bg="white" padded>

@@ -13,6 +13,7 @@ import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { AddContactSheet } from '@/components/AddContactSheet';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { TrustedContact } from '@tricigo/types';
 
 const MAX_CONTACTS = 5;
@@ -22,6 +23,7 @@ export default function TrustedContactsScreen() {
   const user = useAuthStore((s) => s.user);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
   const loadContacts = useCallback(async () => {
@@ -29,8 +31,8 @@ export default function TrustedContactsScreen() {
     try {
       const data = await trustedContactService.getContacts(user.id);
       setContacts(data);
-    } catch {
-      // silent fail
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -74,6 +76,8 @@ export default function TrustedContactsScreen() {
       ],
     );
   };
+
+  if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadContacts(); }} />;
 
   return (
     <Screen scroll bg="white" padded>

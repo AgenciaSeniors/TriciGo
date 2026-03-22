@@ -51,7 +51,7 @@ export default function SavedLocationsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: '#999' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
       </div>
     );
   }
@@ -59,7 +59,7 @@ export default function SavedLocationsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: '#666' }}>Inicia sesion para ver tus ubicaciones</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tus ubicaciones</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           Iniciar sesion
         </Link>
@@ -68,17 +68,17 @@ export default function SavedLocationsPage() {
   }
 
   const EditIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   );
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: '#1a1a1a', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
@@ -88,9 +88,9 @@ export default function SavedLocationsPage() {
 
       {/* Home & Work */}
       <div style={{
-        background: '#fff',
+        background: 'var(--bg-card)',
         borderRadius: '1rem',
-        border: '1px solid #eee',
+        border: '1px solid var(--border-light)',
         overflow: 'hidden',
         marginBottom: '2rem',
       }}>
@@ -101,14 +101,14 @@ export default function SavedLocationsPage() {
               display: 'flex',
               alignItems: 'center',
               padding: '1rem 1.25rem',
-              borderBottom: index < savedLocations.length - 1 ? '1px solid #f0f0f0' : 'none',
+              borderBottom: index < savedLocations.length - 1 ? '1px solid var(--border-light)' : 'none',
             }}
           >
             <div style={{
               width: 44,
               height: 44,
               borderRadius: '50%',
-              background: '#f7f7f7',
+              background: 'var(--bg-page)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -119,8 +119,8 @@ export default function SavedLocationsPage() {
               {loc.icon}
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#1a1a1a' }}>{loc.label}</p>
-              <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#999' }}>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{loc.label}</p>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
                 {loc.address || 'Agregar ubicacion'}
               </p>
             </div>
@@ -133,13 +133,13 @@ export default function SavedLocationsPage() {
 
       {/* Favorites */}
       <div>
-        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
           Favoritos
         </h2>
         <div style={{
-          background: '#fff',
+          background: 'var(--bg-card)',
           borderRadius: '1rem',
-          border: '1px solid #eee',
+          border: '1px solid var(--border-light)',
           overflow: 'hidden',
         }}>
           {favorites.map((fav, index) => (
@@ -149,14 +149,14 @@ export default function SavedLocationsPage() {
                 display: 'flex',
                 alignItems: 'center',
                 padding: '1rem 1.25rem',
-                borderBottom: index < favorites.length - 1 ? '1px solid #f0f0f0' : 'none',
+                borderBottom: index < favorites.length - 1 ? '1px solid var(--border-light)' : 'none',
               }}
             >
               <div style={{
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                background: '#f7f7f7',
+                background: 'var(--bg-page)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -168,8 +168,8 @@ export default function SavedLocationsPage() {
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: '#1a1a1a' }}>{fav.label}</p>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#999' }}>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{fav.label}</p>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
                   {fav.address || 'Agregar ubicacion'}
                 </p>
               </div>
