@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP, formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { createBrowserClient } from '@/lib/supabase-server';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -117,10 +118,56 @@ export default function ReportsPage() {
   // Utilization total
   const utilTotal = utilization ? utilization.busy + utilization.idle + utilization.offline : 1;
 
+  // CSV Export
+  const [exporting, setExporting] = useState(false);
+  const exportCSV = useCallback(async () => {
+    setExporting(true);
+    try {
+      const supabase = createBrowserClient();
+      const { data } = await supabase
+        .from('rides')
+        .select('created_at, service_type, status, estimated_fare_cup, final_fare_trc, payment_method, pickup_address, dropoff_address')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      if (!data?.length) return;
+
+      const headers = ['Fecha', 'Tipo', 'Estado', 'Tarifa CUP', 'Tarifa TRC', 'Pago', 'Origen', 'Destino'];
+      const rows = data.map(r => [
+        new Date(r.created_at).toLocaleDateString(),
+        r.service_type, r.status,
+        r.estimated_fare_cup, r.final_fare_trc,
+        r.payment_method, r.pickup_address, r.dropoff_address,
+      ]);
+
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tricigo-rides-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">{t('reports.title')}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold">{t('reports.title')}</h1>
+          <button
+            onClick={exportCSV}
+            disabled={exporting}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
+          >
+            {exporting ? '...' : 'Exportar CSV'}
+          </button>
+        </div>
 
         {/* Period selector */}
         <div className="flex gap-1 bg-neutral-100 rounded-lg p-1">

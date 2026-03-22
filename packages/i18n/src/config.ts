@@ -24,6 +24,7 @@ import enWeb from './locales/en/web.json';
 import ptCommon from './locales/pt/common.json';
 import ptRider from './locales/pt/rider.json';
 import ptDriver from './locales/pt/driver.json';
+import ptAdmin from './locales/pt/admin.json';
 import ptWeb from './locales/pt/web.json';
 
 export const defaultNS = 'common';
@@ -49,6 +50,7 @@ export const resources = {
     common: ptCommon,
     rider: ptRider,
     driver: ptDriver,
+    admin: ptAdmin,
     web: ptWeb,
   },
 } as const;

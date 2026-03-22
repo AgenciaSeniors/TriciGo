@@ -187,7 +187,40 @@ export const rideService = {
       console.warn('calculate_dynamic_surge failed, defaulting to 1.0x');
     }
 
-    const surgedFare = applySurge(fareResult.fare, surgeMultiplier);
+    let surgedFare = applySurge(fareResult.fare, surgeMultiplier);
+
+    // ─── A/B Pricing Experiment ───
+    try {
+      const { data: experiment } = await supabase
+        .from('pricing_experiments')
+        .select('*')
+        .eq('status', 'active')
+        .eq('service_type', params.service_type)
+        .maybeSingle();
+
+      if (experiment) {
+        // Deterministic variant assignment: hash userId to get consistent A/B
+        const userId = (await supabase.auth.getUser()).data.user?.id;
+        if (userId) {
+          // Simple hash: sum of char codes mod 2
+          const hash = userId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          const isVariantB = hash % 2 === 1;
+          const variant = isVariantB ? 'b' : 'a';
+          const multiplier = isVariantB ? experiment.variant_b_multiplier : experiment.variant_a_multiplier;
+
+          // Apply experiment multiplier to fare
+          if (multiplier && multiplier !== 1.0) {
+            surgedFare = Math.round(surgedFare * multiplier);
+          }
+
+          // Increment rides counter (non-blocking, fire-and-forget)
+          void supabase.rpc('increment_experiment_rides', {
+            p_experiment_id: experiment.id,
+            p_variant: variant,
+          });
+        }
+      }
+    } catch { /* experiments are optional, don't break pricing */ }
 
     // ─── Exchange Rate: convert CUP → TRC ───
     const exchangeRate = await exchangeRateService.getUsdCupRate();
