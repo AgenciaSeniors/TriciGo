@@ -160,6 +160,43 @@ export default function TripDetailScreen() {
         <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(fare) })}>
           <Text variant="h2" color="accent" className="text-center mb-4">{formatCUP(fare)}</Text>
 
+          {/* Fare breakdown */}
+          {pricing && (
+            <>
+              <View className="flex-row justify-between mb-1">
+                <Text variant="caption" color="inverse" className="opacity-40">
+                  {t('trip.base_fare', { defaultValue: 'Tarifa base' })}
+                </Text>
+                <Text variant="caption" color="inverse" className="opacity-40">{formatCUP(pricing.base_fare_cup ?? 0)}</Text>
+              </View>
+              <View className="flex-row justify-between mb-1">
+                <Text variant="caption" color="inverse" className="opacity-40">
+                  {t('trip.distance_charge', { defaultValue: 'Distancia' })} ({((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000).toFixed(1)} km)
+                </Text>
+                <Text variant="caption" color="inverse" className="opacity-40">
+                  {formatCUP(Math.round(((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000) * (pricing.per_km_rate_cup ?? 0)))}
+                </Text>
+              </View>
+              {(ride.surge_multiplier ?? 1) > 1 && (
+                <View className="flex-row justify-between mb-1">
+                  <Text variant="caption" className="text-orange-400">
+                    {t('trip.surge', { defaultValue: 'Tarifa dinámica' })} {(ride.surge_multiplier ?? 1).toFixed(1)}x
+                  </Text>
+                  <Text variant="caption" className="text-orange-400">+{formatCUP(Math.round(fare * (1 - 1 / (ride.surge_multiplier ?? 1))))}</Text>
+                </View>
+              )}
+              {(ride.tip_amount_cup ?? 0) > 0 && (
+                <View className="flex-row justify-between mb-1">
+                  <Text variant="caption" className="text-green-400">
+                    {t('trip.tip', { defaultValue: 'Propina' })}
+                  </Text>
+                  <Text variant="caption" className="text-green-400">+{formatCUP(ride.tip_amount_cup ?? 0)}</Text>
+                </View>
+              )}
+              <View className="h-px bg-neutral-700 my-2" />
+            </>
+          )}
+
           <View className="flex-row justify-between mb-2">
             <Text variant="bodySmall" color="inverse" className="opacity-60">
               {t('trip.total_fare', { defaultValue: 'Tarifa total' })}

@@ -126,12 +126,23 @@ export function FareBreakdownCard({
         detail={`${Math.round(durationMin)} min × ${perMinRateCup} CUP/min`}
       />
 
-      {/* Weather surge indicator */}
-      {surgeType === 'weather' && surgeMultiplier > 1 && (
-        <View className="flex-row items-center mb-2 bg-blue-50 rounded-lg px-3 py-2">
-          <Ionicons name="rainy-outline" size={16} color="#3b82f6" />
-          <Text variant="bodySmall" className="ml-2 text-blue-600 font-medium">
-            {weatherSurgeLabel ?? 'Weather fare'} {surgeMultiplier.toFixed(1)}x
+      {/* Surge indicator */}
+      {surgeMultiplier > 1 && (
+        <View className={`flex-row items-center mb-2 rounded-lg px-3 py-2 ${
+          surgeType === 'weather' ? 'bg-blue-50' : 'bg-orange-50'
+        }`}>
+          <Ionicons
+            name={surgeType === 'weather' ? 'rainy-outline' : 'trending-up-outline'}
+            size={16}
+            color={surgeType === 'weather' ? '#3b82f6' : '#f97316'}
+          />
+          <Text variant="bodySmall" className={`ml-2 font-medium ${
+            surgeType === 'weather' ? 'text-blue-600' : 'text-orange-600'
+          }`}>
+            {surgeType === 'weather'
+              ? (weatherSurgeLabel ?? 'Weather fare')
+              : (surgeLabel ?? 'Dynamic pricing')
+            } {surgeMultiplier.toFixed(1)}x
           </Text>
         </View>
       )}
