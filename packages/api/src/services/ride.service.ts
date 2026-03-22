@@ -19,6 +19,8 @@ import type {
   TripInsuranceConfig,
   RidePreferences,
   CancellationFeePreview,
+  Waypoint,
+  RideSplit,
 } from '@tricigo/types';
 import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
 import {
@@ -42,6 +44,7 @@ import { matchingService } from './matching.service';
 import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
+import { AuthError, ValidationError, ForbiddenError } from '../errors';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -319,17 +322,17 @@ export const rideService = {
 
     // Validate coordinates are within Cuba
     if (!isLocationInCuba(validParams.pickup_latitude, validParams.pickup_longitude)) {
-      throw new Error('Pickup location is outside the service area');
+      throw new ValidationError('Pickup location is outside the service area');
     }
     if (!isLocationInCuba(validParams.dropoff_latitude, validParams.dropoff_longitude)) {
-      throw new Error('Dropoff location is outside the service area');
+      throw new ValidationError('Dropoff location is outside the service area');
     }
 
     const supabase = getSupabaseClient();
 
     // Get current user for customer_id
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    if (!user) throw new AuthError();
 
     // Snapshot exchange rate at ride creation for consistent pricing
     const exchangeRate = await exchangeRateService.getUsdCupRate();
@@ -347,7 +350,7 @@ export const rideService = {
         validParams.service_type,
       );
       if (!validation.valid) {
-        throw new Error(validation.reason ?? 'Corporate ride validation failed');
+        throw new ValidationError(validation.reason ?? 'Corporate ride validation failed');
       }
       paymentMethod = 'corporate';
     }
@@ -566,7 +569,7 @@ export const rideService = {
       .order('sort_order', { ascending: true });
 
     if (waypoints && waypoints.length > 0) {
-      (result as any).waypoints = waypoints;
+      result.waypoints = waypoints as Ride['waypoints'];
     }
 
     return result;
@@ -669,7 +672,7 @@ export const rideService = {
         }
 
         if (ride.customer_id !== userId && !isDriverUser) {
-          throw new Error('Unauthorized: user is not the customer or driver of this ride');
+          throw new ForbiddenError('User is not the customer or driver of this ride');
         }
       }
     }
@@ -1159,7 +1162,7 @@ export const rideService = {
     address: string,
     latitude: number,
     longitude: number,
-  ): Promise<any> {
+  ): Promise<Waypoint> {
     const supabase = getSupabaseClient();
     // Get current max sort_order
     const { data: existing } = await supabase
@@ -1169,7 +1172,7 @@ export const rideService = {
       .order('sort_order', { ascending: false })
       .limit(1);
     const nextOrder = (existing?.[0]?.sort_order ?? 0) + 1;
-    if (nextOrder > 3) throw new Error('MAX_WAYPOINTS_REACHED');
+    if (nextOrder > 3) throw new ValidationError('MAX_WAYPOINTS_REACHED');
     const { data, error } = await supabase
       .from('ride_waypoints')
       .insert({
@@ -1181,13 +1184,13 @@ export const rideService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return data as Waypoint;
   },
 
   /**
    * Get waypoints for a ride.
    */
-  async getRideWaypoints(rideId: string): Promise<any[]> {
+  async getRideWaypoints(rideId: string): Promise<Waypoint[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('ride_waypoints')
@@ -1230,8 +1233,8 @@ export const rideService = {
    */
   subscribeToWaypoints(
     rideId: string,
-    onInsert: (wp: any) => void,
-    onUpdate: (wp: any) => void,
+    onInsert: (wp: Record<string, unknown>) => void,
+    onUpdate: (wp: Record<string, unknown>) => void,
   ) {
     const supabase = getSupabaseClient();
     return supabase
@@ -1272,7 +1275,7 @@ export const rideService = {
     invitedUserId: string,
     invitedByUserId: string,
     sharePct: number,
-  ): Promise<any> {
+  ): Promise<RideSplit> {
     const supabase = getSupabaseClient();
 
     // Validate payment method is tricicoin
@@ -1282,7 +1285,7 @@ export const rideService = {
       .eq('id', rideId)
       .single();
     if (ride?.payment_method !== 'tricicoin') {
-      throw new Error('SPLIT_ONLY_TRICICOIN');
+      throw new ValidationError('SPLIT_ONLY_TRICICOIN');
     }
 
     // Mark ride as split if not already
@@ -1301,7 +1304,7 @@ export const rideService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return data as RideSplit;
   },
 
   /**
@@ -1343,7 +1346,7 @@ export const rideService = {
   /**
    * Get all splits for a ride with user info.
    */
-  async getSplitsForRide(rideId: string): Promise<any[]> {
+  async getSplitsForRide(rideId: string): Promise<RideSplit[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('ride_splits')
@@ -1351,18 +1354,18 @@ export const rideService = {
       .eq('ride_id', rideId)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    return (data ?? []).map((s: any) => ({
-      ...s,
-      user_name: s.users?.raw_user_meta_data?.name ?? null,
-      user_phone: s.users?.raw_user_meta_data?.phone ?? null,
+    return (data ?? []).map((s) => ({
+      ...(s as Record<string, unknown>),
+      user_name: (s as Record<string, unknown> & { users?: { raw_user_meta_data?: { name?: string; phone?: string } } }).users?.raw_user_meta_data?.name ?? null,
+      user_phone: (s as Record<string, unknown> & { users?: { raw_user_meta_data?: { name?: string; phone?: string } } }).users?.raw_user_meta_data?.phone ?? null,
       users: undefined,
-    }));
+    })) as unknown as RideSplit[];
   },
 
   /**
    * Get pending split invites for a user.
    */
-  async getMySplitInvites(userId: string): Promise<any[]> {
+  async getMySplitInvites(userId: string): Promise<RideSplit[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('ride_splits')
@@ -1411,8 +1414,8 @@ export const rideService = {
    */
   subscribeToSplits(
     rideId: string,
-    onInsert: (split: any) => void,
-    onUpdate: (split: any) => void,
+    onInsert: (split: Record<string, unknown>) => void,
+    onUpdate: (split: Record<string, unknown>) => void,
   ) {
     const supabase = getSupabaseClient();
     return supabase

@@ -123,7 +123,7 @@ export const adminService = {
     // Client-side vehicle type filter (vehicles is a nested array)
     if (filters.vehicleType) {
       return (data as DriverProfileWithUser[]).filter((d) =>
-        d.vehicles?.some((v: any) => v.type === filters.vehicleType),
+        d.vehicles?.some((v: { type: string; plate_number: string }) => v.type === filters.vehicleType),
       );
     }
 
@@ -796,7 +796,15 @@ export const adminService = {
 
     // Parse PostGIS POINT to lat/lng + get user name
     const drivers = await Promise.all(
-      (data ?? []).map(async (dp: any) => {
+      (data ?? []).map(async (dp: {
+        id: string;
+        user_id: string;
+        status: string;
+        is_online: boolean;
+        rating_avg: number | null;
+        current_location: string | { coordinates: number[] } | null;
+        vehicles?: { type: string }[];
+      }) => {
         let latitude = 0;
         let longitude = 0;
         if (dp.current_location) {

@@ -79,7 +79,7 @@ export const corporateService = {
       .eq('is_active', true);
     if (error) throw error;
     return (data ?? [])
-      .map((row: any) => row.corporate_accounts as CorporateAccount)
+      .map((row: Record<string, unknown>) => (Array.isArray(row.corporate_accounts) ? row.corporate_accounts[0] : row.corporate_accounts) as CorporateAccount)
       .filter((a: CorporateAccount) => a.status === 'approved');
   },
 
@@ -373,7 +373,7 @@ export const corporateService = {
       .gte('created_at', monthStart);
 
     const totalRides = rides?.length ?? 0;
-    const totalSpent = (rides ?? []).reduce((sum: number, r: any) => sum + r.fare_trc, 0);
+    const totalSpent = (rides ?? []).reduce((sum: number, r: { fare_trc: number }) => sum + r.fare_trc, 0);
 
     // Get budget
     const account = await this.getAccount(accountId);

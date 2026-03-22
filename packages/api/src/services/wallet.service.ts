@@ -14,6 +14,7 @@ import type {
 import { getSupabaseClient } from '../client';
 import { validate, rechargeSchema, transferP2PSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
+import { NotFoundError } from '../errors';
 
 export const walletService = {
   /**
@@ -101,7 +102,7 @@ export const walletService = {
     if (error) throw error;
     // RPC returns the account ID; fetch full account
     const account = await this.getAccount(userId);
-    if (!account) throw new Error('Failed to ensure wallet account');
+    if (!account) throw new NotFoundError('WalletAccount');
     return account;
   },
 
