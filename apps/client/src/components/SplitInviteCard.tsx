@@ -22,7 +22,7 @@ interface PendingInvite extends RideSplit {
   inviter_name?: string;
 }
 
-export function SplitInviteCard({ onAction }: SplitInviteCardProps) {
+function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
   const { t } = useTranslation('rider');
   const userId = useAuthStore((s) => s.user?.id);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -148,3 +148,5 @@ export function SplitInviteCard({ onAction }: SplitInviteCardProps) {
     </View>
   );
 }
+
+export const SplitInviteCard = React.memo(SplitInviteCardInner);

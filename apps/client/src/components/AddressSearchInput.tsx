@@ -25,7 +25,7 @@ interface AddressSearchInputProps {
   showUseMyLocation?: boolean;
 }
 
-export function AddressSearchInput({
+function AddressSearchInputInner({
   placeholder,
   selectedAddress,
   onSelect,
@@ -426,3 +426,5 @@ export function AddressSearchInput({
     </View>
   );
 }
+
+export const AddressSearchInput = React.memo(AddressSearchInputInner);

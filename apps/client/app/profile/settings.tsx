@@ -19,11 +19,12 @@ import * as Notifications from 'expo-notifications';
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
 const NOTIF_CATEGORIES = [
-  { key: '@tricigo/notif_rides', icon: 'car-outline' as const, labelKey: 'profile.notif_rides' },
-  { key: '@tricigo/notif_chat', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
-  { key: '@tricigo/notif_wallet', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
-  { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
-];
+  { key: 'ride_updates', icon: 'car-outline' as const, labelKey: 'profile.notif_rides' },
+  { key: 'chat_messages', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
+  { key: 'payment_updates', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
+  { key: 'promotions', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
+  { key: 'driver_approval', icon: 'checkmark-circle-outline' as const, labelKey: 'profile.notif_driver_approval' },
+] as const;
 
 const THEME_OPTIONS: { value: ThemeMode; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { value: 'light', labelKey: 'profile.theme_light', icon: 'sunny-outline' },
@@ -47,18 +48,21 @@ export default function SettingsScreen() {
       if (val !== null) setNotificationsEnabled(val === 'true');
     }).catch(() => {});
 
-    // Load category preferences
-    Promise.all(
-      NOTIF_CATEGORIES.map(async (cat) => {
-        const val = await AsyncStorage.getItem(cat.key).catch(() => null);
-        return [cat.key, val !== 'false'] as const;  // default true
-      }),
-    ).then((results) => {
-      setCategoryPrefs(Object.fromEntries(results));
-    });
-
-    // Load SMS preference from server
+    // Load category preferences from server
     if (userId) {
+      notificationService.getPreferences(userId).then((prefs) => {
+        if (prefs) {
+          setCategoryPrefs({
+            ride_updates: prefs.ride_updates,
+            chat_messages: prefs.chat_messages,
+            payment_updates: prefs.payment_updates,
+            promotions: prefs.promotions,
+            driver_approval: prefs.driver_approval,
+          });
+        }
+      }).catch(() => {});
+
+      // Load SMS preference from server
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
     }
   }, [userId]);
@@ -84,8 +88,15 @@ export default function SettingsScreen() {
 
   const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
     setCategoryPrefs((prev) => ({ ...prev, [key]: enabled }));
-    await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
-  }, []);
+    if (userId) {
+      try {
+        await notificationService.updatePreferences(userId, { [key]: enabled });
+      } catch {
+        // Revert on error
+        setCategoryPrefs((prev) => ({ ...prev, [key]: !enabled }));
+      }
+    }
+  }, [userId]);
 
   return (
     <Screen scroll bg="white" padded>

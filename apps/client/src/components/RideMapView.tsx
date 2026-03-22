@@ -70,7 +70,7 @@ function toCoord(p: GeoPoint): [number, number] {
   return [p.longitude, p.latitude];
 }
 
-export function RideMapView({
+function RideMapViewInner({
   pickupLocation,
   dropoffLocation,
   driverLocation,
@@ -336,3 +336,5 @@ export function RideMapView({
     </View>
   );
 }
+
+export const RideMapView = React.memo(RideMapViewInner);

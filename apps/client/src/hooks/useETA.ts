@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { fetchRoute, haversineDistance, estimateRoadDistance } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 
@@ -129,5 +129,5 @@ export function useETA({
     calculateETA();
   }, [calculateETA, estimatedDurationS]);
 
-  return { etaMinutes, isCalculating };
+  return useMemo(() => ({ etaMinutes, isCalculating }), [etaMinutes, isCalculating]);
 }

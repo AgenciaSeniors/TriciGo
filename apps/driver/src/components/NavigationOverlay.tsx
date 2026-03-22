@@ -31,7 +31,7 @@ function formatDuration(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
-export function NavigationOverlay({
+function NavigationOverlayInner({
   currentStep,
   nextStep,
   remainingDistance_m,
@@ -135,3 +135,5 @@ export function NavigationOverlay({
     </View>
   );
 }
+
+export const NavigationOverlay = React.memo(NavigationOverlayInner);

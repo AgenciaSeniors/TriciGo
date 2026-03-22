@@ -31,7 +31,7 @@ const CANCEL_REASONS = [
   'cancel_reason_other',
 ] as const;
 
-export function CancelRideSheet({
+function CancelRideSheetInner({
   visible,
   onClose,
   onConfirm,
@@ -194,6 +194,8 @@ export function CancelRideSheet({
     </BottomSheet>
   );
 }
+
+export const CancelRideSheet = React.memo(CancelRideSheetInner);
 
 /** Single policy rule row with bullet indicator */
 function PolicyRow({ text, active }: { text: string; active: boolean }) {

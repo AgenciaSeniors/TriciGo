@@ -31,7 +31,7 @@ interface IncomingRideCardProps {
   riderRating?: number | null;
 }
 
-export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
+function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
   const acceptingRef = useRef(false);
   const debouncedAccept = useCallback(() => {
@@ -217,3 +217,5 @@ export function IncomingRideCard({ ride, onAccept, onReject, driverCustomRateCup
     </AnimatedCard>
   );
 }
+
+export const IncomingRideCard = React.memo(IncomingRideCardInner);

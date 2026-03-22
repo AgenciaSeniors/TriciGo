@@ -163,6 +163,7 @@ export const notificationService = {
 
   /**
    * Send push notification to a specific user and log it.
+   * If a category is provided, checks the user's notification preferences first.
    */
   async sendToUser(
     userId: string,
@@ -170,8 +171,23 @@ export const notificationService = {
     body: string,
     sentBy: string,
     data?: Record<string, string>,
+    category?: 'ride_updates' | 'chat_messages' | 'promotions' | 'payment_updates' | 'driver_approval',
   ): Promise<{ successCount: number; errorCount: number }> {
     const supabase = getSupabaseClient();
+
+    // Check notification preferences if a category is provided
+    if (category) {
+      try {
+        const prefs = await this.getPreferences(userId);
+        if (prefs && prefs[category] === false) {
+          // User has disabled this notification category — skip sending
+          return { successCount: 0, errorCount: 0 };
+        }
+      } catch {
+        // If preferences check fails, send the notification anyway
+      }
+    }
+
     const tokens = await this.getDeviceTokens(userId);
 
     const result = tokens.length > 0
@@ -345,6 +361,44 @@ export const notificationService = {
       .eq('id', userId)
       .single();
     return data?.sms_notifications_enabled ?? false;
+  },
+
+  // ============================================================
+  // Push Notification Preferences
+  // ============================================================
+
+  async getPreferences(userId: string) {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.rpc('ensure_notification_preferences', { p_user_id: userId });
+    return data as {
+      id: string;
+      user_id: string;
+      ride_updates: boolean;
+      chat_messages: boolean;
+      promotions: boolean;
+      payment_updates: boolean;
+      driver_approval: boolean;
+      created_at: string;
+      updated_at: string;
+    } | null;
+  },
+
+  async updatePreferences(userId: string, prefs: Partial<{
+    ride_updates: boolean;
+    chat_messages: boolean;
+    promotions: boolean;
+    payment_updates: boolean;
+    driver_approval: boolean;
+  }>) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .update({ ...prefs, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
 
   /**
