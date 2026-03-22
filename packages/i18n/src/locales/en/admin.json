@@ -708,6 +708,8 @@
     "surge_zones_desc": "Dynamic pricing rules by zone",
     "live_map": "Live Map",
     "live_map_desc": "Real-time driver positions",
+    "experiments": "Pricing Experiments",
+    "experiments_desc": "A/B testing to optimize fares",
     "surge_dashboard": "Live Surge",
     "surge_dashboard_desc": "Real-time surge and demand monitoring",
     "automation": "Automation Rules",

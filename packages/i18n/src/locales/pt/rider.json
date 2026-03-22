@@ -1,0 +1,44 @@
+{
+  "ride": {
+    "where_to": "Para onde?",
+    "get_estimate": "Ver tarifa estimada",
+    "estimated_fare": "Tarifa estimada",
+    "request_ride": "Solicitar viagem",
+    "requesting": "Solicitando...",
+    "searching": "Buscando motorista...",
+    "cancel": "Cancelar",
+    "cancel_ride": "Cancelar viagem",
+    "fare_breakdown": "Detalhes da tarifa",
+    "payment_method": "Método de pagamento",
+    "surge_active": "Tarifa dinâmica",
+    "discount": "Desconto",
+    "min_fare_note": "Tarifa mínima aplicada",
+    "promo_code": "Código promocional",
+    "apply": "Aplicar",
+    "insufficient_balance_title": "Saldo insuficiente",
+    "insufficient_balance_msg": "Você não tem TriciCoin suficiente para esta viagem.",
+    "too_close_title": "Destino muito perto",
+    "too_close_msg": "O destino está a menos de 200m do ponto de partida."
+  },
+
+  "rides_history": {
+    "title": "Histórico de viagens",
+    "completed": "Concluída",
+    "canceled": "Cancelada",
+    "no_rides": "Sem viagens"
+  },
+
+  "wallet": {
+    "title": "Carteira",
+    "available_balance": "Saldo disponível",
+    "held_balance": "Em retenção",
+    "history": "Histórico",
+    "recharge": "Recarregar",
+    "transfer": "Transferir",
+    "no_transactions": "Sem transações"
+  },
+
+  "chat": {
+    "send_failed": "Mensagem não enviada"
+  }
+}

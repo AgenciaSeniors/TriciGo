@@ -1,0 +1,33 @@
+{
+  "nav": {
+    "book_ride": "Pedir viagem",
+    "login": "Entrar",
+    "blog": "Blog"
+  },
+  "home": {
+    "hero_title_1": "Seu táxi em Havana,",
+    "hero_title_2": "a um toque",
+    "hero_subtitle": "Peça triciclos, motos e carros — rápido, seguro e acessível. O app de táxi #1 em Cuba.",
+    "hero_cta": "Pedir viagem",
+    "feature_triciclos": "Triciclos",
+    "feature_motos": "Motos",
+    "feature_autos": "Carros",
+    "download_title": "Baixe o app",
+    "download_subtitle": "Disponível para Android e iOS."
+  },
+  "book": {
+    "title": "Pedir viagem",
+    "subtitle": "Selecione os locais para obter uma estimativa de tarifa.",
+    "service_triciclo": "Triciclo",
+    "service_moto": "Moto",
+    "service_auto": "Carro",
+    "get_estimate": "Ver estimativa",
+    "request_ride": "Pedir viagem",
+    "surge_weather": "Tarifa por clima"
+  },
+  "footer": {
+    "location": "Havana, Cuba",
+    "privacy": "Privacidade",
+    "terms": "Termos"
+  }
+}

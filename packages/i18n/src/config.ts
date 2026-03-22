@@ -20,8 +20,14 @@ import enDriver from './locales/en/driver.json';
 import enAdmin from './locales/en/admin.json';
 import enWeb from './locales/en/web.json';
 
+// Portuguese translations
+import ptCommon from './locales/pt/common.json';
+import ptRider from './locales/pt/rider.json';
+import ptDriver from './locales/pt/driver.json';
+import ptWeb from './locales/pt/web.json';
+
 export const defaultNS = 'common';
-export const supportedLanguages = ['es', 'en'] as const;
+export const supportedLanguages = ['es', 'en', 'pt'] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 
 export const resources = {
@@ -38,6 +44,12 @@ export const resources = {
     driver: enDriver,
     admin: enAdmin,
     web: enWeb,
+  },
+  pt: {
+    common: ptCommon,
+    rider: ptRider,
+    driver: ptDriver,
+    web: ptWeb,
   },
 } as const;
 

@@ -1,0 +1,69 @@
+{
+  "loading": "Carregando...",
+  "save": "Salvar",
+  "cancel": "Cancelar",
+  "delete": "Excluir",
+  "edit": "Editar",
+  "back": "Voltar",
+  "error": "Erro",
+  "success": "Sucesso",
+  "confirm": "Confirmar",
+  "yes": "Sim",
+  "no": "Não",
+  "ok": "OK",
+  "processing": "Processando...",
+  "status": "Status",
+  "search": "Buscar",
+
+  "auth": {
+    "login": "Entrar",
+    "logout": "Sair",
+    "phone_label": "Número de telefone",
+    "phone_placeholder": "Seu número cubano",
+    "send_code": "Enviar código",
+    "sending": "Enviando...",
+    "invalid_phone": "Número de telefone inválido",
+    "otp_title": "Verificação",
+    "otp_subtitle": "Digite o código enviado para {{phone}}",
+    "otp_placeholder": "Código de 6 dígitos",
+    "verify": "Verificar",
+    "verifying": "Verificando...",
+    "resend_code": "Reenviar código",
+    "back_to_login": "Voltar",
+    "or_continue_with": "ou continue com",
+    "login_required": "Faça login para continuar"
+  },
+
+  "errors": {
+    "generic": "Ocorreu um erro. Tente novamente.",
+    "network": "Sem conexão com a internet.",
+    "session_expired": "Sessão expirada. Faça login novamente."
+  },
+
+  "tabs": {
+    "home": "Início",
+    "rides": "Viagens",
+    "wallet": "Carteira",
+    "profile": "Perfil"
+  },
+
+  "profile": {
+    "edit_profile": "Editar perfil",
+    "settings": "Configurações",
+    "logout": "Sair",
+    "saved_locations": "Locais salvos",
+    "emergency_contact": "Contato de emergência"
+  },
+
+  "payment": {
+    "cash": "Dinheiro",
+    "tricicoin": "TriciCoin"
+  },
+
+  "time": {
+    "now": "Agora",
+    "minutes_short": "m",
+    "hours_short": "h",
+    "days_short": "d"
+  }
+}

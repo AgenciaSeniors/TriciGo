@@ -708,6 +708,8 @@
     "surge_zones_desc": "Reglas de tarifa dinámica por zona",
     "live_map": "Mapa en vivo",
     "live_map_desc": "Posición de conductores en tiempo real",
+    "experiments": "Experimentos de Precios",
+    "experiments_desc": "A/B testing para optimizar tarifas",
     "surge_dashboard": "Surge en tiempo real",
     "surge_dashboard_desc": "Monitoreo de surge y demanda en vivo",
     "automation": "Automatización",
