@@ -706,6 +706,8 @@
     "flags_desc": "Activar o desactivar funcionalidades del sistema",
     "surge_zones": "Zonas de tarifa dinámica",
     "surge_zones_desc": "Reglas de tarifa dinámica por zona",
+    "live_map": "Mapa en vivo",
+    "live_map_desc": "Posición de conductores en tiempo real",
     "surge_dashboard": "Surge en tiempo real",
     "surge_dashboard_desc": "Monitoreo de surge y demanda en vivo",
     "automation": "Automatización",

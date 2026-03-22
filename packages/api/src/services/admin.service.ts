@@ -717,6 +717,63 @@ export const adminService = {
     };
   },
 
+  // ==================== LIVE MAP ====================
+
+  async getOnlineDrivers() {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select(`
+        id,
+        user_id,
+        status,
+        is_online,
+        rating_avg,
+        current_location,
+        vehicles!inner(type)
+      `)
+      .eq('is_online', true)
+      .eq('status', 'approved');
+    if (error) throw error;
+
+    // Parse PostGIS POINT to lat/lng + get user name
+    const drivers = await Promise.all(
+      (data ?? []).map(async (dp: any) => {
+        let latitude = 0;
+        let longitude = 0;
+        if (dp.current_location) {
+          // PostGIS format: POINT(lng lat) or {x, y}
+          const loc = dp.current_location;
+          if (typeof loc === 'string') {
+            const match = loc.match(/POINT\(([^ ]+) ([^ ]+)\)/);
+            if (match) { longitude = parseFloat(match[1]); latitude = parseFloat(match[2]); }
+          } else if (loc.coordinates) {
+            longitude = loc.coordinates[0]; latitude = loc.coordinates[1];
+          }
+        }
+
+        // Get user name
+        const { data: user } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', dp.user_id)
+          .single();
+
+        return {
+          id: dp.id,
+          full_name: user?.full_name ?? 'Sin nombre',
+          vehicle_type: dp.vehicles?.[0]?.type ?? 'auto',
+          latitude,
+          longitude,
+          is_online: dp.is_online,
+          rating_avg: dp.rating_avg ?? 0,
+        };
+      }),
+    );
+
+    return drivers.filter((d) => d.latitude !== 0 && d.longitude !== 0);
+  },
+
   // ==================== ZONES ====================
 
   async getZones(): Promise<Omit<Zone, 'boundary'>[]> {

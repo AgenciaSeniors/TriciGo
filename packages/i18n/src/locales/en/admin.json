@@ -706,6 +706,8 @@
     "flags_desc": "Enable or disable system features",
     "surge_zones": "Dynamic pricing zones",
     "surge_zones_desc": "Dynamic pricing rules by zone",
+    "live_map": "Live Map",
+    "live_map_desc": "Real-time driver positions",
     "surge_dashboard": "Live Surge",
     "surge_dashboard_desc": "Real-time surge and demand monitoring",
     "automation": "Automation Rules",

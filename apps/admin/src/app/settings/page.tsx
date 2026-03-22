@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
-import { Car, DollarSign, Map, Zap, Gift, Flag, Sliders, ArrowLeftRight, Activity, Bot } from 'lucide-react';
+import { Car, DollarSign, Map, MapPin, Zap, Gift, Flag, Sliders, ArrowLeftRight, Activity, Bot } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 type Section = {
@@ -39,6 +39,12 @@ export default function SettingsPage() {
       titleKey: 'settings.surge_zones',
       descKey: 'settings.surge_zones_desc',
       icon: Zap,
+    },
+    {
+      href: '/settings/live-map',
+      titleKey: 'settings.live_map',
+      descKey: 'settings.live_map_desc',
+      icon: MapPin,
     },
     {
       href: '/settings/surge-dashboard',
