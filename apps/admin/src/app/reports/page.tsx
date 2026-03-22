@@ -45,6 +45,14 @@ export default function ReportsPage() {
   const { t } = useTranslation('admin');
   const [period, setPeriod] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
+  const [selectedCity, setSelectedCity] = useState<string>('');
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.from('cities').select('id, name').eq('is_active', true).order('name')
+      .then(({ data }) => { if (data) setCities(data); });
+  }, []);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [walletStats, setWalletStats] = useState<WalletStats | null>(null);
   const [ridesByDay, setRidesByDay] = useState<DayData[]>([]);
@@ -124,11 +132,17 @@ export default function ReportsPage() {
     setExporting(true);
     try {
       const supabase = createBrowserClient();
-      const { data } = await supabase
+      let csvQuery = supabase
         .from('rides')
         .select('created_at, service_type, status, estimated_fare_cup, final_fare_trc, payment_method, pickup_address, dropoff_address')
         .order('created_at', { ascending: false })
         .limit(1000);
+
+      if (selectedCity) {
+        csvQuery = csvQuery.eq('city_id', selectedCity);
+      }
+
+      const { data } = await csvQuery;
 
       if (!data?.length) return;
 
@@ -153,7 +167,7 @@ export default function ReportsPage() {
     } finally {
       setExporting(false);
     }
-  }, []);
+  }, [selectedCity]);
 
   return (
     <div>
@@ -168,6 +182,19 @@ export default function ReportsPage() {
             {exporting ? '...' : 'Exportar CSV'}
           </button>
         </div>
+
+        <div className="flex items-center gap-3">
+          {/* City filter */}
+          <select
+            value={selectedCity}
+            onChange={(e) => setSelectedCity(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
+          >
+            <option value="">{t('cities.all_cities')}</option>
+            {cities.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
 
         {/* Period selector */}
         <div className="flex gap-1 bg-neutral-100 rounded-lg p-1">
@@ -184,6 +211,7 @@ export default function ReportsPage() {
               {opt.label}
             </button>
           ))}
+        </div>
         </div>
       </div>
 

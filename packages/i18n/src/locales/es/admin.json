@@ -66,7 +66,8 @@
     "blog": "Blog",
     "admin_panel": "Panel de administraci\u00f3n",
     "businesses": "Empresas",
-    "reviews": "Rese\u00f1as"
+    "reviews": "Rese\u00f1as",
+    "cities": "Ciudades"
   },
 
   "referrals": {
@@ -714,7 +715,24 @@
     "surge_dashboard": "Surge en tiempo real",
     "surge_dashboard_desc": "Monitoreo de surge y demanda en vivo",
     "automation": "Automatización",
-    "automation_desc": "Reglas de auto-aprobación y auto-resolución"
+    "automation_desc": "Reglas de auto-aprobación y auto-resolución",
+    "cities": "Ciudades",
+    "cities_desc": "Gestionar ciudades y áreas de operación"
+  },
+
+  "cities": {
+    "title": "Ciudades",
+    "col_name": "Nombre",
+    "col_slug": "Slug",
+    "col_timezone": "Zona horaria",
+    "col_rides": "Viajes",
+    "col_bounds": "Límites",
+    "col_active": "Estado",
+    "no_cities": "No hay ciudades configuradas",
+    "bounds_configured": "Configurado",
+    "bounds_none": "Sin configurar",
+    "error_saving": "Error al guardar la ciudad",
+    "all_cities": "Todas las ciudades"
   },
 
   "surge_dashboard": {

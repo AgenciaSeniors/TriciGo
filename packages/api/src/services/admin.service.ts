@@ -91,6 +91,7 @@ export const adminService = {
       search?: string;
       ratingMin?: number;
       vehicleType?: string;
+      cityId?: string;
     } = {},
   ): Promise<DriverProfileWithUser[]> {
     const supabase = getSupabaseClient();
@@ -111,6 +112,9 @@ export const adminService = {
     }
     if (filters.ratingMin !== undefined && filters.ratingMin > 0) {
       query = query.gte('rating_avg', filters.ratingMin);
+    }
+    if (filters.cityId) {
+      query = query.eq('city_id', filters.cityId);
     }
 
     const { data, error } = await query;
@@ -367,6 +371,7 @@ export const adminService = {
       dateFrom?: string;
       dateTo?: string;
       search?: string;
+      cityId?: string;
     } = {},
     page = 0,
     pageSize = 20,
@@ -398,6 +403,9 @@ export const adminService = {
     }
     if (filters.search) {
       query = query.or(`pickup_address.ilike.%${filters.search}%,dropoff_address.ilike.%${filters.search}%`);
+    }
+    if (filters.cityId) {
+      query = query.eq('city_id', filters.cityId);
     }
 
     const { data, error } = await query;

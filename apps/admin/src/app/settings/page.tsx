@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
-import { Car, DollarSign, Map, MapPin, Zap, Gift, Flag, Sliders, ArrowLeftRight, Activity, Bot, FlaskConical } from 'lucide-react';
+import { Car, DollarSign, Map, MapPin, Zap, Gift, Flag, Sliders, ArrowLeftRight, Activity, Bot, FlaskConical, Building2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 type Section = {
@@ -87,6 +87,12 @@ export default function SettingsPage() {
       titleKey: 'settings.experiments',
       descKey: 'settings.experiments_desc',
       icon: FlaskConical,
+    },
+    {
+      href: '/settings/cities',
+      titleKey: 'settings.cities',
+      descKey: 'settings.cities_desc',
+      icon: Building2,
     },
   ];
 

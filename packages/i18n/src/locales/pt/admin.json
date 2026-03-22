@@ -66,7 +66,8 @@
     "blog": "Blog",
     "admin_panel": "Painel de administra\u00e7\u00e3o",
     "businesses": "Empresas",
-    "reviews": "Avalia\u00e7\u00f5es"
+    "reviews": "Avalia\u00e7\u00f5es",
+    "cities": "Cidades"
   },
 
   "referrals": {
@@ -714,7 +715,24 @@
     "surge_dashboard": "Surge em tempo real",
     "surge_dashboard_desc": "Monitoramento de surge e demanda ao vivo",
     "automation": "Automatiza\u00e7\u00e3o",
-    "automation_desc": "Regras de aprova\u00e7\u00e3o e resolu\u00e7\u00e3o autom\u00e1ticas"
+    "automation_desc": "Regras de aprova\u00e7\u00e3o e resolu\u00e7\u00e3o autom\u00e1ticas",
+    "cities": "Cidades",
+    "cities_desc": "Gerenciar cidades e \u00e1reas de opera\u00e7\u00e3o"
+  },
+
+  "cities": {
+    "title": "Cidades",
+    "col_name": "Nome",
+    "col_slug": "Slug",
+    "col_timezone": "Fuso hor\u00e1rio",
+    "col_rides": "Viagens",
+    "col_bounds": "Limites",
+    "col_active": "Status",
+    "no_cities": "Nenhuma cidade configurada",
+    "bounds_configured": "Configurado",
+    "bounds_none": "N\u00e3o configurado",
+    "error_saving": "Erro ao salvar cidade",
+    "all_cities": "Todas as cidades"
   },
 
   "surge_dashboard": {

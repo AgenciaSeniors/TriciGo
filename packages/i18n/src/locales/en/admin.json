@@ -66,7 +66,8 @@
     "blog": "Blog",
     "admin_panel": "Admin Panel",
     "businesses": "Businesses",
-    "reviews": "Reviews"
+    "reviews": "Reviews",
+    "cities": "Cities"
   },
 
   "referrals": {
@@ -714,7 +715,24 @@
     "surge_dashboard": "Live Surge",
     "surge_dashboard_desc": "Real-time surge and demand monitoring",
     "automation": "Automation Rules",
-    "automation_desc": "Configure auto-approval and auto-resolve rules"
+    "automation_desc": "Configure auto-approval and auto-resolve rules",
+    "cities": "Cities",
+    "cities_desc": "Manage cities and operational areas"
+  },
+
+  "cities": {
+    "title": "Cities",
+    "col_name": "Name",
+    "col_slug": "Slug",
+    "col_timezone": "Timezone",
+    "col_rides": "Rides",
+    "col_bounds": "Bounds",
+    "col_active": "Status",
+    "no_cities": "No cities configured",
+    "bounds_configured": "Configured",
+    "bounds_none": "Not configured",
+    "error_saving": "Error saving city",
+    "all_cities": "All cities"
   },
 
   "surge_dashboard": {

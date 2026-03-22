@@ -7,6 +7,7 @@ import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
+import { createBrowserClient } from '@/lib/supabase-server';
 
 const PAGE_SIZE = 20;
 
@@ -62,6 +63,14 @@ export default function RidesPage() {
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
+  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
+  const [selectedCity, setSelectedCity] = useState<string>('');
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.from('cities').select('id, name').eq('is_active', true).order('name')
+      .then(({ data }) => { if (data) setCities(data); });
+  }, []);
 
   const filterFields: FilterField[] = [
     {
@@ -120,6 +129,7 @@ export default function RidesPage() {
         if (advancedFilters.dateFrom) filters.dateFrom = advancedFilters.dateFrom;
         if (advancedFilters.dateTo) filters.dateTo = advancedFilters.dateTo;
         if (advancedFilters.search) filters.search = advancedFilters.search;
+        if (selectedCity) filters.cityId = selectedCity;
 
         const data = await adminService.getRides(filters, page, PAGE_SIZE);
         if (!cancelled) setRides(data);
@@ -133,14 +143,26 @@ export default function RidesPage() {
 
     fetchRides();
     return () => { cancelled = true; };
-  }, [page, statusFilter, advancedFilters]);
+  }, [page, statusFilter, advancedFilters, selectedCity]);
 
   const canGoPrev = page > 0;
   const canGoNext = rides.length === PAGE_SIZE;
 
   return (
     <div>
-      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('rides.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">{t('rides.title')}</h1>
+        <select
+          value={selectedCity}
+          onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
+          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
+        >
+          <option value="">{t('cities.all_cities')}</option>
+          {cities.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-4">
