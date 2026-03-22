@@ -14,6 +14,7 @@ export function createBrowserClient() {
       autoRefreshToken: true,
       detectSessionInUrl: true,
       flowType: 'implicit',
+      storageKey: 'sb-tricigo-auth', // Must match @tricigo/api client.ts
     },
   });
 
