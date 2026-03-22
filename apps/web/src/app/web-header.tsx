@@ -1,13 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { useAuth } from './providers';
+import { getSupabaseClient } from '@tricigo/api';
+import type { User } from '@supabase/supabase-js';
 
+/**
+ * WebHeader with direct Supabase auth subscription.
+ * Does NOT rely on React context (useAuth) because Next.js App Router
+ * layout children don't always re-render on context changes.
+ */
 export function WebHeader() {
   const { t } = useTranslation('web');
-  const { user, isAuthenticated, isLoading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+        setIsLoading(false);
+      },
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isAuthenticated = !!user;
+
+  const signOut = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   const initial = user?.user_metadata?.full_name?.[0]
     ?? user?.email?.[0]?.toUpperCase()
