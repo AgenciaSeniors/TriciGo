@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
-import { rideService, driverService, locationService } from '@tricigo/api';
+import { rideService, driverService, locationService, notificationService } from '@tricigo/api';
 import { triggerHaptic, playSound } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -251,6 +251,11 @@ export function useDriverRideActions() {
 
         triggerHaptic('success');
         playSound('trip_completed');
+
+        // Send receipt email to passenger (non-blocking)
+        notificationService.sendRideReceipt(activeTrip.id, activeTrip.customer_id)
+          .catch((err) => console.warn('[Receipt] email failed:', err));
+
         useDriverRideStore.getState().updateActiveTrip({
           ...activeTrip,
           status: 'completed',

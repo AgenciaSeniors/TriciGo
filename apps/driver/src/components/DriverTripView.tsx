@@ -294,7 +294,21 @@ export function DriverTripView() {
           : routeCoordinates}
         height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
       />
-      <View className="h-3" />
+
+      {/* Navigate button */}
+      {navTarget && (
+        <Pressable
+          onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
+          className="flex-row items-center justify-center bg-blue-600 rounded-xl py-3 mt-3 mb-3 mx-1"
+          accessibilityRole="button"
+          accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
+        >
+          <Ionicons name="navigate" size={20} color="white" />
+          <Text variant="body" color="inverse" className="ml-2 font-bold">
+            {t('trip.navigate', { defaultValue: 'Navegar' })}
+          </Text>
+        </Pressable>
+      )}
 
       {/* Status stepper */}
       <StatusStepper
