@@ -43,15 +43,9 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         setUser(session?.user ?? null);
         setIsLoading(false);
-
-        // After OAuth sign-in, if user landed on home page (Supabase fallback),
-        // redirect them to /book
-        if (event === 'SIGNED_IN' && session && window.location.pathname === '/') {
-          window.location.replace('/book');
-        }
       },
     );
 

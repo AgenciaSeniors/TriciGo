@@ -85,7 +85,7 @@ export default function LoginPage() {
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/book`,
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       });
@@ -105,7 +105,7 @@ export default function LoginPage() {
       const { error: appleError } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: `${window.location.origin}/book`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (appleError) throw appleError;
