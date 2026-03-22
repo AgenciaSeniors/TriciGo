@@ -72,7 +72,7 @@ export default function LiveMapPage() {
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: HAVANA_CENTER,
       zoom: 12,
       attributionControl: false,

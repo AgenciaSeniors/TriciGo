@@ -176,7 +176,7 @@ export function RideMapView({
     <View style={{ height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL="mapbox://styles/mapbox/dark-v11"
+        styleURL="mapbox://styles/mapbox/streets-v12"
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
-import { HAVANA_CENTER, HAVANA_PRESETS, findNearestPreset } from '@tricigo/utils';
+import { HAVANA_CENTER, HAVANA_PRESETS, findNearestPreset, reverseGeocode } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
@@ -160,7 +160,7 @@ export default function BookingMap({
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: [HAVANA_CENTER.longitude, HAVANA_CENTER.latitude],
       zoom: 13,
       attributionControl: false,
@@ -235,15 +235,23 @@ export default function BookingMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const handleClick = (e: mapboxgl.MapMouseEvent) => {
+    const handleClick = async (e: mapboxgl.MapMouseEvent) => {
       if (selectionStep === 'done') return;
       const { lat, lng } = e.lngLat;
-      const preset = findNearestPreset({ latitude: lat, longitude: lng }) ?? {
-        label: t('book.map_custom_location'),
-        address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-        latitude: lat,
-        longitude: lng,
-      };
+      const nearest = findNearestPreset({ latitude: lat, longitude: lng });
+      let preset: LocationPreset;
+      if (nearest) {
+        preset = nearest;
+      } else {
+        const address = await reverseGeocode(lat, lng);
+        const label = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        preset = {
+          label,
+          address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          latitude: lat,
+          longitude: lng,
+        };
+      }
       if (selectionStep === 'pickup') onSetPickup(preset);
       else onSetDropoff(preset);
     };

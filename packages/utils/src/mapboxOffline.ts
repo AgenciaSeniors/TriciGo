@@ -16,7 +16,7 @@ export const HAVANA_PACK_NAME = 'havana-primary';
 export const HAVANA_PACK_ZOOM = { minZoom: 12, maxZoom: 15 };
 
 /** Mapbox style for offline pack */
-export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/dark-v11';
+export const MAPBOX_STYLE_URL = 'mapbox://styles/mapbox/streets-v12';
 
 /** Refresh interval: 1 week */
 export const PACK_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;

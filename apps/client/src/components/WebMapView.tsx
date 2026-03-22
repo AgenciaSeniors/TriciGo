@@ -25,7 +25,7 @@ interface WebMapViewProps {
 
 const HAVANA_CENTER: [number, number] = [-82.38, 23.13];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
+const MAP_STYLE = 'mapbox://styles/mapbox/streets-v12';
 
 export function WebMapView({
   center = HAVANA_CENTER,

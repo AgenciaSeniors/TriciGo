@@ -140,7 +140,7 @@ export function RideMapView({
         accessible={false}
         accessibilityElementsHidden={true}
         importantForAccessibility="no-hide-descendants"
-        styleURL="mapbox://styles/mapbox/dark-v11"
+        styleURL="mapbox://styles/mapbox/streets-v12"
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}

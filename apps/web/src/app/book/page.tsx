@@ -204,12 +204,20 @@ export default function BookPage() {
   async function handleUseMyLocation() {
     try {
       const coords = await requestLocation();
-      const preset = findNearestPreset(coords) ?? {
-        label: t('book.map_custom_location'),
-        address: `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      };
+      const nearest = findNearestPreset(coords);
+      let preset: LocationPreset;
+      if (nearest) {
+        preset = nearest;
+      } else {
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        const label = address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+        preset = {
+          label,
+          address: address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        };
+      }
       if (selectionStep === 'pickup') {
         handleSetPickup(preset);
       } else if (selectionStep === 'dropoff') {
@@ -267,13 +275,18 @@ export default function BookPage() {
       });
       router.push(`/track/${ride.id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('book.error_unknown');
+      console.error('[Book] createRide failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+
       if (msg.includes('Not authenticated') || msg.includes('Missing')) {
-        setError(t('book.error_auth'));
+        setError('Debes iniciar sesión para solicitar un viaje.');
+      } else if (msg.includes('outside the service area')) {
+        setError('La ubicación está fuera del área de servicio.');
+      } else if (msg.includes('Validation error')) {
+        setError('Datos del viaje incompletos. Verifica origen y destino.');
       } else {
-        setError(t('book.error_request'));
+        setError(`Error al solicitar viaje: ${msg}`);
       }
-      console.error(err);
     } finally {
       setIsRequesting(false);
     }
