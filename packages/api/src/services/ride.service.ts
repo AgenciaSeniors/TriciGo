@@ -336,11 +336,12 @@ export const rideService = {
         });
       } catch (promoErr) {
         // Rollback: delete the promotion_use record if increment failed
-        await supabase.from('promotion_uses')
-          .delete()
-          .eq('ride_id', (data as Ride).id)
-          .eq('promotion_id', params.promo_code_id)
-          .catch(() => {});
+        try {
+          await supabase.from('promotion_uses')
+            .delete()
+            .eq('ride_id', (data as Ride).id)
+            .eq('promotion_id', params.promo_code_id);
+        } catch { /* best-effort rollback */ }
         console.warn('[Ride] Promo usage recording failed:', promoErr);
       }
     }
