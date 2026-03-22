@@ -448,6 +448,58 @@ export async function reverseGeocode(
   }
 }
 
+/* ─── Predictive Pickup Optimization ─── */
+
+/**
+ * Suggest an optimized pickup point near a major intersection.
+ * Snaps the user's location to the nearest road point
+ * using the Mapbox Directions API.
+ * Returns null if snapping fails or the snapped point is within 50m (already on road).
+ */
+export async function suggestPickupPoint(
+  lat: number,
+  lng: number,
+): Promise<{ latitude: number; longitude: number; address: string } | null> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return null;
+
+    // Use Mapbox Directions to snap to nearest road
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${lng},${lat};${lng + 0.001},${lat + 0.001}?access_token=${token}&geometries=geojson`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const waypoint = data?.waypoints?.[0];
+    if (!waypoint) return null;
+
+    const [snappedLng, snappedLat] = waypoint.location;
+
+    // Check distance between original and snapped point
+    const distanceM = haversineDistance(
+      { latitude: lat, longitude: lng },
+      { latitude: snappedLat, longitude: snappedLng },
+    );
+
+    // Only suggest if >50m from road (user is far from a drivable road)
+    if (distanceM <= 50) return null;
+
+    // Get address for the snapped point
+    const address = await reverseGeocode(snappedLat, snappedLng);
+
+    return {
+      latitude: snappedLat,
+      longitude: snappedLng,
+      address: address || `${snappedLat.toFixed(4)}, ${snappedLng.toFixed(4)}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /* ─── Nominatim Forward Geocoding (Address Search) ─── */
 
 /**

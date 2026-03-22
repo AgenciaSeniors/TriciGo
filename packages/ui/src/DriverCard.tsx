@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Image } from 'react-native';
+import { View, Image as RNImage } from 'react-native';
+import { Image } from 'expo-image';
 import type { ImageSourcePropType } from 'react-native';
 import { Text } from './Text';
 import { Card } from './Card';
@@ -101,7 +102,7 @@ export function DriverCard({
           {vehicleLine.length > 0 && (
             <View className="flex-row items-center mt-1">
               {serviceTypeIcon && (
-                <Image
+                <RNImage
                   source={serviceTypeIcon}
                   style={{ width: 24, height: 24, marginRight: 6 }}
                   resizeMode="contain"
@@ -135,8 +136,9 @@ export function DriverCard({
         <View className="mt-3 rounded-lg overflow-hidden">
           <Image
             source={{ uri: vehiclePhotoUrl }}
+            transition={300}
             style={{ width: '100%', aspectRatio: 16 / 9 }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         </View>
       )}

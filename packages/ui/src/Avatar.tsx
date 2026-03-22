@@ -1,7 +1,10 @@
 import React from 'react';
-import { View, Image, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
+
+const AVATAR_BLURHASH = 'LKO2?U%2Tw=w]~RBVZRi};RPxuwH';
 
 export interface AvatarProps {
   /** Image URI (Supabase Storage public URL) */
@@ -69,8 +72,10 @@ export function Avatar({
       {uri ? (
         <Image
           source={{ uri }}
+          placeholder={{ blurhash: AVATAR_BLURHASH }}
+          transition={200}
           style={{ width: size, height: size }}
-          resizeMode="cover"
+          contentFit="cover"
         />
       ) : name ? (
         <Text

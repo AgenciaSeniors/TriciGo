@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, TextInput, Pressable, Alert, Image, ScrollView } from 'react-native';
+import { View, TextInput, Pressable, Alert, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '@tricigo/ui/Screen';
@@ -213,8 +214,9 @@ export default function DisputeFormScreen() {
               <View key={uri} className="relative">
                 <Image
                   source={{ uri }}
-                  className="w-20 h-20 rounded-lg"
-                  resizeMode="cover"
+                  transition={200}
+                  style={{ width: 80, height: 80, borderRadius: 8 }}
+                  contentFit="cover"
                   accessibilityLabel={t('dispute.evidence_photo', { defaultValue: 'Foto de evidencia {{n}}', n: index + 1 })}
                 />
                 <Pressable

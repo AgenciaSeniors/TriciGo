@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
@@ -185,6 +186,204 @@ function EarningsChart({ data }: { data: Map<string, { earnings: number; count: 
   );
 }
 
+// ── Earnings Goal Component ──────────────────────────────────
+const GOAL_STORAGE_KEY = '@tricigo/earnings_goal';
+const MILESTONE_STORAGE_PREFIX = '@tricigo/milestone_shown_';
+
+function getTodayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
+  const { t } = useTranslation('driver');
+  const [goal, setGoal] = useState<number>(0);
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const shownMilestonesRef = useRef<Set<number>>(new Set());
+
+  // Load goal from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem(GOAL_STORAGE_KEY).then((v) => {
+      if (v) {
+        const parsed = parseInt(v, 10);
+        if (!isNaN(parsed) && parsed > 0) setGoal(parsed);
+      }
+    });
+  }, []);
+
+  // Load already-shown milestones for today
+  useEffect(() => {
+    const todayKey = getTodayKey();
+    AsyncStorage.getItem(`${MILESTONE_STORAGE_PREFIX}${todayKey}`).then((v) => {
+      if (v) {
+        try {
+          const arr = JSON.parse(v) as number[];
+          shownMilestonesRef.current = new Set(arr);
+        } catch { /* ignore */ }
+      }
+    });
+  }, []);
+
+  // Milestone toasts
+  useEffect(() => {
+    if (goal <= 0 || currentEarnings <= 0) return;
+    const pct = (currentEarnings / goal) * 100;
+    const todayKey = getTodayKey();
+
+    const milestones: { threshold: number; message: string }[] = [
+      { threshold: 25, message: t('earnings.milestone_25', { defaultValue: 'Buen inicio!' }) },
+      { threshold: 50, message: t('earnings.milestone_50', { defaultValue: 'Mitad del camino!' }) },
+      { threshold: 75, message: t('earnings.milestone_75', { defaultValue: 'Casi llegas!' }) },
+      { threshold: 100, message: t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' }) },
+    ];
+
+    for (const ms of milestones) {
+      if (pct >= ms.threshold && !shownMilestonesRef.current.has(ms.threshold)) {
+        shownMilestonesRef.current.add(ms.threshold);
+        Toast.show({
+          type: ms.threshold === 100 ? 'success' : 'info',
+          text1: ms.threshold === 100 ? '🎉 ' + ms.message : ms.message,
+          text2: `${Math.round(pct)}% ${t('earnings.of_goal', { defaultValue: 'de tu meta' })}`,
+        });
+        // Persist shown milestones for today
+        AsyncStorage.setItem(
+          `${MILESTONE_STORAGE_PREFIX}${todayKey}`,
+          JSON.stringify(Array.from(shownMilestonesRef.current)),
+        );
+      }
+    }
+  }, [currentEarnings, goal, t]);
+
+  const saveGoal = useCallback(() => {
+    const parsed = parseInt(inputValue.replace(/\D/g, ''), 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      setGoal(parsed);
+      AsyncStorage.setItem(GOAL_STORAGE_KEY, String(parsed));
+      // Reset milestones for new goal
+      const todayKey = getTodayKey();
+      shownMilestonesRef.current.clear();
+      AsyncStorage.removeItem(`${MILESTONE_STORAGE_PREFIX}${todayKey}`);
+    }
+    setEditing(false);
+  }, [inputValue]);
+
+  const pct = goal > 0 ? Math.min((currentEarnings / goal) * 100, 100) : 0;
+  const progressColor = pct >= 75 ? '#22c55e' : pct >= 50 ? '#eab308' : '#ef4444';
+
+  const milestoneLabel = pct >= 100
+    ? t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' })
+    : pct >= 75
+      ? t('earnings.milestone_75', { defaultValue: 'Casi llegas!' })
+      : pct >= 50
+        ? t('earnings.milestone_50', { defaultValue: 'Mitad del camino!' })
+        : pct >= 25
+          ? t('earnings.milestone_25', { defaultValue: 'Buen inicio!' })
+          : null;
+
+  if (goal <= 0 && !editing) {
+    return (
+      <Pressable
+        onPress={() => { setEditing(true); setInputValue(''); }}
+        className="bg-neutral-800 rounded-2xl p-4 mb-4"
+        accessibilityRole="button"
+        accessibilityLabel={t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
+      >
+        <View className="flex-row items-center">
+          <Text style={{ fontSize: 20, marginRight: 8 }}>🎯</Text>
+          <Text variant="body" color="inverse" className="font-semibold">
+            {t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
+          </Text>
+        </View>
+        <Text variant="caption" color="inverse" className="opacity-50 mt-1">
+          {t('earnings.set_goal_hint', { defaultValue: 'Define cuanto quieres ganar hoy' })}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  if (editing) {
+    return (
+      <View className="bg-neutral-800 rounded-2xl p-4 mb-4">
+        <Text variant="body" color="inverse" className="font-semibold mb-3">
+          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })} (CUP)
+        </Text>
+        <View className="flex-row items-center gap-3">
+          <TextInput
+            className="flex-1 bg-neutral-700 rounded-xl px-4 py-3 text-white text-lg"
+            value={inputValue}
+            onChangeText={setInputValue}
+            placeholder={goal > 0 ? String(goal) : '5000'}
+            placeholderTextColor="#6b7280"
+            keyboardType="numeric"
+            autoFocus
+            onSubmitEditing={saveGoal}
+            style={{ color: '#fff', fontSize: 18 }}
+          />
+          <Pressable
+            onPress={saveGoal}
+            className="bg-primary-500 rounded-xl px-5 py-3"
+          >
+            <Text variant="body" color="inverse" className="font-semibold">OK</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setEditing(false)}
+            className="px-3 py-3"
+          >
+            <Text variant="body" color="inverse" className="opacity-50">✕</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View className="bg-neutral-800 rounded-2xl p-4 mb-4">
+      <View className="flex-row items-center justify-between mb-2">
+        <Text variant="body" color="inverse" className="font-semibold">
+          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })}: {formatCUP(goal)}
+        </Text>
+        {pct >= 100 && <Text style={{ fontSize: 18 }}>🎉</Text>}
+      </View>
+
+      {/* Progress bar */}
+      <View
+        className="h-3 bg-neutral-700 rounded-full overflow-hidden mb-2"
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: goal, now: Math.min(currentEarnings, goal) }}
+      >
+        <View
+          className="h-full rounded-full"
+          style={{ width: `${Math.round(pct)}%`, backgroundColor: progressColor }}
+        />
+      </View>
+
+      <View className="flex-row items-center justify-between">
+        <Text variant="bodySmall" color="inverse" className="opacity-70">
+          {formatCUP(currentEarnings)} / {formatCUP(goal)} — {Math.round(pct)}% {t('earnings.completed', { defaultValue: 'completado' })}
+        </Text>
+      </View>
+
+      {milestoneLabel && (
+        <Text variant="caption" style={{ color: progressColor, marginTop: 4, fontWeight: '600' }}>
+          {milestoneLabel}
+        </Text>
+      )}
+
+      <Pressable
+        onPress={() => { setEditing(true); setInputValue(String(goal)); }}
+        className="mt-2"
+        accessibilityRole="button"
+        accessibilityLabel={t('earnings.change_goal', { defaultValue: 'Cambiar meta' })}
+      >
+        <Text variant="caption" className="text-primary-400">
+          {t('earnings.change_goal', { defaultValue: 'Cambiar meta' })}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function NativeEarningsScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
@@ -200,6 +399,7 @@ function NativeEarningsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [todayEarnings, setTodayEarnings] = useState(0);
   const [prevPeriodEarnings, setPrevPeriodEarnings] = useState<number | null>(null);
   const [quests, setQuests] = useState<QuestWithProgress[]>([]);
   const [driverStats, setDriverStats] = useState<{
@@ -230,6 +430,23 @@ function NativeEarningsScreen() {
 
       setBalance(balanceData.available);
       setPeriodTrips(trips);
+
+      // Always compute today's earnings for goal tracking
+      if (period === 'day') {
+        let todayTotal = 0;
+        for (const trip of trips) todayTotal += trip.final_fare_cup ?? trip.estimated_fare_cup;
+        setTodayEarnings(todayTotal);
+      } else {
+        try {
+          const todayRange = getDateRange('day');
+          const todayTrips = await driverService.getTripHistoryByDateRange(
+            driverProfileId, todayRange.start.toISOString(), todayRange.end.toISOString(),
+          );
+          let todayTotal = 0;
+          for (const trip of todayTrips) todayTotal += trip.final_fare_cup ?? trip.estimated_fare_cup;
+          setTodayEarnings(todayTotal);
+        } catch { /* non-critical — goal card will show 0 */ }
+      }
 
       const parsedRate = commRateStr ? parseFloat(String(commRateStr).replace(/"/g, '')) : NaN;
       setCommissionRate(!isNaN(parsedRate) && parsedRate > 0 && parsedRate < 1 ? parsedRate : 0.15);
@@ -357,6 +574,9 @@ function NativeEarningsScreen() {
             </View>
           ) : (
           <>
+          {/* Daily Earnings Goal */}
+          <EarningsGoalCard currentEarnings={todayEarnings} />
+
           <AnimatedCard delay={0}>
             <BalanceBadge
               balance={balance}

@@ -11,7 +11,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
-import { formatTRC, triggerSelection, triggerHaptic } from '@tricigo/utils';
+import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService } from '@tricigo/api';
@@ -454,6 +454,23 @@ function SelectingView() {
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickupSuggestion, setPickupSuggestion] = useState<{
+    latitude: number; longitude: number; address: string;
+  } | null>(null);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+
+  // Predictive pickup: suggest a better pickup point near a road
+  useEffect(() => {
+    setSuggestionDismissed(false);
+    setPickupSuggestion(null);
+    const loc = draft.pickup?.location;
+    if (!loc) return;
+    let cancelled = false;
+    suggestPickupPoint(loc.latitude, loc.longitude).then((suggestion) => {
+      if (!cancelled && suggestion) setPickupSuggestion(suggestion);
+    });
+    return () => { cancelled = true; };
+  }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude]);
 
   // Bug 11: Re-estimate fare when payment method changes
   const prevPaymentRef = useRef(draft.paymentMethod);
@@ -499,6 +516,49 @@ function SelectingView() {
         recentAddresses={recentAddresses}
         showUseMyLocation
       />
+
+      {/* Predictive pickup suggestion banner */}
+      {pickupSuggestion && !suggestionDismissed && (
+        <View className="bg-primary-50 border border-primary-200 rounded-xl px-4 py-3 mt-2">
+          <View className="flex-row items-start">
+            <Ionicons name="location" size={18} color={colors.brand.orange} style={{ marginTop: 2 }} />
+            <View className="flex-1 ml-2">
+              <Text variant="bodySmall" className="text-neutral-800">
+                {t('ride.pickup_suggestion', { defaultValue: 'Punto de recogida sugerido' })}:{' '}
+                <Text variant="bodySmall" className="font-semibold">{pickupSuggestion.address}</Text>
+              </Text>
+              <Text variant="caption" color="secondary" className="mt-0.5">
+                {t('ride.pickup_suggestion_reason', { defaultValue: 'Los conductores te encontraran mas facilmente aqui' })}
+              </Text>
+              <View className="flex-row gap-3 mt-2">
+                <Pressable
+                  className="bg-primary-500 rounded-lg px-3 py-1.5"
+                  onPress={() => {
+                    setPickup(pickupSuggestion.address, {
+                      latitude: pickupSuggestion.latitude,
+                      longitude: pickupSuggestion.longitude,
+                    });
+                    setPickupSuggestion(null);
+                    triggerSelection();
+                  }}
+                >
+                  <Text variant="caption" color="inverse" className="font-semibold">
+                    {t('ride.use_suggested', { defaultValue: 'Usar punto sugerido' })}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  className="px-3 py-1.5"
+                  onPress={() => setSuggestionDismissed(true)}
+                >
+                  <Text variant="caption" color="secondary">
+                    {t('ride.keep_original', { defaultValue: 'Mantener original' })}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
 
       <View className="h-2" />
 
