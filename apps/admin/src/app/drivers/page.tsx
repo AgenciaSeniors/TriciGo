@@ -238,6 +238,11 @@ export default function DriversPage() {
                       >
                         {t(statusLabelKeys[driver.status])}
                       </span>
+                      {(driver as any).is_on_break && (
+                        <span className="inline-block ml-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                          {t('drivers.on_break', { defaultValue: 'En descanso' })}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
                       {Number(driver.rating_avg).toFixed(1)}

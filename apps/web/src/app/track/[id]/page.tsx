@@ -3,10 +3,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService } from '@tricigo/api';
+import { getSupabaseClient, rideService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
+
+const TrackingMap = dynamic(() => import('../TrackingMap'), { ssr: false });
 
 function useStatusSteps() {
   const { t } = useTranslation('web');
@@ -27,6 +30,7 @@ export default function TrackRidePage() {
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
@@ -57,6 +61,19 @@ export default function TrackRidePage() {
       clearInterval(interval);
     };
   }, [rideId, fetchRide]);
+
+  // Subscribe to driver location broadcasts
+  useEffect(() => {
+    if (!ride?.driver_id) return;
+    const supabase = getSupabaseClient();
+    const channel = supabase.channel(`driver-location-${ride.driver_id}`)
+      .on('broadcast', { event: 'location' }, (payload: { payload: { latitude: number; longitude: number } }) => {
+        setDriverLocation({ lat: payload.payload.latitude, lng: payload.payload.longitude });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [ride?.driver_id]);
 
   if (loading) {
     return (
@@ -104,6 +121,18 @@ export default function TrackRidePage() {
         <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
           ID: {ride.id.slice(0, 8)}...
         </p>
+
+        {/* Map */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <TrackingMap
+            pickupLat={ride.pickup_location.latitude}
+            pickupLng={ride.pickup_location.longitude}
+            dropoffLat={ride.dropoff_location.latitude}
+            dropoffLng={ride.dropoff_location.longitude}
+            driverLat={driverLocation?.lat}
+            driverLng={driverLocation?.lng}
+          />
+        </div>
 
         {/* Status stepper */}
         {isCanceled ? (

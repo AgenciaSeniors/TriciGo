@@ -125,6 +125,8 @@ function NativeDriverHomeScreen() {
   const removeRequest = useDriverRideStore((s) => s.removeRequest);
   const [toggling, setToggling] = useState(false);
   const [isIneligible, setIsIneligible] = useState(false);
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [togglingBreak, setTogglingBreak] = useState(false);
   const notifCenterEnabled = useFeatureFlag('notification_center_enabled');
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
@@ -146,6 +148,12 @@ function NativeDriverHomeScreen() {
         }
       });
   }, []);
+
+  // Load initial break status from driver profile
+  useEffect(() => {
+    if (!profile) return;
+    setIsOnBreak(!!(profile as any).is_on_break);
+  }, [profile]);
 
   // Check financial eligibility on mount and every 60s while online
   useEffect(() => {
@@ -220,6 +228,25 @@ function NativeDriverHomeScreen() {
       setToggling(false);
     }
   }, [profile, isOnline, setOnline]);
+
+  const handleToggleBreak = useCallback(async () => {
+    if (!profile || togglingBreak) return;
+    if (activeTrip) {
+      Toast.show({ type: 'error', text1: t('driver.cannot_break_active_ride', { defaultValue: 'No puedes descansar durante un viaje activo' }) });
+      return;
+    }
+    setTogglingBreak(true);
+    try {
+      const newBreakStatus = !isOnBreak;
+      await driverService.setBreakStatus(profile.id, newBreakStatus);
+      setIsOnBreak(newBreakStatus);
+      trackEvent(newBreakStatus ? 'driver_break_started' : 'driver_break_ended');
+    } catch {
+      Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+    } finally {
+      setTogglingBreak(false);
+    }
+  }, [profile, isOnBreak, togglingBreak, activeTrip]);
 
   const handleAccept = useCallback(
     (rideId: string) => {
@@ -341,6 +368,47 @@ function NativeDriverHomeScreen() {
             {isOnline ? t('home.go_offline') : t('home.go_online')}
           </Text>
         </Pressable>
+
+        {/* Break mode toggle (only visible when online) */}
+        {isOnline && (
+          <View className="mb-4">
+            {isOnBreak && (
+              <View className="bg-amber-500/20 rounded-xl px-4 py-2 mb-2 flex-row items-center justify-center" accessibilityRole="alert">
+                <Ionicons name="cafe-outline" size={16} color="#f59e0b" />
+                <Text variant="bodySmall" className="ml-2 text-amber-400 font-semibold">
+                  {t('home.on_break_label', { defaultValue: 'En descanso — no recibes solicitudes' })}
+                </Text>
+              </View>
+            )}
+            <Pressable
+              className={`
+                w-full py-3 rounded-xl items-center justify-center
+                ${isOnBreak ? 'bg-primary-500' : 'bg-amber-600'}
+                ${togglingBreak ? 'opacity-50' : ''}
+              `}
+              onPress={handleToggleBreak}
+              disabled={togglingBreak}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: togglingBreak }}
+              accessibilityLabel={isOnBreak
+                ? t('home.end_break', { defaultValue: 'Volver' })
+                : t('home.start_break', { defaultValue: 'En descanso' })}
+            >
+              <View className="flex-row items-center gap-2">
+                <Ionicons
+                  name={isOnBreak ? 'arrow-back-outline' : 'cafe-outline'}
+                  size={18}
+                  color="#fff"
+                />
+                <Text variant="body" color="inverse" className="font-semibold">
+                  {isOnBreak
+                    ? t('home.end_break', { defaultValue: 'Volver' })
+                    : t('home.start_break', { defaultValue: 'En descanso' })}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
 
         {/* Content based on online state */}
         {isOnline ? (

@@ -438,6 +438,21 @@ export const driverService = {
     return data as Ride[];
   },
 
+  // ==================== BREAK MODE ====================
+
+  /**
+   * Set break status for a driver.
+   * A driver on break stays "online" but won't receive ride requests.
+   */
+  async setBreakStatus(driverId: string, isOnBreak: boolean): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update({ is_on_break: isOnBreak })
+      .eq('id', driverId);
+    if (error) throw error;
+  },
+
   // ==================== ELIGIBILITY ====================
 
   /**
