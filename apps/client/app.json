@@ -16,7 +16,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.client",
       "associatedDomains": [
-        "applinks:tricigo.app"
+        "applinks:tricigo.com"
       ],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,

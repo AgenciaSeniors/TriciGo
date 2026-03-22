@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.driver",
-      "associatedDomains": ["applinks:tricigo.app"],
+      "associatedDomains": ["applinks:tricigo.com"],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para mostrar viajes cercanos",
