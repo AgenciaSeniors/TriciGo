@@ -67,6 +67,7 @@ export default function DriverDetailPage() {
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
   const [selfieChecks, setSelfieChecks] = useState<SelfieCheck[]>([]);
   const [verifyingDoc, setVerifyingDoc] = useState<string | null>(null);
+  const [churnRisk, setChurnRisk] = useState<{ churn_risk_score: number; risk_level: string; days_since_last_ride: number; earnings_this_week: number } | null>(null);
   const [docNotes, setDocNotes] = useState<Record<string, string>>({});
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
 
@@ -85,6 +86,10 @@ export default function DriverDetailPage() {
           setDriver(data);
           setSelfieChecks(checks);
           if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
+          // Fetch churn risk
+          adminService.getDriverChurnRisk(id).then((risk) => {
+            if (!cancelled && risk) setChurnRisk(risk);
+          }).catch(() => {});
         }
       } catch (err) {
         console.error('Error loading driver:', err);
@@ -507,6 +512,36 @@ export default function DriverDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Churn Risk */}
+      {churnRisk && (
+        <div className={`rounded-xl border-2 p-4 mb-4 ${
+          churnRisk.risk_level === 'high' ? 'bg-red-50 border-red-200' :
+          churnRisk.risk_level === 'medium' ? 'bg-amber-50 border-amber-200' :
+          'bg-green-50 border-green-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-sm">
+                {t('drivers.churn_risk', { defaultValue: 'Riesgo de abandono' })}
+              </h3>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                {t('drivers.days_since_ride', { days: churnRisk.days_since_last_ride, defaultValue: `${churnRisk.days_since_last_ride} días sin viaje` })}
+                {churnRisk.earnings_this_week > 0 && ` · ${formatCUP(churnRisk.earnings_this_week)} esta semana`}
+              </p>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+              churnRisk.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+              churnRisk.risk_level === 'medium' ? 'bg-amber-100 text-amber-700' :
+              'bg-green-100 text-green-700'
+            }`}>
+              {churnRisk.risk_level === 'high' ? 'ALTO' :
+               churnRisk.risk_level === 'medium' ? 'MEDIO' : 'BAJO'}
+              {' '}{churnRisk.churn_risk_score}/100
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Match Score */}
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">

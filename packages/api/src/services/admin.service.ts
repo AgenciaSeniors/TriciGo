@@ -717,6 +717,31 @@ export const adminService = {
     };
   },
 
+  // ==================== CHURN PREDICTION ====================
+
+  async getDriverChurnRisk(driverProfileId: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_churn_risk')
+      .select('*')
+      .eq('driver_profile_id', driverProfileId)
+      .single();
+    if (error) return null;
+    return data;
+  },
+
+  async getHighChurnDrivers() {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_churn_risk')
+      .select('*')
+      .in('risk_level', ['high', 'medium'])
+      .order('churn_risk_score', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return data ?? [];
+  },
+
   // ==================== SURGE PREDICTIONS ====================
 
   async getSurgePredictions() {
