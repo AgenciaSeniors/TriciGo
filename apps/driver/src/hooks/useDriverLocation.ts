@@ -77,13 +77,20 @@ export function useDriverLocationTracking(
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setError('location_denied');
-          // Alert driver that GPS is required for rides
           Alert.alert(
             'Ubicación requerida',
             'Debes permitir el acceso a tu ubicación para recibir viajes. Activa la ubicación en la configuración de tu dispositivo.',
             [{ text: 'Entendido' }],
           );
           return;
+        }
+
+        // Request background location when driver has active ride
+        if (activeRideId) {
+          const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync().catch(() => ({ status: 'denied' as const }));
+          if (bgStatus === 'granted') {
+            console.log('[Location] Background permission granted for active ride');
+          }
         }
 
         subscriptionRef.current = await Location.watchPositionAsync(

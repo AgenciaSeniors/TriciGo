@@ -21,3 +21,4 @@ export type {
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
 export type { QuickReply } from './chatQuickReplies';
 export { getErrorMessage } from './errors';
+export { logger, setLogContext, clearLogContext } from './logger';
