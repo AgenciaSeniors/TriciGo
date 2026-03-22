@@ -12,6 +12,7 @@ import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
+import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
@@ -105,7 +106,11 @@ function WebWalletScreen() {
 
         <Text variant="h4" className="mb-3">{t('wallet.history', { defaultValue: 'Historial' })}</Text>
         {loading ? (
-          <ActivityIndicator size="small" color={colors.brand.orange} />
+          <View>
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+          </View>
         ) : transactions.length === 0 ? (
           <Text variant="body" color="secondary">{t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}</Text>
         ) : (
@@ -395,8 +400,12 @@ function NativeWalletScreen() {
   if (loading) {
     return (
       <Screen bg="white" padded>
-        <View className="flex-1 items-center justify-center py-20">
-          <ActivityIndicator size="large" color={colors.brand.orange} />
+        <View className="pt-4">
+          <SkeletonBalance />
+          <SkeletonListItem />
+          <SkeletonListItem />
+          <SkeletonListItem />
+          <SkeletonListItem />
         </View>
       </Screen>
     );

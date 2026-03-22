@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, ScrollView, RefreshControl, ActivityIndicator, Pressable, Dimensions } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -348,8 +349,10 @@ function NativeEarningsScreen() {
           </Text>
 
           {loading ? (
-            <View className="items-center justify-center py-20">
-              <ActivityIndicator size="large" color={colors.brand.orange} />
+            <View className="py-4">
+              <SkeletonBalance />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={3} />
             </View>
           ) : (
           <>
