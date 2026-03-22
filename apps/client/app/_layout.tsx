@@ -12,6 +12,7 @@ import MapboxGL from '@rnmapbox/maps';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
 import '../global.css';
 
 // Initialize Sentry as early as possible
@@ -47,6 +48,9 @@ function RootNavigator() {
 
   // Download Havana offline map tiles (runs once per week)
   useMapboxOffline();
+
+  // Process offline queue when connectivity is restored
+  useOfflineSync();
   const router = useRouter();
   const navRef = useNavigationContainerRef();
 

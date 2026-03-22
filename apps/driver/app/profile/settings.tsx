@@ -8,8 +8,9 @@ import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService } from '@tricigo/api';
+import { notificationService, driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
@@ -24,6 +25,10 @@ const NOTIF_CATEGORIES = [
 export default function DriverSettingsScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
+  const profile = useDriverStore((s) => s.profile);
+  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
+  const [autoAcceptEligible, setAutoAcceptEligible] = useState(false);
+  const [autoAcceptLoading, setAutoAcceptLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
@@ -49,6 +54,13 @@ export default function DriverSettingsScreen() {
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
     }
   }, [userId]);
+
+  // Load auto-accept eligibility and current setting
+  useEffect(() => {
+    if (!profile?.id) return;
+    setAutoAcceptEnabled(!!profile.auto_accept_enabled);
+    driverService.isEligibleForAutoAccept(profile.id).then(setAutoAcceptEligible).catch(() => {});
+  }, [profile?.id]);
 
   const toggleLanguage = () => {
     const next = currentLang === 'es' ? 'en' : 'es';
@@ -136,6 +148,48 @@ export default function DriverSettingsScreen() {
               ))}
             </View>
           )}
+        </Card>
+
+        {/* Auto-accept rides */}
+        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1 mr-3">
+              <Ionicons name="flash-outline" size={22} color={colors.neutral[400]} />
+              <View className="ml-3 flex-1">
+                <Text variant="body" color="inverse">
+                  {t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
+                </Text>
+                {autoAcceptEligible ? (
+                  <Text variant="caption" color="secondary">
+                    {autoAcceptEnabled
+                      ? t('profile.auto_accept_on_desc', { defaultValue: 'Los viajes se aceptarán automáticamente. Tienes 5 segundos para cancelar.' })
+                      : t('profile.auto_accept_off_desc', { defaultValue: 'Los viajes entrantes requieren aceptación manual.' })}
+                  </Text>
+                ) : (
+                  <Text variant="caption" color="secondary">
+                    {t('profile.auto_accept_not_eligible', { defaultValue: 'Disponible después de 50 viajes y 4.5 de calificación' })}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Switch
+              value={autoAcceptEnabled}
+              disabled={!autoAcceptEligible || autoAcceptLoading}
+              onValueChange={async (enabled) => {
+                if (!profile?.id) return;
+                setAutoAcceptEnabled(enabled);
+                setAutoAcceptLoading(true);
+                try {
+                  await driverService.setAutoAccept(profile.id, enabled);
+                } catch {
+                  setAutoAcceptEnabled(!enabled);
+                } finally {
+                  setAutoAcceptLoading(false);
+                }
+              }}
+              trackColor={{ true: colors.brand.orange }}
+            />
+          </View>
         </Card>
 
         {/* SMS Alerts section */}

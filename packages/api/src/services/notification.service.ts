@@ -364,6 +364,51 @@ export const notificationService = {
   },
 
   // ============================================================
+  // Trusted Contact Notifications (Safety Sharing)
+  // ============================================================
+
+  /**
+   * Send an SMS directly to a phone number via the send-sms Edge Function.
+   * Used for trusted contacts who may not be registered users.
+   * Fire-and-forget — callers should .catch(() => {}).
+   */
+  async sendSMSToPhone(params: {
+    phone: string;
+    body: string;
+    eventType?: string;
+  }): Promise<{ success: boolean }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('send-sms', {
+      body: {
+        phone: params.phone,
+        body: params.body,
+        event_type: params.eventType ?? 'trusted_contact',
+      },
+    });
+    if (error) throw error;
+    return (data as { success: boolean }) ?? { success: false };
+  },
+
+  /**
+   * Notify all auto-share trusted contacts about a trip event via SMS.
+   * Best-effort: failures are silently ignored per-contact.
+   */
+  async notifyTrustedContacts(params: {
+    contacts: Array<{ name: string; phone: string }>;
+    message: string;
+    eventType?: string;
+  }): Promise<void> {
+    const promises = params.contacts.map((contact) =>
+      this.sendSMSToPhone({
+        phone: contact.phone,
+        body: params.message,
+        eventType: params.eventType ?? 'trusted_contact',
+      }).catch(() => {}),
+    );
+    await Promise.allSettled(promises);
+  },
+
+  // ============================================================
   // Push Notification Preferences
   // ============================================================
 

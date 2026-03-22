@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
-import { rideService, deliveryService } from '@tricigo/api';
+import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, playSound, getErrorMessage } from '@tricigo/utils';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
@@ -288,6 +288,21 @@ export function useRideActions() {
           trackEvent('ride_completed', { ride_id: updated.id, service_type: updated.service_type });
           // Invalidate prediction cache so next load recalculates with new ride
           invalidatePredictionCache().catch(() => {});
+
+          // Notify auto-share trusted contacts that the trip ended safely (fire-and-forget)
+          const currentUserId = useAuthStore.getState().user?.id;
+          const currentUserName = useAuthStore.getState().user?.full_name ?? 'Tu contacto';
+          if (currentUserId) {
+            trustedContactService.getAutoShareContacts(currentUserId).then((contacts) => {
+              if (contacts.length > 0) {
+                notificationService.notifyTrustedContacts({
+                  contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
+                  message: `\u2705 ${currentUserName} lleg\u00f3 a su destino de forma segura.`,
+                  eventType: 'trip_completed_safe',
+                }).catch(() => {});
+              }
+            }).catch(() => {});
+          }
         }
 
         // TropiPay payment confirmed via Realtime (use prevRide captured before update)

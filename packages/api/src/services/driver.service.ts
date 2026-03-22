@@ -438,6 +438,34 @@ export const driverService = {
     return data as Ride[];
   },
 
+  // ==================== AUTO-ACCEPT ====================
+
+  /**
+   * Enable or disable auto-accept for incoming rides.
+   */
+  async setAutoAccept(driverId: string, enabled: boolean): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update({ auto_accept_enabled: enabled })
+      .eq('id', driverId);
+    if (error) throw error;
+  },
+
+  /**
+   * Check if a driver is eligible for auto-accept (>=50 rides, >=4.5 rating).
+   */
+  async isEligibleForAutoAccept(driverId: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from('driver_profiles')
+      .select('total_rides, rating_avg')
+      .eq('id', driverId)
+      .single();
+    if (!data) return false;
+    return (data.total_rides ?? 0) >= 50 && (data.rating_avg ?? 0) >= 4.5;
+  },
+
   // ==================== BREAK MODE ====================
 
   /**

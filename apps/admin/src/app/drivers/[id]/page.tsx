@@ -258,6 +258,16 @@ export default function DriverDetailPage() {
               <dd className="text-sm font-medium">{profile.total_rides_completed}</dd>
             </div>
             <div>
+              <dt className="text-sm text-neutral-500">{t('drivers.auto_accept', { defaultValue: 'Auto-accept' })}</dt>
+              <dd className="text-sm font-medium">
+                {(profile as any).auto_accept_enabled ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">&#10003; {t('common.enabled', { defaultValue: 'Activado' })}</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-500">&#10007; {t('common.disabled', { defaultValue: 'Desactivado' })}</span>
+                )}
+              </dd>
+            </div>
+            <div>
               <dt className="text-sm text-neutral-500">{t('drivers.label_registered')}</dt>
               <dd className="text-sm font-medium">{formatDate(profile.created_at)}</dd>
             </div>

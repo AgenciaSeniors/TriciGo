@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, FlatList, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
@@ -131,6 +131,9 @@ function NativeDriverHomeScreen() {
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
   const [serviceConfigs, setServiceConfigs] = useState<Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }>>({});
+  const [autoAcceptCountdown, setAutoAcceptCountdown] = useState<number | null>(null);
+  const autoAcceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch service type configs once for fare calculation
   useEffect(() => {
@@ -204,6 +207,42 @@ function NativeDriverHomeScreen() {
   const { needsCheck, isProcessing, loading: selfieLoading, submitSelfie, check: selfieCheck } = useSelfieCheck();
 
   const { acceptRide } = useDriverRideActions();
+
+  // Auto-accept countdown for first incoming ride when auto_accept_enabled
+  useEffect(() => {
+    const firstRequest = incomingRequests[0];
+    if (firstRequest && profile?.auto_accept_enabled) {
+      // Start a 5-second countdown
+      setAutoAcceptCountdown(5);
+
+      countdownIntervalRef.current = setInterval(() => {
+        setAutoAcceptCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : prev));
+      }, 1000);
+
+      autoAcceptTimerRef.current = setTimeout(() => {
+        acceptRide(firstRequest.id);
+        setAutoAcceptCountdown(null);
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      }, 5000);
+
+      return () => {
+        if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);
+        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+        setAutoAcceptCountdown(null);
+      };
+    }
+    // No incoming rides or auto-accept off — clear
+    setAutoAcceptCountdown(null);
+    return undefined;
+  }, [incomingRequests, profile?.auto_accept_enabled, acceptRide]);
+
+  const cancelAutoAccept = useCallback(() => {
+    if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    autoAcceptTimerRef.current = null;
+    countdownIntervalRef.current = null;
+    setAutoAcceptCountdown(null);
+  }, []);
 
   const handleToggleOnline = useCallback(async () => {
     if (!profile || toggling) return; // Bug 38: Prevent rapid toggle
@@ -406,6 +445,20 @@ function NativeDriverHomeScreen() {
                     : t('home.start_break', { defaultValue: 'En descanso' })}
                 </Text>
               </View>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Auto-accept countdown banner */}
+        {autoAcceptCountdown !== null && (
+          <View className="bg-green-600 rounded-xl p-3 mb-2 flex-row items-center justify-between">
+            <Text variant="body" color="inverse">
+              {t('home.auto_accepting', { defaultValue: 'Aceptando automáticamente en' })} {autoAcceptCountdown}...
+            </Text>
+            <Pressable onPress={cancelAutoAccept}>
+              <Text variant="body" color="inverse" className="font-bold">
+                {t('common.cancel', { defaultValue: 'Cancelar' })}
+              </Text>
             </Pressable>
           </View>
         )}

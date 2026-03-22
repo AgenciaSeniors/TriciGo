@@ -6,7 +6,7 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
-import { incidentService, rideService, trustedContactService } from '@tricigo/api';
+import { incidentService, rideService, trustedContactService, notificationService } from '@tricigo/api';
 import type { TrustedContact } from '@tricigo/types';
 
 interface SafetySheetProps {
@@ -94,13 +94,18 @@ export function SafetySheet({
         token = await rideService.generateShareToken(rideId);
       }
       const url = `https://tricigo.app/track/share/${token}`;
-      const contactNames = autoShareContacts.map((c) => c.name).join(', ');
-      await Share.share({
-        message: t('safety.share_trip_message', { url }) + '\n\n' + t('safety.share_for_contacts', { names: contactNames }),
-      });
+
+      // Notify trusted contacts via SMS (fire-and-forget)
+      const userName = emergencyContact?.name ?? t('safety.someone');
+      notificationService.notifyTrustedContacts({
+        contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
+        message: `\u{1F4CD} ${userName} est\u00e1 en un viaje. Sigue su ubicaci\u00f3n en tiempo real: ${url}`,
+        eventType: 'trip_shared',
+      }).catch(() => {});
+
       setContactsSent(true);
     } catch {
-      // Share dismissed
+      // Share generation failed
     } finally {
       setSharingWithContacts(false);
     }

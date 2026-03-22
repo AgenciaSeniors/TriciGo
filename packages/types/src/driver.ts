@@ -30,6 +30,8 @@ export interface DriverProfile {
   negative_balance_since: string | null;
   /** Driver's custom per-km rate in CUP whole pesos. null = use default */
   custom_per_km_rate_cup: number | null;
+  /** Whether the driver has auto-accept enabled for incoming rides */
+  auto_accept_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
