@@ -24,51 +24,57 @@ import { Platform } from 'react-native';
 
 const PAGE_SIZE = 20;
 
-// TEMP: Static web version for Play Store screenshots
+// Web rides: uses real data from Supabase
 function WebRidesScreen() {
-  const mockRides = [
-    { id: '1', date: 'Hoy', status: 'completed', pickup: 'Calle 23 esq. L, Vedado', dropoff: 'Parque Central, Habana Vieja', fare: 'T$ 85.00', payment: 'TriciCoin' },
-    { id: '2', date: 'Hoy', status: 'completed', pickup: 'Miramar Trade Center', dropoff: 'Hotel Nacional de Cuba', fare: 'T$ 120.00', payment: 'Efectivo' },
-    { id: '3', date: 'Ayer', status: 'completed', pickup: 'Universidad de La Habana', dropoff: 'Plaza de la Revolución', fare: 'T$ 65.00', payment: 'TriciCoin' },
-    { id: '4', date: '12 mar', status: 'canceled', pickup: 'Aeropuerto José Martí', dropoff: 'Malecón y Prado', fare: 'T$ 250.00', payment: 'Efectivo' },
-    { id: '5', date: '11 mar', status: 'completed', pickup: 'Coppelia, Vedado', dropoff: 'Capitolio Nacional', fare: 'T$ 45.00', payment: 'TriciCoin' },
-  ];
+  const { t } = useTranslation('common');
+  const userId = useAuthStore((s) => s.user?.id);
+  const [rides, setRides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await rideService.getRideHistory(userId!, { page: 0, pageSize: 20 });
+        if (!cancelled) setRides(data);
+      } catch (err) {
+        console.error('Rides fetch error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [userId]);
 
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <View className="flex-row items-center justify-between mb-4">
-          <Text variant="h3">Historial de viajes</Text>
-          <View className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100">
-            <Ionicons name="download-outline" size={14} color="#6b7280" />
-            <Text variant="caption" color="secondary" className="font-medium">CSV</Text>
-          </View>
-        </View>
+        <Text variant="h3" className="mb-4">{t('rides_history.title', { defaultValue: 'Historial de viajes' })}</Text>
 
-        <View className="flex-row gap-2 mb-4">
-          {['Todos', 'Completados', 'Cancelados'].map((f, i) => (
-            <View key={i} className={`px-3 py-1.5 rounded-full ${i === 0 ? 'bg-primary-500' : 'bg-neutral-100'}`}>
-              <Text variant="caption" className={i === 0 ? 'text-white font-semibold' : 'font-medium'}>{f}</Text>
-            </View>
-          ))}
-        </View>
-
-        {mockRides.map((ride) => (
-          <Card key={ride.id} variant="outlined" padding="md" className="mb-3">
-            <View className="flex-row items-center justify-between mb-2">
-              <Text variant="caption" color="secondary">{ride.date}</Text>
-              <StatusBadge
-                label={ride.status === 'completed' ? 'Completado' : 'Cancelado'}
-                variant={ride.status === 'completed' ? 'success' : 'error'}
-              />
-            </View>
-            <RouteSummary pickupAddress={ride.pickup} dropoffAddress={ride.dropoff} compact className="mb-2" />
-            <View className="flex-row justify-between items-center">
-              <Text variant="body" className="font-semibold">{ride.fare}</Text>
-              <Text variant="caption" color="tertiary">{ride.payment}</Text>
-            </View>
-          </Card>
-        ))}
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.brand.orange} />
+        ) : rides.length === 0 ? (
+          <Text variant="body" color="secondary">{t('rides_history.no_rides', { defaultValue: 'Sin viajes' })}</Text>
+        ) : (
+          rides.map((ride) => (
+            <Card key={ride.id} variant="outlined" padding="md" className="mb-3">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text variant="caption" color="secondary">{getRelativeDay(ride.created_at)}</Text>
+                <StatusBadge
+                  label={ride.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
+                  variant={ride.status === 'completed' ? 'success' : 'error'}
+                />
+              </View>
+              <RouteSummary pickupAddress={ride.pickup_address} dropoffAddress={ride.dropoff_address} compact className="mb-2" />
+              <View className="flex-row justify-between items-center">
+                <Text variant="body" className="font-semibold">{formatTRC(ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0)}</Text>
+                <Text variant="caption" color="tertiary">{ride.payment_method === 'cash' ? t('payment.cash') : 'TriciCoin'}</Text>
+              </View>
+            </Card>
+          ))
+        )}
       </View>
     </Screen>
   );

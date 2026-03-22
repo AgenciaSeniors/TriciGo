@@ -38,74 +38,94 @@ function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
   }, [callback, delayMs]);
 }
 
-// TEMP: Static web version for Play Store screenshots
+// Web wallet: uses real data from Supabase (same as native but simplified UI)
 function WebWalletScreen() {
-  const mockTxns = [
-    { id: '1', desc: 'Viaje — Vedado → Habana Vieja', date: 'Hoy', amount: -8500, credit: false },
-    { id: '2', desc: 'Recarga TropiPay', date: 'Hoy', amount: 500000, credit: true },
-    { id: '3', desc: 'Viaje — Miramar → Vedado', date: 'Ayer', amount: -12000, credit: false },
-    { id: '4', desc: 'Transferencia recibida de Carlos', date: 'Ayer', amount: 20000, credit: true },
-    { id: '5', desc: 'Viaje — Centro Habana → Playa', date: '12 mar', amount: -6500, credit: false },
-    { id: '6', desc: 'Recarga efectivo', date: '11 mar', amount: 300000, credit: true },
-  ];
+  const { t } = useTranslation('common');
+  const userId = useAuthStore((s) => s.user?.id);
+  const [balance, setBalance] = useState({ available: 0, held: 0 });
+  const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const formatAmount = (cents: number) => {
-    const abs = Math.abs(cents);
-    return `T$ ${(abs / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })}`;
-  };
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        await walletService.ensureAccount(userId!);
+        const [bal, account] = await Promise.all([
+          walletService.getBalance(userId!),
+          walletService.getAccount(userId!),
+        ]);
+        if (cancelled) return;
+        setBalance(bal);
+        if (account?.id) {
+          const txns = await walletService.getTransactions(account.id, 0, 20);
+          if (!cancelled) setTransactions(txns as TransactionWithAmount[]);
+        }
+      } catch (err) {
+        console.error('Wallet fetch error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  if (!userId) {
+    return (
+      <Screen bg="white" padded>
+        <View className="flex-1 justify-center items-center">
+          <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesión para ver tu billetera' })}</Text>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
         <View className="flex-row items-center gap-2.5 mb-4">
           <Image source={tricoinLogo} style={{ width: 48, height: 48 }} resizeMode="contain" />
-          <Text variant="h3">Billetera</Text>
+          <Text variant="h3">{t('wallet.title', { defaultValue: 'Billetera' })}</Text>
         </View>
 
         <View className="bg-primary-50 rounded-2xl p-5 mb-6">
-          <Text variant="caption" color="secondary" className="mb-1">Saldo disponible</Text>
+          <Text variant="caption" color="secondary" className="mb-1">{t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}</Text>
           <View className="flex-row items-center gap-2">
             <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
-            <Text variant="h2" className="font-bold">T$ 7,935.00</Text>
+            <Text variant="h2" className="font-bold">{loading ? '...' : formatTriciCoin(balance.available)}</Text>
           </View>
-          <Text variant="caption" color="tertiary" className="mt-1">En retención: T$ 120.00</Text>
-        </View>
-
-        <View className="flex-row gap-3 mb-3">
-          <Button title="Recargar" variant="primary" size="md" className="flex-1" onPress={() => {}} />
-          <Button title="Transferir" variant="outline" size="md" className="flex-1" onPress={() => {}} />
-        </View>
-        <Button title="Recargar con TropiPay" variant="secondary" size="md" fullWidth onPress={() => {}} className="mb-4" />
-
-        {/* Filter chips */}
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-          {[
-            { label: 'Todos', active: true },
-            { label: 'Recargas', active: false },
-            { label: 'Viajes', active: false },
-            { label: 'Transferencias', active: false },
-          ].map((chip, i) => (
-            <View key={i} style={{
-              paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
-              backgroundColor: chip.active ? '#FF4D00' : '#f5f5f5',
-            }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: chip.active ? '#fff' : '#6b7280' }}>{chip.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        <Text variant="h4" className="mb-3">Historial</Text>
-        {mockTxns.map((tx) => (
-          <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100">
-            <View className="flex-1">
-              <Text variant="bodySmall" numberOfLines={1}>{tx.desc}</Text>
-              <Text variant="caption" color="tertiary">{tx.date}</Text>
-            </View>
-            <Text variant="body" className={`font-semibold ${tx.credit ? 'text-green-600' : 'text-red-500'}`}>
-              {tx.credit ? '+' : '-'}{formatAmount(tx.amount)}
+          {balance.held > 0 && (
+            <Text variant="caption" color="tertiary" className="mt-1">
+              {t('wallet.held_balance', { defaultValue: 'En retención' })}: {formatTriciCoin(balance.held)}
             </Text>
-          </View>
-        ))}
+          )}
+        </View>
+
+        <Text variant="h4" className="mb-3">{t('wallet.history', { defaultValue: 'Historial' })}</Text>
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.brand.orange} />
+        ) : transactions.length === 0 ? (
+          <Text variant="body" color="secondary">{t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}</Text>
+        ) : (
+          transactions.map((tx) => {
+            const entry = tx.ledger_entries?.[0];
+            const amount = entry?.amount ?? 0;
+            const isCredit = amount > 0;
+            return (
+              <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100">
+                <View className="flex-1">
+                  <Text variant="bodySmall" numberOfLines={1}>{tx.description || tx.type}</Text>
+                  <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at)}</Text>
+                </View>
+                <Text variant="body" className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-500'}`}>
+                  {isCredit ? '+' : ''}{formatTriciCoin(amount)}
+                </Text>
+              </View>
+            );
+          })
+        )}
       </View>
     </Screen>
   );

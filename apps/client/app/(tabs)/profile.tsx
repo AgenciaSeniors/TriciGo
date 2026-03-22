@@ -14,42 +14,61 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { Platform } from 'react-native';
 import { colors } from '@tricigo/theme';
 
-// TEMP: Static web version for Play Store screenshots
+// Web profile: uses real user data from auth store
 function WebProfileScreen() {
+  const { t } = useTranslation('common');
+  const user = useAuthStore((s) => s.user);
+  const reset = useAuthStore((s) => s.reset);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await authService.signOut();
+      await AsyncStorage.multiRemove([
+        '@tricigo/notifications_enabled', '@tricigo/sms_enabled',
+        '@tricigo/notification_pref_ride_updates', '@tricigo/notification_pref_promotions',
+        '@tricigo/notification_pref_chat', '@tricigo/notification_pref_payment',
+        '@tricigo/notification_permission_shown', '@tricigo/recent_addresses',
+        '@tricigo/prediction_cache',
+      ]).catch(() => {});
+      reset();
+    } catch { setLoggingOut(false); }
+  };
+
+  const initial = user?.full_name?.charAt(0)?.toUpperCase() ?? '?';
   const menuItems = [
-    { icon: 'person-outline' as const, label: 'Editar perfil' },
-    { icon: 'location-outline' as const, label: 'Lugares guardados' },
-    { icon: 'call-outline' as const, label: 'Contacto de emergencia' },
-    { icon: 'people-outline' as const, label: 'Contactos de confianza' },
-    { icon: 'shield-checkmark-outline' as const, label: 'Seguridad' },
-    { icon: 'repeat-outline' as const, label: 'Viajes recurrentes' },
-    { icon: 'language-outline' as const, label: 'Idioma' },
-    { icon: 'settings-outline' as const, label: 'Configuración' },
-    { icon: 'gift-outline' as const, label: 'Referir amigos' },
-    { icon: 'help-circle-outline' as const, label: 'Ayuda' },
-    { icon: 'newspaper-outline' as const, label: 'Blog' },
-    { icon: 'information-circle-outline' as const, label: 'Acerca de' },
+    { icon: 'person-outline' as const, label: t('profile.edit_profile'), href: '/profile/edit' },
+    { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), href: '/profile/settings' },
   ];
+
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
-        <Text variant="h3" className="mb-6">Perfil</Text>
+        <Text variant="h3" className="mb-6">{t('tabs.profile')}</Text>
         <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
           <View className="w-14 h-14 rounded-full bg-primary-500 items-center justify-center mr-4">
-            <Text variant="h4" color="inverse">M</Text>
+            <Text variant="h4" color="inverse">{initial}</Text>
           </View>
           <View className="flex-1">
-            <Text variant="h4">María García</Text>
-            <Text variant="caption" color="secondary">+53 5XXXXXXX</Text>
+            <Text variant="h4">{user?.full_name ?? t('common.no_name', { defaultValue: 'Sin nombre' })}</Text>
+            <Text variant="caption" color="secondary">{user?.email ?? ''}</Text>
           </View>
         </Card>
         {menuItems.map((item, i) => (
-          <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-100">
+          <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-100"
+            onPress={() => router.push(item.href as any)}>
             <Ionicons name={item.icon} size={22} color={colors.neutral[500]} />
             <Text variant="body" className="flex-1 ml-4">{item.label}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
           </Pressable>
         ))}
+        <Pressable className="flex-row items-center py-4 mt-4" onPress={handleLogout} disabled={loggingOut}>
+          <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
+          <Text variant="body" className="flex-1 ml-4 text-red-500">
+            {loggingOut ? t('common.processing') : t('profile.logout', { defaultValue: 'Cerrar sesión' })}
+          </Text>
+        </Pressable>
       </View>
     </Screen>
   );
