@@ -63,11 +63,14 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+const PAGE_SIZE = 20;
+
 export default function CampaignsPage() {
   const { t } = useTranslation('admin');
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -88,6 +91,9 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     loadCampaigns();
+  }, [page]);
+
+  useEffect(() => {
     loadReferenceData();
   }, []);
 
@@ -95,10 +101,13 @@ export default function CampaignsPage() {
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
       const { data } = await supabase
         .from('campaigns')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to);
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
       console.error('Error loading campaigns:', err);
@@ -241,6 +250,7 @@ export default function CampaignsPage() {
       setFormSendNow(true);
       setShowForm(false);
 
+      setPage(0);
       loadCampaigns();
       window.alert(t('campaigns.send_success'));
     } catch (err) {
@@ -250,6 +260,9 @@ export default function CampaignsPage() {
       setSending(false);
     }
   };
+
+  const canGoPrev = page > 0;
+  const canGoNext = campaigns.length === PAGE_SIZE;
 
   const getSegmentLabel = (segmentType: string): string => {
     const option = SEGMENT_OPTIONS.find((o) => o.value === segmentType);
@@ -510,6 +523,35 @@ export default function CampaignsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between mt-6">
+        <button
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          disabled={!canGoPrev}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoPrev
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.previous')}
+        </button>
+        <span className="text-sm text-neutral-500">
+          {t('common.page')} {page + 1}
+        </span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={!canGoNext}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoNext
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.next')}
+        </button>
       </div>
     </div>
   );

@@ -99,8 +99,8 @@ export default function RidesPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1rem' }}>
-      <div style={{ maxWidth: 500, width: '100%' }}>
+    <main className="page-main">
+      <div className="page-container">
         <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
           &larr; Inicio
         </Link>
@@ -142,22 +142,17 @@ export default function RidesPage() {
 
         {/* Ride list */}
         {!loading && rides.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="rides-list">
             {rides.map((ride) => {
               const statusInfo = STATUS_LABELS[ride.status] ?? { label: ride.status, bg: '#f3f4f6', color: '#666' };
               return (
                 <div
                   key={ride.id}
+                  className="ride-card"
                   onClick={() => router.push(`/rides/${ride.id}`)}
-                  style={{
-                    padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee',
-                    background: 'white', cursor: 'pointer', transition: 'box-shadow 0.15s',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
                 >
                   {/* Header: date + status */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div className="ride-card-header">
                     <span style={{ fontSize: '0.8rem', color: '#999' }}>
                       {getRelativeDay(ride.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(ride.created_at)}
                     </span>
@@ -186,7 +181,7 @@ export default function RidesPage() {
                   </div>
 
                   {/* Footer: fare + payment */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="ride-card-footer">
                     <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary)' }}>
                       {ride.final_fare_trc != null ? formatTRC(ride.final_fare_trc) : formatTRC(ride.estimated_fare_trc ?? 0)}
                     </span>

@@ -19,10 +19,13 @@ const emptyForm = {
   author_id: null as string | null,
 };
 
+const PAGE_SIZE = 20;
+
 export default function BlogAdminPage() {
   const { t } = useTranslation('admin');
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -30,7 +33,7 @@ export default function BlogAdminPage() {
   const loadPosts = () => {
     setLoading(true);
     blogService
-      .getAllPosts(0, 100)
+      .getAllPosts(page, PAGE_SIZE)
       .then(setPosts)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -38,7 +41,7 @@ export default function BlogAdminPage() {
 
   useEffect(() => {
     loadPosts();
-  }, []);
+  }, [page]);
 
   const resetForm = () => {
     setForm({ ...emptyForm });
@@ -108,6 +111,9 @@ export default function BlogAdminPage() {
       console.error(err);
     }
   };
+
+  const canGoPrev = page > 0;
+  const canGoNext = posts.length === PAGE_SIZE;
 
   const handleTogglePublish = async (post: BlogPost) => {
     try {
@@ -310,6 +316,35 @@ export default function BlogAdminPage() {
           </table>
         </div>
       )}
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between mt-6">
+        <button
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          disabled={!canGoPrev}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoPrev
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.previous')}
+        </button>
+        <span className="text-sm text-neutral-500">
+          {t('common.page')} {page + 1}
+        </span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={!canGoNext}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoNext
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.next')}
+        </button>
+      </div>
     </div>
   );
 }

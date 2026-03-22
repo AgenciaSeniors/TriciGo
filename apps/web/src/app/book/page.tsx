@@ -312,16 +312,8 @@ export default function BookPage() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '1rem',
-      }}
-    >
-      <div style={{ maxWidth: 500, width: '100%' }}>
+    <main className="page-main">
+      <div className="page-container">
         <Link
           href="/"
           style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}
@@ -488,11 +480,12 @@ export default function BookPage() {
             >
               {t('book.service_type')}
             </label>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="booking-service-types">
               {SERVICE_TYPE_KEYS.map((svc) => (
                 <button
                   key={svc.slug}
                   type="button"
+                  className="booking-service-btn"
                   onClick={() => {
                     setServiceType(svc.slug);
                     setEstimate(null);
@@ -571,6 +564,7 @@ export default function BookPage() {
           {/* ═══ Fare estimate card ═══ */}
           {estimate && (
             <div
+              className="booking-estimate-card"
               style={{
                 padding: '1.25rem',
                 borderRadius: '0.75rem',
@@ -596,6 +590,7 @@ export default function BookPage() {
                 </span>
               </div>
               <div
+                className="booking-fare-details"
                 style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: '#666', flexWrap: 'wrap' }}
               >
                 <span>{(estimate.estimated_distance_m / 1000).toFixed(1)} km</span>
@@ -644,7 +639,7 @@ export default function BookPage() {
                 >
                   {t('book.payment_method')}
                 </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="booking-payment-methods" style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('cash')}
@@ -722,7 +717,33 @@ export default function BookPage() {
         >
           {t('book.download_cta')}
         </p>
+
+        {/* Spacer for fixed bottom CTA on mobile */}
+        {estimate && <div style={{ height: '5rem' }} className="booking-cta-spacer" />}
       </div>
+
+      {/* Fixed bottom CTA on mobile */}
+      {estimate && (
+        <div className="booking-cta-fixed">
+          <button
+            onClick={handleRequest}
+            disabled={isRequesting}
+            style={{
+              width: '100%',
+              padding: '1rem',
+              borderRadius: '0.75rem',
+              border: 'none',
+              background: isRequesting ? '#ccc' : 'var(--primary)',
+              color: 'white',
+              fontSize: '1rem',
+              fontWeight: 700,
+              cursor: isRequesting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isRequesting ? t('book.requesting') : t('book.request_ride')}
+          </button>
+        </div>
+      )}
     </main>
   );
 }

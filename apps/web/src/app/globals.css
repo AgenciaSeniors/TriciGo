@@ -426,3 +426,312 @@ body {
     margin-right: auto;
   }
 }
+
+/* ══════════════════════════════════════════════════
+   App Pages — Responsive (booking, rides, wallet, profile)
+   ══════════════════════════════════════════════════ */
+
+/* ── Common page layout ── */
+.page-main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+}
+
+.page-container {
+  max-width: 500px;
+  width: 100%;
+}
+
+/* ── Booking page ── */
+.booking-service-types {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.booking-service-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.booking-estimate-card {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  border: 2px solid var(--primary);
+  background: #FFF5F0;
+}
+
+.booking-fare-details {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.booking-payment-methods {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.booking-cta-fixed {
+  display: none;
+}
+
+/* ── Rides page ── */
+.rides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ride-card {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #eee;
+  background: white;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.ride-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.ride-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.ride-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Wallet page ── */
+.wallet-balance-card {
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: var(--primary);
+  color: white;
+  margin-bottom: 1.5rem;
+}
+
+.wallet-section-card {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #eee;
+  background: white;
+}
+
+.wallet-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.wallet-filter-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.wallet-filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.wallet-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wallet-tx-item {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #f3f4f6;
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Profile page ── */
+.profile-main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  background: #fff;
+  min-height: 100vh;
+}
+
+.profile-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.profile-menu {
+  background: #fff;
+  border-radius: 1rem;
+  border: 1px solid #eee;
+  overflow: hidden;
+}
+
+.profile-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: #1a1a1a;
+  transition: background 0.15s;
+}
+
+.profile-menu-item:active {
+  background: #f9f9f9;
+}
+
+/* ── Tablet (max-width: 1024px) ── */
+@media (max-width: 1024px) {
+  .page-container {
+    max-width: 500px;
+  }
+
+  .profile-main {
+    max-width: 480px;
+  }
+}
+
+/* ── Mobile (max-width: 768px) ── */
+@media (max-width: 768px) {
+  .page-main {
+    padding: 0.75rem;
+  }
+
+  .page-container {
+    max-width: 100%;
+  }
+
+  /* Booking: service type buttons horizontal scroll */
+  .booking-service-types {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    padding-bottom: 0.25rem;
+  }
+
+  .booking-service-types::-webkit-scrollbar {
+    display: none;
+  }
+
+  .booking-service-btn {
+    flex: 0 0 auto;
+    min-width: 110px;
+  }
+
+  /* Booking: fixed bottom CTA when estimate is shown */
+  .booking-cta-fixed {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.75rem 1rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    background: white;
+    border-top: 1px solid #eee;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+    z-index: 100;
+  }
+
+  .booking-cta-fixed button {
+    width: 100%;
+  }
+
+  /* Rides: full-width cards, better touch targets */
+  .ride-card {
+    border-radius: 0.5rem;
+  }
+
+  /* Wallet: balance card full bleed */
+  .wallet-balance-card {
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+
+  .wallet-section-card {
+    border-radius: 0.5rem;
+  }
+
+  .wallet-input-row {
+    flex-direction: column;
+  }
+
+  .wallet-input-row input,
+  .wallet-input-row button {
+    width: 100% !important;
+  }
+
+  .wallet-filter-tabs {
+    gap: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  /* Profile: larger touch targets */
+  .profile-main {
+    padding: 1rem 0.75rem;
+    max-width: 100%;
+  }
+
+  .profile-avatar-section {
+    padding: 1.5rem 1rem;
+  }
+
+  .profile-menu-item {
+    padding: 1.1rem 1rem;
+  }
+}
+
+/* ── Small mobile (max-width: 400px) ── */
+@media (max-width: 400px) {
+  .page-main {
+    padding: 0.5rem;
+  }
+
+  .booking-service-btn {
+    min-width: 95px;
+    padding: 0.5rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .booking-fare-details {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .booking-payment-methods {
+    flex-direction: column;
+  }
+
+  .wallet-balance-card {
+    padding: 1rem;
+  }
+
+  .wallet-tx-item {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .profile-avatar-section {
+    padding: 1rem 0.5rem;
+  }
+}

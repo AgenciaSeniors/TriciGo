@@ -257,8 +257,8 @@ export default function WalletPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1rem' }}>
-      <div style={{ maxWidth: 500, width: '100%' }}>
+    <main className="page-main">
+      <div className="page-container">
         <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
           &larr; Inicio
         </Link>
@@ -268,10 +268,7 @@ export default function WalletPage() {
         </h1>
 
         {/* ═══ Balance card ═══ */}
-        <div style={{
-          padding: '1.5rem', borderRadius: '1rem', background: 'var(--primary)', color: 'white',
-          marginBottom: '1.5rem',
-        }}>
+        <div className="wallet-balance-card">
           {balanceLoading ? (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
               <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>Cargando saldo...</p>
@@ -297,12 +294,12 @@ export default function WalletPage() {
         </div>
 
         {/* ═══ Recharge section ═══ */}
-        <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white', marginBottom: '1rem' }}>
+        <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Recargar billetera</p>
           <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 0.5rem' }}>
             Tasa actual: 1 USD = {exchangeRate} CUP
           </p>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="wallet-input-row">
             <input
               type="number"
               placeholder="Monto en CUP"
@@ -336,11 +333,11 @@ export default function WalletPage() {
         </div>
 
         {/* ═══ P2P Transfer section ═══ */}
-        <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #eee', background: 'white', marginBottom: '1.5rem' }}>
+        <div className="wallet-section-card" style={{ marginBottom: '1.5rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Enviar TriciCoin</p>
 
           {/* Phone search */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <div className="wallet-input-row" style={{ marginBottom: '0.5rem' }}>
             <input
               type="tel"
               placeholder="Telefono del destinatario"
@@ -427,7 +424,7 @@ export default function WalletPage() {
           <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Historial de transacciones</p>
 
           {/* Filter tabs */}
-          <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '1rem', overflowX: 'auto' }}>
+          <div className="wallet-filter-tabs">
             {FILTER_TABS.map((tab) => (
               <button
                 key={tab.key}
@@ -466,15 +463,12 @@ export default function WalletPage() {
 
           {/* Transaction list */}
           {!txLoading && filteredTx.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="wallet-tx-list">
               {filteredTx.map((tx) => {
                 const isCredit = CREDIT_TYPES.has(tx.type);
                 const amount = getTxAmount(tx);
                 return (
-                  <div key={tx.id} style={{
-                    padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #f3f4f6',
-                    background: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
+                  <div key={tx.id} className="wallet-tx-item">
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0, color: '#333' }}>
                         {TYPE_LABELS[tx.type] ?? tx.type}

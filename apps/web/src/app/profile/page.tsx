@@ -59,15 +59,9 @@ export default function ProfilePage() {
   const level = user?.user_metadata?.level;
 
   return (
-    <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: '#fff', minHeight: '100vh' }}>
+    <main className="profile-main">
       {/* User Info Card */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '2rem 1rem',
-        marginBottom: '1.5rem',
-      }}>
+      <div className="profile-avatar-section">
         <div style={{
           width: 80,
           height: 80,
@@ -107,24 +101,14 @@ export default function ProfilePage() {
       </div>
 
       {/* Menu Items */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '1rem',
-        border: '1px solid #eee',
-        overflow: 'hidden',
-      }}>
+      <div className="profile-menu">
         {menuItems.map((item, index) => (
           <Link
             key={item.href}
             href={item.href}
+            className="profile-menu-item"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '1rem 1.25rem',
-              textDecoration: 'none',
-              color: '#1a1a1a',
               borderBottom: index < menuItems.length - 1 ? '1px solid #f0f0f0' : 'none',
-              transition: 'background 0.15s',
             }}
           >
             <span style={{ fontSize: '1.25rem', marginRight: '1rem', width: 28, textAlign: 'center' }}>{item.icon}</span>

@@ -15,10 +15,13 @@ const QUEST_TYPE_LABELS: Record<string, { es: string; en: string }> = {
   peak_hours: { es: 'Horas pico', en: 'Peak hours' },
 };
 
+const PAGE_SIZE = 20;
+
 export default function QuestsPage() {
   const { t } = useTranslation('admin');
   const [quests, setQuests] = useState<Quest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -35,11 +38,12 @@ export default function QuestsPage() {
 
   useEffect(() => {
     loadQuests();
-  }, []);
+  }, [page]);
 
   const loadQuests = async () => {
+    setLoading(true);
     try {
-      const data = await questService.getAllQuests();
+      const data = await questService.getAllQuests(page, PAGE_SIZE);
       setQuests(data);
     } catch (err) {
       console.error('Error loading quests:', err);
@@ -66,6 +70,7 @@ export default function QuestsPage() {
       });
       setShowCreate(false);
       resetForm();
+      setPage(0);
       loadQuests();
     } catch (err) {
       console.error('Error creating quest:', err);
@@ -92,6 +97,9 @@ export default function QuestsPage() {
   function formatCurrency(centavos: number): string {
     return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
   }
+
+  const canGoPrev = page > 0;
+  const canGoNext = quests.length === PAGE_SIZE;
 
   const isExpired = (q: Quest) => new Date(q.end_date) < new Date();
   const isActive = (q: Quest) => q.is_active && !isExpired(q);
@@ -219,6 +227,35 @@ export default function QuestsPage() {
           ))}
         </div>
       )}
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between mt-6">
+        <button
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          disabled={!canGoPrev}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoPrev
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.previous')}
+        </button>
+        <span className="text-sm text-neutral-500">
+          {t('common.page')} {page + 1}
+        </span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          disabled={!canGoNext}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            canGoNext
+              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
+              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
+          }`}
+        >
+          {t('common.next')}
+        </button>
+      </div>
     </div>
   );
 }
