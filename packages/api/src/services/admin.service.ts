@@ -717,6 +717,31 @@ export const adminService = {
     };
   },
 
+  // ==================== SURGE PREDICTIONS ====================
+
+  async getSurgePredictions() {
+    const supabase = getSupabaseClient();
+    const now = new Date();
+    const dow = now.getDay();
+    const currentHour = now.getHours();
+
+    // Get predictions for next 6 hours
+    const hours = Array.from({ length: 6 }, (_, i) => (currentHour + i + 1) % 24);
+
+    const { data, error } = await supabase
+      .from('surge_predictions')
+      .select('*')
+      .eq('day_of_week', dow)
+      .in('hour_of_day', hours)
+      .gt('predicted_multiplier', 1.0)
+      .gte('confidence', 0.3)
+      .order('predicted_multiplier', { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+    return data ?? [];
+  },
+
   // ==================== LIVE MAP ====================
 
   async getOnlineDrivers() {
