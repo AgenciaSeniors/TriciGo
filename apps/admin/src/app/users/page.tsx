@@ -2,12 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { User } from '@tricigo/types';
 import type { UserRole } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -41,6 +44,7 @@ const EMPTY_FILTERS: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  const router = useRouter();
   const { t } = useTranslation('admin');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +111,8 @@ export default function UsersPage() {
     return () => { cancelled = true; };
   }, [page, roleFilter, advancedFilters]);
 
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(users, 'created_at');
+
   const canGoPrev = page > 0;
   const canGoNext = users.length === PAGE_SIZE;
 
@@ -155,9 +161,7 @@ export default function UsersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                {t('users.col_name')}
-              </th>
+              <SortableHeader label={t('users.col_name')} sortKey="full_name" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap" />
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
                 {t('users.col_phone')}
               </th>
@@ -167,9 +171,7 @@ export default function UsersPage() {
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('users.col_status')}
               </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                {t('users.col_registered')}
-              </th>
+              <SortableHeader label={t('users.col_registered')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
                 {t('common.actions')}
               </th>
@@ -182,17 +184,18 @@ export default function UsersPage() {
                   {t('common.loading')}
                 </td>
               </tr>
-            ) : users.length === 0 ? (
+            ) : sortedData.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
                   {t('users.no_users')}
                 </td>
               </tr>
             ) : (
-              users.map((user) => (
+              sortedData.map((user) => (
                 <tr
                   key={user.id}
-                  className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"
+                  className="border-b border-neutral-50 hover:bg-neutral-50 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/users/${user.id}`)}
                 >
                   <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
                     {user.full_name}

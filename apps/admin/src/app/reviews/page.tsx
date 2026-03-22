@@ -6,6 +6,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -228,6 +230,8 @@ export default function ReviewsPage() {
     }
   };
 
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(reviews, 'created_at');
+
   const canGoPrev = page > 0;
   const canGoNext = reviews.length === PAGE_SIZE;
 
@@ -311,10 +315,10 @@ export default function ReviewsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-neutral-500">
-                <th className="pb-3 pr-4">{t('reviews.col_date')}</th>
+                <SortableHeader label={t('reviews.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="pb-3 pr-4" />
                 <th className="pb-3 pr-4">{t('reviews.col_reviewer')}</th>
                 <th className="pb-3 pr-4">{t('reviews.col_reviewee')}</th>
-                <th className="pb-3 pr-4">{t('reviews.col_rating')}</th>
+                <SortableHeader label={t('reviews.col_rating')} sortKey="rating" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="pb-3 pr-4" />
                 <th className="pb-3 pr-4">{t('reviews.col_comment')}</th>
                 <th className="pb-3 pr-4">{t('reviews.col_tags')}</th>
                 <th className="pb-3 pr-4">{t('reviews.col_status')}</th>
@@ -322,7 +326,7 @@ export default function ReviewsPage() {
               </tr>
             </thead>
             <tbody>
-              {reviews.map((review) => (
+              {sortedData.map((review) => (
                 <tr key={review.id} className="border-b hover:bg-neutral-50">
                   <td className="py-3 pr-4 text-neutral-500 text-xs whitespace-nowrap">
                     {formatDate(review.created_at)}

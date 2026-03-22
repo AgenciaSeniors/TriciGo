@@ -7,6 +7,8 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -91,6 +93,8 @@ export default function ReferralsPage() {
   const conversionRate =
     stats.total > 0 ? ((stats.rewarded / stats.total) * 100).toFixed(1) : '0';
 
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(referrals, 'created_at');
+
   const canGoPrev = page > 0;
   const canGoNext = referrals.length === PAGE_SIZE;
 
@@ -166,14 +170,14 @@ export default function ReferralsPage() {
                 <th className="pb-3 pr-4">{t('referrals.col_referrer')}</th>
                 <th className="pb-3 pr-4">{t('referrals.col_referee')}</th>
                 <th className="pb-3 pr-4">{t('referrals.col_code')}</th>
-                <th className="pb-3 pr-4">{t('referrals.col_status')}</th>
+                <SortableHeader label={t('referrals.col_status')} sortKey="status" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="pb-3 pr-4" />
                 <th className="pb-3 pr-4">{t('referrals.col_bonus')}</th>
-                <th className="pb-3 pr-4">{t('referrals.col_date')}</th>
+                <SortableHeader label={t('referrals.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="pb-3 pr-4" />
                 <th className="pb-3">{t('referrals.col_actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {referrals.map((ref) => (
+              {sortedData.map((ref) => (
                 <tr key={ref.id} className="border-b hover:bg-neutral-50">
                   <td className="py-3 pr-4 font-mono text-xs">
                     {ref.referrer_id.substring(0, 8)}...

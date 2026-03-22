@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { DriverProfileWithUser } from '@tricigo/types';
@@ -9,6 +10,8 @@ import type { DriverStatus } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -54,6 +57,7 @@ const EMPTY_FILTERS: Record<string, string> = {
 };
 
 export default function DriversPage() {
+  const router = useRouter();
   const { t } = useTranslation('admin');
   const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,6 +142,8 @@ export default function DriversPage() {
     return () => { cancelled = true; };
   }, [page, statusFilter, advancedFilters, selectedCity]);
 
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(drivers, 'created_at');
+
   const canGoPrev = page > 0;
   const canGoNext = drivers.length === PAGE_SIZE;
 
@@ -204,9 +210,9 @@ export default function DriversPage() {
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_name')}</th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_phone')}</th>
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_vehicle')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_status')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_rating')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_registered')}</th>
+              <SortableHeader label={t('drivers.col_status')} sortKey="status" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap" />
+              <SortableHeader label={t('drivers.col_rating')} sortKey="rating_avg" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
+              <SortableHeader label={t('drivers.col_registered')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
               <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
             </tr>
           </thead>
@@ -217,19 +223,20 @@ export default function DriversPage() {
                   {t('common.loading')}
                 </td>
               </tr>
-            ) : drivers.length === 0 ? (
+            ) : sortedData.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-neutral-400">
                   {t('drivers.no_drivers')}
                 </td>
               </tr>
             ) : (
-              drivers.map((driver) => {
+              sortedData.map((driver) => {
                 const vehicle = driver.vehicles?.[0];
                 return (
                   <tr
                     key={driver.id}
-                    className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"
+                    className="border-b border-neutral-50 hover:bg-neutral-50 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/drivers/${driver.id}`)}
                   >
                     <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
                       {driver.users.full_name || '—'}

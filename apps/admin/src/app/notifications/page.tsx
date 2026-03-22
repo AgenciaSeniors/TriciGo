@@ -8,6 +8,8 @@ import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 type NotificationLog = {
   id: string;
@@ -55,6 +57,7 @@ export default function NotificationsPage() {
   // History state
   const [history, setHistory] = useState<NotificationLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const { sortedData: sortedHistory, toggleSort, sortKey, sortDirection } = useSortableTable(history, 'created_at');
 
   // Inbox stats state
   const [inboxStats, setInboxStats] = useState<{
@@ -394,7 +397,7 @@ export default function NotificationsPage() {
                   </thead>
                   <tbody>
                     {inboxStats.recent.map((n) => (
-                      <tr key={n.id} className="border-b border-neutral-50">
+                      <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                         <td className="px-3 py-2 text-xs text-neutral-600">{formatDate(n.created_at)}</td>
                         <td className="px-3 py-2">
                           <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-600">
@@ -438,15 +441,15 @@ export default function NotificationsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neutral-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_date')}</th>
+                  <SortableHeader label={t('notifications.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 text-xs font-semibold text-neutral-500" />
                   <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_title')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_audience')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_sent')}</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((n) => (
-                  <tr key={n.id} className="border-b border-neutral-50">
+                {sortedHistory.map((n) => (
+                  <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                     <td className="px-4 py-3 text-sm text-neutral-600">
                       {formatDate(n.created_at)}
                     </td>

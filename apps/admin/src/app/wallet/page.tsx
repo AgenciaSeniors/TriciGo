@@ -8,6 +8,8 @@ import { useAdminUser } from '@/lib/useAdminUser';
 import type { LedgerTransaction, PaymentIntent, WalletRedemption, WalletRechargeRequest } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -39,6 +41,11 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [processing, setProcessing] = useState<string | null>(null);
+
+  const { sortedData: sortedRedemptions, toggleSort: toggleSortRedemptions, sortKey: sortKeyRedemptions, sortDirection: sortDirRedemptions } = useSortableTable(redemptions, 'requested_at' as keyof RedemptionRow);
+  const { sortedData: sortedRecharges, toggleSort: toggleSortRecharges, sortKey: sortKeyRecharges, sortDirection: sortDirRecharges } = useSortableTable(recharges, 'created_at' as keyof RechargeRow);
+  const { sortedData: sortedTransactions, toggleSort: toggleSortTransactions, sortKey: sortKeyTransactions, sortDirection: sortDirTransactions } = useSortableTable(transactions, 'created_at' as keyof LedgerTransaction);
+  const { sortedData: sortedTropipay, toggleSort: toggleSortTropipay, sortKey: sortKeyTropipay, sortDirection: sortDirTropipay } = useSortableTable(tropipayIntents, 'created_at' as keyof TropiPayRow);
 
   // Fetch stats on mount
   useEffect(() => {
@@ -224,20 +231,20 @@ export default function WalletPage() {
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_driver')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <SortableHeader label={t('wallet_admin.col_amount')} sortKey="amount" currentSortKey={sortKeyRedemptions as string | null} sortDirection={sortDirRedemptions} onSort={toggleSortRedemptions as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
+                <SortableHeader label={t('wallet_admin.col_date')} sortKey="requested_at" currentSortKey={sortKeyRedemptions as string | null} sortDirection={sortDirRedemptions} onSort={toggleSortRedemptions as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {redemptions.length === 0 ? (
+              {sortedRedemptions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
                     {loading ? t('common.loading') : t('wallet_admin.no_redemptions')}
                   </td>
                 </tr>
               ) : (
-                redemptions.map((r) => (
+                sortedRedemptions.map((r) => (
                   <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                     <td className="px-4 py-3 font-medium text-neutral-900">
                       {r.driver_name}
@@ -276,20 +283,20 @@ export default function WalletPage() {
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_user')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <SortableHeader label={t('wallet_admin.col_amount')} sortKey="amount" currentSortKey={sortKeyRecharges as string | null} sortDirection={sortDirRecharges} onSort={toggleSortRecharges as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
+                <SortableHeader label={t('wallet_admin.col_date')} sortKey="created_at" currentSortKey={sortKeyRecharges as string | null} sortDirection={sortDirRecharges} onSort={toggleSortRecharges as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {recharges.length === 0 ? (
+              {sortedRecharges.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
                     {loading ? t('common.loading') : t('wallet_admin.no_recharges')}
                   </td>
                 </tr>
               ) : (
-                recharges.map((r) => (
+                sortedRecharges.map((r) => (
                   <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                     <td className="px-4 py-3 font-medium text-neutral-900">
                       {r.user_name}
@@ -330,18 +337,18 @@ export default function WalletPage() {
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_description')}</th>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_type')}</th>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_ref')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <SortableHeader label={t('wallet_admin.col_date')} sortKey="created_at" currentSortKey={sortKeyTransactions as string | null} sortDirection={sortDirTransactions} onSort={toggleSortTransactions as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
               </tr>
             </thead>
             <tbody>
-              {transactions.length === 0 ? (
+              {sortedTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="text-center py-12 text-neutral-400">
                     {loading ? t('common.loading') : t('wallet_admin.no_ledger')}
                   </td>
                 </tr>
               ) : (
-                transactions.map((tx) => (
+                sortedTransactions.map((tx) => (
                   <tr key={tx.id} className="border-b border-neutral-50 hover:bg-neutral-50">
                     <td className="px-4 py-3 text-neutral-900">{tx.description}</td>
                     <td className="px-4 py-3">
@@ -365,22 +372,22 @@ export default function WalletPage() {
             <thead className="bg-neutral-50 border-b border-neutral-100">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_user')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_amount')}</th>
+                <SortableHeader label={t('wallet_admin.col_amount')} sortKey="amount_cup" currentSortKey={sortKeyTropipay as string | null} sortDirection={sortDirTropipay} onSort={toggleSortTropipay as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_usd_amount')}</th>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('wallet_admin.col_status')}</th>
                 <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_reference')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('wallet_admin.col_date')}</th>
+                <SortableHeader label={t('wallet_admin.col_date')} sortKey="created_at" currentSortKey={sortKeyTropipay as string | null} sortDirection={sortDirTropipay} onSort={toggleSortTropipay as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
               </tr>
             </thead>
             <tbody>
-              {tropipayIntents.length === 0 ? (
+              {sortedTropipay.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-neutral-400">
                     {loading ? t('common.loading') : t('wallet_admin.tropipay_no_intents')}
                   </td>
                 </tr>
               ) : (
-                tropipayIntents.map((pi) => {
+                sortedTropipay.map((pi) => {
                   const statusColors: Record<string, string> = {
                     created: 'bg-neutral-100 text-neutral-700',
                     pending: 'bg-yellow-100 text-yellow-700',

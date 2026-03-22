@@ -8,6 +8,7 @@ import { useAdminUser } from '@/lib/useAdminUser';
 import { formatTRC } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
 
 const statusBadge: Record<string, string> = {
   open: 'bg-blue-50 text-blue-700',
@@ -179,6 +180,8 @@ export default function DisputesPage() {
     }
   };
 
+  const { sortedData: sortedDisputes, toggleSort, sortKey, sortDirection } = useSortableTable(disputes, 'created_at');
+
   const FILTER_TABS = ['all', 'open', 'under_review', 'awaiting_response', 'resolved', 'denied'] as const;
 
   return (
@@ -214,12 +217,12 @@ export default function DisputesPage() {
         {/* Dispute list */}
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
           <div className="max-h-[650px] overflow-y-auto">
-            {disputes.length === 0 ? (
+            {sortedDisputes.length === 0 ? (
               <div className="text-center py-12 text-neutral-400">
                 {loading ? t('common.loading') : t('disputes.no_disputes')}
               </div>
             ) : (
-              disputes.map((dispute) => {
+              sortedDisputes.map((dispute) => {
                 const sla = getSlaStatus(dispute.sla_resolution_deadline);
                 return (
                   <button

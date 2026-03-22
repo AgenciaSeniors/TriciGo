@@ -6,6 +6,7 @@ import { questService } from '@tricigo/api/services/quest';
 import type { Quest } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
 
 const QUEST_TYPES = ['trip_count', 'earnings', 'rating', 'hours_online', 'peak_hours'] as const;
 
@@ -103,6 +104,8 @@ export default function QuestsPage() {
   function formatCurrency(centavos: number): string {
     return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
   }
+
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(quests, 'start_date');
 
   const canGoPrev = page > 0;
   const canGoNext = quests.length === PAGE_SIZE;
@@ -205,8 +208,17 @@ export default function QuestsPage() {
       ) : quests.length === 0 ? (
         <p className="text-neutral-400">{t('quests.no_quests', { defaultValue: 'No hay misiones creadas' })}</p>
       ) : (
+        <>
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => toggleSort('start_date' as keyof Quest)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortKey === 'start_date' ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
+            {t('quests.sort_date', { defaultValue: 'Fecha' })} {sortKey === 'start_date' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+          </button>
+          <button onClick={() => toggleSort('is_active' as keyof Quest)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${sortKey === 'is_active' ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
+            {t('quests.sort_status', { defaultValue: 'Estado' })} {sortKey === 'is_active' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+          </button>
+        </div>
         <div className="space-y-3">
-          {quests.map((q) => (
+          {sortedData.map((q) => (
             <div key={q.id} className="bg-white rounded-xl shadow-sm border border-neutral-100 p-5 flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
@@ -240,6 +252,7 @@ export default function QuestsPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {/* Pagination */}

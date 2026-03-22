@@ -9,6 +9,8 @@ import type { Ride } from '@tricigo/types';
 import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useSortableTable } from '@/hooks/useSortableTable';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 const PAGE_SIZE = 20;
 
@@ -147,6 +149,8 @@ export default function RidesPage() {
     return () => { cancelled = true; };
   }, [page, statusFilter, advancedFilters, selectedCity]);
 
+  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(rides, 'created_at');
+
   const canGoPrev = page > 0;
   const canGoNext = rides.length === PAGE_SIZE;
 
@@ -208,22 +212,22 @@ export default function RidesPage() {
           <thead className="bg-neutral-50 border-b border-neutral-100">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_route')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_status')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_fare')}</th>
+              <SortableHeader label={t('rides.col_status')} sortKey="status" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
+              <SortableHeader label={t('rides.col_fare')} sortKey="estimated_fare_cup" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
               <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_distance')}</th>
               <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_payment')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_date')}</th>
+              <SortableHeader label={t('rides.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
             </tr>
           </thead>
           <tbody>
-            {rides.length === 0 ? (
+            {sortedData.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-neutral-400">
                   {loading ? t('common.loading') : t('rides.no_rides')}
                 </td>
               </tr>
             ) : (
-              rides.map((ride) => (
+              sortedData.map((ride) => (
                 <tr key={ride.id} className="border-b border-neutral-50 hover:bg-neutral-50 cursor-pointer" onClick={() => router.push(`/rides/${ride.id}`)}>
                   <td className="px-4 py-3">
                     <div className="text-neutral-900">{truncate(ride.pickup_address, 25)}</div>
