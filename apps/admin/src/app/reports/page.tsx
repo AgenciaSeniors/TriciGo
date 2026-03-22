@@ -27,6 +27,19 @@ type PaymentData = { payment_method: string; count: number; revenue: number };
 type HourData = { hour: number; avg_rides: number };
 type DriverData = { driver_id: string; driver_name: string; rides_count: number; rating: number; revenue: number };
 type UtilData = { online: number; busy: number; idle: number; offline: number };
+type ForecastDay = { day: string; revenue: number; predicted: boolean };
+
+function linearRegression(data: { x: number; y: number }[]) {
+  const n = data.length;
+  if (n < 2) return { slope: 0, intercept: 0 };
+  const sumX = data.reduce((s, d) => s + d.x, 0);
+  const sumY = data.reduce((s, d) => s + d.y, 0);
+  const sumXY = data.reduce((s, d) => s + d.x * d.y, 0);
+  const sumXX = data.reduce((s, d) => s + d.x * d.x, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
 
 const PERIOD_OPTIONS = [
   { label: '7d', value: 7 },
@@ -159,6 +172,41 @@ export default function ReportsPage() {
   // Revenue trend helpers
   const maxRevenue = Math.max(...ridesByDay.map((d) => d.revenue), 1);
   const maxRides = Math.max(...ridesByDay.map((d) => d.total), 1);
+
+  // Revenue Forecast — linear regression on last 30 days, project next 7
+  const forecastData: ForecastDay[] = (() => {
+    if (ridesByDay.length < 2) return [];
+    const regressionInput = ridesByDay.map((d, i) => ({ x: i, y: d.revenue }));
+    const { slope, intercept } = linearRegression(regressionInput);
+
+    const actual: ForecastDay[] = ridesByDay.map((d) => ({
+      day: d.day,
+      revenue: d.revenue,
+      predicted: false,
+    }));
+
+    const lastDay = ridesByDay[ridesByDay.length - 1];
+    const lastDate = lastDay ? new Date(lastDay.day) : new Date();
+    const n = ridesByDay.length;
+
+    const predicted: ForecastDay[] = Array.from({ length: 7 }, (_, i) => {
+      const futureDate = new Date(lastDate);
+      futureDate.setDate(futureDate.getDate() + i + 1);
+      const predictedRevenue = Math.max(0, slope * (n + i) + intercept);
+      return {
+        day: futureDate.toISOString().split('T')[0]!,
+        revenue: predictedRevenue,
+        predicted: true,
+      };
+    });
+
+    return [...actual, ...predicted];
+  })();
+
+  const forecastTotal = forecastData
+    .filter((d) => d.predicted)
+    .reduce((sum, d) => sum + d.revenue, 0);
+  const maxForecastRevenue = Math.max(...forecastData.map((d) => d.revenue), 1);
 
   // Peak hours helpers
   const maxAvgRides = Math.max(...peakHours.map((h) => h.avg_rides), 1);
@@ -338,6 +386,71 @@ export default function ReportsPage() {
               <span>{ridesByDay[ridesByDay.length - 1]?.day ? new Date(ridesByDay[ridesByDay.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' }) : ''}</span>
             </div>
           </section>
+
+          {/* Revenue Forecast */}
+          {forecastData.length > 0 && (
+            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-neutral-800">{t('reports.revenue_forecast')}</h2>
+                <div className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">
+                  {t('reports.prediction_next_7_days')}: {forecastTotal.toFixed(1)} TRC
+                </div>
+              </div>
+              <div className="flex items-end gap-[2px] h-40">
+                {forecastData.map((d) => (
+                  <div
+                    key={d.day}
+                    className="flex-1 group relative"
+                    title={`${d.day}: ${d.revenue.toFixed(1)} TRC ${d.predicted ? `(${t('reports.predicted')})` : `(${t('reports.actual')})`}`}
+                  >
+                    <div
+                      className={`w-full rounded-t-sm transition-all ${
+                        d.predicted
+                          ? 'bg-primary-300/50 hover:bg-primary-400/60'
+                          : 'bg-primary-500/80 hover:bg-primary-600'
+                      }`}
+                      style={{
+                        height: `${Math.max((d.revenue / maxForecastRevenue) * 100, 2)}%`,
+                        backgroundImage: d.predicted
+                          ? 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.3) 3px, rgba(255,255,255,0.3) 6px)'
+                          : undefined,
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-neutral-400">
+                <span>
+                  {forecastData[0]?.day
+                    ? new Date(forecastData[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' })
+                    : ''}
+                </span>
+                <span className="text-primary-400 font-medium">← {t('reports.predicted')} →</span>
+                <span>
+                  {forecastData[forecastData.length - 1]?.day
+                    ? new Date(forecastData[forecastData.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' })
+                    : ''}
+                </span>
+              </div>
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-3 text-xs text-neutral-500">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-primary-500/80" />
+                  <span>{t('reports.actual')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="w-3 h-3 rounded-sm bg-primary-300/50"
+                    style={{
+                      backgroundImage:
+                        'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 4px)',
+                    }}
+                  />
+                  <span>{t('reports.predicted')}</span>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Two-column grid: Service Type + Payment Method */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

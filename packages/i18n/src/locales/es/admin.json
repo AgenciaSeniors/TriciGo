@@ -69,7 +69,8 @@
     "reviews": "Rese\u00f1as",
     "cities": "Ciudades",
     "segments": "Segmentos",
-    "campaigns": "Campa\u00f1as"
+    "campaigns": "Campa\u00f1as",
+    "funnel": "Conversión"
   },
 
   "referrals": {
@@ -506,7 +507,23 @@
     "health_active_rides": "Viajes Activos",
     "health_online_drivers": "Conductores en Línea",
     "health_operational": "Operativo",
-    "health_down": "Caído"
+    "health_down": "Caído",
+    "revenue_forecast": "Pronóstico de Ingresos",
+    "prediction_next_7_days": "Predicción próximos 7 días",
+    "actual": "Real",
+    "predicted": "Proyectado"
+  },
+
+  "funnel": {
+    "title": "Análisis de Conversión",
+    "sessions": "Sesiones",
+    "searches": "Búsquedas",
+    "requests": "Solicitudes",
+    "accepted": "Aceptados",
+    "completed": "Completados",
+    "conversion_rate": "Tasa de conversión",
+    "last_30_days": "Últimos 30 días",
+    "step": "Paso"
   },
 
   "login": {

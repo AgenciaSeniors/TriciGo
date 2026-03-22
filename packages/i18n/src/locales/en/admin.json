@@ -69,7 +69,8 @@
     "reviews": "Reviews",
     "cities": "Cities",
     "segments": "Segments",
-    "campaigns": "Campaigns"
+    "campaigns": "Campaigns",
+    "funnel": "Conversion"
   },
 
   "referrals": {
@@ -506,7 +507,23 @@
     "health_active_rides": "Active Rides",
     "health_online_drivers": "Online Drivers",
     "health_operational": "Operational",
-    "health_down": "Down"
+    "health_down": "Down",
+    "revenue_forecast": "Revenue Forecast",
+    "prediction_next_7_days": "Prediction next 7 days",
+    "actual": "Actual",
+    "predicted": "Predicted"
+  },
+
+  "funnel": {
+    "title": "Conversion Analysis",
+    "sessions": "Sessions",
+    "searches": "Searches",
+    "requests": "Requests",
+    "accepted": "Accepted",
+    "completed": "Completed",
+    "conversion_rate": "Conversion rate",
+    "last_30_days": "Last 30 days",
+    "step": "Step"
   },
 
   "login": {

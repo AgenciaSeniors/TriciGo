@@ -26,6 +26,7 @@ import {
   Newspaper,
   Building2,
   Megaphone,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -60,6 +61,7 @@ const navItems: NavItem[] = [
   { href: '/quests', labelKey: 'sidebar.quests', icon: Trophy },
   { href: '/audit', labelKey: 'sidebar.audit', icon: ClipboardList },
   { href: '/reports', labelKey: 'sidebar.reports', icon: BarChart3 },
+  { href: '/funnel', labelKey: 'sidebar.funnel', icon: TrendingUp },
   { href: '/settings/cities', labelKey: 'sidebar.cities', icon: MapPin },
   { href: '/settings', labelKey: 'sidebar.settings', icon: Settings },
 ];
