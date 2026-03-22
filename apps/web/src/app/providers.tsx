@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { initI18n } from '@tricigo/i18n';
-import { createBrowserClient } from '@/lib/supabase';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 

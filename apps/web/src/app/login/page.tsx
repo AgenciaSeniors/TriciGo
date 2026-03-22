@@ -1,26 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createBrowserClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@tricigo/api';
+import { useAuth } from '../providers';
 
 type Step = 'phone' | 'otp';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('+53');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Redirect to /book if already logged in
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/book');
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || isAuthenticated) {
+    return (
+      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa' }}>
+        <p style={{ color: '#888', fontSize: '0.9rem' }}>Cargando...</p>
+      </main>
+    );
+  }
+
   async function handleSendOtp() {
     if (phone.length < 8) return;
     setLoading(true);
     setError(null);
     try {
-      const supabase = createBrowserClient();
+      const supabase = getSupabaseClient();
       const { error: otpError } = await supabase.functions.invoke('send-sms-otp', {
         body: { phone },
       });
@@ -39,7 +56,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createBrowserClient();
+      const supabase = getSupabaseClient();
       const { data, error: verifyError } = await supabase.functions.invoke('verify-whatsapp-otp', {
         body: { phone, code: otp },
       });
@@ -64,7 +81,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createBrowserClient();
+      const supabase = getSupabaseClient();
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -84,7 +101,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createBrowserClient();
+      const supabase = getSupabaseClient();
       const { error: appleError } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
