@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
 import { colors } from '@tricigo/theme';
@@ -87,6 +88,7 @@ function NativeRidesScreen() {
   const [rides, setRides] = useState<Ride[]>([]);
   const [scheduledRides, setScheduledRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
   const [filters, setFilters] = useState<HistoryFilterState>({});
@@ -151,6 +153,7 @@ function NativeRidesScreen() {
         }
       } catch (err) {
         console.error('Error fetching rides:', err);
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Error desconocido');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -209,6 +212,7 @@ function NativeRidesScreen() {
       setRides(history);
     } catch (err) {
       console.error('Error refreshing rides:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setRefreshing(false);
     }
@@ -305,7 +309,17 @@ function NativeRidesScreen() {
           </View>
         )}
 
-        {loading && page === 0 ? (
+        {error && !loading ? (
+          <ErrorState
+            title={t('rides_history.error_title', { defaultValue: 'Error al cargar viajes' })}
+            description={error}
+            onRetry={() => {
+              setError(null);
+              setPage(0);
+            }}
+            retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
+          />
+        ) : loading && page === 0 ? (
           <View className="items-center py-20">
             <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>

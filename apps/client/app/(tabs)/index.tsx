@@ -12,6 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import { formatTRC, triggerSelection, triggerHaptic } from '@tricigo/utils';
+import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -27,6 +28,7 @@ import { RideMapView } from '@/components/RideMapView';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { Skeleton, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { FareBreakdownCard } from '@tricigo/ui/FareBreakdownCard';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { colors } from '@tricigo/theme';
@@ -198,6 +200,8 @@ function IdleView() {
   const user = useAuthStore((s) => s.user);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState(0);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
@@ -208,6 +212,18 @@ function IdleView() {
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
 
+  // Check location permission on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') setLocationDenied(true);
+      } catch {
+        // Silently ignore — don't crash
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
@@ -217,9 +233,16 @@ function IdleView() {
         const bal = await walletService.getBalance(user.id);
         if (!cancelled) setWalletBalance(bal.available);
       } catch (err) { console.warn('[Home] Failed to load wallet:', err); }
+      if (!cancelled) setInitialLoading(false);
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // Fallback timeout for loading state
+  useEffect(() => {
+    const timer = setTimeout(() => setInitialLoading(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Fetch unread count + subscribe to realtime notifications
   useEffect(() => {
@@ -245,8 +268,42 @@ function IdleView() {
     setFlowStep('selecting');
   }, [setDropoff, setFlowStep]);
 
+  if (initialLoading) {
+    return (
+      <View className="pt-4">
+        <Skeleton width="60%" height={28} className="mb-4" />
+        <Skeleton width="40%" height={20} className="mb-6" />
+        <SkeletonCard className="mb-4" />
+        <Skeleton width="100%" height={52} className="rounded-xl mb-4" />
+        <SkeletonCard className="mb-4" />
+      </View>
+    );
+  }
+
   return (
     <View className="pt-4">
+      {/* Location permission denied banner */}
+      {locationDenied && (
+        <Pressable
+          onPress={async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status === 'granted') setLocationDenied(false);
+          }}
+          className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4 flex-row items-center"
+        >
+          <Ionicons name="location-outline" size={20} color="#D97706" />
+          <View className="flex-1 ml-3">
+            <Text variant="bodySmall" className="font-semibold text-yellow-800">
+              {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
+            </Text>
+            <Text variant="caption" className="text-yellow-700">
+              {t('home.location_denied_msg', { defaultValue: 'Activa la ubicación para encontrar conductores cercanos.' })}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#D97706" />
+        </Pressable>
+      )}
+
       <View className="flex-row items-center justify-between mb-1">
         <Text variant="h3">
           {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}

@@ -13,6 +13,8 @@ import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
+import { EmptyState } from '@tricigo/ui/EmptyState';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
@@ -92,6 +94,7 @@ function NativeTripsScreen() {
 
   const [trips, setTrips] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<HistoryFilterState>({});
@@ -139,6 +142,7 @@ function NativeTripsScreen() {
         }
       } catch (err) {
         console.error('Error fetching trips:', err);
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Error desconocido');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -195,6 +199,7 @@ function NativeTripsScreen() {
       setPage(0);
     } catch (err) {
       console.error('Error refreshing trips:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setRefreshing(false);
     }
@@ -263,7 +268,17 @@ function NativeTripsScreen() {
           dark
         />
 
-        {loading && page === 0 ? (
+        {error && !loading ? (
+          <ErrorState
+            title={t('trips_history.error_title', { defaultValue: 'Error al cargar viajes' })}
+            description={error}
+            onRetry={() => {
+              setError(null);
+              setPage(0);
+            }}
+            retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
+          />
+        ) : loading && page === 0 ? (
           <View className="items-center py-20">
             <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>
@@ -281,11 +296,10 @@ function NativeTripsScreen() {
               />
             }
             ListEmptyComponent={
-              <View className="items-center py-20">
-                <Text variant="body" color="inverse" className="opacity-50">
-                  {t('trips_history.no_trips')}
-                </Text>
-              </View>
+              <EmptyState
+                icon="car-outline"
+                title={t('trips_history.no_trips')}
+              />
             }
             ListFooterComponent={
               trips.length >= (page + 1) * PAGE_SIZE ? (

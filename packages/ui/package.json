@@ -13,6 +13,7 @@
     "./ETABadge": "./src/ETABadge.tsx",
     "./EmptyState": "./src/EmptyState.tsx",
     "./ErrorBoundary": "./src/ErrorBoundary.tsx",
+    "./ErrorState": "./src/ErrorState.tsx",
     "./FareBreakdownCard": "./src/FareBreakdownCard.tsx",
     "./HistoryFilters": "./src/HistoryFilters.tsx",
     "./IconButton": "./src/IconButton.tsx",
@@ -25,6 +26,8 @@
     "./StatusBadge": "./src/StatusBadge.tsx",
     "./StatusStepper": "./src/StatusStepper.tsx",
     "./Text": "./src/Text.tsx",
+    "./Skeleton": "./src/Skeleton.tsx",
+    "./AnimatedCard": "./src/AnimatedCard.tsx",
     "./hooks/useResponsive": "./src/hooks/useResponsive.ts"
   },
   "dependencies": {

@@ -6,7 +6,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, trackEvent } from '@tricigo/utils';
+import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { rideService, notificationService, useFeatureFlag, getSupabaseClient } from '@tricigo/api';
@@ -102,6 +102,7 @@ export function RideCompleteView() {
     try {
       await rideService.addTip(activeRide.id, userId, amount);
       setTipSent(true);
+      triggerHaptic('success');
       Toast.show({ type: 'success', text1: t('ride.tip_sent_confirmation') });
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('common.error');
@@ -124,6 +125,7 @@ export function RideCompleteView() {
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       });
       setSubmitted(true);
+      triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
       setTimeout(() => resetAll(), 1500);
     } catch (err) {

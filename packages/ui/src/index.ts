@@ -34,6 +34,9 @@ export type { RouteSummaryProps } from './RouteSummary';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
+export { ErrorState } from './ErrorState';
+export type { ErrorStateProps } from './ErrorState';
+
 export { ScreenHeader } from './ScreenHeader';
 export type { ScreenHeaderProps } from './ScreenHeader';
 

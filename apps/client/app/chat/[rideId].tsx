@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   FlatList,
@@ -6,10 +6,12 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -19,6 +21,8 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { IconButton } from '@tricigo/ui/IconButton';
 import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
 import { getQuickRepliesForRole } from '@tricigo/utils';
+import { colors } from '@tricigo/theme';
+import NetInfo from '@react-native-community/netinfo';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -26,12 +30,34 @@ export default function ChatScreen() {
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
   const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
   const remoteTyping = useChatStore((s) => s.remoteTyping);
 
   useChatInit(rideId!);
   const { sendMessage, notifyTyping } = useChatActions(rideId!);
+
+  // Track loading state — messages arrive via store
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Clear loading once messages arrive
+  useEffect(() => {
+    if (messages.length > 0) setLoading(false);
+  }, [messages]);
+
+  // Network connectivity monitor
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!(state.isConnected ?? true));
+    });
+    return () => unsubscribe();
+  }, []);
 
   const quickReplies = getQuickRepliesForRole('rider').map((qr) => ({
     key: qr.key,
@@ -100,7 +126,32 @@ export default function ChatScreen() {
           />
         </View>
 
+        {/* Offline banner */}
+        {isOffline && (
+          <View className="bg-red-500 px-4 py-2">
+            <Text variant="caption" color="inverse" className="text-center">
+              {t('chat.offline_banner', { defaultValue: 'Sin conexión. Los mensajes se enviarán cuando vuelvas a estar en línea.' })}
+            </Text>
+          </View>
+        )}
+
         {/* Messages */}
+        {loading ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="large" color={colors.brand.orange} />
+          </View>
+        ) : error ? (
+          <ErrorState
+            title={t('chat.error_title', { defaultValue: 'Error al cargar mensajes' })}
+            description={error}
+            onRetry={() => {
+              setError(null);
+              setLoading(true);
+              setTimeout(() => setLoading(false), 1500);
+            }}
+            retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
+          />
+        ) : (
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -119,6 +170,7 @@ export default function ChatScreen() {
             flatListRef.current?.scrollToEnd({ animated: true })
           }
         />
+        )}
 
         {/* Typing indicator */}
         {remoteTyping && (
