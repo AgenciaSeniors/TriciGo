@@ -47,29 +47,7 @@ type SelectionStep = 'pickup' | 'dropoff' | 'done';
 export default function BookPage() {
   const router = useRouter();
   const { t } = useTranslation('web');
-  const { isAuthenticated, isLoading } = useAuth();
-
-  /* ─── Auth gate ─── */
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isLoading, isAuthenticated, router]);
-
-  if (isLoading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d1a' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
-            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
-          </div>
-          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) return null;
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   /* ─── Location state ─── */
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
@@ -299,6 +277,25 @@ export default function BookPage() {
     } finally {
       setIsRequesting(false);
     }
+  }
+
+  /* ─── Auth gate (after all hooks) ─── */
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d1a' }}>
+        <div style={{ textAlign: 'center', color: '#999' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    router.replace('/login');
+    return null;
   }
 
   return (
