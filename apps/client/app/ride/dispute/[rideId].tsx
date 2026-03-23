@@ -10,6 +10,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { disputeService, getSupabaseClient } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
 import { colors } from '@tricigo/theme';
@@ -125,8 +126,8 @@ export default function DisputeFormScreen() {
         evidence_urls: evidenceUrls,
       });
       setSubmitted(true);
-    } catch (err: any) {
-      Alert.alert(t('common.error'), err?.message ?? 'Error');
+    } catch (err: unknown) {
+      Alert.alert(t('common.error'), getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

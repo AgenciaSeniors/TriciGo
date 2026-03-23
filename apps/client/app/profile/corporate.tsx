@@ -8,7 +8,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useRouter } from 'expo-router';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -81,8 +81,7 @@ export default function CorporateProfileScreen() {
       setNewRole('employee');
       await loadEmployees(expandedAccountId);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('common:errors.generic', { defaultValue: 'Error' });
-      Alert.alert(t('common:error', { defaultValue: 'Error' }), msg);
+      Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
       setAddingEmployee(false);
     }
@@ -103,7 +102,7 @@ export default function CorporateProfileScreen() {
               await corporateService.removeEmployee(expandedAccountId, empUserId);
               await loadEmployees(expandedAccountId);
             } catch {
-              Alert.alert(t('common:error', { defaultValue: 'Error' }), t('common:errors.generic', { defaultValue: 'No se pudo completar la acción' }));
+              Alert.alert(t('common:error', { defaultValue: 'Error' }), t('common:errors.corporate_load_failed', { defaultValue: 'Error al cargar cuenta corporativa' }));
             }
           },
         },

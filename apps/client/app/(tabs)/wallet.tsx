@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic } from '@tricigo/utils';
+import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, getErrorMessage } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -250,7 +250,7 @@ function NativeWalletScreen() {
       Alert.alert(t('wallet.recharge'), t('wallet.recharge_success'));
     } catch (err) {
       console.error('Error requesting recharge:', err);
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.recharge_failed'));
     } finally {
       setRechargeSubmitting(false);
     }
@@ -281,7 +281,7 @@ function NativeWalletScreen() {
         Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
       }
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.transfer_failed'));
     } finally {
       setTransferSearching(false);
     }
@@ -311,8 +311,7 @@ function NativeWalletScreen() {
       Alert.alert(t('wallet.transfer'), t('wallet.transfer_success'));
       await fetchData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('errors.generic');
-      Alert.alert(t('error'), message);
+      Alert.alert(t('error'), getErrorMessage(err));
     } finally {
       setTransferSubmitting(false);
     }

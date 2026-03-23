@@ -8,6 +8,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { lostItemService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,11 +62,12 @@ export default function LostItemReportScreen() {
         photo_urls: [],
       });
       setSubmitted(true);
-    } catch (err: any) {
-      if (err?.message?.includes('duplicate') || err?.code === '23505') {
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown> | null;
+      if (typeof errObj?.message === 'string' && (errObj.message.includes('duplicate') || errObj?.code === '23505')) {
         Alert.alert(t('common.error'), t('lost_found.already_reported'));
       } else {
-        Alert.alert(t('common.error'), err?.message ?? 'Error');
+        Alert.alert(t('common.error'), getErrorMessage(err));
       }
     } finally {
       setSubmitting(false);

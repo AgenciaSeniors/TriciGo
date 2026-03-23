@@ -82,8 +82,8 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
         payment_method: paymentMethod,
       });
       onUpdated();
-    } catch (err: any) {
-      Alert.alert(t('common:error'), t('common:errors.generic'));
+    } catch {
+      Alert.alert(t('common:error'), t('common:errors.recurring_rides_failed'));
     } finally {
       setSaving(false);
     }

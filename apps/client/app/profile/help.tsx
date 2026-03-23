@@ -14,6 +14,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
@@ -61,7 +62,7 @@ export default function HelpScreen() {
       const data = await supportService.getUserTickets(userId);
       setTickets(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoadingTickets(false);
     }

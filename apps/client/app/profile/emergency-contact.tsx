@@ -8,7 +8,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService, trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone, getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CustomerProfile, TrustedContact } from '@tricigo/types';
@@ -35,7 +35,7 @@ export default function EmergencyContactScreen() {
         setPhone(cp.emergency_contact.phone);
         setRelationship(cp.emergency_contact.relationship);
       }
-    }).catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido'));
+    }).catch((err) => setError(getErrorMessage(err)));
 
     // Also check trusted_contacts for existing emergency contact
     trustedContactService.getContacts(user.id).then((contacts) => {
@@ -98,7 +98,7 @@ export default function EmergencyContactScreen() {
 
       router.back();
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.emergency_contact_failed'));
     } finally {
       setSaving(false);
     }

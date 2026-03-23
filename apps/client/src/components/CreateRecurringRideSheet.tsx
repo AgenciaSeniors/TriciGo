@@ -106,10 +106,11 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
       });
       resetForm();
       onCreated();
-    } catch (err: any) {
-      const msg = err?.message?.includes('max')
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown> | null;
+      const msg = typeof errObj?.message === 'string' && errObj.message.includes('max')
         ? t('recurring.max_reached')
-        : t('common:errors.generic');
+        : t('common:errors.recurring_rides_failed');
       Alert.alert(t('common:error'), msg);
     } finally {
       setSaving(false);

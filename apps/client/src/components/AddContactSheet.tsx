@@ -58,7 +58,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
       } else if (err?.code === '23505') {
         Alert.alert(t('error'), t('trusted_contacts.duplicate_phone'));
       } else {
-        Alert.alert(t('error'), t('errors.generic'));
+        Alert.alert(t('error'), t('errors.contacts_load_failed'));
       }
     } finally {
       setSaving(false);

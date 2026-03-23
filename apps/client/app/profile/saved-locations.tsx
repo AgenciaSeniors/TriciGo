@@ -12,6 +12,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
@@ -40,7 +41,7 @@ export default function SavedLocationsScreen() {
     customerService.ensureProfile(user.id).then((cp) => {
       setProfile(cp);
       setLocations(cp.saved_locations ?? []);
-    }).catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido')).finally(() => setLoading(false));
+    }).catch((err) => setError(getErrorMessage(err))).finally(() => setLoading(false));
   }, [user]);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export default function SavedLocationsScreen() {
       setSelectedAddress(null);
       setEditingIndex(null);
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.saved_locations_failed'));
     } finally {
       setSaving(false);
     }
@@ -93,7 +94,7 @@ export default function SavedLocationsScreen() {
             await customerService.updateProfile(profile.id, { saved_locations: updated });
             setLocations(updated);
           } catch {
-            Alert.alert(t('error'), t('errors.generic'));
+            Alert.alert(t('error'), t('errors.saved_locations_failed'));
           }
         },
       },

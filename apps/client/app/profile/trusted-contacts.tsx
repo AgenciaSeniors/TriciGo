@@ -11,6 +11,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { AddContactSheet } from '@/components/AddContactSheet';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -32,7 +33,7 @@ export default function TrustedContactsScreen() {
       const data = await trustedContactService.getContacts(user.id);
       setContacts(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -51,7 +52,7 @@ export default function TrustedContactsScreen() {
         prev.map((c) => (c.id === contact.id ? updated : c)),
       );
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.contacts_load_failed'));
     }
   };
 
@@ -69,7 +70,7 @@ export default function TrustedContactsScreen() {
               await trustedContactService.deleteContact(contact.id);
               setContacts((prev) => prev.filter((c) => c.id !== contact.id));
             } catch {
-              Alert.alert(t('error'), t('errors.generic'));
+              Alert.alert(t('error'), t('errors.contacts_load_failed'));
             }
           },
         },

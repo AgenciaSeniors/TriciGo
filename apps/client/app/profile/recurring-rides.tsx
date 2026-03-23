@@ -11,6 +11,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { recurringRideService, useFeatureFlag } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { RecurringRide } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
@@ -43,7 +44,7 @@ export default function RecurringRidesScreen() {
       const data = await recurringRideService.getRecurringRides(userId);
       setRides(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

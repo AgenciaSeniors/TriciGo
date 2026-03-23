@@ -1,9 +1,17 @@
 /**
  * Extract a user-friendly error message from any error object.
  * Distinguishes network errors, auth errors, validation errors, and server errors.
+ * Handles: Error instances, string errors, objects with message property,
+ * null/undefined, and any other unknown types.
  */
 export function getErrorMessage(err: unknown): string {
-  if (!err) return 'Error desconocido';
+  // Null / undefined / falsy
+  if (!err) return 'Error inesperado. Intenta de nuevo.';
+
+  // Plain string errors
+  if (typeof err === 'string') {
+    return err.length > 0 && err.length < 300 ? err : 'Error inesperado. Intenta de nuevo.';
+  }
 
   // Network errors (no internet)
   if (err instanceof TypeError && err.message === 'Failed to fetch') {
@@ -44,7 +52,17 @@ export function getErrorMessage(err: unknown): string {
         return 'Este registro ya existe.';
       }
       // Return message if it's reasonable length
-      if (e.message.length < 200) return e.message;
+      if (e.message.length > 0 && e.message.length < 200) return e.message;
+    }
+
+    // Objects with error_description (OAuth-style errors)
+    if (typeof e.error_description === 'string' && e.error_description.length > 0 && e.error_description.length < 200) {
+      return e.error_description;
+    }
+
+    // Objects with error property as string
+    if (typeof e.error === 'string' && e.error.length > 0 && e.error.length < 200) {
+      return e.error;
     }
   }
 
@@ -52,7 +70,7 @@ export function getErrorMessage(err: unknown): string {
     if (err.message.includes('fetch') || err.message.includes('network')) {
       return 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
     }
-    if (err.message.length < 200) return err.message;
+    if (err.message.length > 0 && err.message.length < 200) return err.message;
   }
 
   return 'Error inesperado. Intenta de nuevo.';

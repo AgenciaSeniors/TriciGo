@@ -10,6 +10,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -36,7 +37,7 @@ export default function SafetyCenterScreen() {
       if (cp.emergency_contact) {
         setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
       }
-    }).catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido'));
+    }).catch((err) => setError(getErrorMessage(err)));
 
     // Load trusted contacts count
     trustedContactService.getContacts(user.id).then((contacts) => {

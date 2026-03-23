@@ -79,7 +79,7 @@ export default function EditProfileScreen() {
       setAvatarUrl(publicUrl);
       setUser({ ...user, avatar_url: publicUrl });
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.profile_upload_failed'));
     } finally {
       setUploadingAvatar(false);
     }
@@ -138,7 +138,7 @@ export default function EditProfileScreen() {
 
       router.back();
     } catch {
-      Alert.alert(t('error'), t('errors.generic'));
+      Alert.alert(t('error'), t('errors.profile_save_failed'));
     } finally {
       setSaving(false);
     }

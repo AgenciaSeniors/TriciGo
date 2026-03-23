@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
+import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -153,7 +153,7 @@ function NativeRidesScreen() {
         }
       } catch (err) {
         console.error('Error fetching rides:', err);
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Error desconocido');
+        if (!cancelled) setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -212,7 +212,7 @@ function NativeRidesScreen() {
       setRides(history);
     } catch (err) {
       console.error('Error refreshing rides:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setRefreshing(false);
     }
