@@ -166,8 +166,9 @@ export function RideActiveView() {
       );
       setWaypoints((prev) => [...prev, wp]);
       setAddStopVisible(false);
-    } catch (err: any) {
-      if (err?.message === 'MAX_WAYPOINTS_REACHED') {
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown> | null;
+      if (typeof errObj?.message === 'string' && errObj.message === 'MAX_WAYPOINTS_REACHED') {
         Alert.alert('', t('ride.max_stops_active', { defaultValue: 'Máximo de paradas alcanzado' }));
       }
     } finally {

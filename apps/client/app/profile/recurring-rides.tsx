@@ -67,6 +67,7 @@ export default function RecurringRidesScreen() {
     try {
       await recurringRideService.pauseRecurringRide(id);
       await fetchRides();
+      Toast.show({ type: 'success', text1: t('recurring.paused_success', { defaultValue: 'Viaje pausado' }) });
     } catch (err) {
       logger.error('Error pausing recurring ride', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });
@@ -79,6 +80,7 @@ export default function RecurringRidesScreen() {
     try {
       await recurringRideService.resumeRecurringRide(id);
       await fetchRides();
+      Toast.show({ type: 'success', text1: t('recurring.resumed_success', { defaultValue: 'Viaje reanudado' }) });
     } catch (err) {
       logger.error('Error resuming recurring ride', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });
@@ -100,6 +102,7 @@ export default function RecurringRidesScreen() {
             try {
               await recurringRideService.deleteRecurringRide(id);
               await fetchRides();
+              Toast.show({ type: 'success', text1: t('recurring.deleted_success', { defaultValue: 'Viaje eliminado' }) });
             } catch (err) {
               logger.error('Error deleting recurring ride', { error: String(err) });
               Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });

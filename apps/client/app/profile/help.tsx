@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, FlatList, RefreshControl } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +48,15 @@ export default function HelpScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [faqSearch, setFaqSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const handleSearchChange = (text: string) => {
+    setFaqSearch(text);
+    setExpandedIdx(null);
+    clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => setDebouncedSearch(text), 300);
+  };
 
   // Tickets state
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -164,12 +173,12 @@ export default function HelpScreen() {
               <Input
                 placeholder={t('profile.help_search_faqs')}
                 value={faqSearch}
-                onChangeText={(text: string) => { setFaqSearch(text); setExpandedIdx(null); }}
+                onChangeText={handleSearchChange}
                 className="mb-3"
               />
 
               {(() => {
-                const query = faqSearch.trim().toLowerCase();
+                const query = debouncedSearch.trim().toLowerCase();
                 const filtered = FAQ_KEYS.filter((key) => {
                   if (!query) return true;
                   const question = t(`profile.${key}`).toLowerCase();

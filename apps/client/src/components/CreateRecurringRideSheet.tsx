@@ -53,7 +53,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
     );
   }, []);
 
-  const handleTimeChange = useCallback((_: any, selected?: Date) => {
+  const handleTimeChange = useCallback((_: unknown, selected?: Date) => {
     if (Platform.OS === 'android') setShowTimePicker(false);
     if (selected) setTime(selected);
   }, []);
@@ -194,7 +194,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
             }`}
           >
             <Ionicons
-              name={icon as any}
+              name={icon as string}
               size={18}
               color={serviceType === slug ? colors.primary[500] : colors.neutral[500]}
             />
@@ -202,7 +202,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
               variant="caption"
               className={`ml-1.5 font-medium ${serviceType === slug ? 'text-primary-600' : 'text-neutral-600'}`}
             >
-              {t(`service_type.${slug}` as any, { defaultValue: slug })}
+              {t(`service_type.${slug}` as string, { defaultValue: slug })}
             </Text>
           </Pressable>
         ))}
@@ -220,7 +220,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
             }`}
           >
             <Ionicons
-              name={icon as any}
+              name={icon as string}
               size={18}
               color={paymentMethod === key ? colors.primary[500] : colors.neutral[500]}
             />

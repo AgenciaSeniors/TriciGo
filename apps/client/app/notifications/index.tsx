@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, FlatList, Pressable, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -141,17 +141,20 @@ export default function NotificationsScreen() {
     ? notifications.filter(n => !n.read_at)
     : notifications;
 
-  // Group by date
-  const sections: { title: string; data: AppNotification[] }[] = [];
-  const groupMap = new Map<string, AppNotification[]>();
-  for (const n of filtered) {
-    const group = getDateGroup(n.created_at, t);
-    if (!groupMap.has(group)) groupMap.set(group, []);
-    groupMap.get(group)!.push(n);
-  }
-  for (const [title, data] of groupMap) {
-    sections.push({ title, data });
-  }
+  // Group by date (memoized)
+  const sections = useMemo(() => {
+    const result: { title: string; data: AppNotification[] }[] = [];
+    const groupMap = new Map<string, AppNotification[]>();
+    for (const n of filtered) {
+      const group = getDateGroup(n.created_at, t);
+      if (!groupMap.has(group)) groupMap.set(group, []);
+      groupMap.get(group)!.push(n);
+    }
+    for (const [title, data] of groupMap) {
+      result.push({ title, data });
+    }
+    return result;
+  }, [filtered, t]);
 
   const renderItem = ({ item }: { item: AppNotification }) => {
     const icon = ICON_MAP[item.type] ?? ICON_MAP.system;

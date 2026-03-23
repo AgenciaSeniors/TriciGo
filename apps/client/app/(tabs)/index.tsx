@@ -50,9 +50,9 @@ import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
 
-function useDebouncePress(callback: (...args: any[]) => void, delayMs = 1000) {
+function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000) {
   const lastPress = useRef(0);
-  return useCallback((...args: any[]) => {
+  return useCallback((...args: unknown[]) => {
     const now = Date.now();
     if (now - lastPress.current < delayMs) return;
     lastPress.current = now;

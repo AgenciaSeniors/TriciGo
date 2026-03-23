@@ -66,8 +66,9 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
         user_phone: phone,
       });
       setPhone('');
-    } catch (err: any) {
-      if (err?.message === 'SPLIT_ONLY_TRICICOIN') {
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown> | null;
+      if (typeof errObj?.message === 'string' && errObj.message === 'SPLIT_ONLY_TRICICOIN') {
         Alert.alert('', t('ride.split_only_tricicoin', { defaultValue: 'Dividir tarifa solo disponible con TriciCoin' }));
       } else {
         Alert.alert('', t('common.error'));

@@ -47,7 +47,7 @@ function CancelRideSheetInner({
 
   const handleConfirm = () => {
     const reason = selectedReason
-      ? t(`ride.${selectedReason}` as any, { defaultValue: selectedReason })
+      ? t(`ride.${selectedReason}` as string, { defaultValue: selectedReason })
       : t('ride.cancel_reason_other', { defaultValue: 'Otra razón' });
     onConfirm(reason);
   };
@@ -151,7 +151,7 @@ function CancelRideSheetInner({
       </Text>
       <View className="flex-row flex-wrap gap-2 mb-6" accessibilityRole="radiogroup">
         {CANCEL_REASONS.map((reasonKey) => {
-          const reasonText = t(`ride.${reasonKey}` as any, { defaultValue: reasonKey });
+          const reasonText = t(`ride.${reasonKey}` as string, { defaultValue: reasonKey });
           return (
             <Pressable
               key={reasonKey}

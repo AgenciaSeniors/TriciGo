@@ -148,15 +148,10 @@ export default function SavedLocationsScreen() {
           renderItem={({ item, index }) => (
             <Card variant="outlined" padding="md" className="mb-2">
               <View className="flex-row items-center justify-between">
-                <Pressable
-                  className="flex-1 mr-3"
-                  onPress={() => handleOpenSheet(index)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
-                >
+                <View className="flex-1 mr-3">
                   <Text variant="body" className="font-medium">{item.label}</Text>
                   <Text variant="bodySmall" color="secondary">{item.address}</Text>
-                </Pressable>
+                </View>
                 <View className="flex-row items-center gap-3">
                   <Pressable
                     onPress={() => handleOpenSheet(index)}
