@@ -8,9 +8,15 @@ const menuItems = [
   { label: 'Editar perfil', href: '/profile/edit', icon: '\u270F\uFE0F' },
   { label: 'Configuracion', href: '/profile/settings', icon: '\u2699\uFE0F' },
   { label: 'Ubicaciones guardadas', href: '/profile/saved-locations', icon: '\uD83D\uDCCD' },
-  { label: 'Contacto de emergencia', href: '/profile/safety', icon: '\uD83D\uDEE1\uFE0F' },
+  { label: 'Seguridad', href: '/profile/safety', icon: '\uD83D\uDEE1\uFE0F' },
+  { label: 'Contactos de confianza', href: '/profile/trusted-contacts', icon: '\uD83D\uDC65' },
+  { label: 'Contacto de emergencia', href: '/profile/emergency-contact', icon: '\uD83D\uDCDE' },
+  { label: 'Preferencias de viaje', href: '/profile/ride-preferences', icon: '\uD83D\uDE97' },
+  { label: 'Cuentas corporativas', href: '/profile/corporate', icon: '\uD83C\uDFE2' },
+  { label: 'Viajes recurrentes', href: '/profile/recurring-rides', icon: '\uD83D\uDD01' },
   { label: 'Programa de referidos', href: '/profile/referral', icon: '\uD83C\uDF81' },
   { label: 'Ayuda', href: '/profile/help', icon: '\u2753' },
+  { label: 'Acerca de', href: '/profile/about', icon: '\u2139\uFE0F' },
   { label: 'Blog', href: '/blog', icon: '\uD83D\uDCDD' },
 ];
 
