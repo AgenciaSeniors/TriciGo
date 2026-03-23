@@ -132,7 +132,7 @@ export default function RecurringRidesScreen() {
         <ScreenHeader title={t('recurring.title')} onBack={() => router.back()} />
         <View className="flex-1 items-center justify-center px-6">
           <Ionicons name="time-outline" size={48} color={colors.neutral[300]} />
-          <Text className="text-neutral-400 mt-3 text-center">Próximamente</Text>
+          <Text className="text-neutral-400 mt-3 text-center">{t('common:coming_soon')}</Text>
         </View>
       </Screen>
     );

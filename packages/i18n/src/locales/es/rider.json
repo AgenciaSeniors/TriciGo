@@ -287,7 +287,13 @@
     "type_promo": "Promoción",
     "type_referral_reward": "Recompensa de referido",
     "type_quest_completed": "Misión completada",
-    "type_system": "Sistema"
+    "type_system": "Sistema",
+    "driver_assigned": "Conductor asignado",
+    "driver_assigned_body": "Un conductor ha aceptado tu viaje",
+    "driver_arrived": "Tu conductor ha llegado",
+    "driver_arrived_body": "Tu conductor te está esperando",
+    "trip_completed": "Viaje completado",
+    "trip_completed_body": "Tu viaje ha finalizado"
   },
 
   "locations": {

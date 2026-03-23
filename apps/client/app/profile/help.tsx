@@ -15,7 +15,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, logger } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -116,7 +116,7 @@ export default function HelpScreen() {
       Toast.show({ type: 'success', text1: t('profile.help_ticket_created') });
       fetchTickets();
     } catch (err) {
-      console.warn('[Help] Failed to create ticket:', err);
+      logger.warn('[Help] Failed to create ticket', { error: String(err) });
       Toast.show({ type: 'error', text1: t('profile.help_ticket_error') });
     } finally {
       setSubmitting(false);

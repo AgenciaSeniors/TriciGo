@@ -287,7 +287,13 @@
     "type_promo": "Promotion",
     "type_referral_reward": "Referral reward",
     "type_quest_completed": "Quest completed",
-    "type_system": "System"
+    "type_system": "System",
+    "driver_assigned": "Driver assigned",
+    "driver_assigned_body": "A driver has accepted your ride",
+    "driver_arrived": "Your driver has arrived",
+    "driver_arrived_body": "Your driver is waiting",
+    "trip_completed": "Trip completed",
+    "trip_completed_body": "Your trip has ended"
   },
 
   "locations": {

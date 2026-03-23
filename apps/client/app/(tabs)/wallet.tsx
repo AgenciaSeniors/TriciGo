@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, Alert, RefreshControl, Linking, Image, Pressable, ScrollView } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Linking, Image, Pressable, ScrollView } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -276,7 +276,7 @@ function NativeWalletScreen() {
     const amountNum = parseInt(rechargeAmount, 10);
     if (!amountNum || amountNum <= 0 || !userId) return;
     if (amountNum > MAX_RECHARGE_CUP) {
-      Alert.alert(t('error'), t('wallet.recharge_max_exceeded', { defaultValue: `El máximo por recarga es ${MAX_RECHARGE_CUP.toLocaleString()} CUP` }));
+      Toast.show({ type: 'error', text1: t('wallet.recharge_max_exceeded', { defaultValue: `El máximo por recarga es ${MAX_RECHARGE_CUP.toLocaleString()} CUP` }) });
       return;
     }
     setRechargeSubmitting(true);
@@ -287,7 +287,7 @@ function NativeWalletScreen() {
       Toast.show({ type: 'success', text1: t('wallet.recharge_success') });
     } catch (err) {
       logger.error('Error requesting recharge', { error: String(err) });
-      Alert.alert(t('error'), t('errors.recharge_failed'));
+      Toast.show({ type: 'error', text1: t('errors.recharge_failed') });
     } finally {
       setRechargeSubmitting(false);
     }
@@ -313,12 +313,12 @@ function NativeWalletScreen() {
       if (user && user.id !== userId) {
         setTransferRecipient({ id: user.id, full_name: user.full_name });
       } else if (user && user.id === userId) {
-        Alert.alert(t('error'), t('wallet.cannot_transfer_self'));
+        Toast.show({ type: 'error', text1: t('wallet.cannot_transfer_self') });
       } else {
-        Alert.alert(t('error'), t('wallet.transfer_user_not_found'));
+        Toast.show({ type: 'error', text1: t('wallet.transfer_user_not_found') });
       }
     } catch {
-      Alert.alert(t('error'), t('errors.transfer_failed'));
+      Toast.show({ type: 'error', text1: t('errors.transfer_failed') });
     } finally {
       setTransferSearching(false);
     }
@@ -331,7 +331,7 @@ function NativeWalletScreen() {
 
     const amountCentavos = amountNum * 100;
     if (amountCentavos > balance.available) {
-      Alert.alert(t('error'), t('wallet.transfer_insufficient'));
+      Toast.show({ type: 'error', text1: t('wallet.transfer_insufficient') });
       return;
     }
 
@@ -348,7 +348,7 @@ function NativeWalletScreen() {
       Toast.show({ type: 'success', text1: t('wallet.transfer_success') });
       await fetchData();
     } catch (err) {
-      Alert.alert(t('error'), getErrorMessage(err));
+      Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
       setTransferSubmitting(false);
     }
@@ -401,7 +401,7 @@ function NativeWalletScreen() {
       }
     } catch (err) {
       logger.error('Error creating TropiPay link', { error: String(err) });
-      Alert.alert(t('error'), t('wallet.tropipay_error_creating'));
+      Toast.show({ type: 'error', text1: t('wallet.tropipay_error_creating') });
     } finally {
       setTropipaySubmitting(false);
     }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
+import i18next from 'i18next';
 import type {
   Ride,
   RideWithDriver,
@@ -13,18 +14,17 @@ import type {
 import type { GeoPoint } from '@tricigo/utils';
 import { logger } from '@tricigo/utils';
 
-const STATUS_NOTIFICATIONS: Partial<Record<RideStatus, string>> = {
-  accepted: 'Conductor asignado',
-  driver_en_route: 'Conductor en camino',
-  arrived_at_pickup: 'Conductor llegó al punto de recogida',
-  completed: 'Viaje completado',
+const STATUS_NOTIFICATION_KEYS: Partial<Record<RideStatus, { title: string; body: string }>> = {
+  accepted: { title: 'rider:notifications.driver_assigned', body: 'rider:notifications.driver_assigned_body' },
+  arrived_at_pickup: { title: 'rider:notifications.driver_arrived', body: 'rider:notifications.driver_arrived_body' },
+  completed: { title: 'rider:notifications.trip_completed', body: 'rider:notifications.trip_completed_body' },
 };
 
 function scheduleLocalNotification(status: RideStatus) {
-  const body = STATUS_NOTIFICATIONS[status];
-  if (!body) return;
+  const keys = STATUS_NOTIFICATION_KEYS[status];
+  if (!keys) return;
   Notifications.scheduleNotificationAsync({
-    content: { title: 'TriciGo', body },
+    content: { title: i18next.t(keys.title), body: i18next.t(keys.body) },
     trigger: null,
   }).catch((err) => { logger.warn('Failed to schedule local notification', { error: String(err) }); });
 }

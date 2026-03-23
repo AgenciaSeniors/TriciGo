@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Alert } from 'react-native';
+
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
@@ -103,10 +103,11 @@ export function useRideActions() {
     const { haversineDistance } = await import('@tricigo/utils');
     const dist = haversineDistance(draft.pickup.location, draft.dropoff.location);
     if (dist < 200) {
-      Alert.alert(
-        i18next.t('rider:ride.too_close_title', { defaultValue: 'Destino muy cercano' }),
-        i18next.t('rider:ride.too_close_msg', { defaultValue: 'El destino está a menos de 200m del punto de recogida. Selecciona un destino más lejano.' }),
-      );
+      Toast.show({
+        type: 'info',
+        text1: i18next.t('rider:ride.too_close_title', { defaultValue: 'Destino muy cercano' }),
+        text2: i18next.t('rider:ride.too_close_msg', { defaultValue: 'El destino está a menos de 200m del punto de recogida. Selecciona un destino más lejano.' }),
+      });
       return;
     }
 
@@ -184,20 +185,22 @@ export function useRideActions() {
           const bal = await walletService.getBalance(userId);
           if (bal.available < (fareEstimate.estimated_fare_trc ?? 0)) {
             isSubmittingRef.current = false;
-            Alert.alert(
-              i18next.t('rider:ride.insufficient_balance_title', { defaultValue: 'Saldo insuficiente' }),
-              i18next.t('rider:ride.insufficient_balance_msg', { defaultValue: 'No tienes suficiente TriciCoin para este viaje. Recarga tu wallet o cambia a efectivo.' }),
-            );
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:ride.insufficient_balance_title', { defaultValue: 'Saldo insuficiente' }),
+              text2: i18next.t('rider:ride.insufficient_balance_msg', { defaultValue: 'No tienes suficiente TriciCoin para este viaje. Recarga tu wallet o cambia a efectivo.' }),
+            });
             return;
           }
         }
       } catch (balErr) {
         logger.warn('Balance check failed', { error: String(balErr) });
         isSubmittingRef.current = false;
-        Alert.alert(
-          i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),
-          i18next.t('rider:ride.balance_check_failed_msg', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo o cambia a efectivo.' }),
-        );
+        Toast.show({
+          type: 'error',
+          text1: i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),
+          text2: i18next.t('rider:ride.balance_check_failed_msg', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo o cambia a efectivo.' }),
+        });
         return;
       }
     }
@@ -322,13 +325,11 @@ export function useRideActions() {
         // Bug 10: Show alert when driver cancels the ride
         if (updated.status === 'canceled' && prevRide?.status !== 'canceled') {
           triggerHaptic('error');
-          Alert.alert(
-            i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-            i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
-            [
-              { text: i18next.t('rider:common.ok', { defaultValue: 'Entendido' }) },
-            ],
-          );
+          Toast.show({
+            type: 'error',
+            text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+            text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
+          });
         }
 
         // When driver accepts, load driver info
@@ -412,10 +413,11 @@ export function useRideActions() {
       }
 
       if (messages.length > 0) {
-        Alert.alert(
-          i18next.t('rider:ride.cancel_title'),
-          messages.join('\n\n'),
-        );
+        Toast.show({
+          type: 'success',
+          text1: i18next.t('rider:ride.cancel_title'),
+          text2: messages.join(' '),
+        });
       }
     } catch (err) {
       setError(getErrorMessage(err));
