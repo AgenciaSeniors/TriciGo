@@ -161,17 +161,33 @@ export function useRideActions() {
 
   // Synchronous flag to prevent double-submission (state updates are async)
   const isSubmittingRef = useRef(false);
+  const pendingRequestIdRef = useRef<string | null>(null);
 
   const confirmRide = useCallback(async () => {
     if (isSubmittingRef.current) return; // Block double-tap
+    if (pendingRequestIdRef.current !== null) return; // Request already in flight
+
+    const requestId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    pendingRequestIdRef.current = requestId;
     isSubmittingRef.current = true;
 
+    // X1.3: Reject stale fare estimates (>5 min)
+    const estimatedAt = useRideStore.getState().fareEstimatedAt;
+    if (!estimatedAt || Date.now() - estimatedAt > 300_000) {
+      Toast.show({ type: 'error', text1: i18next.t('errors.estimate_expired') });
+      useRideStore.getState().setFareEstimate(null);
+      isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
+      return;
+    }
+
     const { draft: d, fareEstimate, promoResult, validatingPromo } = useRideStore.getState();
-    if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; return; }
+    if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; pendingRequestIdRef.current = null; return; }
 
     // Bug 12: Block confirm while promo is validating
     if (validatingPromo) {
       isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
       Toast.show({ type: 'info', text1: i18next.t('rider:ride.wait_promo', { defaultValue: 'Espera, validando código...' }) });
       return;
     }
@@ -185,6 +201,7 @@ export function useRideActions() {
           const bal = await walletService.getBalance(userId);
           if (bal.available < (fareEstimate.estimated_fare_trc ?? 0)) {
             isSubmittingRef.current = false;
+            pendingRequestIdRef.current = null;
             Toast.show({
               type: 'error',
               text1: i18next.t('rider:ride.insufficient_balance_title', { defaultValue: 'Saldo insuficiente' }),
@@ -196,6 +213,7 @@ export function useRideActions() {
       } catch (balErr) {
         logger.warn('Balance check failed', { error: String(balErr) });
         isSubmittingRef.current = false;
+        pendingRequestIdRef.current = null;
         Toast.show({
           type: 'error',
           text1: i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),
@@ -348,6 +366,14 @@ export function useRideActions() {
       timeoutRef.current = setTimeout(async () => {
         const { flowStep, activeRide: ar } = useRideStore.getState();
         if (flowStep === 'searching' && ar) {
+          // X1.2: Check if ride was accepted during search before resetting
+          const currentRide = useRideStore.getState().activeRide;
+          if (currentRide && currentRide.status !== 'searching') {
+            // Ride was accepted during search — don't reset!
+            useRideStore.getState().setFlowStep('active');
+            return;
+          }
+
           try {
             await rideService.cancelRide(ar.id, user?.id, 'search_timeout');
           } catch {
@@ -371,6 +397,7 @@ export function useRideActions() {
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
     }
   }, [setActiveRide, setFlowStep, setLoading, setError]);
 

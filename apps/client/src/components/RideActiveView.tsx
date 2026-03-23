@@ -108,14 +108,25 @@ export function RideActiveView() {
   const [addStopVisible, setAddStopVisible] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
 
+  // X1.6: Use refs for subscription channels to ensure proper cleanup on ride change
+  const waypointChannelRef = useRef<ReturnType<typeof rideService.subscribeToWaypoints> | null>(null);
+  const splitChannelRef = useRef<ReturnType<typeof rideService.subscribeToSplits> | null>(null);
+
   // Fetch existing waypoints + subscribe to inserts AND updates (driver arrive/depart)
   useEffect(() => {
+    // Clean up previous subscription before creating a new one
+    if (waypointChannelRef.current) {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(waypointChannelRef.current);
+      waypointChannelRef.current = null;
+    }
+
     if (!activeRide) return;
     rideService.getRideWaypoints(activeRide.id)
       .then((wps) => setWaypoints(wps))
       .catch(() => {});
 
-    const channel = rideService.subscribeToWaypoints(
+    waypointChannelRef.current = rideService.subscribeToWaypoints(
       activeRide.id,
       (newWp) => {
         setWaypoints((prev) => [...prev, newWp]);
@@ -128,13 +139,23 @@ export function RideActiveView() {
     );
 
     return () => {
-      const supabase = getSupabaseClient();
-      supabase.removeChannel(channel);
+      if (waypointChannelRef.current) {
+        const supabase = getSupabaseClient();
+        supabase.removeChannel(waypointChannelRef.current);
+        waypointChannelRef.current = null;
+      }
     };
   }, [activeRide?.id]);
 
   // Subscribe to real-time split changes (invitations, acceptances, payments)
   useEffect(() => {
+    // Clean up previous subscription before creating a new one
+    if (splitChannelRef.current) {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(splitChannelRef.current);
+      splitChannelRef.current = null;
+    }
+
     if (!activeRide?.id || !activeRide.is_split) return;
 
     // Fetch existing splits
@@ -142,15 +163,18 @@ export function RideActiveView() {
       .then((existingSplits) => setSplits(existingSplits))
       .catch(() => {});
 
-    const channel = rideService.subscribeToSplits(
+    splitChannelRef.current = rideService.subscribeToSplits(
       activeRide.id,
       (newSplit) => addSplit(newSplit),
       (updatedSplit) => updateSplit(updatedSplit),
     );
 
     return () => {
-      const supabase = getSupabaseClient();
-      supabase.removeChannel(channel);
+      if (splitChannelRef.current) {
+        const supabase = getSupabaseClient();
+        supabase.removeChannel(splitChannelRef.current);
+        splitChannelRef.current = null;
+      }
     };
   }, [activeRide?.id, activeRide?.is_split]);
 

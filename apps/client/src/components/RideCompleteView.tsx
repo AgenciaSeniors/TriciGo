@@ -44,6 +44,7 @@ export function RideCompleteView() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [tipSent, setTipSent] = useState(false);
   const [sendingTip, setSendingTip] = useState(false);
   const [receiptEmailed, setReceiptEmailed] = useState(false);
@@ -115,6 +116,7 @@ export function RideCompleteView() {
   };
 
   const handleSubmitReview = async () => {
+    if (hasSubmitted) return;
     if (!selectedRating || !userId || !rideWithDriver?.driver_user_id) return;
     setSubmitting(true);
     try {
@@ -126,6 +128,7 @@ export function RideCompleteView() {
         comment: comment.trim() || undefined,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
       });
+      setHasSubmitted(true);
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
@@ -489,6 +492,7 @@ export function RideCompleteView() {
             fullWidth
             onPress={selectedRating ? handleSubmitReview : resetAll}
             loading={submitting}
+            disabled={hasSubmitted || submitting}
             accessibilityHint={selectedRating ? 'Enviar calificación al conductor' : undefined}
           />
         </>

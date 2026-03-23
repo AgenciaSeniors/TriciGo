@@ -384,7 +384,8 @@
     "corporate_load_failed": "Error al cargar cuenta corporativa",
     "preferences_save_failed": "Error al guardar preferencias",
     "location_permission_failed": "Error al obtener ubicación",
-    "operation_failed": "La operación falló. Inténtalo de nuevo."
+    "operation_failed": "La operación falló. Inténtalo de nuevo.",
+    "estimate_expired": "Tu cotización expiró. Solicita una nueva."
   },
 
   "preferences": {

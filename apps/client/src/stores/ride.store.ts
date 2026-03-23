@@ -97,6 +97,7 @@ interface RideState {
   flowStep: RideFlowStep;
   draft: RideRequestDraft;
   fareEstimate: FareEstimate | null;
+  fareEstimatedAt: number | null;
   activeRide: Ride | null;
   rideWithDriver: RideWithDriver | null;
   isLoading: boolean;
@@ -145,6 +146,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   flowStep: 'idle',
   draft: { ...defaultDraft },
   fareEstimate: null,
+  fareEstimatedAt: null,
   activeRide: null,
   rideWithDriver: null,
   isLoading: false,
@@ -171,7 +173,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   setScheduledAt: (scheduledAt) =>
     set((s) => ({ draft: { ...s.draft, scheduledAt } })),
 
-  setFareEstimate: (fareEstimate) => set({ fareEstimate }),
+  setFareEstimate: (fareEstimate) => set({ fareEstimate, fareEstimatedAt: fareEstimate ? Date.now() : null }),
 
   setActiveRide: (activeRide) => set({ activeRide }),
 
@@ -254,13 +256,14 @@ export const useRideStore = create<RideState>((set, get) => ({
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, error: null, promoCode: '', promoResult: null, splits: [] }),
+    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, error: null, promoCode: '', promoResult: null, splits: [] }),
 
   resetAll: () =>
     set({
       flowStep: 'idle',
       draft: { ...defaultDraft },
       fareEstimate: null,
+      fareEstimatedAt: null,
       activeRide: null,
       rideWithDriver: null,
       isLoading: false,

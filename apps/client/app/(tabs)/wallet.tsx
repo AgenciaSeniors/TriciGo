@@ -206,6 +206,9 @@ function NativeWalletScreen() {
   const [transferSearching, setTransferSearching] = useState(false);
   const [transferSubmitting, setTransferSubmitting] = useState(false);
 
+  // Processing guard to prevent double-submit across all wallet actions
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // TropiPay recharge state
   const [tropipaySheetVisible, setTropipaySheetVisible] = useState(false);
   const [tropipayAmount, setTropipayAmount] = useState('');
@@ -275,12 +278,14 @@ function NativeWalletScreen() {
   const MAX_RECHARGE_CUP = 50000;
 
   const submitRecharge = useCallback(async () => {
+    if (isProcessing) return;
     const amountNum = parseInt(rechargeAmount, 10);
     if (!amountNum || amountNum <= 0 || !userId) return;
     if (amountNum > MAX_RECHARGE_CUP) {
       Toast.show({ type: 'error', text1: t('wallet.recharge_max_exceeded', { defaultValue: `El máximo por recarga es ${MAX_RECHARGE_CUP.toLocaleString()} CUP` }) });
       return;
     }
+    setIsProcessing(true);
     setRechargeSubmitting(true);
     try {
       await walletService.requestRecharge(userId, amountNum * 100);
@@ -292,8 +297,9 @@ function NativeWalletScreen() {
       Toast.show({ type: 'error', text1: t('errors.recharge_failed') });
     } finally {
       setRechargeSubmitting(false);
+      setIsProcessing(false);
     }
-  }, [rechargeAmount, userId, t]);
+  }, [rechargeAmount, userId, t, isProcessing]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
@@ -327,6 +333,7 @@ function NativeWalletScreen() {
   };
 
   const submitTransfer = useCallback(async () => {
+    if (isProcessing) return;
     if (!transferRecipient || !userId) return;
     const amountNum = parseInt(transferAmount, 10);
     if (!amountNum || amountNum <= 0) return;
@@ -337,6 +344,7 @@ function NativeWalletScreen() {
       return;
     }
 
+    setIsProcessing(true);
     setTransferSubmitting(true);
     try {
       await walletService.transferP2P(
@@ -353,8 +361,9 @@ function NativeWalletScreen() {
       Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
       setTransferSubmitting(false);
+      setIsProcessing(false);
     }
-  }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData]);
+  }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData, isProcessing]);
   const debouncedSubmitTransfer = useDebouncePress(submitTransfer);
 
   // TropiPay handlers
@@ -641,7 +650,7 @@ function NativeWalletScreen() {
             fullWidth
             onPress={debouncedSubmitRecharge}
             loading={rechargeSubmitting}
-            disabled={!rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
+            disabled={isProcessing || !rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
           />
         </View>
       </BottomSheet>
@@ -723,6 +732,7 @@ function NativeWalletScreen() {
             onPress={debouncedSubmitTransfer}
             loading={transferSubmitting}
             disabled={
+              isProcessing ||
               !transferRecipient ||
               !transferAmount ||
               parseInt(transferAmount, 10) <= 0
