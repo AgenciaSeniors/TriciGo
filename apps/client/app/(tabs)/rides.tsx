@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -7,7 +7,8 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger } from '@tricigo/utils';
+import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -56,9 +57,17 @@ function WebRidesScreen() {
         <Text variant="h3" className="mb-4">{t('rides_history.title', { defaultValue: 'Historial de viajes' })}</Text>
 
         {loading ? (
-          <ActivityIndicator size="small" color={colors.brand.orange} />
+          <View>
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+          </View>
         ) : rides.length === 0 ? (
-          <Text variant="body" color="secondary">{t('rides_history.no_rides', { defaultValue: 'Sin viajes' })}</Text>
+          <EmptyState
+            icon="car-outline"
+            title={t('rides_history.no_rides', { defaultValue: 'Sin viajes' })}
+            description={t('rides_history.no_rides_desc', { defaultValue: 'Tu historial de viajes aparecerá aquí.' })}
+          />
         ) : (
           rides.map((ride) => (
             <Card key={ride.id} variant="outlined" padding="md" className="mb-3">
@@ -301,7 +310,7 @@ function NativeRidesScreen() {
                     <View className="flex-1">
                       <Text variant="bodySmall" color="accent" className="font-semibold">
                         {ride.scheduled_at
-                          ? `${new Date(ride.scheduled_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — ${new Date(ride.scheduled_at).toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}`
+                          ? formatTimestamp(ride.scheduled_at, 'absolute')
                           : ''}
                       </Text>
                     </View>
@@ -329,8 +338,11 @@ function NativeRidesScreen() {
             retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
           />
         ) : loading && page === 0 ? (
-          <View className="items-center py-20">
-            <ActivityIndicator size="large" color={colors.brand.orange} />
+          <View className="py-4">
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
           </View>
         ) : (
           <FlatList

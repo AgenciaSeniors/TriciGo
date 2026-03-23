@@ -14,7 +14,9 @@ import { i18n } from '@tricigo/i18n';
 import { authService, customerService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { PaymentMethod, Language, CustomerProfile } from '@tricigo/types';
-import { logger } from '@tricigo/utils';
+import { logger, triggerHaptic } from '@tricigo/utils';
+import Toast from 'react-native-toast-message';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: 'es', label: 'Español' },
@@ -40,13 +42,14 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     customerService.ensureProfile(user.id).then((cp) => {
       setCustomerProfile(cp);
       setPaymentMethod(cp.default_payment_method);
-    }).catch((err) => logger.warn('[EditProfile] Failed to load:', err));
+    }).catch((err) => logger.warn('[EditProfile] Failed to load:', err)).finally(() => setLoadingProfile(false));
   }, [user]);
 
   const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
@@ -138,6 +141,8 @@ export default function EditProfileScreen() {
         });
       }
 
+      Toast.show({ type: 'success', text1: t('profile.profile_saved', { defaultValue: 'Perfil guardado' }) });
+      triggerHaptic('success');
       router.back();
     } catch {
       Alert.alert(t('error'), t('errors.profile_save_failed'));
@@ -145,6 +150,18 @@ export default function EditProfileScreen() {
       setSaving(false);
     }
   };
+
+  if (loadingProfile) {
+    return (
+      <Screen scroll bg="white" padded>
+        <View className="pt-4">
+          <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={2} />
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll bg="white" padded>

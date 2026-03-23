@@ -15,7 +15,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
-import { getErrorMessage, logger } from '@tricigo/utils';
+import { getErrorMessage, logger, triggerHaptic, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -114,6 +114,7 @@ export default function HelpScreen() {
       });
       setSheetVisible(false);
       Toast.show({ type: 'success', text1: t('profile.help_ticket_created') });
+      triggerHaptic('success');
       fetchTickets();
     } catch (err) {
       logger.warn('[Help] Failed to create ticket', { error: String(err) });
@@ -134,10 +135,7 @@ export default function HelpScreen() {
                 {item.subject}
               </Text>
               <Text variant="caption" color="tertiary" className="mt-0.5">
-                {new Date(item.created_at).toLocaleDateString('es-CU', {
-                  day: 'numeric',
-                  month: 'short',
-                })}
+                {formatTimestamp(item.created_at, 'short')}
               </Text>
             </View>
             <StatusBadge

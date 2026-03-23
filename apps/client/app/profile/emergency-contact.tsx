@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService, trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone, getErrorMessage } from '@tricigo/utils';
+import { isValidCubanPhone, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -100,6 +100,8 @@ export default function EmergencyContactScreen() {
         });
       }
 
+      Toast.show({ type: 'success', text1: t('emergency.contact_saved', { defaultValue: 'Contacto de emergencia guardado' }) });
+      triggerHaptic('success');
       router.back();
     } catch {
       Toast.show({ type: 'error', text1: t('errors.emergency_contact_failed') });

@@ -8,6 +8,8 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { recurringRideService } from '@tricigo/api';
+import Toast from 'react-native-toast-message';
+import { triggerHaptic } from '@tricigo/utils';
 import type { RecurringRide, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 
 interface EditRecurringRideSheetProps {
@@ -81,6 +83,8 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
         service_type: serviceType,
         payment_method: paymentMethod,
       });
+      Toast.show({ type: 'success', text1: t('recurring.updated_success', { defaultValue: 'Viaje recurrente actualizado' }) });
+      triggerHaptic('success');
       onUpdated();
     } catch {
       Alert.alert(t('common:error'), t('common:errors.recurring_rides_failed'));

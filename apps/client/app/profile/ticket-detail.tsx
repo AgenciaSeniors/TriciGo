@@ -13,7 +13,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
-import { logger } from '@tricigo/utils';
+import { logger, formatTimestamp } from '@tricigo/utils';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 
 export default function TicketDetailScreen() {
   const { t } = useTranslation('common');
@@ -97,16 +98,25 @@ export default function TicketDetailScreen() {
           </Text>
         </View>
         <Text variant="caption" color="tertiary" className="mt-0.5 mx-1">
-          {new Date(item.created_at).toLocaleTimeString('es-CU', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
+          {formatTimestamp(item.created_at, 'relative')}
         </Text>
       </View>
     );
   };
 
   const isClosed = ticket?.status === 'closed' || ticket?.status === 'resolved';
+
+  if (loading) {
+    return (
+      <Screen bg="white">
+        <View className="px-5 pt-4">
+          <ScreenHeader title="Ticket" onBack={() => router.back()} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={4} />
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen bg="white">

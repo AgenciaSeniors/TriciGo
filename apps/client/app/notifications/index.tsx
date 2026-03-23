@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { logger } from '@tricigo/utils';
+import { logger, formatTimestamp } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification, NotificationType } from '@tricigo/types';
@@ -32,15 +32,8 @@ function buildIconMap(isDark: boolean): Record<NotificationType, { name: keyof t
   };
 }
 
-function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return t('notifications.now', { defaultValue: 'Ahora' });
-  if (mins < 60) return `${mins}${t('notifications.minutes_short', { defaultValue: 'm' })}`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}${t('notifications.hours_short', { defaultValue: 'h' })}`;
-  const days = Math.floor(hours / 24);
-  return `${days}${t('notifications.days_short', { defaultValue: 'd' })}`;
+function timeAgo(dateStr: string): string {
+  return formatTimestamp(dateStr, 'relative');
 }
 
 function getDateGroup(dateStr: string, t: (key: string) => string): string {
@@ -182,7 +175,7 @@ export default function NotificationsScreen() {
           </Text>
         </View>
         <View className="items-end">
-          <Text variant="caption" color="tertiary">{timeAgo(item.created_at, t)}</Text>
+          <Text variant="caption" color="tertiary">{timeAgo(item.created_at)}</Text>
           {!item.read && (
             <View className="w-2 h-2 rounded-full bg-primary-500 mt-1" />
           )}

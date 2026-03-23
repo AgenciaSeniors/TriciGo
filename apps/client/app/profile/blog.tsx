@@ -11,8 +11,10 @@ import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
 import i18next from 'i18next';
 import { colors } from '@tricigo/theme';
-import { logger } from '@tricigo/utils';
+import { logger, formatTimestamp } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
+import { EmptyState } from '@tricigo/ui/EmptyState';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ScrollView } from 'react-native';
 
 const PAGE_SIZE = 10;
@@ -75,11 +77,7 @@ export default function BlogScreen() {
         </Text>
         {item.published_at && (
           <Text variant="caption" color="tertiary" className="mt-2">
-            {new Date(item.published_at).toLocaleDateString('es-CU', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {formatTimestamp(item.published_at, 'absolute')}
           </Text>
         )}
       </Card>
@@ -104,14 +102,19 @@ export default function BlogScreen() {
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            !loading ? (
-              <View className="items-center py-12">
-                <Ionicons name="newspaper-outline" size={48} color={colors.neutral[300]} />
-                <Text variant="body" color="secondary" className="mt-3">
-                  {t('profile.no_blog_posts', { defaultValue: 'No hay publicaciones aún' })}
-                </Text>
+            loading ? (
+              <View>
+                <SkeletonListItem />
+                <SkeletonListItem />
+                <SkeletonListItem />
               </View>
-            ) : null
+            ) : (
+              <EmptyState
+                icon="newspaper-outline"
+                title={t('profile.no_blog_posts', { defaultValue: 'No hay publicaciones aún' })}
+                description={t('profile.no_blog_posts_desc', { defaultValue: 'Las publicaciones del blog aparecerán aquí.' })}
+              />
+            )
           }
         />
       </View>
@@ -128,11 +131,7 @@ export default function BlogScreen() {
             </Text>
             {selectedPost.published_at && (
               <Text variant="caption" color="tertiary" className="mb-4">
-                {new Date(selectedPost.published_at).toLocaleDateString('es-CU', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
+                {formatTimestamp(selectedPost.published_at, 'absolute')}
               </Text>
             )}
             <Text variant="body" color="primary" className="leading-6">

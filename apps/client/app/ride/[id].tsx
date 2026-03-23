@@ -12,7 +12,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic, logger } from '@tricigo/utils';
+import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic, logger, formatTimestamp } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -290,32 +290,32 @@ export default function RideDetailScreen() {
         {/* Timestamps */}
         <Card variant="outlined" padding="md" className="mb-6">
           <Text variant="label" className="mb-2">{t('ride.timestamps', { defaultValue: 'Tiempos' })}</Text>
-          <View className="flex-row justify-between mb-1" accessible={true} accessibilityLabel={`${t('ride.timestamp_created')}: ${new Date(ride.created_at).toLocaleString('es-CU')}`}>
+          <View className="flex-row justify-between mb-1" accessible={true} accessibilityLabel={`${t('ride.timestamp_created')}: ${formatTimestamp(ride.created_at, 'absolute')}`}>
             <Text variant="caption" color="secondary">{t('ride.timestamp_created')}</Text>
-            <Text variant="caption">{new Date(ride.created_at).toLocaleString('es-CU')}</Text>
+            <Text variant="caption">{formatTimestamp(ride.created_at, 'absolute')}</Text>
           </View>
           {ride.accepted_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="secondary">{t('ride.timestamp_accepted')}</Text>
-              <Text variant="caption">{new Date(ride.accepted_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption">{formatTimestamp(ride.accepted_at, 'absolute')}</Text>
             </View>
           )}
           {ride.pickup_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="secondary">{t('ride.timestamp_pickup')}</Text>
-              <Text variant="caption">{new Date(ride.pickup_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption">{formatTimestamp(ride.pickup_at, 'absolute')}</Text>
             </View>
           )}
           {ride.completed_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="secondary">{t('ride.timestamp_completed')}</Text>
-              <Text variant="caption">{new Date(ride.completed_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption">{formatTimestamp(ride.completed_at, 'absolute')}</Text>
             </View>
           )}
           {ride.canceled_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="secondary">{t('ride.timestamp_canceled')}</Text>
-              <Text variant="caption">{new Date(ride.canceled_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption">{formatTimestamp(ride.canceled_at, 'absolute')}</Text>
             </View>
           )}
         </Card>

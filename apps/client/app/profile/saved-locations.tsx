@@ -13,7 +13,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
@@ -86,6 +86,8 @@ export default function SavedLocationsScreen() {
       setNewLabel('');
       setSelectedAddress(null);
       setEditingIndex(null);
+      Toast.show({ type: 'success', text1: t('profile.location_saved', { defaultValue: 'Ubicación guardada' }) });
+      triggerHaptic('success');
     } catch {
       Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
     } finally {

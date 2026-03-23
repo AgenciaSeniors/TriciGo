@@ -7,7 +7,8 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone, triggerHaptic } from '@tricigo/utils';
+import Toast from 'react-native-toast-message';
 
 interface AddContactSheetProps {
   visible: boolean;
@@ -50,6 +51,8 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         is_emergency: isEmergency,
       });
       resetForm();
+      Toast.show({ type: 'success', text1: t('trusted_contacts.contact_added', { defaultValue: 'Contacto agregado' }) });
+      triggerHaptic('success');
       onAdded();
       onClose();
     } catch (err: unknown) {

@@ -8,6 +8,8 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { recurringRideService } from '@tricigo/api';
+import Toast from 'react-native-toast-message';
+import { triggerHaptic } from '@tricigo/utils';
 import type { ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
@@ -104,6 +106,8 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
         time_of_day: `${hours}:${minutes}`,
         timezone: 'America/Havana',
       });
+      Toast.show({ type: 'success', text1: t('recurring.created_success', { defaultValue: 'Viaje recurrente creado' }) });
+      triggerHaptic('success');
       resetForm();
       onCreated();
     } catch (err: unknown) {
