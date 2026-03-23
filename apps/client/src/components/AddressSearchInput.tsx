@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -77,6 +77,7 @@ function AddressSearchInputInner({
   }, []);
 
   const handleSelectResult = (result: AddressSearchResult) => {
+    triggerSelection();
     trackEvent('address_searched', { query: query.trim() });
     setQuery('');
     setResults([]);
@@ -85,6 +86,7 @@ function AddressSearchInputInner({
   };
 
   const handleSelectSaved = (loc: SavedLocation) => {
+    triggerSelection();
     setQuery('');
     setResults([]);
     setIsExpanded(false);
@@ -92,6 +94,7 @@ function AddressSearchInputInner({
   };
 
   const handleSelectRecent = (loc: RecentAddress) => {
+    triggerSelection();
     setQuery('');
     setResults([]);
     setIsExpanded(false);
@@ -99,6 +102,7 @@ function AddressSearchInputInner({
   };
 
   const handleSelectPreset = (preset: typeof HAVANA_PRESETS[number]) => {
+    triggerSelection();
     setQuery('');
     setResults([]);
     setIsExpanded(false);
@@ -162,6 +166,7 @@ function AddressSearchInputInner({
     : [];
 
   const handleSelectPrediction = (pred: PredictedDestination) => {
+    triggerSelection();
     setQuery('');
     setResults([]);
     setIsExpanded(false);

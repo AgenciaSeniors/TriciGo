@@ -5,7 +5,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, triggerSelection } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { CancellationFeePreview } from '@tricigo/types';
@@ -158,9 +158,10 @@ function CancelRideSheetInner({
                 ? 'bg-neutral-800 border-neutral-800'
                 : 'bg-white border-neutral-300'
             }`}
-            onPress={() =>
-              setSelectedReason(selectedReason === reasonKey ? null : reasonKey)
-            }
+            onPress={() => {
+              triggerSelection();
+              setSelectedReason(selectedReason === reasonKey ? null : reasonKey);
+            }}
           >
             <Text
               variant="caption"

@@ -15,6 +15,7 @@ import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
@@ -198,12 +199,18 @@ export default function HelpScreen() {
             </View>
           }
           ListEmptyComponent={
-            !loadingTickets ? (
+            loadingTickets ? (
+              <View>
+                <SkeletonListItem />
+                <SkeletonListItem />
+                <SkeletonListItem />
+              </View>
+            ) : (
               <EmptyState
                 icon="chatbubble-ellipses-outline"
                 title={t('profile.help_no_tickets')}
               />
-            ) : null
+            )
           }
         />
       </View>

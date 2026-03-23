@@ -129,6 +129,7 @@ export function RideCompleteView() {
       setTimeout(() => resetAll(), 1500);
     } catch (err) {
       console.error('Error submitting review:', err);
+      Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
       setSubmitting(false);
     }
   };

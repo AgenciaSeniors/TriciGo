@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -164,6 +164,7 @@ function NativeRidesScreen() {
   }, [userId, page, filters]);
 
   const handleFilterChange = useCallback((newFilters: HistoryFilterState) => {
+    triggerSelection();
     setFilters(newFilters);
     setPage(0);
   }, []);

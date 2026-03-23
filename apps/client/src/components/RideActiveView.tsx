@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Pressable, Linking, Alert } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -230,14 +230,27 @@ export function RideActiveView() {
   return (
     <View className="flex-1 pt-4">
       {/* Live map with route polyline */}
-      <RideMapView
-        pickupLocation={activeRide.pickup_location}
-        dropoffLocation={activeRide.dropoff_location}
-        driverLocation={driverPosition}
-        driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
-        routeCoordinates={routeCoordinates}
-        height={200}
-      />
+      <View style={{ position: 'relative' }}>
+        <RideMapView
+          pickupLocation={activeRide.pickup_location}
+          dropoffLocation={activeRide.dropoff_location}
+          driverLocation={driverPosition}
+          driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
+          routeCoordinates={routeCoordinates}
+          height={200}
+        />
+        {!driverPosition && (
+          <View
+            className="absolute inset-0 items-center justify-center bg-neutral-100/80"
+            style={{ borderRadius: 12 }}
+          >
+            <ActivityIndicator size="small" color="#F97316" />
+            <Text variant="caption" color="secondary" className="mt-2">
+              {t('ride.loading_map', { defaultValue: 'Cargando mapa...' })}
+            </Text>
+          </View>
+        )}
+      </View>
       {driverPosState.isCached && driverPosState.cachedAt && (
         <View className="items-center mt-1">
           <Text variant="caption" color="secondary" className="opacity-60">

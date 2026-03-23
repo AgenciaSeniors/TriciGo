@@ -951,7 +951,18 @@ function ReviewingView() {
     draft.pickup?.location?.longitude ?? null,
   );
 
-  if (!fareEstimate) return null;
+  if (!fareEstimate) {
+    if (isLoading) {
+      return (
+        <View className="pt-4 flex-1">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </View>
+      );
+    }
+    return null;
+  }
 
   const discount = promoResult?.valid ? promoResult.discountAmount : 0;
 

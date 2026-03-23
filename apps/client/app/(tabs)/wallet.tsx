@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, getErrorMessage } from '@tricigo/utils';
+import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -247,7 +247,7 @@ function NativeWalletScreen() {
       await walletService.requestRecharge(userId, amountNum * 100);
       setRechargeSheetVisible(false);
       triggerHaptic('success');
-      Alert.alert(t('wallet.recharge'), t('wallet.recharge_success'));
+      Toast.show({ type: 'success', text1: t('wallet.recharge_success') });
     } catch (err) {
       console.error('Error requesting recharge:', err);
       Alert.alert(t('error'), t('errors.recharge_failed'));
@@ -308,7 +308,7 @@ function NativeWalletScreen() {
       );
       setTransferSheetVisible(false);
       triggerHaptic('success');
-      Alert.alert(t('wallet.transfer'), t('wallet.transfer_success'));
+      Toast.show({ type: 'success', text1: t('wallet.transfer_success') });
       await fetchData();
     } catch (err) {
       Alert.alert(t('error'), getErrorMessage(err));
@@ -474,7 +474,7 @@ function NativeWalletScreen() {
             {filterOptions.map((opt) => (
               <Pressable
                 key={opt.key}
-                onPress={() => setActiveFilter(opt.key)}
+                onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
                 className={`px-3 py-1.5 rounded-full border ${
                   activeFilter === opt.key
                     ? 'bg-primary-500 border-primary-500'
