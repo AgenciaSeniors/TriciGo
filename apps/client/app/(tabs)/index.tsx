@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger } from '@tricigo/utils';
+import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -503,6 +503,27 @@ function IdleView() {
 function isValidCoordinate(lat: number, lng: number): boolean {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
 }
+
+// UBER-1.1: Recommend a service based on distance + passengers
+function getRecommendedService(distanceM: number, passengers: number): ServiceTypeSlug {
+  if (passengers > 2) return 'triciclo_basico';
+  if (distanceM < 3000) return 'moto_standard';
+  if (distanceM < 8000) return 'auto_standard';
+  return 'auto_confort';
+}
+
+// UBER-1.2: Format currency with thousand separators
+function formatCurrency(amount: number): string {
+  return Math.round(amount).toLocaleString('es-CU');
+}
+
+// UBER-1.1: Service metadata for recommendation cards
+const SERVICE_META: Record<string, { label: string; maxPax: number; slug: ServiceTypeSlug }> = {
+  moto_standard: { label: 'Moto', maxPax: 1, slug: 'moto_standard' },
+  triciclo_basico: { label: 'Triciclo', maxPax: 3, slug: 'triciclo_basico' },
+  auto_standard: { label: 'Auto', maxPax: 4, slug: 'auto_standard' },
+  auto_confort: { label: 'Confort', maxPax: 4, slug: 'auto_confort' },
+};
 
 // ── Selecting View ─────────────────────────────────────────
 
@@ -1105,13 +1126,45 @@ function ReviewingView() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'auto_standard';
   }, [recentRides]);
 
+  // UBER-1.1: Calculate distance and recommend service
+  const distanceM = useMemo(() => {
+    if (!draft.pickup?.location || !draft.dropoff?.location) return 0;
+    return haversineDistance(draft.pickup.location, draft.dropoff.location);
+  }, [draft.pickup?.location, draft.dropoff?.location]);
+
+  const recommendedSlug = useMemo(
+    () => getRecommendedService(distanceM, draft.passengerCount || 1),
+    [distanceM, draft.passengerCount],
+  );
+
   const [servicePreSelected, setServicePreSelected] = useState(false);
   useEffect(() => {
-    if (!draft.serviceType && preferredService && !servicePreSelected) {
-      setServiceType(preferredService as ServiceTypeSlug);
+    if (!draft.serviceType && !servicePreSelected) {
+      setServiceType(recommendedSlug);
       setServicePreSelected(true);
     }
-  }, [preferredService, draft.serviceType, servicePreSelected, setServiceType]);
+  }, [recommendedSlug, draft.serviceType, servicePreSelected, setServiceType]);
+
+  // UBER-1.1: Derive other (non-selected) services for secondary chips
+  const allServiceSlugs: ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'];
+  const selectedSlug = draft.serviceType || recommendedSlug;
+  const otherServices = allServiceSlugs.filter((s) => s !== selectedSlug);
+
+  const handleServiceSwap = useCallback((slug: ServiceTypeSlug) => {
+    setServiceType(slug);
+    triggerSelection();
+    requestEstimate();
+  }, [setServiceType, requestEstimate]);
+
+  // UBER-1.2: Smart confirm label
+  const selectedServiceLabel = t(`service_type.${selectedSlug}` as const);
+  const confirmLabel = fareEstimate
+    ? t('home.request_with_details', {
+        service: selectedServiceLabel,
+        fare: formatCurrency(fareEstimate.estimated_fare_cup),
+        eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
+      })
+    : t('home.calculating', { defaultValue: 'Calculando...' });
   const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
   const nearbyVehicles = useNearbyVehicles(
     draft.pickup?.location?.latitude ?? null,
@@ -1213,22 +1266,80 @@ function ReviewingView() {
         );
       })()}
 
-      {/* Fare total emphasis */}
-      <View className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-3 mb-4 items-center">
-        <View className="flex-row items-center mb-1">
-          <Text variant="caption" color="secondary">{t('ride.estimated_fare')}</Text>
-          {/* U1.2: Usual service badge */}
-          {draft.serviceType === preferredService && recentRides.length > 0 && (
-            <View className="bg-primary-100 rounded-full px-2 py-0.5 ml-2">
-              <Text variant="caption" style={{ color: colors.brand.orange, fontSize: 10, fontWeight: '600' }}>
-                {t('home.your_usual_service', { defaultValue: 'Tu servicio habitual' })}
+      {/* UBER-1.1: Recommended service PRIMARY card */}
+      <View
+        className="border-2 border-primary-500 rounded-xl p-4 mb-3 relative"
+        style={{ shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, backgroundColor: '#fff' }}
+      >
+        {/* "Recomendado" badge */}
+        {selectedSlug === recommendedSlug && (
+          <View className="absolute -top-3 right-3 bg-primary-500 rounded-full px-3 py-0.5 z-10">
+            <Text variant="caption" color="inverse" style={{ fontSize: 11, fontWeight: '700' }}>
+              {t('home.recommended', { defaultValue: 'Recomendado' })}
+            </Text>
+          </View>
+        )}
+        <View className="flex-row items-center">
+          <Image
+            source={vehicleSelectionImages[selectedSlug] ?? vehicleSelectionImages.auto_standard}
+            style={{ width: 56, height: 56 }}
+            resizeMode="contain"
+          />
+          <View className="flex-1 ml-3">
+            <Text variant="h3" className="font-bold">
+              {t(`service_type.${selectedSlug}` as const)}
+            </Text>
+            <View className="flex-row items-center mt-1">
+              {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
+                <Text variant="bodySmall" color="secondary">
+                  ~{Math.ceil(fareEstimate.estimated_duration_s / 60)} {t('home.min', { defaultValue: 'min' })}
+                </Text>
+              )}
+              {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
+                <Text variant="bodySmall" color="tertiary" className="mx-1">·</Text>
+              )}
+              <Text variant="bodySmall" color="secondary">
+                {t('home.passengers_short', {
+                  count: SERVICE_META[selectedSlug]?.maxPax ?? 4,
+                  defaultValue: `${SERVICE_META[selectedSlug]?.maxPax ?? 4} pax`,
+                })}
               </Text>
             </View>
-          )}
+          </View>
+          <Text variant="h2" color="accent" className="font-bold">
+            ₧{formatCurrency(fareEstimate.estimated_fare_cup)}
+          </Text>
         </View>
-        <Text variant="h2" color="accent">
-          {formatTRC(fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup)}
+      </View>
+
+      {/* UBER-1.1: Secondary service chips */}
+      <View className="mb-4">
+        <Text variant="caption" color="tertiary" className="mb-2">
+          {t('home.other_services', { defaultValue: 'Otras opciones' })}
         </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View className="flex-row gap-2">
+            {otherServices.map((slug) => (
+              <Pressable
+                key={slug}
+                className="bg-neutral-100 rounded-full px-4 py-2 flex-row items-center"
+                onPress={() => handleServiceSwap(slug)}
+                accessibilityRole="radio"
+                accessibilityLabel={t(`service_type.${slug}` as const)}
+                accessibilityState={{ selected: false }}
+              >
+                <Image
+                  source={vehicleSelectionImages[slug]}
+                  style={{ width: 24, height: 24, marginRight: 6 }}
+                  resizeMode="contain"
+                />
+                <Text variant="caption" className="text-neutral-600 font-medium">
+                  {SERVICE_META[slug]?.label ?? slug}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
       </View>
 
       {/* Fare breakdown */}
@@ -1500,20 +1611,11 @@ function ReviewingView() {
       )}
 
       <Button
-        title={
-          fareEstimate.estimated_fare_cup
-            ? t('home.request_service_fare_eta', {
-                service: t(`service_type.${draft.serviceType}` as const),
-                fare: fareEstimate.estimated_fare_cup.toLocaleString(),
-                eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
-                defaultValue: `Solicitar ${t(`service_type.${draft.serviceType}` as const)} por ₧${fareEstimate.estimated_fare_cup.toLocaleString()} · ~${Math.ceil((fareEstimate.estimated_duration_s || 0) / 60)} min`,
-              })
-            : t('home.calculating', { defaultValue: 'Calculando...' })
-        }
+        title={confirmLabel}
         size="lg"
         fullWidth
         onPress={debouncedConfirmRide}
-        loading={isLoading}
+        loading={isLoading || isFareEstimating}
         className="mb-3"
       />
       <Button

@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -42,6 +42,23 @@ function AddressSearchInputInner({
   const [isLocating, setIsLocating] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
+
+  // Fetch user location once for distance display
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getLastKnownPositionAsync();
+        if (!cancelled && pos) {
+          setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Debounced search
   const handleTextChange = useCallback((text: string) => {
@@ -151,22 +168,6 @@ function AddressSearchInputInner({
   const queryLower = query.trim().toLowerCase();
   const hasActiveQuery = queryLower.length >= 2;
 
-  const matchedPredictions = hasActiveQuery
-    ? predictions.filter((p) => p.address.toLowerCase().includes(queryLower)).slice(0, 3)
-    : [];
-
-  const matchedSaved = hasActiveQuery
-    ? savedLocations.filter(
-        (s) =>
-          s.address.toLowerCase().includes(queryLower) ||
-          s.label.toLowerCase().includes(queryLower),
-      ).slice(0, 3)
-    : [];
-
-  const matchedRecent = hasActiveQuery
-    ? recentAddresses.filter((r) => r.address.toLowerCase().includes(queryLower)).slice(0, 3)
-    : [];
-
   const handleSelectPrediction = (pred: PredictedDestination) => {
     triggerSelection();
     setQuery('');
@@ -174,6 +175,64 @@ function AddressSearchInputInner({
     setIsExpanded(false);
     onSelect(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
   };
+
+  // UBER-1.3: Unified select handler for merged results
+  const handleSelectMerged = (item: { address: string; latitude: number; longitude: number }) => {
+    triggerSelection();
+    trackEvent('address_searched', { query: query.trim() });
+    setQuery('');
+    setResults([]);
+    setIsExpanded(false);
+    onSelect(item.address, { latitude: item.latitude, longitude: item.longitude });
+  };
+
+  // UBER-1.3: Merge and rank all sources into a single list of 3
+  type MergedResult = { address: string; latitude: number; longitude: number; priority: number; source: string; distanceKm: number | null; icon: string };
+
+  const mergedResults: MergedResult[] = (() => {
+    if (!hasActiveQuery) return [];
+
+    const matchedPreds = predictions
+      .filter((p) => p.address.toLowerCase().includes(queryLower))
+      .map((p) => ({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 1, source: 'prediction', icon: 'navigate-outline' as const }));
+
+    const matchedSvd = savedLocations
+      .filter((s) => s.address.toLowerCase().includes(queryLower) || s.label.toLowerCase().includes(queryLower))
+      .map((s) => ({ address: s.address, latitude: s.latitude, longitude: s.longitude, priority: 2, source: 'saved', icon: 'star' as const }));
+
+    const matchedRec = recentAddresses
+      .filter((r) => r.address.toLowerCase().includes(queryLower))
+      .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 3, source: 'recent', icon: 'time-outline' as const }));
+
+    const matchedApi = results
+      .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 4, source: 'api', icon: 'location-outline' as const }));
+
+    const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];
+
+    // Remove duplicates: if two items are within 100m, keep the one with lower priority number
+    const deduped: typeof all = [];
+    for (const item of all) {
+      const isDup = deduped.some((d) => {
+        const dist = haversineDistance(
+          { latitude: d.latitude, longitude: d.longitude },
+          { latitude: item.latitude, longitude: item.longitude },
+        );
+        return dist < 100;
+      });
+      if (!isDup) deduped.push(item);
+    }
+
+    // Sort by priority
+    deduped.sort((a, b) => a.priority - b.priority);
+
+    // Add distance from user
+    return deduped.slice(0, 3).map((item) => ({
+      ...item,
+      distanceKm: userLocation
+        ? haversineDistance(userLocation, { latitude: item.latitude, longitude: item.longitude }) / 1000
+        : null,
+    }));
+  })();
 
   // If address is selected and not searching, show compact view
   if (selectedAddress && !isExpanded) {
@@ -224,81 +283,43 @@ function AddressSearchInputInner({
         </View>
       )}
 
-      {/* ── Active search results (query >= 2 chars) ── */}
+      {/* UBER-1.3: Merged ranked results (query >= 2 chars) — max 3 */}
       {isExpanded && hasActiveQuery && (
-        <View className="bg-white rounded-xl mt-1 border border-neutral-200 max-h-64 overflow-hidden">
+        <View className="bg-white rounded-xl mt-1 border border-neutral-200 overflow-hidden">
           <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-            {/* Local matches: predictions */}
-            {matchedPredictions.map((pred, index) => (
+            {mergedResults.map((item, index) => (
               <Pressable
-                key={`pred-${index}`}
-                className="px-4 py-3 flex-row items-center border-b border-neutral-100"
-                onPress={() => handleSelectPrediction(pred)}
-                accessibilityLabel={pred.address}
+                key={`merged-${item.source}-${item.latitude}-${item.longitude}`}
+                className={`px-4 flex-row items-center border-b border-neutral-100 ${index === 0 ? 'py-4' : 'py-3'}`}
+                onPress={() => handleSelectMerged(item)}
+                accessibilityLabel={item.address}
               >
                 <Ionicons
-                  name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                  size={16}
-                  color={colors.brand.orange}
+                  name={item.icon as any}
+                  size={index === 0 ? 18 : 16}
+                  color={index === 0 ? colors.brand.orange : colors.neutral[500]}
                 />
-                <Text variant="bodySmall" className="flex-1 ml-2" numberOfLines={2}>
-                  {pred.address}
-                </Text>
-              </Pressable>
-            ))}
-
-            {/* Local matches: saved locations */}
-            {matchedSaved.map((loc, index) => (
-              <Pressable
-                key={`saved-${index}`}
-                className="px-4 py-3 flex-row items-center border-b border-neutral-100"
-                onPress={() => handleSelectSaved(loc)}
-                accessibilityLabel={`${loc.label}: ${loc.address}`}
-              >
-                <Ionicons name="star" size={16} color={colors.brand.orange} />
                 <View className="flex-1 ml-2">
-                  <Text variant="bodySmall" className="font-medium" numberOfLines={1}>
-                    {loc.label}
-                  </Text>
-                  <Text variant="caption" color="secondary" numberOfLines={1}>
-                    {loc.address}
+                  <Text
+                    variant={index === 0 ? 'body' : 'bodySmall'}
+                    className={index === 0 ? 'font-semibold' : ''}
+                    numberOfLines={2}
+                  >
+                    {item.address}
                   </Text>
                 </View>
-              </Pressable>
-            ))}
-
-            {/* Local matches: recent addresses */}
-            {matchedRecent.map((loc, index) => (
-              <Pressable
-                key={`recent-${index}`}
-                className="px-4 py-3 flex-row items-center border-b border-neutral-100"
-                onPress={() => handleSelectRecent(loc)}
-                accessibilityLabel={loc.address}
-              >
-                <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
-                <Text variant="bodySmall" className="flex-1 ml-2" numberOfLines={2}>
-                  {loc.address}
-                </Text>
-              </Pressable>
-            ))}
-
-            {/* API results */}
-            {results.map((result, index) => (
-              <Pressable
-                key={`api-${result.latitude}-${result.longitude}-${index}`}
-                className="px-4 py-3 flex-row items-center border-b border-neutral-100"
-                onPress={() => handleSelectResult(result)}
-                accessibilityLabel={result.address}
-              >
-                <Ionicons name="location-outline" size={16} color={colors.neutral[500]} />
-                <Text variant="bodySmall" className="flex-1 ml-2" numberOfLines={2}>
-                  {result.address}
-                </Text>
+                {item.distanceKm != null && (
+                  <Text variant="caption" color="tertiary" className="ml-2">
+                    {item.distanceKm < 1
+                      ? `${Math.round(item.distanceKm * 1000)} m`
+                      : `${item.distanceKm.toFixed(1)} km`}
+                  </Text>
+                )}
               </Pressable>
             ))}
 
             {/* No results */}
-            {!isSearching && results.length === 0 && matchedPredictions.length === 0 && matchedSaved.length === 0 && matchedRecent.length === 0 && (
+            {!isSearching && mergedResults.length === 0 && (
               <View className="px-4 py-3">
                 <Text variant="caption" color="secondary">
                   {t('home.no_address_results', { defaultValue: 'No se encontraron resultados' })}
@@ -312,7 +333,7 @@ function AddressSearchInputInner({
         </View>
       )}
 
-      {/* ── Suggestions panel (no active query) ── */}
+      {/* UBER-1.3: Suggestions panel (no active query) — merged ranked list */}
       {isExpanded && !hasActiveQuery && (
         <View className="mt-2">
           {/* Use my location */}
@@ -336,86 +357,68 @@ function AddressSearchInputInner({
             </Pressable>
           )}
 
-          {/* Predicted destinations */}
-          {predictions.length > 0 && (
-            <View className="mt-2">
-              <Text variant="caption" color="secondary" className="mb-1 px-1">
-                {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
-              </Text>
-              {predictions.slice(0, 3).map((pred, index) => (
-                <Pressable
-                  key={`pred-sug-${index}`}
-                  className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectPrediction(pred)}
-                >
-                  <Ionicons
-                    name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                    size={16}
-                    color={colors.brand.orange}
-                  />
-                  <View className="flex-1 ml-3">
-                    <Text variant="bodySmall" className="font-medium" numberOfLines={1}>
-                      {pred.address}
-                    </Text>
-                    <Text variant="caption" color="accent">
-                      {pred.reason === 'time_pattern'
-                        ? t('prediction.time_pattern', { defaultValue: 'Según tu horario' })
-                        : pred.reason === 'frequent'
-                          ? t('prediction.frequent', { defaultValue: 'Destino frecuente' })
-                          : t('prediction.recent', { defaultValue: 'Viaje reciente' })}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          {/* Merged suggestion list: predictions > saved > recent, top 3 */}
+          {(() => {
+            const sugAll: MergedResult[] = [
+              ...predictions.slice(0, 3).map((p) => ({
+                address: p.address, latitude: p.latitude, longitude: p.longitude,
+                priority: 1, source: 'prediction',
+                icon: p.reason === 'time_pattern' ? 'time-outline' : p.reason === 'frequent' ? 'star' : 'navigate-outline',
+                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: p.latitude, longitude: p.longitude }) / 1000 : null,
+              })),
+              ...savedLocations.slice(0, 3).map((s) => ({
+                address: s.address, latitude: s.latitude, longitude: s.longitude,
+                priority: 2, source: 'saved', icon: 'star',
+                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: s.latitude, longitude: s.longitude }) / 1000 : null,
+              })),
+              ...recentAddresses.slice(0, 3).map((r) => ({
+                address: r.address, latitude: r.latitude, longitude: r.longitude,
+                priority: 3, source: 'recent', icon: 'time-outline',
+                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: r.latitude, longitude: r.longitude }) / 1000 : null,
+              })),
+            ];
+            // Dedupe within 100m
+            const deduped: typeof sugAll = [];
+            for (const item of sugAll) {
+              const isDup = deduped.some((d) =>
+                haversineDistance({ latitude: d.latitude, longitude: d.longitude }, { latitude: item.latitude, longitude: item.longitude }) < 100
+              );
+              if (!isDup) deduped.push(item);
+            }
+            deduped.sort((a, b) => a.priority - b.priority);
+            const top3 = deduped.slice(0, 3);
 
-          {/* Saved places */}
-          {savedLocations.length > 0 && (
-            <View className="mt-2">
-              <Text variant="caption" color="secondary" className="mb-1 px-1">
-                {t('home.saved_places', { defaultValue: 'Lugares guardados' })}
-              </Text>
-              {savedLocations.slice(0, 5).map((loc, index) => (
-                <Pressable
-                  key={`saved-sug-${index}`}
-                  className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectSaved(loc)}
-                >
-                  <Ionicons name="star" size={16} color={colors.brand.orange} />
-                  <View className="flex-1 ml-3">
-                    <Text variant="bodySmall" className="font-medium" numberOfLines={1}>
-                      {loc.label}
-                    </Text>
-                    <Text variant="caption" color="secondary" numberOfLines={1}>
-                      {loc.address}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
-          {/* Recent places */}
-          {recentAddresses.length > 0 && (
-            <View className="mt-2">
-              <Text variant="caption" color="secondary" className="mb-1 px-1">
-                {t('home.recent_places', { defaultValue: 'Lugares recientes' })}
-              </Text>
-              {recentAddresses.slice(0, 5).map((loc, index) => (
-                <Pressable
-                  key={`recent-sug-${index}`}
-                  className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectRecent(loc)}
-                >
-                  <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
-                  <Text variant="bodySmall" className="flex-1 ml-3" numberOfLines={1}>
-                    {loc.address}
+            if (top3.length === 0) return null;
+            return top3.map((item, index) => (
+              <Pressable
+                key={`sug-${item.source}-${item.latitude}-${item.longitude}`}
+                className={`flex-row items-center px-3 rounded-lg ${index === 0 ? 'py-3' : 'py-2.5'}`}
+                onPress={() => handleSelectMerged(item)}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={index === 0 ? 18 : 16}
+                  color={index === 0 ? colors.brand.orange : colors.neutral[500]}
+                />
+                <View className="flex-1 ml-3">
+                  <Text
+                    variant={index === 0 ? 'body' : 'bodySmall'}
+                    className={index === 0 ? 'font-semibold' : 'font-medium'}
+                    numberOfLines={1}
+                  >
+                    {item.address}
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+                </View>
+                {item.distanceKm != null && (
+                  <Text variant="caption" color="tertiary">
+                    {item.distanceKm < 1
+                      ? `${Math.round(item.distanceKm * 1000)} m`
+                      : `${item.distanceKm.toFixed(1)} km`}
+                  </Text>
+                )}
+              </Pressable>
+            ));
+          })()}
 
           {/* Popular places (presets) */}
           <View className="mt-3">

@@ -24,7 +24,11 @@
     "searching_drivers": "Procurando motoristas na sua área...",
     "notifying_drivers": "Notificando motoristas próximos...",
     "expanding_search": "Ampliando busca na sua área...",
-    "few_drivers": "Poucos motoristas disponíveis. Continuamos buscando..."
+    "few_drivers": "Poucos motoristas disponíveis. Continuamos buscando...",
+    "recommended": "Recomendado",
+    "request_with_details": "Pedir {{service}} · ₧{{fare}} · {{eta}} min",
+    "other_services": "Outras opções",
+    "passengers_short": "{{count}} pax"
   },
 
   "ride": {
