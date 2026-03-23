@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Alert, Pressable } from 'react-native';
+import { View, Pressable } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -57,11 +58,11 @@ export default function EmergencyContactScreen() {
   const handleSave = async () => {
     if (!profile || !user) return;
     if (!name.trim() || name.trim().length < 2) {
-      Alert.alert(t('error'), t('emergency.name_required', { defaultValue: 'Ingresa el nombre del contacto' }));
+      Toast.show({ type: 'error', text1: t('emergency.name_required', { defaultValue: 'Ingresa el nombre del contacto' }) });
       return;
     }
     if (!isValidCubanPhone(phone.trim())) {
-      Alert.alert(t('error'), t('emergency.invalid_phone', { defaultValue: 'Ingresa un número de teléfono cubano válido' }));
+      Toast.show({ type: 'error', text1: t('emergency.invalid_phone', { defaultValue: 'Ingresa un número de teléfono cubano válido' }) });
       return;
     }
     setSaving(true);
@@ -98,7 +99,7 @@ export default function EmergencyContactScreen() {
 
       router.back();
     } catch {
-      Alert.alert(t('error'), t('errors.emergency_contact_failed'));
+      Toast.show({ type: 'error', text1: t('errors.emergency_contact_failed') });
     } finally {
       setSaving(false);
     }

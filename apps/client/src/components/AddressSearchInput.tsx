@@ -194,7 +194,7 @@ function AddressSearchInputInner({
   return (
     <View className="mb-2">
       {/* Search input */}
-      <View className="bg-neutral-100 rounded-xl px-3 py-2 flex-row items-center">
+      <View className="bg-neutral-100 rounded-xl px-3 py-2 flex-row items-center" accessibilityRole="search">
         <Ionicons name="search-outline" size={18} color={colors.neutral[400]} />
         <TextInput
           className="flex-1 text-base text-neutral-900 ml-2 py-1"
@@ -205,6 +205,7 @@ function AddressSearchInputInner({
           onFocus={handleFocus}
           autoCorrect={false}
           returnKeyType="search"
+          accessibilityLabel="Buscar dirección"
         />
         {isSearching && <ActivityIndicator size="small" color={colors.brand.orange} />}
         {query.length > 0 && !isSearching && (
@@ -233,6 +234,7 @@ function AddressSearchInputInner({
                 key={`pred-${index}`}
                 className="px-4 py-3 flex-row items-center border-b border-neutral-100"
                 onPress={() => handleSelectPrediction(pred)}
+                accessibilityLabel={pred.address}
               >
                 <Ionicons
                   name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
@@ -251,6 +253,7 @@ function AddressSearchInputInner({
                 key={`saved-${index}`}
                 className="px-4 py-3 flex-row items-center border-b border-neutral-100"
                 onPress={() => handleSelectSaved(loc)}
+                accessibilityLabel={`${loc.label}: ${loc.address}`}
               >
                 <Ionicons name="star" size={16} color={colors.brand.orange} />
                 <View className="flex-1 ml-2">
@@ -270,6 +273,7 @@ function AddressSearchInputInner({
                 key={`recent-${index}`}
                 className="px-4 py-3 flex-row items-center border-b border-neutral-100"
                 onPress={() => handleSelectRecent(loc)}
+                accessibilityLabel={loc.address}
               >
                 <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
                 <Text variant="bodySmall" className="flex-1 ml-2" numberOfLines={2}>
@@ -284,6 +288,7 @@ function AddressSearchInputInner({
                 key={`api-${result.latitude}-${result.longitude}-${index}`}
                 className="px-4 py-3 flex-row items-center border-b border-neutral-100"
                 onPress={() => handleSelectResult(result)}
+                accessibilityLabel={result.address}
               >
                 <Ionicons name="location-outline" size={16} color={colors.neutral[500]} />
                 <Text variant="bodySmall" className="flex-1 ml-2" numberOfLines={2}>

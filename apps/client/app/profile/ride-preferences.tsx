@@ -9,6 +9,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import Toast from 'react-native-toast-message';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { customerService } from '@tricigo/api';
 import type { RidePreferences, AccessibilityNeed } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
@@ -97,8 +98,8 @@ export default function RidePreferencesScreen() {
     return (
       <Screen>
         <ScreenHeader title={t('preferences.title')} onBack={() => router.back()} />
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+        <View className="flex-1 px-4 pt-4">
+          <SkeletonCard />
         </View>
       </Screen>
     );

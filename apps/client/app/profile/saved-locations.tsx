@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, FlatList, Alert, Pressable, RefreshControl } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
@@ -14,6 +15,7 @@ import { colors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
@@ -85,7 +87,7 @@ export default function SavedLocationsScreen() {
       setSelectedAddress(null);
       setEditingIndex(null);
     } catch {
-      Alert.alert(t('error'), t('errors.saved_locations_failed'));
+      Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
     } finally {
       setSaving(false);
     }
@@ -104,7 +106,7 @@ export default function SavedLocationsScreen() {
             await customerService.updateProfile(profile.id, { saved_locations: updated });
             setLocations(updated);
           } catch {
-            Alert.alert(t('error'), t('errors.saved_locations_failed'));
+            Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
           }
         },
       },
@@ -177,14 +179,20 @@ export default function SavedLocationsScreen() {
             </Card>
           )}
           ListEmptyComponent={
-            !loading ? (
+            loading ? (
+              <View>
+                <SkeletonListItem />
+                <SkeletonListItem />
+                <SkeletonListItem />
+              </View>
+            ) : (
               <EmptyState
                 icon="location-outline"
                 title={t('profile.no_saved_locations')}
                 description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar más rápido.' })}
                 action={{ label: t('profile.add_location'), onPress: () => handleOpenSheet() }}
               />
-            ) : null
+            )
           }
         />
 

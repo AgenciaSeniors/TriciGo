@@ -149,28 +149,34 @@ function CancelRideSheetInner({
       <Text variant="bodySmall" color="secondary" className="mb-2">
         {t('ride.cancel_reason_title', { defaultValue: 'Razón (opcional)' })}
       </Text>
-      <View className="flex-row flex-wrap gap-2 mb-6">
-        {CANCEL_REASONS.map((reasonKey) => (
-          <Pressable
-            key={reasonKey}
-            className={`px-3 py-2 rounded-full border ${
-              selectedReason === reasonKey
-                ? 'bg-neutral-800 dark:bg-neutral-200 border-neutral-800 dark:border-neutral-200'
-                : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600'
-            }`}
-            onPress={() => {
-              triggerSelection();
-              setSelectedReason(selectedReason === reasonKey ? null : reasonKey);
-            }}
-          >
-            <Text
-              variant="caption"
-              color={selectedReason === reasonKey ? 'inverse' : 'secondary'}
+      <View className="flex-row flex-wrap gap-2 mb-6" accessibilityRole="radiogroup">
+        {CANCEL_REASONS.map((reasonKey) => {
+          const reasonText = t(`ride.${reasonKey}` as any, { defaultValue: reasonKey });
+          return (
+            <Pressable
+              key={reasonKey}
+              className={`px-3 py-2 rounded-full border ${
+                selectedReason === reasonKey
+                  ? 'bg-neutral-800 dark:bg-neutral-200 border-neutral-800 dark:border-neutral-200'
+                  : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600'
+              }`}
+              onPress={() => {
+                triggerSelection();
+                setSelectedReason(selectedReason === reasonKey ? null : reasonKey);
+              }}
+              accessibilityRole="radio"
+              accessibilityLabel={reasonText}
+              accessibilityState={{ selected: selectedReason === reasonKey }}
             >
-              {t(`ride.${reasonKey}` as any, { defaultValue: reasonKey })}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                variant="caption"
+                color={selectedReason === reasonKey ? 'inverse' : 'secondary'}
+              >
+                {reasonText}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Action buttons */}

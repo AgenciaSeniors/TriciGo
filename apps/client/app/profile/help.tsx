@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, RefreshControl } from 'react-native';
+import { View, Pressable, FlatList, RefreshControl } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -103,11 +104,11 @@ export default function HelpScreen() {
         description: description.trim() || undefined,
       });
       setSheetVisible(false);
-      Alert.alert(t('profile.help_title'), t('profile.help_ticket_created'));
+      Toast.show({ type: 'success', text1: t('profile.help_ticket_created') });
       fetchTickets();
     } catch (err) {
       console.warn('[Help] Failed to create ticket:', err);
-      Alert.alert(t('error'), t('profile.help_ticket_error'));
+      Toast.show({ type: 'error', text1: t('profile.help_ticket_error') });
     } finally {
       setSubmitting(false);
     }

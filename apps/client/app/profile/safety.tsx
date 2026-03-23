@@ -12,6 +12,7 @@ import { colors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
 import { getErrorMessage, logger } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -30,36 +31,42 @@ export default function SafetyCenterScreen() {
   const [incidents, setIncidents] = useState<IncidentReport[]>([]);
   const [tipsExpanded, setTipsExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSafetyData = useCallback(() => {
+  const loadSafetyData = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
 
-    // Load emergency contact
-    customerService.ensureProfile(user.id).then((cp) => {
-      if (cp.emergency_contact) {
-        setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
-      }
-    }).catch((err) => setError(getErrorMessage(err)));
+    await Promise.allSettled([
+      // Load emergency contact
+      customerService.ensureProfile(user.id).then((cp) => {
+        if (cp.emergency_contact) {
+          setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
+        }
+      }).catch((err) => setError(getErrorMessage(err))),
 
-    // Load trusted contacts count
-    trustedContactService.getContacts(user.id).then((contacts) => {
-      setTrustedCount(contacts.length);
-      // Use emergency contact from trusted_contacts if available
-      const emergency = contacts.find((c) => c.is_emergency);
-      if (emergency) {
-        setEmergencyContact({ name: emergency.name, phone: emergency.phone });
-      }
-    }).catch((err) => {
-      logger.error('Error loading trusted contacts', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('errors.contacts_load_failed', { ns: 'common' }) });
-    });
+      // Load trusted contacts count
+      trustedContactService.getContacts(user.id).then((contacts) => {
+        setTrustedCount(contacts.length);
+        // Use emergency contact from trusted_contacts if available
+        const emergency = contacts.find((c) => c.is_emergency);
+        if (emergency) {
+          setEmergencyContact({ name: emergency.name, phone: emergency.phone });
+        }
+      }).catch((err) => {
+        logger.error('Error loading trusted contacts', { error: String(err) });
+        Toast.show({ type: 'error', text1: t('errors.contacts_load_failed', { ns: 'common' }) });
+      }),
 
-    // Load incidents
-    incidentService.getMyIncidents(user.id).then(setIncidents).catch((err) => {
-      logger.error('Error loading incidents', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('errors.safety_load_failed', { ns: 'common' }) });
-    });
+      // Load incidents
+      incidentService.getMyIncidents(user.id).then(setIncidents).catch((err) => {
+        logger.error('Error loading incidents', { error: String(err) });
+        Toast.show({ type: 'error', text1: t('errors.safety_load_failed', { ns: 'common' }) });
+      }),
+    ]);
+
+    setLoading(false);
   }, [user]);
 
   useEffect(() => {
@@ -104,6 +111,15 @@ export default function SafetyCenterScreen() {
           {t('safety.desc')}
         </Text>
 
+        {loading && (
+          <View>
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+          </View>
+        )}
+
+        {!loading && (<>
         {/* Emergency Services */}
         <Card variant="outlined" padding="md" className="mb-3">
           <View className="flex-row items-center mb-3">
@@ -254,6 +270,7 @@ export default function SafetyCenterScreen() {
             ))
           )}
         </Card>
+        </>)}
       </View>
     </Screen>
   );

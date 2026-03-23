@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, Switch, Alert, ScrollView, RefreshControl } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -59,7 +60,7 @@ export default function TrustedContactsScreen() {
         prev.map((c) => (c.id === contact.id ? updated : c)),
       );
     } catch {
-      Alert.alert(t('error'), t('errors.contacts_load_failed'));
+      Toast.show({ type: 'error', text1: t('errors.contacts_load_failed') });
     }
   };
 
@@ -77,7 +78,7 @@ export default function TrustedContactsScreen() {
               await trustedContactService.deleteContact(contact.id);
               setContacts((prev) => prev.filter((c) => c.id !== contact.id));
             } catch {
-              Alert.alert(t('error'), t('errors.contacts_load_failed'));
+              Toast.show({ type: 'error', text1: t('errors.contacts_load_failed') });
             }
           },
         },

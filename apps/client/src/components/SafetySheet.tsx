@@ -135,6 +135,8 @@ export function SafetySheet({
         <Pressable
           className="flex-row items-center py-4 border-b border-neutral-100"
           onPress={() => Linking.openURL(`tel:${driverPhone}`)}
+          accessibilityRole="button"
+          accessibilityLabel="Llamar al conductor"
         >
           <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
             <Ionicons name="call-outline" size={20} color={colors.primary[500]} />
@@ -152,6 +154,8 @@ export function SafetySheet({
       <Pressable
         className="flex-row items-center py-4 border-b border-neutral-100"
         onPress={handleSOS}
+        accessibilityRole="button"
+        accessibilityLabel="Activar SOS"
       >
         <View className="w-10 h-10 rounded-full bg-error items-center justify-center mr-3">
           <Ionicons name="warning" size={20} color="white" />
@@ -172,6 +176,8 @@ export function SafetySheet({
         className="flex-row items-center py-4 border-b border-neutral-100"
         onPress={handleShareTrip}
         disabled={sharing}
+        accessibilityRole="button"
+        accessibilityLabel="Compartir ubicación"
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
           <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
@@ -196,6 +202,8 @@ export function SafetySheet({
         className="flex-row items-center py-4 border-b border-neutral-100"
         onPress={handleShareWithContacts}
         disabled={sharingWithContacts || contactsSent}
+        accessibilityRole="button"
+        accessibilityLabel="Compartir con contactos de confianza"
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
           <Ionicons name="people-outline" size={20} color={colors.primary[500]} />
@@ -225,6 +233,8 @@ export function SafetySheet({
       <Pressable
         className="flex-row items-center py-4 border-b border-neutral-100"
         onPress={handleCallContact}
+        accessibilityRole="button"
+        accessibilityLabel="Llamar a contacto de emergencia"
       >
         <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
           <Ionicons name="call-outline" size={20} color={colors.primary[500]} />

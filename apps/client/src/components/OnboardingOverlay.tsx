@@ -108,7 +108,12 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
         <View style={[styles.card, { backgroundColor: isDark ? '#1F2937' : '#ffffff' }]}>
           {/* Skip button */}
           {!isLastStep && (
-            <Pressable style={styles.skipButton} onPress={handleSkip}>
+            <Pressable
+              style={styles.skipButton}
+              onPress={handleSkip}
+              accessibilityRole="button"
+              accessibilityLabel="Omitir introducción"
+            >
               <Text style={[styles.skipText, { color: isDark ? '#6B7280' : '#9ca3af' }]}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
             </Pressable>
           )}
@@ -132,7 +137,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
           </Animated.View>
 
           {/* Dots indicator */}
-          <View style={styles.dotsRow}>
+          <View style={styles.dotsRow} accessibilityRole="tablist">
             {STEPS.map((_, i) => (
               <View
                 key={i}
@@ -149,6 +154,8 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             title={isLastStep ? t('onboarding.start', { defaultValue: 'Comenzar' }) : t('onboarding.next', { defaultValue: 'Siguiente' })}
             onPress={handleNext}
             fullWidth
+            accessibilityRole="button"
+            accessibilityLabel="Siguiente"
           />
         </View>
       </View>

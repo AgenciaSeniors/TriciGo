@@ -368,7 +368,7 @@ export function RideCompleteView() {
                 key={star}
                 onPress={() => { setSelectedRating(star); triggerSelection(); }}
                 accessibilityRole="radio"
-                accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                accessibilityLabel={`Calificar ${star} de 5 estrellas`}
                 accessibilityState={{ selected: selectedRating === star }}
                 style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
               >
@@ -487,6 +487,7 @@ export function RideCompleteView() {
             fullWidth
             onPress={selectedRating ? handleSubmitReview : resetAll}
             loading={submitting}
+            accessibilityHint={selectedRating ? 'Enviar calificación al conductor' : undefined}
           />
         </>
       ) : (

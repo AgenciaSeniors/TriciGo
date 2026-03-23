@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, Share, RefreshControl } from 'react-native';
+import { View, Pressable, FlatList, Share, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -12,6 +12,7 @@ import { Input } from '@tricigo/ui/Input';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { Skeleton } from '@tricigo/ui/Skeleton';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
@@ -89,13 +90,13 @@ export default function ReferralScreen() {
     setSubmitting(true);
     try {
       await referralService.applyReferralCode(userId, inputCode.trim());
-      Alert.alert(t('profile.referral_success_title'), t('profile.referral_success_message'));
+      Toast.show({ type: 'success', text1: t('profile.referral_success_title'), text2: t('profile.referral_success_message') });
       setInputCode('');
       setHasBeenReferred(true);
       fetchData();
     } catch (err) {
       const message = err instanceof Error ? err.message : t('profile.referral_error');
-      Alert.alert(t('error'), message);
+      Toast.show({ type: 'error', text1: t('error'), text2: message });
     } finally {
       setSubmitting(false);
     }
@@ -150,6 +151,11 @@ export default function ReferralScreen() {
                 <Text variant="bodySmall" color="secondary" className="mb-2">
                   {t('profile.referral_your_code')}
                 </Text>
+                {loading && !myCode ? (
+                  <View className="mb-3">
+                    <Skeleton width={160} height={32} />
+                  </View>
+                ) : (
                 <Pressable onPress={handleCopyCode} className="flex-row items-center mb-3">
                   <Text variant="h2" color="primary" className="tracking-widest">
                     {myCode || '...'}
@@ -158,6 +164,7 @@ export default function ReferralScreen() {
                     <Ionicons name="copy-outline" size={20} color={colors.primary[500]} style={{ marginLeft: 8 }} />
                   ) : null}
                 </Pressable>
+                )}
                 <Button
                   title={t('profile.referral_share')}
                   variant="primary"
