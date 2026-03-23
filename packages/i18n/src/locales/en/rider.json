@@ -13,7 +13,9 @@
     "retry_estimate": "Retry",
     "optional": "optional",
     "passenger_capacity_hint": "Capacity: Moto 1, Triciclo 2-3, Auto 1-4",
-    "geocode_error": "Could not get the address. Try typing it manually."
+    "geocode_error": "Could not get the address. Try typing it manually.",
+    "surge_active_label": "Dynamic pricing active",
+    "surge_explanation": "Prices are higher due to high demand in your area"
   },
 
   "ride": {
@@ -221,7 +223,8 @@
     "skip_rating": "Skip",
     "comment_limit": "{{count}}/500",
     "report_issue": "Report issue",
-    "lost_item": "Lost item"
+    "lost_item": "Lost item",
+    "driver_phone_unavailable": "Driver phone not available"
   },
 
   "dispute": {
@@ -475,6 +478,20 @@
     "day_fri": "F",
     "day_sat": "S",
     "day_sun": "S"
+  },
+
+  "onboarding": {
+    "slide1_title": "Welcome to TriciGo",
+    "slide1_desc": "Your ride-hailing app in Havana. Request a ride in seconds and get where you need to go.",
+    "slide2_title": "Choose your ride",
+    "slide2_desc": "Motorcycle, tricycle, car, or comfort. Pick the service that fits your trip.",
+    "slide3_title": "Travel safely",
+    "slide3_desc": "SOS button, trusted contacts, and real-time tracking for your peace of mind.",
+    "slide4_title": "Pay easily",
+    "slide4_desc": "Pay with TriciCoin, cash, or mixed. Top up your wallet right from the app.",
+    "skip": "Skip",
+    "next": "Next",
+    "start": "Get started"
   },
 
   "common": {

@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { colors } from '@tricigo/theme';
+import { useTranslation } from '@tricigo/i18n';
 
 interface OnboardingOverlayProps {
   onComplete: () => void;
@@ -18,34 +19,38 @@ interface OnboardingOverlayProps {
 
 interface OnboardingStep {
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description: string;
+  titleKey: string;
+  descKey: string;
   iconColor: string;
   iconBg: string;
 }
 
 const STEPS: OnboardingStep[] = [
   {
-    icon: 'car-sport',
-    title: 'Solicita un viaje',
-    description:
-      'Escribe tu destino, elige el tipo de veh\u00edculo y confirma. Un conductor cercano te recoger\u00e1 en minutos.',
+    icon: 'rocket-outline',
+    titleKey: 'onboarding.slide1_title',
+    descKey: 'onboarding.slide1_desc',
     iconColor: colors.brand.orange,
     iconBg: colors.primary[50],
   },
   {
-    icon: 'wallet',
-    title: 'Paga con TriciCoin',
-    description:
-      'Recarga tu billetera con TriciCoins y paga tus viajes de forma r\u00e1pida y segura desde la app.',
+    icon: 'car-sport',
+    titleKey: 'onboarding.slide2_title',
+    descKey: 'onboarding.slide2_desc',
+    iconColor: '#2563eb',
+    iconBg: '#eff6ff',
+  },
+  {
+    icon: 'shield-checkmark',
+    titleKey: 'onboarding.slide3_title',
+    descKey: 'onboarding.slide3_desc',
     iconColor: '#16a34a',
     iconBg: '#f0fdf4',
   },
   {
-    icon: 'people',
-    title: 'Invita amigos',
-    description:
-      'Comparte tu c\u00f3digo de referido y ambos recibir\u00e1n TriciCoins de bonificaci\u00f3n cuando completen su primer viaje.',
+    icon: 'wallet',
+    titleKey: 'onboarding.slide4_title',
+    descKey: 'onboarding.slide4_desc',
     iconColor: '#7c3aed',
     iconBg: '#f5f3ff',
   },
@@ -54,6 +59,7 @@ const STEPS: OnboardingStep[] = [
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
+  const { t } = useTranslation('rider');
   const [currentStep, setCurrentStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -97,7 +103,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
           {/* Skip button */}
           {!isLastStep && (
             <Pressable style={styles.skipButton} onPress={handleSkip}>
-              <Text style={styles.skipText}>Omitir</Text>
+              <Text style={styles.skipText}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
             </Pressable>
           )}
 
@@ -113,10 +119,10 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             </View>
 
             {/* Title */}
-            <Text style={styles.title}>{step.title}</Text>
+            <Text style={styles.title}>{t(step.titleKey)}</Text>
 
             {/* Description */}
-            <Text style={styles.description}>{step.description}</Text>
+            <Text style={styles.description}>{t(step.descKey)}</Text>
           </Animated.View>
 
           {/* Dots indicator */}
@@ -134,7 +140,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
 
           {/* Action button */}
           <Button
-            title={isLastStep ? 'Comenzar' : 'Siguiente'}
+            title={isLastStep ? t('onboarding.start', { defaultValue: 'Comenzar' }) : t('onboarding.next', { defaultValue: 'Siguiente' })}
             onPress={handleNext}
             fullWidth
           />

@@ -1121,6 +1121,25 @@ function ReviewingView() {
         />
       </View>
 
+      {/* Surge pricing explanation card (8.1) */}
+      {fareEstimate.surge_multiplier != null && fareEstimate.surge_multiplier > 1 && (
+        <View
+          className="flex-row items-center rounded-xl px-4 py-3 mb-4"
+          style={{ backgroundColor: '#FEF3C7' }}
+          accessibilityRole="alert"
+        >
+          <Ionicons name="flash" size={20} color="#D97706" />
+          <View className="flex-1 ml-3">
+            <Text variant="bodySmall" className="font-bold" style={{ color: '#92400E' }}>
+              {t('home.surge_active_label', { defaultValue: 'Tarifa dinámica activa' })} (x{fareEstimate.surge_multiplier})
+            </Text>
+            <Text variant="caption" style={{ color: '#92400E' }}>
+              {t('home.surge_explanation', { defaultValue: 'Los precios son más altos debido a la alta demanda en tu zona' })}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* ETA display */}
       {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
         <View className="flex-row items-center mb-4 px-1">

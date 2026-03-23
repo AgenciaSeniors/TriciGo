@@ -86,7 +86,11 @@
     "txn_tip_sent": "Tip sent",
     "txn_refund": "Refund",
     "txn_bonus": "Bonus",
-    "txn_referral_bonus": "Referral bonus"
+    "txn_referral_bonus": "Referral bonus",
+    "this_month": "This month",
+    "total_spent": "Total spent",
+    "rides_count": "Rides",
+    "avg_ride": "Average"
   },
 
   "profile": {

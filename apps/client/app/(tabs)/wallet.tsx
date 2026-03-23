@@ -408,6 +408,36 @@ function NativeWalletScreen() {
   }, [tropipayAmount, userId, t]);
   const debouncedSubmitTropiPay = useDebouncePress(submitTropiPay);
 
+  // Monthly spending insights (8.4)
+  const monthlyInsights = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthTxns = transactions.filter((tx) => {
+      const txDate = new Date(tx.created_at);
+      return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
+    });
+
+    const debitTxns = monthTxns.filter((tx) => {
+      const amount = tx.ledger_entries?.[0]?.amount ?? 0;
+      return amount < 0;
+    });
+
+    const totalSpent = debitTxns.reduce((sum, tx) => {
+      const amount = tx.ledger_entries?.[0]?.amount ?? 0;
+      return sum + Math.abs(amount);
+    }, 0);
+
+    const ridePayments = debitTxns.filter((tx) =>
+      tx.type === 'ride_payment' || tx.type === 'ride_hold' || tx.type === 'redemption',
+    );
+    const ridesCount = ridePayments.length;
+    const avgRide = ridesCount > 0 ? Math.round(totalSpent / ridesCount) : 0;
+
+    return { totalSpent, ridesCount, avgRide };
+  }, [transactions]);
+
   const filteredTransactions = useMemo(() => {
     if (activeFilter === 'all') return transactions;
     return transactions.filter((tx) => tx.type === activeFilter);
@@ -500,6 +530,41 @@ function NativeWalletScreen() {
           onPress={handleTropiPay}
           className="mb-8"
         />
+
+        {/* Monthly spending insights (8.4) */}
+        {transactions.length > 0 && (
+          <View className="mb-6">
+            <Text variant="h4" className="mb-3">
+              {t('wallet.this_month', { defaultValue: 'Este mes' })}
+            </Text>
+            <View className="flex-row gap-3">
+              <View className="flex-1 bg-primary-50 rounded-xl px-3 py-3 items-center">
+                <Text variant="caption" color="secondary" className="mb-1">
+                  {t('wallet.total_spent', { defaultValue: 'Total gastado' })}
+                </Text>
+                <Text variant="body" className="font-bold text-primary-600">
+                  {formatTriciCoin(monthlyInsights.totalSpent)}
+                </Text>
+              </View>
+              <View className="flex-1 bg-primary-50 rounded-xl px-3 py-3 items-center">
+                <Text variant="caption" color="secondary" className="mb-1">
+                  {t('wallet.rides_count', { defaultValue: 'Viajes' })}
+                </Text>
+                <Text variant="body" className="font-bold text-primary-600">
+                  {monthlyInsights.ridesCount}
+                </Text>
+              </View>
+              <View className="flex-1 bg-primary-50 rounded-xl px-3 py-3 items-center">
+                <Text variant="caption" color="secondary" className="mb-1">
+                  {t('wallet.avg_ride', { defaultValue: 'Promedio' })}
+                </Text>
+                <Text variant="body" className="font-bold text-primary-600">
+                  {formatTriciCoin(monthlyInsights.avgRide)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         <Text variant="h4" className="mb-2">
           {t('wallet.history')}

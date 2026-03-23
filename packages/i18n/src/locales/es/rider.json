@@ -13,7 +13,9 @@
     "retry_estimate": "Reintentar",
     "optional": "opcional",
     "passenger_capacity_hint": "Capacidad: Moto 1, Triciclo 2-3, Auto 1-4",
-    "geocode_error": "No se pudo obtener la dirección. Intenta escribirla manualmente."
+    "geocode_error": "No se pudo obtener la dirección. Intenta escribirla manualmente.",
+    "surge_active_label": "Tarifa dinámica activa",
+    "surge_explanation": "Los precios son más altos debido a la alta demanda en tu zona"
   },
 
   "ride": {
@@ -221,7 +223,8 @@
     "skip_rating": "Omitir",
     "comment_limit": "{{count}}/500",
     "report_issue": "Reportar problema",
-    "lost_item": "Objeto perdido"
+    "lost_item": "Objeto perdido",
+    "driver_phone_unavailable": "Número del conductor no disponible"
   },
 
   "dispute": {
@@ -475,6 +478,20 @@
     "day_fri": "V",
     "day_sat": "S",
     "day_sun": "D"
+  },
+
+  "onboarding": {
+    "slide1_title": "Bienvenido a TriciGo",
+    "slide1_desc": "Tu app de transporte en La Habana. Pide un viaje en segundos y llega a donde necesites.",
+    "slide2_title": "Elige tu transporte",
+    "slide2_desc": "Moto, triciclo, auto o confort. Elige el servicio que mejor se adapte a tu viaje.",
+    "slide3_title": "Viaja seguro",
+    "slide3_desc": "Botón SOS, contactos de confianza y seguimiento en tiempo real para tu tranquilidad.",
+    "slide4_title": "Paga fácil",
+    "slide4_desc": "Paga con TriciCoin, efectivo o mixto. Recarga tu wallet desde la app.",
+    "skip": "Omitir",
+    "next": "Siguiente",
+    "start": "Comenzar"
   },
 
   "common": {

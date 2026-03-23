@@ -86,7 +86,11 @@
     "txn_tip_sent": "Propina enviada",
     "txn_refund": "Reembolso",
     "txn_bonus": "Bonificación",
-    "txn_referral_bonus": "Bonus de referido"
+    "txn_referral_bonus": "Bonus de referido",
+    "this_month": "Este mes",
+    "total_spent": "Total gastado",
+    "rides_count": "Viajes",
+    "avg_ride": "Promedio"
   },
 
   "profile": {

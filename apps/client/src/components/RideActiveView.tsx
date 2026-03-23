@@ -416,7 +416,7 @@ export function RideActiveView() {
                   onPress={() => router.push(`/chat/${activeRide.id}`)}
                   label="Chat"
                 />
-                {rideWithDriver.driver_phone && (
+                {rideWithDriver.driver_phone ? (
                   <IconButton
                     icon="call-outline"
                     variant="primary"
@@ -424,6 +424,17 @@ export function RideActiveView() {
                     onPress={handleCall}
                     label={t('ride.call_driver', { defaultValue: 'Llamar' })}
                   />
+                ) : (
+                  <View style={{ alignItems: 'center', opacity: 0.5 }}>
+                    <IconButton
+                      icon="call-outline"
+                      variant="secondary"
+                      size="lg"
+                      onPress={() => {}}
+                      label={t('ride.driver_phone_unavailable', { defaultValue: 'Número del conductor no disponible' })}
+                      disabled
+                    />
+                  </View>
                 )}
                 <IconButton
                   icon="shield-checkmark-outline"
