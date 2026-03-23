@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, View } from 'react-native';
+import { logger } from '@tricigo/utils';
 
 // Only import mapbox-gl on web
 let mapboxgl: typeof import('mapbox-gl') | null = null;
@@ -9,7 +10,7 @@ if (Platform.OS === 'web') {
     // Import CSS
     require('mapbox-gl/dist/mapbox-gl.css');
   } catch {
-    console.warn('[WebMapView] mapbox-gl not available');
+    logger.warn('[WebMapView] mapbox-gl not available');
   }
 }
 

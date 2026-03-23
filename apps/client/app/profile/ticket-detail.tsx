@@ -13,6 +13,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
+import { logger } from '@tricigo/utils';
 
 export default function TicketDetailScreen() {
   const { t } = useTranslation('common');
@@ -43,7 +44,7 @@ export default function TicketDetailScreen() {
       setTicket(ticketData);
       setMessages(messagesData);
     } catch (err) {
-      console.warn('[TicketDetail] Failed to load:', err);
+      logger.warn('[TicketDetail] Failed to load:', err);
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ export default function TicketDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (err) {
-      console.warn('[TicketDetail] Failed to send message:', err);
+      logger.warn('[TicketDetail] Failed to send message:', err);
     } finally {
       setSending(false);
     }

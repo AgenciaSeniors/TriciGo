@@ -14,6 +14,7 @@ import { i18n } from '@tricigo/i18n';
 import { authService, customerService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { PaymentMethod, Language, CustomerProfile } from '@tricigo/types';
+import { logger } from '@tricigo/utils';
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: 'es', label: 'Español' },
@@ -45,7 +46,7 @@ export default function EditProfileScreen() {
     customerService.ensureProfile(user.id).then((cp) => {
       setCustomerProfile(cp);
       setPaymentMethod(cp.default_payment_method);
-    }).catch((err) => console.warn('[EditProfile] Failed to load:', err));
+    }).catch((err) => logger.warn('[EditProfile] Failed to load:', err));
   }, [user]);
 
   const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {

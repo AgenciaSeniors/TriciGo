@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
-import { identifyUser, resetAnalytics } from '@tricigo/utils';
+import { identifyUser, resetAnalytics, logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -48,7 +48,7 @@ export function useAuthInit() {
     const setLoading = useAuthStore.getState().setLoading;
     const safetyTimeout = setTimeout(() => {
       if (mounted && useAuthStore.getState().isLoading) {
-        console.warn('[Auth] Safety timeout: forcing isLoading=false after 15s');
+        logger.warn('[Auth] Safety timeout: forcing isLoading=false after 15s');
         setLoading(false);
       }
     }, 15000);
@@ -61,7 +61,7 @@ export function useAuthInit() {
           if (mounted) setUser(user);
           if (user) {
             identifyUser(user.id, { email: user.email });
-            customerService.ensureProfile(user.id).catch((err) => console.warn('[Auth] Failed to ensure profile:', err));
+            customerService.ensureProfile(user.id).catch((err) => logger.warn('[Auth] Failed to ensure profile:', err));
           }
         } else if (mounted) {
           reset();
@@ -70,7 +70,7 @@ export function useAuthInit() {
         // On web, "Lock broken" errors happen during remounts — don't reset auth
         const isLockError = err instanceof Error && err.message?.includes('Lock broken');
         if (isLockError) {
-          console.warn('[Auth] Lock contention during init, retrying...');
+          logger.warn('[Auth] Lock contention during init, retrying...');
           // Retry once after a short delay
           setTimeout(async () => {
             if (!mounted) return;

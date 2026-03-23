@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { chatService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -23,7 +24,7 @@ export function useChatInit(rideId: string) {
     chatService
       .getMessages(rideId)
       .then(setMessages)
-      .catch((err) => console.warn('[Chat] Failed to load messages:', err));
+      .catch((err) => logger.warn('[Chat] Failed to load messages:', err));
 
     msgChannel = chatService.subscribeToMessages(rideId, addMessage);
 

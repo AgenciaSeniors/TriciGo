@@ -11,6 +11,7 @@ import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
 import i18next from 'i18next';
 import { colors } from '@tricigo/theme';
+import { logger } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native';
 
@@ -38,7 +39,7 @@ export default function BlogScreen() {
       setHasMore(data.length === PAGE_SIZE);
       setPage(pageNum);
     } catch (err) {
-      console.warn('[Blog] Failed to load:', err);
+      logger.warn('[Blog] Failed to load:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);

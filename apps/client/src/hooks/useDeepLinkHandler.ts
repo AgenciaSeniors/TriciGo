@@ -4,6 +4,7 @@ import Toast from 'react-native-toast-message';
 import { referralService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
+import { logger } from '@tricigo/utils';
 
 const PENDING_REFERRAL_KEY = 'pending_referral_code';
 const PENDING_PROMO_KEY = 'pending_promo_code';
@@ -41,7 +42,7 @@ export function useDeepLinkHandler() {
             });
           } catch (err) {
             // Silently fail — user can apply manually later
-            console.warn('[DeepLink] Failed to apply referral:', err);
+            logger.warn('[DeepLink] Failed to apply referral:', err);
           }
         }
       } catch {

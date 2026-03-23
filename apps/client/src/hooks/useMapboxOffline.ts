@@ -14,6 +14,7 @@ import {
   PACK_REFRESH_MS,
   OFFLINE_SYNC_KEY,
 } from '@tricigo/utils/mapboxOffline';
+import { logger } from '@tricigo/utils';
 
 let MapboxGL: any;
 try {
@@ -87,7 +88,7 @@ export function useMapboxOffline(): OfflinePackState {
           (pack: any, error: any) => {
             // Error callback
             if (error) {
-              console.warn('[MapboxOffline] Pack error:', error);
+              logger.warn('[MapboxOffline] Pack error:', error);
               setState((s) => ({
                 ...s,
                 isDownloading: false,
@@ -101,7 +102,7 @@ export function useMapboxOffline(): OfflinePackState {
         await AsyncStorage.setItem(OFFLINE_SYNC_KEY, String(Date.now()));
         setState({ progress: 100, isDownloading: false, error: null });
       } catch (err) {
-        console.warn('[MapboxOffline] Failed to create pack:', err);
+        logger.warn('[MapboxOffline] Failed to create pack:', err);
         setState((s) => ({
           ...s,
           isDownloading: false,
