@@ -162,7 +162,7 @@ export default function HelpScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderTicket}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />
           }
           ListHeaderComponent={
             <View>

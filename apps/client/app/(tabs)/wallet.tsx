@@ -18,7 +18,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
@@ -181,6 +181,8 @@ function WebWalletScreen() {
 
 function NativeWalletScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
 
   const [balance, setBalance] = useState({ available: 0, held: 0 });
@@ -580,7 +582,7 @@ function NativeWalletScreen() {
                 className={`px-3 py-1.5 rounded-full border ${
                   activeFilter === opt.key
                     ? 'bg-primary-500 border-primary-500'
-                    : 'bg-white border-neutral-200'
+                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                 }`}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: activeFilter === opt.key }}

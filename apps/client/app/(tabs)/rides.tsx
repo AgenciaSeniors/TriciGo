@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 const PAGE_SIZE = 20;
 
@@ -83,6 +83,8 @@ function WebRidesScreen() {
 
 function NativeRidesScreen() {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
 
   const [rides, setRides] = useState<Ride[]>([]);
@@ -263,7 +265,7 @@ function NativeRidesScreen() {
           <Text variant="h3">{t('rides_history.title')}</Text>
           {rides.length > 0 && (
             <Pressable onPress={handleExportCSV} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100" accessibilityRole="button" accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}>
-              <Ionicons name="download-outline" size={14} color="#6b7280" />
+              <Ionicons name="download-outline" size={14} color={isDark ? '#9CA3AF' : '#6b7280'} />
               <Text variant="caption" color="secondary" className="font-medium">CSV</Text>
             </Pressable>
           )}
@@ -333,8 +335,8 @@ function NativeRidesScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                colors={['#F97316']}
-                tintColor="#F97316"
+                colors={[colors.brand.orange]}
+                tintColor={colors.brand.orange}
               />
             }
             ListEmptyComponent={

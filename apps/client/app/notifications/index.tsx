@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, Pressable, RefreshControl } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -15,20 +15,22 @@ import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification, NotificationType } from '@tricigo/types';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 
-const ICON_MAP: Record<NotificationType, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
-  ride_update: { name: 'car', color: colors.brand.orange },
-  ride_completed: { name: 'checkmark-circle', color: '#16a34a' },
-  ride_canceled: { name: 'close-circle', color: '#dc2626' },
-  driver_assigned: { name: 'person', color: colors.brand.orange },
-  driver_arriving: { name: 'navigate', color: '#2563eb' },
-  dispute_update: { name: 'alert-circle', color: '#ea580c' },
-  wallet_credit: { name: 'arrow-down-circle', color: '#16a34a' },
-  wallet_debit: { name: 'arrow-up-circle', color: '#dc2626' },
-  promo: { name: 'gift', color: '#7c3aed' },
-  referral_reward: { name: 'people', color: '#2563eb' },
-  quest_completed: { name: 'trophy', color: '#ca8a04' },
-  system: { name: 'information-circle', color: '#6b7280' },
-};
+function buildIconMap(isDark: boolean): Record<NotificationType, { name: keyof typeof Ionicons.glyphMap; color: string }> {
+  return {
+    ride_update: { name: 'car', color: colors.brand.orange },
+    ride_completed: { name: 'checkmark-circle', color: isDark ? '#4ADE80' : '#16a34a' },
+    ride_canceled: { name: 'close-circle', color: isDark ? '#F87171' : '#dc2626' },
+    driver_assigned: { name: 'person', color: colors.brand.orange },
+    driver_arriving: { name: 'navigate', color: isDark ? '#60A5FA' : '#2563eb' },
+    dispute_update: { name: 'alert-circle', color: isDark ? '#FB923C' : '#ea580c' },
+    wallet_credit: { name: 'arrow-down-circle', color: isDark ? '#4ADE80' : '#16a34a' },
+    wallet_debit: { name: 'arrow-up-circle', color: isDark ? '#F87171' : '#dc2626' },
+    promo: { name: 'gift', color: isDark ? '#A78BFA' : '#7c3aed' },
+    referral_reward: { name: 'people', color: isDark ? '#60A5FA' : '#2563eb' },
+    quest_completed: { name: 'trophy', color: isDark ? '#FBBF24' : '#ca8a04' },
+    system: { name: 'information-circle', color: isDark ? '#9CA3AF' : '#6b7280' },
+  };
+}
 
 function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -54,6 +56,9 @@ function getDateGroup(dateStr: string, t: (key: string) => string): string {
 
 export default function NotificationsScreen() {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const ICON_MAP = useMemo(() => buildIconMap(isDark), [isDark]);
   const user = useAuthStore((s) => s.user);
   const {
     notifications, isLoading, setNotifications, appendNotifications,
@@ -238,7 +243,7 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}

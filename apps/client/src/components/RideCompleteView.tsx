@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Pressable, Share, Animated } from 'react-native';
+import { View, Pressable, Share, Animated, useColorScheme } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -28,6 +28,8 @@ const FALLBACK_NEGATIVE_TAGS = [
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const splits = useRideStore((s) => s.splits);
@@ -260,7 +262,7 @@ export function RideCompleteView() {
       {activeRide.is_split && splits.length > 0 && (
         <Card variant="filled" padding="md" className="w-full mb-4">
           <View className="flex-row items-center mb-2">
-            <Ionicons name="people" size={18} color="#888" />
+            <Ionicons name="people" size={18} color={isDark ? '#9CA3AF' : '#888888'} />
             <Text variant="bodySmall" className="ml-2 font-bold">
               {t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
             </Text>
