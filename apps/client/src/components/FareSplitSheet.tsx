@@ -50,7 +50,7 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
       }
 
       const invitedUser = users[0]!;
-      if (invitedUser.id === userId) {
+      if (!invitedUser?.id || !userId || invitedUser.id === userId) {
         Alert.alert('', t('ride.split_cant_invite_self', { defaultValue: 'No puedes invitarte a ti mismo' }));
         return;
       }

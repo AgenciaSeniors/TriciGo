@@ -170,7 +170,7 @@ export default function NotificationsScreen() {
         accessibilityRole="button"
         accessibilityLabel={`${item.title}: ${item.body}`}
       >
-        <View className="w-10 h-10 rounded-full items-center justify-center mr-3" style={{ backgroundColor: icon.color + '15' }}>
+        <View className="w-10 h-10 rounded-full items-center justify-center mr-3" style={{ backgroundColor: icon.color ? `${icon.color}20` : 'transparent' }}>
           <Ionicons name={icon.name} size={20} color={icon.color} />
         </View>
         <View className="flex-1 mr-2">

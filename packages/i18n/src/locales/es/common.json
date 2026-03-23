@@ -390,7 +390,8 @@
     "invalid_coordinates": "Ubicación inválida. Selecciona otra dirección.",
     "invalid_tip": "Monto de propina inválido",
     "sos_report_failed": "No se pudo registrar la alerta SOS",
-    "receipt_failed": "No se pudo enviar el recibo"
+    "receipt_failed": "No se pudo enviar el recibo",
+    "export_unavailable": "Exportación no disponible"
   },
 
   "preferences": {

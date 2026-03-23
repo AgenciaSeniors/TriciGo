@@ -390,7 +390,8 @@
     "invalid_coordinates": "Invalid location. Select another address.",
     "invalid_tip": "Invalid tip amount",
     "sos_report_failed": "Failed to report SOS alert",
-    "receipt_failed": "Failed to send receipt"
+    "receipt_failed": "Failed to send receipt",
+    "export_unavailable": "Export unavailable"
   },
 
   "preferences": {

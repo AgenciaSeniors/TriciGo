@@ -58,7 +58,7 @@ function WebProfileScreen() {
         </Card>
         {menuItems.map((item, i) => (
           <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-100"
-            onPress={() => router.push(item.href as any)}>
+            onPress={() => router.push(item.href as string)}>
             <Ionicons name={item.icon} size={22} color={colors.neutral[500]} />
             <Text variant="body" className="flex-1 ml-4">{item.label}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />

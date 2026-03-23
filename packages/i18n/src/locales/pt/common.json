@@ -390,7 +390,8 @@
     "invalid_coordinates": "Localização inválida. Selecione outro endereço.",
     "invalid_tip": "Valor de gorjeta inválido",
     "sos_report_failed": "Falha ao registrar alerta SOS",
-    "receipt_failed": "Falha ao enviar recibo"
+    "receipt_failed": "Falha ao enviar recibo",
+    "export_unavailable": "Exportação indisponível"
   },
 
   "preferences": {

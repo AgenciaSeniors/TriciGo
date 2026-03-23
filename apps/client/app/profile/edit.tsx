@@ -117,7 +117,8 @@ export default function EditProfileScreen() {
       Alert.alert('Error', t('profile.name_too_short', { defaultValue: 'El nombre debe tener al menos 2 caracteres' }));
       return;
     }
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    if (email.trim() && !EMAIL_REGEX.test(email.trim())) {
       Alert.alert('Error', t('profile.invalid_email', { defaultValue: 'Ingresa un email válido' }));
       return;
     }

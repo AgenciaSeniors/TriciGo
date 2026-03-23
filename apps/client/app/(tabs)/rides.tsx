@@ -20,6 +20,7 @@ import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+import Toast from 'react-native-toast-message';
 
 import { Platform, useColorScheme } from 'react-native';
 
@@ -173,15 +174,20 @@ function NativeRidesScreen() {
 
   const handleExportCSV = useCallback(async () => {
     if (rides.length === 0) return;
+    const cacheDir = FileSystem.cacheDirectory;
+    if (!cacheDir) {
+      Toast.show({ type: 'error', text1: t('errors.export_unavailable', { defaultValue: 'Exportación no disponible' }) });
+      return;
+    }
     try {
       const csv = generateHistoryCSV(rides, 'es');
-      const fileUri = (FileSystem.cacheDirectory ?? '') + 'historial_viajes.csv';
+      const fileUri = cacheDir + 'historial_viajes.csv';
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
     } catch (err) {
       logger.error('Error exporting CSV', { error: String(err) });
     }
-  }, [rides]);
+  }, [rides, t]);
 
   const loadMore = useCallback(() => {
     if (rides.length >= (page + 1) * PAGE_SIZE) {
