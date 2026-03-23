@@ -116,7 +116,7 @@ export function WebHeader() {
                 {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
               </div>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', flex: 1 }}>{user?.user_metadata?.full_name || user?.email}</span>
-              <button onClick={signOut} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>
+              <button onClick={signOut} aria-label="Cerrar sesion" style={{ background: 'none', border: '1px solid var(--border)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>
                 {t('nav.logout', { defaultValue: 'Salir' })}
               </button>
             </div>
@@ -127,14 +127,14 @@ export function WebHeader() {
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
           {links.map((l) => (
-            <a key={l.href} href={l.href} style={navLinkStyle(pathname.startsWith(l.href))}>
+            <a key={l.href} href={l.href} style={navLinkStyle(pathname.startsWith(l.href))} aria-label={l.label}>
               {l.label}
             </a>
           ))}
-          <div style={avatarStyle}>
-            {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
+          <div style={avatarStyle} aria-label="Avatar de usuario">
+            {avatarUrl ? <img src={avatarUrl} alt="Foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
           </div>
-          <button onClick={signOut} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}>
+          <button onClick={signOut} aria-label="Cerrar sesion" style={{ background: 'none', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}>
             {t('nav.logout', { defaultValue: 'Salir' })}
           </button>
         </div>
@@ -155,12 +155,12 @@ export function WebHeader() {
   return (
     <header style={{ borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 50 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', maxWidth: 1200, margin: '0 auto' }}>
-        <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <a href="/" style={{ textDecoration: 'none', color: 'inherit' }} aria-label="Ir a inicio de TriciGo">
           <span style={{ fontSize: '1.5rem', fontWeight: 800 }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </span>
         </a>
-        <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop">
+        <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegacion principal">
           <AuthNav />
           <button
             onClick={toggleDark}
@@ -178,7 +178,7 @@ export function WebHeader() {
           >
             {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
           </button>
-          <button onClick={() => setMenuOpen(!menuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', fontSize: '1.5rem', lineHeight: 1 }}>
+          <button onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Cerrar menu' : 'Abrir menu'} aria-expanded={menuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', fontSize: '1.5rem', lineHeight: 1 }}>
             {menuOpen ? '\u2715' : '\u2630'}
           </button>
         </div>

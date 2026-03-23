@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, trustedContactService } from '@tricigo/api';
 import type { TrustedContact } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 const MAX_CONTACTS = 5;
 
@@ -107,8 +109,8 @@ export default function TrustedContactsPage() {
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link href="/profile" aria-label="Volver al perfil" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -130,19 +132,13 @@ export default function TrustedContactsPage() {
 
       {/* Contact List */}
       {loading ? (
-        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>Cargando contactos...</p>
+        <WebSkeletonList count={3} />
       ) : contacts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)' }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 00-3-3.87" />
-            <path d="M16 3.13a4 4 0 010 7.75" />
-          </svg>
-          <p style={{ color: 'var(--text-tertiary)', margin: '1rem 0 0', fontSize: '0.9rem' }}>
-            No tienes contactos de confianza aun.
-          </p>
-        </div>
+        <WebEmptyState
+          icon="👥"
+          title="No tienes contactos de confianza aun"
+          description="Estas personas seran notificadas si activas el boton SOS durante un viaje."
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {contacts.map((contact) => (
@@ -167,7 +163,7 @@ export default function TrustedContactsPage() {
                     <p style={{ margin: '0.15rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{contact.relationship}</p>
                   )}
                 </div>
-                <button onClick={() => handleDelete(contact)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--text-tertiary)' }}>
+                <button onClick={() => handleDelete(contact)} aria-label={`Eliminar contacto ${contact.name}`} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--text-tertiary)' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 import type { AppNotification } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 function getNotificationIcon(type: string) {
   switch (type) {
@@ -172,8 +174,8 @@ export default function NotificationsPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Link href="/" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </Link>
@@ -202,6 +204,7 @@ export default function NotificationsPage() {
         {unreadCount > 0 && (
           <button
             onClick={handleMarkAllRead}
+            aria-label="Marcar todas las notificaciones como leidas"
             style={{
               background: 'none',
               border: 'none',
@@ -217,11 +220,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-          <p style={{ color: 'var(--text-tertiary)' }}>Cargando notificaciones...</p>
-        </div>
-      )}
+      {loading && <WebSkeletonList count={4} />}
 
       {/* Error */}
       {error && (
@@ -252,25 +251,11 @@ export default function NotificationsPage() {
 
       {/* Empty State */}
       {!loading && !error && notifications.length === 0 && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '4rem 1rem',
-          textAlign: 'center',
-        }}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 01-3.46 0" />
-          </svg>
-          <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-tertiary)', margin: '1rem 0 0.25rem' }}>
-            No tienes notificaciones
-          </p>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', margin: 0 }}>
-            Aqui veras las actualizaciones de tus viajes y promociones.
-          </p>
-        </div>
+        <WebEmptyState
+          icon="🔔"
+          title="No tienes notificaciones"
+          description="Aqui veras las actualizaciones de tus viajes y promociones."
+        />
       )}
 
       {/* Notification Groups */}
@@ -295,6 +280,7 @@ export default function NotificationsPage() {
               <button
                 key={notif.id}
                 onClick={() => !notif.read && handleMarkRead(notif.id)}
+                aria-label={`${notif.read ? '' : 'Marcar como leida: '}${notif.title}`}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',

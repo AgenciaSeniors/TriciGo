@@ -107,12 +107,13 @@ export default function ProfilePage() {
       </div>
 
       {/* Menu Items */}
-      <div className="profile-menu">
+      <nav className="profile-menu" aria-label="Menu de perfil">
         {menuItems.map((item, index) => (
           <Link
             key={item.href}
             href={item.href}
             className="profile-menu-item"
+            aria-label={item.label}
             style={{
               borderBottom: index < menuItems.length - 1 ? '1px solid var(--border-light)' : 'none',
             }}
@@ -124,12 +125,13 @@ export default function ProfilePage() {
             </svg>
           </Link>
         ))}
-      </div>
+      </nav>
 
       {/* Logout Button */}
       <button
         onClick={handleLogout}
         disabled={loggingOut}
+        aria-label="Cerrar sesion"
         style={{
           display: 'block',
           width: '100%',

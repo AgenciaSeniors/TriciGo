@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, corporateService } from '@tricigo/api';
 import type { CorporateAccount } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 export default function CorporatePage() {
   const router = useRouter();
@@ -55,8 +57,8 @@ export default function CorporatePage() {
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link href="/profile" aria-label="Volver al perfil" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -70,17 +72,13 @@ export default function CorporatePage() {
       )}
 
       {loading ? (
-        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>Cargando cuentas...</p>
+        <WebSkeletonList count={2} />
       ) : accounts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            <polyline points="9 22 9 12 15 12 15 22" />
-          </svg>
-          <p style={{ color: 'var(--text-tertiary)', margin: '1rem 0 0', fontSize: '0.9rem' }}>
-            No estas asociado a ninguna cuenta corporativa.
-          </p>
-        </div>
+        <WebEmptyState
+          icon="🏢"
+          title="Sin cuentas corporativas"
+          description="No estas asociado a ninguna cuenta corporativa."
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {accounts.map((acc) => {

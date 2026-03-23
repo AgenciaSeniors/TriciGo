@@ -31,6 +31,7 @@ export default function TrackRidePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
@@ -274,6 +275,48 @@ export default function TrackRidePage() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Share & Contact buttons */}
+        {!isTerminal && (
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+            {ride.share_token && (
+              <button
+                onClick={() => {
+                  const url = `https://tricigo.com/track/share/${ride.share_token}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2000);
+                  });
+                }}
+                style={{
+                  flex: 1, padding: '0.75rem', borderRadius: '0.75rem',
+                  border: '1px solid var(--border-light, #eee)', background: 'var(--bg-card, #fff)',
+                  cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                  color: 'var(--text-primary)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: '0.5rem',
+                }}
+              >
+                {shareCopied ? '✓ Enlace copiado' : '🔗 Compartir viaje'}
+              </button>
+            )}
+            {ride.driver_phone && (
+              <a
+                href={`https://wa.me/${ride.driver_phone.replace(/[^0-9]/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1, padding: '0.75rem', borderRadius: '0.75rem',
+                  border: '1px solid #25D366', background: '#25D366',
+                  color: 'white', textDecoration: 'none', fontSize: '0.85rem',
+                  fontWeight: 600, textAlign: 'center', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                }}
+              >
+                💬 Contactar conductor
+              </a>
+            )}
           </div>
         )}
 

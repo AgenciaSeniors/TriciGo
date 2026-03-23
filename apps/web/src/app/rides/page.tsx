@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }> = {
   completed: { label: 'Completado', bg: '#dcfce7', color: '#16a34a' },
@@ -101,7 +103,7 @@ export default function RidesPage() {
   return (
     <main className="page-main">
       <div className="page-container">
-        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
+        <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
           &larr; Inicio
         </Link>
 
@@ -110,34 +112,16 @@ export default function RidesPage() {
         </h1>
 
         {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-tertiary)' }}>
-            <div style={{
-              width: 32, height: 32, border: '3px solid var(--border-light)', borderTopColor: 'var(--primary)',
-              borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.75rem',
-            }} />
-            <p style={{ fontSize: '0.875rem' }}>Cargando viajes...</p>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          </div>
-        )}
+        {loading && <WebSkeletonList count={4} />}
 
         {/* Empty state */}
         {!loading && rides.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🚗</div>
-            <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Sin viajes todavia</p>
-            <p style={{ fontSize: '0.875rem' }}>Cuando completes un viaje, aparecera aqui.</p>
-            <Link
-              href="/book"
-              style={{
-                display: 'inline-block', marginTop: '1rem', padding: '0.75rem 1.5rem',
-                background: 'var(--primary)', color: 'white', borderRadius: '0.75rem',
-                textDecoration: 'none', fontWeight: 600, fontSize: '0.875rem',
-              }}
-            >
-              Solicitar un viaje
-            </Link>
-          </div>
+          <WebEmptyState
+            icon="🚗"
+            title="Sin viajes todavia"
+            description="Cuando completes un viaje, aparecera aqui."
+            action={{ label: 'Solicitar un viaje', href: '/book' }}
+          />
         )}
 
         {/* Ride list */}
@@ -149,7 +133,11 @@ export default function RidesPage() {
                 <div
                   key={ride.id}
                   className="ride-card"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Ver detalle del viaje de ${ride.pickup_address} a ${ride.dropoff_address}`}
                   onClick={() => router.push(`/rides/${ride.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/rides/${ride.id}`); }}
                 >
                   {/* Header: date + status */}
                   <div className="ride-card-header">
@@ -198,6 +186,7 @@ export default function RidesPage() {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
+                aria-label="Cargar mas viajes"
                 style={{
                   width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
                   border: '1px solid var(--border)', background: 'white', cursor: loadingMore ? 'not-allowed' : 'pointer',

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, recurringRideService } from '@tricigo/api';
 import type { RecurringRide } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -91,8 +93,8 @@ export default function RecurringRidesPage() {
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link href="/profile" aria-label="Volver al perfil" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -109,22 +111,14 @@ export default function RecurringRidesPage() {
       )}
 
       {loading ? (
-        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>Cargando viajes...</p>
+        <WebSkeletonList count={3} />
       ) : rides.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="17 1 21 5 17 9" />
-            <path d="M3 11V9a4 4 0 014-4h14" />
-            <polyline points="7 23 3 19 7 15" />
-            <path d="M21 13v2a4 4 0 01-4 4H3" />
-          </svg>
-          <p style={{ color: 'var(--text-secondary)', margin: '1rem 0 0.25rem', fontSize: '1rem', fontWeight: 600 }}>
-            Sin viajes recurrentes
-          </p>
-          <p style={{ color: 'var(--text-tertiary)', margin: 0, fontSize: '0.85rem' }}>
-            Programa viajes que se repitan automaticamente cada semana.
-          </p>
-        </div>
+        <WebEmptyState
+          icon="🔁"
+          title="Sin viajes recurrentes"
+          description="Programa viajes que se repitan automaticamente cada semana."
+          action={{ label: 'Solicitar un viaje', href: '/book' }}
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {rides.map((ride) => (
@@ -186,6 +180,7 @@ export default function RecurringRidesPage() {
                   <>
                     <button
                       onClick={() => ride.status === 'active' ? handlePause(ride.id) : handleResume(ride.id)}
+                      aria-label={ride.status === 'active' ? 'Pausar viaje recurrente' : 'Reanudar viaje recurrente'}
                       style={{
                         padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 500,
                         background: 'var(--border-light)', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer',
@@ -195,6 +190,7 @@ export default function RecurringRidesPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(ride.id)}
+                      aria-label="Eliminar viaje recurrente"
                       style={{
                         padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 500,
                         background: '#fef2f2', color: '#dc2626', border: 'none', cursor: 'pointer',

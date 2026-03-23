@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { walletService, exchangeRateService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount } from '@tricigo/types';
+import { WebSkeletonList } from '@/components/WebSkeleton';
+import { WebEmptyState } from '@/components/WebEmptyState';
 
 type FilterTab = 'all' | 'recharge' | 'rides' | 'transfers';
 
@@ -259,7 +261,7 @@ export default function WalletPage() {
   return (
     <main className="page-main">
       <div className="page-container">
-        <Link href="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
+        <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
           &larr; Inicio
         </Link>
 
@@ -303,6 +305,7 @@ export default function WalletPage() {
             <input
               type="number"
               placeholder="Monto en CUP"
+              aria-label="Monto de recarga en CUP"
               value={rechargeCup}
               onChange={(e) => setRechargeCup(e.target.value)}
               style={{
@@ -313,6 +316,7 @@ export default function WalletPage() {
             <button
               onClick={handleRecharge}
               disabled={rechargeLoading || !rechargeCup}
+              aria-label="Solicitar recarga"
               style={{
                 padding: '0.75rem 1rem', borderRadius: '0.5rem', border: 'none',
                 background: rechargeLoading || !rechargeCup ? '#ccc' : 'var(--primary)',
@@ -341,6 +345,7 @@ export default function WalletPage() {
             <input
               type="tel"
               placeholder="Telefono del destinatario"
+              aria-label="Telefono del destinatario"
               value={transferPhone}
               onChange={(e) => { setTransferPhone(e.target.value); setTransferRecipient(null); setTransferError(null); }}
               style={{
@@ -351,6 +356,7 @@ export default function WalletPage() {
             <button
               onClick={handleFindRecipient}
               disabled={transferSearching || !transferPhone.trim()}
+              aria-label="Buscar destinatario"
               style={{
                 padding: '0.75rem 1rem', borderRadius: '0.5rem', border: 'none',
                 background: transferSearching || !transferPhone.trim() ? '#ccc' : '#333',
@@ -378,6 +384,7 @@ export default function WalletPage() {
               <input
                 type="number"
                 placeholder="Monto en centavos TRC"
+                aria-label="Monto de transferencia en centavos TRC"
                 value={transferAmount}
                 onChange={(e) => setTransferAmount(e.target.value)}
                 style={{
@@ -393,6 +400,7 @@ export default function WalletPage() {
               <input
                 type="text"
                 placeholder="Nota (opcional)"
+                aria-label="Nota para la transferencia"
                 value={transferNote}
                 onChange={(e) => setTransferNote(e.target.value)}
                 style={{
@@ -403,6 +411,7 @@ export default function WalletPage() {
               <button
                 onClick={handleTransfer}
                 disabled={transferSending || !transferAmount || parseInt(transferAmount) <= 0}
+                aria-label="Enviar transferencia"
                 style={{
                   width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: 'none',
                   background: transferSending ? '#ccc' : 'var(--primary)',
@@ -424,10 +433,13 @@ export default function WalletPage() {
           <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Historial de transacciones</p>
 
           {/* Filter tabs */}
-          <div className="wallet-filter-tabs">
+          <div className="wallet-filter-tabs" role="tablist" aria-label="Filtrar transacciones">
             {FILTER_TABS.map((tab) => (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={filter === tab.key}
+                aria-label={`Filtrar por ${tab.label}`}
                 onClick={() => setFilter(tab.key)}
                 style={{
                   padding: '0.4rem 0.75rem', borderRadius: '1rem', border: 'none',
@@ -443,22 +455,15 @@ export default function WalletPage() {
           </div>
 
           {/* Loading */}
-          {txLoading && (
-            <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-tertiary)' }}>
-              <div style={{
-                width: 28, height: 28, border: '3px solid var(--border-light)', borderTopColor: 'var(--primary)',
-                borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.5rem',
-              }} />
-              <p style={{ fontSize: '0.8rem' }}>Cargando transacciones...</p>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
-          )}
+          {txLoading && <WebSkeletonList count={4} />}
 
           {/* Empty */}
           {!txLoading && filteredTx.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-tertiary)' }}>
-              <p style={{ fontSize: '0.875rem' }}>Sin transacciones {filter !== 'all' ? 'en esta categoria' : ''}</p>
-            </div>
+            <WebEmptyState
+              icon="💰"
+              title={filter !== 'all' ? 'Sin transacciones en esta categoria' : 'Sin transacciones'}
+              description="Tus movimientos de TriciCoin apareceran aqui."
+            />
           )}
 
           {/* Transaction list */}
@@ -499,6 +504,7 @@ export default function WalletPage() {
                 <button
                   onClick={handleLoadMoreTx}
                   disabled={txLoadingMore}
+                  aria-label="Cargar mas transacciones"
                   style={{
                     width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
                     border: '1px solid var(--border)', background: 'white',

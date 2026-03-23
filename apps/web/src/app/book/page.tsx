@@ -349,6 +349,7 @@ export default function BookPage() {
       <div className="page-container">
         <Link
           href="/"
+          aria-label="Volver al inicio"
           style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}
         >
           {t('book.back')}
@@ -390,6 +391,7 @@ export default function BookPage() {
           <button
             type="button"
             onClick={handleResetMap}
+            aria-label="Reiniciar seleccion de mapa"
             style={{
               width: '100%',
               marginTop: '0.5rem',
@@ -509,6 +511,7 @@ export default function BookPage() {
                     <button
                       type="button"
                       onClick={() => setWaypoints((prev) => prev.filter((_, i) => i !== idx))}
+                      aria-label={`Eliminar parada ${idx + 1}`}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -647,6 +650,7 @@ export default function BookPage() {
           <button
             disabled={!canEstimate || isEstimating}
             onClick={handleEstimate}
+            aria-label="Calcular tarifa estimada"
             style={{
               width: '100%',
               padding: '1rem',
@@ -758,6 +762,8 @@ export default function BookPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('cash')}
+                    aria-label="Pagar en efectivo"
+                    aria-pressed={paymentMethod === 'cash'}
                     style={{
                       flex: 1,
                       padding: '0.5rem',
@@ -777,6 +783,8 @@ export default function BookPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('tricicoin')}
+                    aria-label="Pagar con TriciCoin"
+                    aria-pressed={paymentMethod === 'tricicoin'}
                     style={{
                       flex: 1,
                       padding: '0.5rem',
@@ -806,6 +814,7 @@ export default function BookPage() {
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   placeholder="Ingresa un código"
+                  aria-label="Codigo promocional"
                   style={{
                     width: '100%',
                     marginTop: '0.25rem',
@@ -833,6 +842,7 @@ export default function BookPage() {
                   type="checkbox"
                   checked={insuranceSelected}
                   onChange={(e) => setInsuranceSelected(e.target.checked)}
+                  aria-label="Agregar seguro de viaje"
                 />
                 <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
               </label>
@@ -850,6 +860,7 @@ export default function BookPage() {
                   <input
                     type="checkbox"
                     checked={isScheduled}
+                    aria-label="Programar viaje para despues"
                     onChange={(e) => {
                       setIsScheduled(e.target.checked);
                       if (!e.target.checked) setScheduleDate('');
@@ -863,6 +874,7 @@ export default function BookPage() {
                     value={scheduleDate}
                     onChange={(e) => setScheduleDate(e.target.value)}
                     min={new Date().toISOString().slice(0, 16)}
+                    aria-label="Fecha y hora del viaje programado"
                     style={{
                       width: '100%',
                       marginTop: '0.5rem',
@@ -880,6 +892,7 @@ export default function BookPage() {
               <button
                 onClick={handleRequest}
                 disabled={isRequesting}
+                aria-label="Solicitar viaje ahora"
                 style={{
                   width: '100%',
                   padding: '1rem',
