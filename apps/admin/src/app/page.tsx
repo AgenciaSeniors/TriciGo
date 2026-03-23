@@ -211,11 +211,11 @@ export default function DashboardPage() {
                   <div key={action.id} className="flex items-center justify-between py-2 border-b border-neutral-50 last:border-0">
                     <div>
                       <p className="text-sm text-neutral-900">{label}</p>
-                      <p className="text-xs text-neutral-400 font-mono">
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 font-mono">
                         {action.target_id?.slice(0, 8)}...
                       </p>
                     </div>
-                    <span className="text-xs text-neutral-400">{timeAgo}</span>
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">{timeAgo}</span>
                   </div>
                 );
               })}

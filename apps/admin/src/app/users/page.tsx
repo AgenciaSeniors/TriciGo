@@ -182,7 +182,7 @@ export default function UsersPage() {
               </tr>
             ) : sortedData.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-400">
+                <td colSpan={6} className="text-center py-12 text-neutral-500 dark:text-neutral-400">
                   {t('users.no_users')}
                 </td>
               </tr>
