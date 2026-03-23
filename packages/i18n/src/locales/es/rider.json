@@ -210,7 +210,14 @@
     "pref_cool": "AC fresco",
     "pref_warm": "Cálido",
     "pref_conversation": "Conversación",
-    "pref_trunk": "Maletero"
+    "pref_trunk": "Maletero",
+    "sos_activate": "¿Activar SOS?",
+    "sos_description": "Se llamará al número de emergencias 106",
+    "driver_not_moving": "Tu conductor no se ha movido en 5 minutos",
+    "position_stale": "Posición desactualizada",
+    "cannot_cancel_in_progress": "No puedes cancelar un viaje en progreso",
+    "contact_support": "Contacta al soporte si necesitas ayuda",
+    "call_driver_full": "Llamar al conductor"
   },
 
   "dispute": {

@@ -210,7 +210,14 @@
     "pref_cool": "Cool AC",
     "pref_warm": "Warm",
     "pref_conversation": "Conversation",
-    "pref_trunk": "Trunk space"
+    "pref_trunk": "Trunk space",
+    "sos_activate": "Activate SOS?",
+    "sos_description": "Emergency number 106 will be called",
+    "driver_not_moving": "Your driver hasn't moved in 5 minutes",
+    "position_stale": "Position outdated",
+    "cannot_cancel_in_progress": "Cannot cancel a ride in progress",
+    "contact_support": "Contact support if you need help",
+    "call_driver_full": "Call driver"
   },
 
   "dispute": {

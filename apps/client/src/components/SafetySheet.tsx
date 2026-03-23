@@ -16,6 +16,7 @@ interface SafetySheetProps {
   driverId: string | null;
   userId: string;
   emergencyContact: { name: string; phone: string } | null;
+  driverPhone?: string | null;
 }
 
 export function SafetySheet({
@@ -25,6 +26,7 @@ export function SafetySheet({
   driverId,
   userId,
   emergencyContact,
+  driverPhone,
 }: SafetySheetProps) {
   const { t } = useTranslation('common');
   const { t: tr } = useTranslation('rider');
@@ -125,6 +127,24 @@ export function SafetySheet({
       <Text variant="h4" className="mb-4">
         {t('safety.title')}
       </Text>
+
+      {/* Call Driver (4.5) — only shown when driver phone is available */}
+      {driverPhone && (
+        <Pressable
+          className="flex-row items-center py-4 border-b border-neutral-100"
+          onPress={() => Linking.openURL(`tel:${driverPhone}`)}
+        >
+          <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
+            <Ionicons name="call-outline" size={20} color={colors.primary[500]} />
+          </View>
+          <View className="flex-1">
+            <Text variant="body" className="font-semibold">
+              {tr('ride.call_driver_full', { defaultValue: 'Llamar al conductor' })}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+        </Pressable>
+      )}
 
       {/* SOS - Call Emergency */}
       <Pressable

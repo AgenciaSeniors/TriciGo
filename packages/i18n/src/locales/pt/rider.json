@@ -206,7 +206,14 @@
     "pref_cool": "AC fresco",
     "pref_warm": "Quente",
     "pref_conversation": "Conversa",
-    "pref_trunk": "Porta-malas"
+    "pref_trunk": "Porta-malas",
+    "sos_activate": "Ativar SOS?",
+    "sos_description": "O número de emergência 106 será ligado",
+    "driver_not_moving": "Seu motorista não se moveu em 5 minutos",
+    "position_stale": "Posição desatualizada",
+    "cannot_cancel_in_progress": "Não pode cancelar viagem em andamento",
+    "contact_support": "Contate o suporte se precisar de ajuda",
+    "call_driver_full": "Ligar para motorista"
   },
 
   "dispute": {

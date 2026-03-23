@@ -1,11 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Pressable, Linking, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, haversineDistance } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { incidentService, rideService, customerService, getSupabaseClient } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
@@ -56,6 +57,49 @@ export function RideActiveView() {
     rideStatus: activeRide?.status ?? null,
     estimatedDurationS: activeRide?.estimated_duration_s,
   });
+
+  // Driver-not-moving detection (4.2)
+  const prevDriverPosRef = useRef<{ latitude: number; longitude: number; timestamp: number } | null>(null);
+  const [driverNotMoving, setDriverNotMoving] = useState(false);
+
+  useEffect(() => {
+    if (!driverPosition || activeRide?.status !== 'driver_en_route') {
+      // Reset when not in driver_en_route status or no position
+      prevDriverPosRef.current = null;
+      setDriverNotMoving(false);
+      return;
+    }
+
+    const now = Date.now();
+    const prev = prevDriverPosRef.current;
+
+    if (!prev) {
+      prevDriverPosRef.current = { latitude: driverPosition.latitude, longitude: driverPosition.longitude, timestamp: now };
+      return;
+    }
+
+    const dist = haversineDistance(
+      { latitude: prev.latitude, longitude: prev.longitude },
+      { latitude: driverPosition.latitude, longitude: driverPosition.longitude },
+    );
+
+    if (dist > 50) {
+      // Driver moved significantly — reset tracking
+      prevDriverPosRef.current = { latitude: driverPosition.latitude, longitude: driverPosition.longitude, timestamp: now };
+      setDriverNotMoving(false);
+    } else {
+      // Driver hasn't moved much — check if 5 minutes have passed
+      const elapsedMs = now - prev.timestamp;
+      if (elapsedMs >= 5 * 60 * 1000) {
+        setDriverNotMoving(true);
+      }
+    }
+  }, [driverPosition, activeRide?.status]);
+
+  // Stale position detection (4.3) — position older than 60s
+  const positionIsStale = driverPosState.isCached && driverPosState.cachedAt
+    ? (Date.now() - new Date(driverPosState.cachedAt).getTime()) > 60_000
+    : false;
 
   // Waypoints state
   const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
@@ -229,6 +273,32 @@ export function RideActiveView() {
 
   return (
     <View className="flex-1 pt-4">
+      {/* Floating SOS button (4.1) — always visible during active ride */}
+      <Pressable
+        onPress={handleSOS}
+        style={{
+          position: 'absolute',
+          top: 60,
+          right: 16,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: '#DC2626',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t('ride.sos_activate', { defaultValue: '¿Activar SOS?' })}
+      >
+        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>SOS</Text>
+      </Pressable>
+
       {/* Live map with route polyline */}
       <View style={{ position: 'relative' }}>
         <RideMapView
@@ -251,7 +321,18 @@ export function RideActiveView() {
           </View>
         )}
       </View>
-      {driverPosState.isCached && driverPosState.cachedAt && (
+      {positionIsStale && (
+        <View
+          className="flex-row items-center justify-center mt-2 mx-4 px-3 py-2 rounded-lg"
+          style={{ backgroundColor: '#F59E0B' }}
+        >
+          <Ionicons name="warning-outline" size={16} color="white" />
+          <Text variant="caption" className="ml-1 font-semibold" style={{ color: 'white' }}>
+            {t('ride.position_stale', { defaultValue: 'Posición desactualizada' })}
+          </Text>
+        </View>
+      )}
+      {driverPosState.isCached && driverPosState.cachedAt && !positionIsStale && (
         <View className="items-center mt-1">
           <Text variant="caption" color="secondary" className="opacity-60">
             {t('ride.last_seen', {
@@ -261,6 +342,19 @@ export function RideActiveView() {
           </Text>
         </View>
       )}
+      {/* Driver not moving warning banner (4.2) */}
+      {driverNotMoving && (
+        <View
+          className="flex-row items-center justify-center mx-4 mt-2 px-3 py-2 rounded-lg"
+          style={{ backgroundColor: '#F59E0B' }}
+        >
+          <Ionicons name="alert-circle-outline" size={16} color="white" />
+          <Text variant="caption" className="ml-1 font-semibold" style={{ color: 'white' }}>
+            {t('ride.driver_not_moving', { defaultValue: 'Tu conductor no se ha movido en 5 minutos' })}
+          </Text>
+        </View>
+      )}
+
       <View className="h-4" />
 
       {/* Status stepper */}
@@ -394,6 +488,16 @@ export function RideActiveView() {
         />
       )}
 
+      {/* Cancel unavailable explanation (4.4) */}
+      {activeRide.status === 'in_progress' && !canCancel && (
+        <View className="px-4 mt-2">
+          <Text variant="caption" color="secondary" className="text-center">
+            {t('ride.cannot_cancel_in_progress', { defaultValue: 'No puedes cancelar un viaje en progreso' })}.{' '}
+            {t('ride.contact_support', { defaultValue: 'Contacta al soporte si necesitas ayuda' })}.
+          </Text>
+        </View>
+      )}
+
       {/* Add stop bottom sheet */}
       <BottomSheet visible={addStopVisible} onClose={() => setAddStopVisible(false)}>
         <Text variant="h4" className="mb-3">
@@ -429,6 +533,7 @@ export function RideActiveView() {
         driverId={activeRide.driver_id}
         userId={userId!}
         emergencyContact={emergencyContact}
+        driverPhone={rideWithDriver?.driver_phone ?? null}
       />
     </View>
   );
