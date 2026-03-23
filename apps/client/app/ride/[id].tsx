@@ -349,17 +349,8 @@ export default function RideDetailScreen() {
           </Card>
         )}
 
-        {/* Dispute button (completed rides without existing dispute) */}
-        {disputesEnabled && isCompleted && !dispute && (
-          <Button
-            title={t('dispute.open_dispute')}
-            variant="outline"
-            size="lg"
-            fullWidth
-            className="mb-4"
-            onPress={() => router.push(`/ride/dispute/${id}`)}
-          />
-        )}
+        {/* Dispute button (completed rides without existing dispute) — kept for backward compat */}
+        {disputesEnabled && isCompleted && !dispute && !lostItem && null}
 
         {/* Lost item status card */}
         {lostItem && (
@@ -390,16 +381,36 @@ export default function RideDetailScreen() {
           </Card>
         )}
 
-        {/* Lost item report button (completed rides without existing report) */}
-        {lostFoundEnabled && isCompleted && !lostItem && ride.driver_user_id && (
-          <Button
-            title={t('lost_found.report_item')}
-            variant="outline"
-            size="lg"
-            fullWidth
-            className="mb-4"
-            onPress={() => router.push(`/ride/lost-item/${id}?driverId=${ride.driver_user_id}`)}
-          />
+        {/* Prominent action CTAs for completed rides */}
+        {isCompleted && (disputesEnabled || lostFoundEnabled) && (!dispute || !lostItem) && (
+          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50">
+            <View className="gap-3">
+              {disputesEnabled && !dispute && (
+                <Pressable
+                  onPress={() => router.push(`/ride/dispute/${id}`)}
+                  className="flex-row items-center bg-white border border-orange-200 rounded-xl px-4 py-3.5"
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.report_issue')}
+                >
+                  <Ionicons name="warning-outline" size={22} color={colors.primary[500]} />
+                  <Text variant="body" className="font-semibold ml-3 flex-1">{t('ride.report_issue')}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+                </Pressable>
+              )}
+              {lostFoundEnabled && !lostItem && ride.driver_user_id && (
+                <Pressable
+                  onPress={() => router.push(`/ride/lost-item/${id}?driverId=${ride.driver_user_id}`)}
+                  className="flex-row items-center bg-white border border-amber-200 rounded-xl px-4 py-3.5"
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.lost_item')}
+                >
+                  <Ionicons name="search-outline" size={22} color={colors.primary[500]} />
+                  <Text variant="body" className="font-semibold ml-3 flex-1">{t('ride.lost_item')}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+                </Pressable>
+              )}
+            </View>
+          </Card>
         )}
 
         {/* Share button */}

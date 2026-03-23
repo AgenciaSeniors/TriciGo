@@ -215,7 +215,9 @@
     "contact_support": "Contate o suporte se precisar de ajuda",
     "call_driver_full": "Ligar para motorista",
     "skip_rating": "Pular",
-    "comment_limit": "{{count}}/500"
+    "comment_limit": "{{count}}/500",
+    "report_issue": "Reportar problema",
+    "lost_item": "Objeto perdido"
   },
 
   "dispute": {

@@ -219,7 +219,9 @@
     "contact_support": "Contacta al soporte si necesitas ayuda",
     "call_driver_full": "Llamar al conductor",
     "skip_rating": "Omitir",
-    "comment_limit": "{{count}}/500"
+    "comment_limit": "{{count}}/500",
+    "report_issue": "Reportar problema",
+    "lost_item": "Objeto perdido"
   },
 
   "dispute": {

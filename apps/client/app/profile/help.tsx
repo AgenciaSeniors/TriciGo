@@ -20,7 +20,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
-const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
+const FAQ_KEYS = [
+  'faq_q1', 'faq_q2', 'faq_q3', 'faq_q4', 'faq_q5',
+  'faq_q6', 'faq_q7', 'faq_q8', 'faq_q9', 'faq_q10',
+] as const;
 
 const CATEGORY_KEYS: { value: TicketCategory; key: string }[] = [
   { value: 'ride_issue', key: 'profile.help_category_ride_issue' },
@@ -43,6 +46,7 @@ export default function HelpScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [faqSearch, setFaqSearch] = useState('');
 
   // Tickets state
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -153,32 +157,63 @@ export default function HelpScreen() {
           ListHeaderComponent={
             <View>
               {/* FAQ Section */}
-              {FAQ_KEYS.map((key, idx) => {
-                const answerKey = key.replace('_q', '_a') as `faq_a${1 | 2 | 3}`;
-                const isExpanded = expandedIdx === idx;
-                return (
-                  <Card key={key} variant="outlined" padding="md" className="mb-3">
-                    <Pressable
-                      onPress={() => setExpandedIdx(isExpanded ? null : idx)}
-                      className="flex-row items-center justify-between"
-                    >
-                      <Text variant="body" className="flex-1 mr-2">
-                        {t(`profile.${key}`)}
-                      </Text>
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color={colors.neutral[400]}
-                      />
-                    </Pressable>
-                    {isExpanded && (
-                      <Text variant="bodySmall" color="secondary" className="mt-2">
-                        {t(`profile.${answerKey}`)}
-                      </Text>
-                    )}
-                  </Card>
-                );
-              })}
+              <Text variant="h4" className="mb-3">{t('profile.help_faq_title')}</Text>
+
+              {/* FAQ Search */}
+              <Input
+                placeholder={t('profile.help_search_faqs')}
+                value={faqSearch}
+                onChangeText={(text: string) => { setFaqSearch(text); setExpandedIdx(null); }}
+                className="mb-3"
+              />
+
+              {(() => {
+                const query = faqSearch.trim().toLowerCase();
+                const filtered = FAQ_KEYS.filter((key) => {
+                  if (!query) return true;
+                  const question = t(`profile.${key}`).toLowerCase();
+                  const answerKey = key.replace('_q', '_a');
+                  const answer = t(`profile.${answerKey}`).toLowerCase();
+                  return question.includes(query) || answer.includes(query);
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <View className="py-4 items-center">
+                      <Text variant="bodySmall" color="tertiary">{t('profile.help_no_faq_results')}</Text>
+                    </View>
+                  );
+                }
+
+                return filtered.map((key, idx) => {
+                  const answerKey = key.replace('_q', '_a');
+                  const isExpanded = expandedIdx === idx;
+                  return (
+                    <Card key={key} variant="outlined" padding="md" className="mb-3">
+                      <Pressable
+                        onPress={() => setExpandedIdx(isExpanded ? null : idx)}
+                        className="flex-row items-center justify-between"
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: isExpanded }}
+                      >
+                        <Text variant="body" className="flex-1 mr-2">
+                          {t(`profile.${key}`)}
+                        </Text>
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={20}
+                          color={colors.neutral[400]}
+                        />
+                      </Pressable>
+                      {isExpanded && (
+                        <Text variant="bodySmall" color="secondary" className="mt-2">
+                          {t(`profile.${answerKey}`)}
+                        </Text>
+                      )}
+                    </Card>
+                  );
+                });
+              })()}
 
               {/* Contact info */}
               <Card variant="outlined" padding="md" className="mt-1 mb-6">
