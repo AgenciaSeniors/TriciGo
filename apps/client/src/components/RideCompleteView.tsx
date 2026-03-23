@@ -7,6 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger } from '@tricigo/utils';
+import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { rideService, notificationService, useFeatureFlag, getSupabaseClient } from '@tricigo/api';
@@ -125,7 +126,7 @@ export function RideCompleteView() {
   const handleTip = async (amount: number) => {
     if (!userId || !activeRide) return;
     // X2.5: Validate tip amount
-    if (amount <= 0 || amount > 100000) {
+    if (amount <= 0 || amount > RIDE_CONFIG.MAX_TIP_AMOUNT) {
       Toast.show({ type: 'error', text1: t('errors.invalid_tip', { ns: 'common', defaultValue: 'Monto de propina inválido' }) });
       return;
     }
@@ -305,7 +306,7 @@ export function RideCompleteView() {
             <Text variant="bodySmall" className="font-bold">
               {formatTRC(
                 fareTrc != null
-                  ? fareTrc - splits.reduce((sum, s) => sum + (s.amount_trc ?? Math.round(fareTrc * s.share_pct / 100)), 0)
+                  ? Math.round(fareTrc - splits.reduce((sum, s) => sum + (s.amount_trc ?? Math.round(fareTrc * s.share_pct / 100)), 0))
                   : 0
               )}
             </Text>

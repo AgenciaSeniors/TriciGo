@@ -388,7 +388,9 @@
     "estimate_expired": "Sua cotação expirou. Solicite uma nova.",
     "waiting_driver_location": "Aguardando localização do motorista...",
     "invalid_coordinates": "Localização inválida. Selecione outro endereço.",
-    "invalid_tip": "Valor de gorjeta inválido"
+    "invalid_tip": "Valor de gorjeta inválido",
+    "sos_report_failed": "Falha ao registrar alerta SOS",
+    "receipt_failed": "Falha ao enviar recibo"
   },
 
   "preferences": {

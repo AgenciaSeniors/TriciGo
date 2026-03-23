@@ -138,6 +138,7 @@
     "download_receipt": "Descargar recibo",
     "not_found": "Viaje no encontrado",
     "tip_sent_confirmation": "Propina enviada",
+    "receipt_sent": "Recibo enviado",
     "no_driver_found": "No se encontró conductor. Intenta de nuevo.",
     "status_accepted": "Aceptado",
     "status_driver_en_route": "En camino",

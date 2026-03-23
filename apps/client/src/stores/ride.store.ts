@@ -13,6 +13,7 @@ import type {
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 import { logger } from '@tricigo/utils';
+import { RIDE_CONFIG } from '@/config/ride';
 
 const STATUS_NOTIFICATION_KEYS: Partial<Record<RideStatus, { title: string; body: string }>> = {
   accepted: { title: 'rider:notifications.driver_assigned', body: 'rider:notifications.driver_assigned_body' },
@@ -244,7 +245,7 @@ export const useRideStore = create<RideState>((set, get) => ({
 
   addWaypoint: () =>
     set((s) => {
-      if (s.draft.waypoints.length >= 3) return s;
+      if (s.draft.waypoints.length >= RIDE_CONFIG.MAX_WAYPOINTS) return s;
       return { draft: { ...s.draft, waypoints: [...s.draft.waypoints, { address: '', location: { latitude: 0, longitude: 0 } }] } };
     }),
 

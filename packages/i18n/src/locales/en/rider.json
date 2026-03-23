@@ -138,6 +138,7 @@
     "download_receipt": "Download receipt",
     "not_found": "Ride not found",
     "tip_sent_confirmation": "Tip sent",
+    "receipt_sent": "Receipt sent",
     "no_driver_found": "No driver found. Please try again.",
     "status_accepted": "Accepted",
     "status_driver_en_route": "En route",

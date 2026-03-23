@@ -4,13 +4,14 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger } from '@tricigo/utils';
+import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-const SEARCH_TIMEOUT_MS = 120_000; // 2 minutes
+const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
 
 /**
  * Initialize ride state on app mount.
@@ -102,7 +103,7 @@ export function useRideActions() {
     // Bug 8: Validate pickup ≠ dropoff (min 200m)
     const { haversineDistance } = await import('@tricigo/utils');
     const dist = haversineDistance(draft.pickup.location, draft.dropoff.location);
-    if (dist < 200) {
+    if (dist < RIDE_CONFIG.MIN_DISTANCE_M) {
       Toast.show({
         type: 'info',
         text1: i18next.t('rider:ride.too_close_title', { defaultValue: 'Destino muy cercano' }),
@@ -173,7 +174,7 @@ export function useRideActions() {
 
     // X1.3: Reject stale fare estimates (>5 min)
     const estimatedAt = useRideStore.getState().fareEstimatedAt;
-    if (!estimatedAt || Date.now() - estimatedAt > 300_000) {
+    if (!estimatedAt || Date.now() - estimatedAt > RIDE_CONFIG.FARE_ESTIMATE_TTL_MS) {
       Toast.show({ type: 'error', text1: i18next.t('errors.estimate_expired') });
       useRideStore.getState().setFareEstimate(null);
       isSubmittingRef.current = false;
@@ -268,8 +269,8 @@ export function useRideActions() {
               : undefined,
             special_instructions: d.delivery.specialInstructions || undefined,
           });
-        } catch {
-          // Best effort — ride is already created
+        } catch (err) {
+          logger.error('Delivery notification failed', { error: String(err) });
         }
       }
 

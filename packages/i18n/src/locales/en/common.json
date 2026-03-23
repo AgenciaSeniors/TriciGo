@@ -388,7 +388,9 @@
     "estimate_expired": "Your estimate expired. Request a new one.",
     "waiting_driver_location": "Waiting for driver location...",
     "invalid_coordinates": "Invalid location. Select another address.",
-    "invalid_tip": "Invalid tip amount"
+    "invalid_tip": "Invalid tip amount",
+    "sos_report_failed": "Failed to report SOS alert",
+    "receipt_failed": "Failed to send receipt"
   },
 
   "preferences": {

@@ -388,7 +388,9 @@
     "estimate_expired": "Tu cotización expiró. Solicita una nueva.",
     "waiting_driver_location": "Esperando ubicación del conductor...",
     "invalid_coordinates": "Ubicación inválida. Selecciona otra dirección.",
-    "invalid_tip": "Monto de propina inválido"
+    "invalid_tip": "Monto de propina inválido",
+    "sos_report_failed": "No se pudo registrar la alerta SOS",
+    "receipt_failed": "No se pudo enviar el recibo"
   },
 
   "preferences": {

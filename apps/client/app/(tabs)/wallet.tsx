@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors } from '@tricigo/theme';
 import { Platform, useColorScheme } from 'react-native';
+import { RIDE_CONFIG } from '@/config/ride';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
@@ -275,7 +276,7 @@ function NativeWalletScreen() {
     setRechargeSheetVisible(true);
   };
 
-  const MAX_RECHARGE_CUP = 50000;
+  const MAX_RECHARGE_CUP = RIDE_CONFIG.MAX_RECHARGE_AMOUNT;
 
   const submitRecharge = useCallback(async () => {
     if (isProcessing) return;

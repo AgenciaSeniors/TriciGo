@@ -6,8 +6,10 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC, haversineDistance } from '@tricigo/utils';
+import { formatTRC, haversineDistance, logger } from '@tricigo/utils';
+import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
+import Toast from 'react-native-toast-message';
 import { incidentService, rideService, customerService, getSupabaseClient } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
@@ -116,7 +118,7 @@ export function RideActiveView() {
         positionTimeoutRef.current = setTimeout(() => {
           setPositionTimeoutReached(true);
           positionTimeoutRef.current = null;
-        }, 30_000);
+        }, RIDE_CONFIG.POSITION_TIMEOUT_MS);
       }
     }
 
@@ -153,14 +155,14 @@ export function RideActiveView() {
       { latitude: driverPosition.latitude, longitude: driverPosition.longitude },
     );
 
-    if (dist > 50) {
+    if (dist > RIDE_CONFIG.DRIVER_NOT_MOVING_THRESHOLD_M) {
       // Driver moved significantly — reset tracking
       prevDriverPosRef.current = { latitude: driverPosition.latitude, longitude: driverPosition.longitude, timestamp: now };
       setDriverNotMoving(false);
     } else {
       // Driver hasn't moved much — check if 5 minutes have passed
       const elapsedMs = now - prev.timestamp;
-      if (elapsedMs >= 5 * 60 * 1000) {
+      if (elapsedMs >= RIDE_CONFIG.DRIVER_NOT_MOVING_TIMEOUT_MS) {
         setDriverNotMoving(true);
       }
     }
@@ -317,7 +319,10 @@ export function RideActiveView() {
                 reported_by: userId,
                 against_user_id: activeRide.driver_id ?? undefined,
                 description: 'SOS activado por pasajero durante viaje',
-              }).catch(() => { /* best-effort: SOS report, phone call is primary */ });
+              }).catch((err) => {
+                logger.error('SOS report failed', { error: String(err) });
+                Toast.show({ type: 'error', text1: t('errors.sos_report_failed', { ns: 'common' }) });
+              });
             }
             Linking.openURL('tel:106');
           },

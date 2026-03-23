@@ -6,7 +6,9 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import Toast from 'react-native-toast-message';
 import { incidentService, rideService, trustedContactService, notificationService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import type { TrustedContact } from '@tricigo/types';
 
 interface SafetySheetProps {
@@ -59,7 +61,10 @@ export function SafetySheet({
               reported_by: userId,
               against_user_id: driverId ?? undefined,
               description: 'SOS activado por pasajero durante viaje',
-            }).catch(() => {});
+            }).catch((err) => {
+              logger.error('SOS report failed', { error: String(err) });
+              Toast.show({ type: 'error', text1: t('errors.sos_report_failed') });
+            });
             Linking.openURL('tel:106');
           },
         },
@@ -99,17 +104,18 @@ export function SafetySheet({
       }
       const url = `https://tricigo.app/track/share/${token}`;
 
-      // Notify trusted contacts via SMS (fire-and-forget)
+      // Notify trusted contacts via SMS
       const userName = emergencyContact?.name ?? t('safety.someone');
-      notificationService.notifyTrustedContacts({
+      await notificationService.notifyTrustedContacts({
         contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
         message: `\u{1F4CD} ${userName} est\u00e1 en un viaje. Sigue su ubicaci\u00f3n en tiempo real: ${url}`,
         eventType: 'trip_shared',
-      }).catch(() => {});
+      });
 
       setContactsSent(true);
-    } catch {
-      // Share generation failed
+    } catch (err) {
+      logger.error('Failed to share with trusted contacts', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.contacts_load_failed') });
     } finally {
       setSharingWithContacts(false);
     }
