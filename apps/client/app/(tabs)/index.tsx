@@ -445,6 +445,7 @@ function SelectingView() {
     removeWaypoint,
     updateWaypoint,
     isLoading,
+    isFareEstimating,
     error,
   } = useRideStore();
   const { requestEstimate } = useRideActions();
@@ -679,18 +680,36 @@ function SelectingView() {
           <Text variant="label" className="mb-3">
             {t('ride.delivery_details', { defaultValue: 'Detalles del envio' })}
           </Text>
+          <View className="mb-1">
+            <Text variant="caption" color="secondary">
+              {t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
+              <Text variant="caption" className="text-red-500"> *</Text>
+            </Text>
+          </View>
           <Input
             placeholder={t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
             value={draft.delivery.packageDescription}
             onChangeText={(v) => setDeliveryField('packageDescription', v)}
             className="mb-3"
           />
+          <View className="mb-1">
+            <Text variant="caption" color="secondary">
+              {t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
+              <Text variant="caption" className="text-red-500"> *</Text>
+            </Text>
+          </View>
           <Input
             placeholder={t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
             value={draft.delivery.recipientName}
             onChangeText={(v) => setDeliveryField('recipientName', v)}
             className="mb-3"
           />
+          <View className="mb-1">
+            <Text variant="caption" color="secondary">
+              {t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
+              <Text variant="caption" className="text-red-500"> *</Text>
+            </Text>
+          </View>
           <Input
             placeholder={t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
             value={draft.delivery.recipientPhone}
@@ -700,6 +719,15 @@ function SelectingView() {
           />
           <View className="flex-row gap-3">
             <View className="flex-1">
+              <View className="mb-1">
+                <Text variant="caption" color="secondary">
+                  {t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
+                  {' '}
+                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
+                    ({t('home.optional', { defaultValue: 'opcional' })})
+                  </Text>
+                </Text>
+              </View>
               <Input
                 placeholder={t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
                 value={draft.delivery.estimatedWeightKg}
@@ -708,6 +736,15 @@ function SelectingView() {
               />
             </View>
             <View className="flex-1">
+              <View className="mb-1">
+                <Text variant="caption" color="secondary">
+                  {t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
+                  {' '}
+                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
+                    ({t('home.optional', { defaultValue: 'opcional' })})
+                  </Text>
+                </Text>
+              </View>
               <Input
                 placeholder={t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
                 value={draft.delivery.specialInstructions}
@@ -743,6 +780,9 @@ function SelectingView() {
                   </Pressable>
                 ))}
               </View>
+              <Text variant="caption" color="tertiary" className="mt-2">
+                {t('home.passenger_capacity_hint', { defaultValue: 'Capacidad: Moto 1, Triciclo 2-3, Auto 1-4' })}
+              </Text>
             </View>
           );
         })()
@@ -926,7 +966,7 @@ function SelectingView() {
         size="lg"
         fullWidth
         onPress={requestEstimate}
-        loading={isLoading}
+        loading={isFareEstimating}
         disabled={!canEstimate}
       />
     </View>
@@ -938,8 +978,9 @@ function SelectingView() {
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
-  const { draft, fareEstimate, setFlowStep, isLoading, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
-  const { confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const { draft, fareEstimate, setFlowStep, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
+  const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const [promoExpanded, setPromoExpanded] = useState(false);
   const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
   const preferencesEnabled = useFeatureFlag('ride_preferences_enabled');
   const { accounts: corporateAccounts } = useCorporateAccounts();
@@ -1080,6 +1121,16 @@ function ReviewingView() {
         />
       </View>
 
+      {/* ETA display */}
+      {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
+        <View className="flex-row items-center mb-4 px-1">
+          <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
+          <Text variant="bodySmall" color="secondary" className="ml-2">
+            {t('home.estimated_time', { defaultValue: 'Tiempo estimado' })}: {Math.ceil(fareEstimate.estimated_duration_s / 60)} {t('home.min', { defaultValue: 'min' })}
+          </Text>
+        </View>
+      )}
+
       {/* Trip insurance toggle */}
       {insuranceEnabled && fareEstimate.insurance_available && fareEstimate.insurance_premium_trc != null && (
         <Pressable
@@ -1116,38 +1167,49 @@ function ReviewingView() {
       )}
 
       {/* Promo code */}
-      <Card variant="outlined" padding="md" className="mb-6">
-        <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
-        <View className="flex-row gap-2">
-          <View className="flex-1">
-            <Input
-              placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
-              value={promoCode}
-              onChangeText={setPromoCode}
-              autoCapitalize="characters"
+      {!promoExpanded && !promoResult?.valid ? (
+        <Pressable
+          className="mb-6 py-2"
+          onPress={() => setPromoExpanded(true)}
+        >
+          <Text variant="bodySmall" color="accent" className="text-center underline">
+            {t('home.have_promo_code', { defaultValue: '¿Tienes un código?' })}
+          </Text>
+        </Pressable>
+      ) : (
+        <Card variant="outlined" padding="md" className="mb-6">
+          <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Input
+                placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
+                value={promoCode}
+                onChangeText={setPromoCode}
+                autoCapitalize="characters"
+              />
+            </View>
+            <Button
+              title={t('ride.apply', { defaultValue: 'Aplicar' })}
+              size="sm"
+              variant="outline"
+              onPress={validatePromo}
+              loading={validatingPromo}
+              disabled={!promoCode.trim()}
             />
           </View>
-          <Button
-            title={t('ride.apply', { defaultValue: 'Aplicar' })}
-            size="sm"
-            variant="outline"
-            onPress={validatePromo}
-            loading={validatingPromo}
-            disabled={!promoCode.trim()}
-          />
-        </View>
-        {promoResult && (
-          <Text
-            variant="caption"
-            color={promoResult.valid ? 'accent' : 'error'}
-            className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
-          >
-            {promoResult.valid
-              ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
-              : promoResult.error ?? t('ride.promo_invalid')}
-          </Text>
-        )}
-      </Card>
+          {promoResult && (
+            <Text
+              variant="caption"
+              color={promoResult.valid ? 'accent' : 'error'}
+              className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
+            >
+              {promoResult.valid
+                ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
+                : promoResult.error ?? t('ride.promo_invalid')}
+            </Text>
+          )}
+        </Card>
+      )}
 
       {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
       {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
@@ -1245,10 +1307,22 @@ function ReviewingView() {
         </Pressable>
       )}
 
+      {/* Inline error banner with retry */}
       {error && (
-        <Text variant="bodySmall" color="error" className="mb-4 text-center">
-          {error}
-        </Text>
+        <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 flex-row items-center">
+          <Ionicons name="alert-circle" size={20} color="#DC2626" />
+          <Text variant="bodySmall" color="error" className="flex-1 ml-2">
+            {error}
+          </Text>
+          <Pressable
+            className="bg-red-500 rounded-lg px-3 py-1.5 ml-2"
+            onPress={requestEstimate}
+          >
+            <Text variant="caption" color="inverse" className="font-semibold">
+              {t('home.retry_estimate', { defaultValue: 'Reintentar' })}
+            </Text>
+          </Pressable>
+        </View>
       )}
 
       <Button

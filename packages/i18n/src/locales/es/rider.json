@@ -4,7 +4,16 @@
     "where_to": "¿A dónde vas?",
     "search_destination": "Buscar destino",
     "recent_places": "Lugares recientes",
-    "saved_places": "Lugares guardados"
+    "saved_places": "Lugares guardados",
+    "no_address_results": "No se encontraron resultados",
+    "try_another_address": "Intenta con otra dirección",
+    "estimated_time": "Tiempo estimado",
+    "min": "min",
+    "have_promo_code": "¿Tienes un código?",
+    "retry_estimate": "Reintentar",
+    "optional": "opcional",
+    "passenger_capacity_hint": "Capacidad: Moto 1, Triciclo 2-3, Auto 1-4",
+    "geocode_error": "No se pudo obtener la dirección. Intenta escribirla manualmente."
   },
 
   "ride": {

@@ -99,6 +99,7 @@ interface RideState {
   activeRide: Ride | null;
   rideWithDriver: RideWithDriver | null;
   isLoading: boolean;
+  isFareEstimating: boolean;
   error: string | null;
 
   // Promo state
@@ -119,6 +120,7 @@ interface RideState {
   setRideWithDriver: (ride: RideWithDriver | null) => void;
   updateRideFromRealtime: (ride: Ride) => void;
   setLoading: (loading: boolean) => void;
+  setFareEstimating: (v: boolean) => void;
   setError: (error: string | null) => void;
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
@@ -145,6 +147,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   activeRide: null,
   rideWithDriver: null,
   isLoading: false,
+  isFareEstimating: false,
   error: null,
   promoCode: '',
   promoResult: null,
@@ -202,6 +205,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   },
 
   setLoading: (isLoading) => set({ isLoading }),
+  setFareEstimating: (isFareEstimating) => set({ isFareEstimating }),
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
@@ -259,6 +263,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       activeRide: null,
       rideWithDriver: null,
       isLoading: false,
+      isFareEstimating: false,
       error: null,
       promoCode: '',
       promoResult: null,

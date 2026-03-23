@@ -40,6 +40,7 @@ function AddressSearchInputInner({
   const [isSearching, setIsSearching] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced search
@@ -130,7 +131,7 @@ function AddressSearchInputInner({
         { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
       );
     } catch {
-      // Silently fail — user can type manually
+      setGeocodeError(t('home.geocode_error', { defaultValue: 'No se pudo obtener la dirección. Intenta escribirla manualmente.' }));
     } finally {
       setIsLocating(false);
     }
@@ -138,6 +139,7 @@ function AddressSearchInputInner({
 
   const handleFocus = () => {
     setIsExpanded(true);
+    setGeocodeError(null);
   };
 
   const handleClear = () => {
@@ -212,6 +214,15 @@ function AddressSearchInputInner({
         )}
       </View>
 
+      {/* Geocoding error inline */}
+      {geocodeError && (
+        <View className="px-3 py-2 mt-1">
+          <Text variant="caption" color="error">
+            {geocodeError}
+          </Text>
+        </View>
+      )}
+
       {/* ── Active search results (query >= 2 chars) ── */}
       {isExpanded && hasActiveQuery && (
         <View className="bg-white rounded-xl mt-1 border border-neutral-200 max-h-64 overflow-hidden">
@@ -285,7 +296,10 @@ function AddressSearchInputInner({
             {!isSearching && results.length === 0 && matchedPredictions.length === 0 && matchedSaved.length === 0 && matchedRecent.length === 0 && (
               <View className="px-4 py-3">
                 <Text variant="caption" color="secondary">
-                  {t('ride.no_results', { defaultValue: 'No se encontraron resultados' })}
+                  {t('home.no_address_results', { defaultValue: 'No se encontraron resultados' })}
+                </Text>
+                <Text variant="caption" color="tertiary" className="mt-1">
+                  {t('home.try_another_address', { defaultValue: 'Intenta con otra dirección' })}
                 </Text>
               </View>
             )}

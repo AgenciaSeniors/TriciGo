@@ -80,6 +80,7 @@ export function useRideActions() {
     setRideWithDriver,
     setFlowStep,
     setLoading,
+    setFareEstimating,
     setError,
     setPromoResult,
     resetAll,
@@ -109,7 +110,7 @@ export function useRideActions() {
       return;
     }
 
-    setLoading(true);
+    setFareEstimating(true);
     setError(null);
     try {
       const estimate = await rideService.getLocalFareEstimate({
@@ -124,9 +125,9 @@ export function useRideActions() {
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      setFareEstimating(false);
     }
-  }, [draft, setFareEstimate, setFlowStep, setLoading, setError]);
+  }, [draft, setFareEstimate, setFlowStep, setFareEstimating, setError]);
 
   const validatePromo = useCallback(async () => {
     const { promoCode, fareEstimate: fe } = useRideStore.getState();
