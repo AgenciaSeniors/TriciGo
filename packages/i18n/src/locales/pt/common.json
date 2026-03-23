@@ -75,7 +75,18 @@
     "tropipay_min_amount": "Valor mínimo: {{min}} CUP",
     "tropipay_redirect": "Você será redirecionado ao TropiPay para concluir o pagamento",
     "tropipay_pay": "Pagar com TropiPay",
-    "tropipay_error_creating": "Erro ao criar o link de pagamento"
+    "tropipay_error_creating": "Erro ao criar o link de pagamento",
+    "txn_recharge": "Recarga de saldo",
+    "txn_ride_payment": "Pagamento de viagem",
+    "txn_ride_earning": "Ganho de viagem",
+    "txn_transfer_received": "Transferência recebida",
+    "txn_transfer_sent": "Transferência enviada",
+    "txn_commission": "Comissão",
+    "txn_tip_received": "Gorjeta recebida",
+    "txn_tip_sent": "Gorjeta enviada",
+    "txn_refund": "Reembolso",
+    "txn_bonus": "Bônus",
+    "txn_referral_bonus": "Bônus de indicação"
   },
 
   "profile": {

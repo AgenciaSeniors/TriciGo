@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Pressable, Share } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Pressable, Share, Animated } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -49,6 +49,7 @@ export function RideCompleteView() {
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fetch dynamic tag definitions from DB
   useEffect(() => {
@@ -126,7 +127,7 @@ export function RideCompleteView() {
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
-      setTimeout(() => resetAll(), 1500);
+      setTimeout(() => resetAll(), 3000);
     } catch (err) {
       console.error('Error submitting review:', err);
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
@@ -178,14 +179,24 @@ export function RideCompleteView() {
     }
   };
 
+  useEffect(() => {
+    if (submitted) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [submitted, fadeAnim]);
+
   if (submitted) {
     return (
-      <View className="flex-1 pt-8 items-center justify-center">
+      <Animated.View style={{ flex: 1, paddingTop: 32, alignItems: 'center', justifyContent: 'center', opacity: fadeAnim }}>
         <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
           <Text variant="h1" color="inverse">✓</Text>
         </View>
         <Text variant="h3">{t('ride.review_thanks')}</Text>
-      </View>
+      </Animated.View>
     );
   }
 
@@ -348,35 +359,7 @@ export function RideCompleteView() {
         </View>
       )}
 
-      {/* Tip section */}
-      {hasDriver && activeRide.payment_method !== 'cash' && !tipSent && (
-        <View className="w-full mb-4">
-          <Text variant="bodySmall" color="secondary" className="text-center mb-2">
-            {t('ride.tip_title')}
-          </Text>
-          <View className="flex-row gap-2 justify-center">
-            {[5000, 10000, 20000].map((amount) => (
-              <Pressable
-                key={amount}
-                className="px-4 py-2 rounded-full bg-neutral-100"
-                onPress={() => handleTip(amount)}
-                disabled={sendingTip}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('ride.tip_title')} ${formatTRC(amount)}`}
-              >
-                <Text variant="bodySmall">{formatTRC(amount)}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-      {tipSent && (
-        <View className="w-full mb-4 items-center" accessibilityLiveRegion="polite">
-          <Text variant="bodySmall" className="text-success-dark">{'✓ '}{t('ride.tip_sent_confirmation')}</Text>
-        </View>
-      )}
-
-      {/* Rating */}
+      {/* Rating + Tip */}
       {hasDriver ? (
         <>
           <View className="flex-row gap-2 mb-2" accessibilityRole="radiogroup" accessibilityLabel={t('ride.rate_driver')}>
@@ -402,9 +385,44 @@ export function RideCompleteView() {
               </Pressable>
             ))}
           </View>
-          <Text variant="caption" color="tertiary" className="mb-4">
+          <Text variant="caption" color="tertiary" className="mb-2">
             {t('ride.rate_driver')}
           </Text>
+
+          {/* Skip rating */}
+          {!selectedRating && (
+            <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating')}>
+              <Text variant="bodySmall" color="tertiary">{t('ride.skip_rating')}</Text>
+            </Pressable>
+          )}
+
+          {/* Tip section (alongside rating) */}
+          {activeRide.payment_method !== 'cash' && !tipSent && (
+            <View className="w-full mb-4">
+              <Text variant="bodySmall" color="secondary" className="text-center mb-2">
+                {t('ride.tip_title')}
+              </Text>
+              <View className="flex-row gap-2 justify-center">
+                {[5000, 10000, 20000].map((amount) => (
+                  <Pressable
+                    key={amount}
+                    className="px-4 py-2 rounded-full bg-neutral-100"
+                    onPress={() => handleTip(amount)}
+                    disabled={sendingTip}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('ride.tip_title')} ${formatTRC(amount)}`}
+                  >
+                    <Text variant="bodySmall">{formatTRC(amount)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+          {tipSent && (
+            <View className="w-full mb-4 items-center" accessibilityLiveRegion="polite">
+              <Text variant="bodySmall" className="text-success-dark">{'✓ '}{t('ride.tip_sent_confirmation')}</Text>
+            </View>
+          )}
 
           {/* Tag chips */}
           {categorizedRatingsEnabled && selectedRating && (
@@ -454,8 +472,12 @@ export function RideCompleteView() {
                 onChangeText={setComment}
                 multiline
                 numberOfLines={3}
+                maxLength={500}
                 style={{ minHeight: 80 }}
               />
+              <Text variant="caption" color="tertiary" className="text-right mt-1">
+                {comment.length}/500
+              </Text>
             </View>
           )}
 

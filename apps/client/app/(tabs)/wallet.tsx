@@ -22,6 +22,43 @@ import { Platform } from 'react-native';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
+/** Map raw ledger entry_type + credit/debit to a human-readable i18n key */
+function getTransactionLabel(
+  type: string,
+  isCredit: boolean,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const map: Record<string, string> = {
+    // Actual LedgerEntryType values
+    recharge: t('wallet.txn_recharge', { defaultValue: 'Recarga de saldo' }),
+    ride_payment: isCredit
+      ? t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' })
+      : t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
+    ride_hold: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
+    ride_hold_release: t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' }),
+    commission: t('wallet.txn_commission', { defaultValue: 'Comisión' }),
+    transfer_in: t('wallet.txn_transfer_received', { defaultValue: 'Transferencia recibida' }),
+    transfer_out: t('wallet.txn_transfer_sent', { defaultValue: 'Transferencia enviada' }),
+    promo_credit: t('wallet.txn_bonus', { defaultValue: 'Bonificación' }),
+    redemption: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
+    adjustment: isCredit
+      ? t('wallet.txn_refund', { defaultValue: 'Reembolso' })
+      : t('wallet.txn_commission', { defaultValue: 'Comisión' }),
+    // Extended entry types from task spec (future-proof)
+    ride_payment_debit: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
+    ride_payment_credit: t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' }),
+    transfer_credit: t('wallet.txn_transfer_received', { defaultValue: 'Transferencia recibida' }),
+    transfer_debit: t('wallet.txn_transfer_sent', { defaultValue: 'Transferencia enviada' }),
+    commission_debit: t('wallet.txn_commission', { defaultValue: 'Comisión' }),
+    tip_credit: t('wallet.txn_tip_received', { defaultValue: 'Propina recibida' }),
+    tip_debit: t('wallet.txn_tip_sent', { defaultValue: 'Propina enviada' }),
+    refund_credit: t('wallet.txn_refund', { defaultValue: 'Reembolso' }),
+    bonus_credit: t('wallet.txn_bonus', { defaultValue: 'Bonificación' }),
+    referral_bonus: t('wallet.txn_referral_bonus', { defaultValue: 'Bonus de referido' }),
+  };
+  return map[type] ?? type;
+}
+
 // TriciCoin images
 const tricoinLogo = require('../../assets/coins/tricoin-logo.png');
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -127,7 +164,7 @@ function WebWalletScreen() {
             return (
               <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100">
                 <View className="flex-1">
-                  <Text variant="bodySmall" numberOfLines={1}>{tx.description || tx.type}</Text>
+                  <Text variant="bodySmall" numberOfLines={1}>{tx.description || getTransactionLabel(tx.type, isCredit, t)}</Text>
                   <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at)}</Text>
                 </View>
                 <Text variant="body" className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-500'}`}>
@@ -391,7 +428,7 @@ function NativeWalletScreen() {
     return (
       <View className="flex-row items-center py-3 border-b border-neutral-100" accessible={true}>
         <View className="flex-1">
-          <Text variant="bodySmall" numberOfLines={1}>{item.description}</Text>
+          <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
           <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
         </View>
         <Text

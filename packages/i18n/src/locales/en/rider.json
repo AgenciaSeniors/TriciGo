@@ -217,7 +217,9 @@
     "position_stale": "Position outdated",
     "cannot_cancel_in_progress": "Cannot cancel a ride in progress",
     "contact_support": "Contact support if you need help",
-    "call_driver_full": "Call driver"
+    "call_driver_full": "Call driver",
+    "skip_rating": "Skip",
+    "comment_limit": "{{count}}/500"
   },
 
   "dispute": {
