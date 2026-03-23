@@ -108,7 +108,7 @@ function WebHomeScreen() {
           </View>
 
           {/* Balance badge */}
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 12, backdropFilter: 'blur(10px)' } as any}>
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 12 }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>
               T$ {(balance / 100).toFixed(2)}
             </Text>

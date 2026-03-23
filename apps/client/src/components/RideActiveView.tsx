@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -29,6 +29,8 @@ import type { GeoPoint } from '@tricigo/utils';
 
 export function RideActiveView() {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const RIDE_STEPS = [
     { key: 'accepted', label: t('ride.status_accepted') },
@@ -314,7 +316,7 @@ export function RideActiveView() {
             className="absolute inset-0 items-center justify-center bg-neutral-100/80"
             style={{ borderRadius: 12 }}
           >
-            <ActivityIndicator size="small" color="#F97316" />
+            <ActivityIndicator size="small" color={isDark ? '#FB923C' : '#F97316'} />
             <Text variant="caption" color="secondary" className="mt-2">
               {t('ride.loading_map', { defaultValue: 'Cargando mapa...' })}
             </Text>
@@ -324,10 +326,10 @@ export function RideActiveView() {
       {positionIsStale && (
         <View
           className="flex-row items-center justify-center mt-2 mx-4 px-3 py-2 rounded-lg"
-          style={{ backgroundColor: '#F59E0B' }}
+          style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
         >
-          <Ionicons name="warning-outline" size={16} color="white" />
-          <Text variant="caption" className="ml-1 font-semibold" style={{ color: 'white' }}>
+          <Ionicons name="warning-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
+          <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
             {t('ride.position_stale', { defaultValue: 'Posición desactualizada' })}
           </Text>
         </View>
@@ -346,10 +348,10 @@ export function RideActiveView() {
       {driverNotMoving && (
         <View
           className="flex-row items-center justify-center mx-4 mt-2 px-3 py-2 rounded-lg"
-          style={{ backgroundColor: '#F59E0B' }}
+          style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
         >
-          <Ionicons name="alert-circle-outline" size={16} color="white" />
-          <Text variant="caption" className="ml-1 font-semibold" style={{ color: 'white' }}>
+          <Ionicons name="alert-circle-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
+          <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
             {t('ride.driver_not_moving', { defaultValue: 'Tu conductor no se ha movido en 5 minutos' })}
           </Text>
         </View>

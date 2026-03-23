@@ -155,8 +155,8 @@ function CancelRideSheetInner({
             key={reasonKey}
             className={`px-3 py-2 rounded-full border ${
               selectedReason === reasonKey
-                ? 'bg-neutral-800 border-neutral-800'
-                : 'bg-white border-neutral-300'
+                ? 'bg-neutral-800 dark:bg-neutral-200 border-neutral-800 dark:border-neutral-200'
+                : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600'
             }`}
             onPress={() => {
               triggerSelection();

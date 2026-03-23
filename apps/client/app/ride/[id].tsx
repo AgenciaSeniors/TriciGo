@@ -322,7 +322,7 @@ export default function RideDetailScreen() {
 
         {/* Dispute status card */}
         {dispute && (
-          <Card variant="outlined" padding="md" className="mb-4 border-orange-200 bg-orange-50">
+          <Card variant="outlined" padding="md" className="mb-4 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30">
             <Text variant="label" className="mb-1">{t('dispute.your_dispute')}</Text>
             <View className="flex-row items-center justify-between">
               <Text variant="bodySmall" color="secondary">
@@ -334,7 +334,7 @@ export default function RideDetailScreen() {
               />
             </View>
             {dispute.resolution_notes && (
-              <View className="mt-2 pt-2 border-t border-orange-200">
+              <View className="mt-2 pt-2 border-t border-orange-200 dark:border-orange-800">
                 <Text variant="caption" color="secondary">{t('dispute.resolution_notes')}</Text>
                 <Text variant="bodySmall">{dispute.resolution_notes}</Text>
               </View>
@@ -354,7 +354,7 @@ export default function RideDetailScreen() {
 
         {/* Lost item status card */}
         {lostItem && (
-          <Card variant="outlined" padding="md" className="mb-4 border-amber-200 bg-amber-50">
+          <Card variant="outlined" padding="md" className="mb-4 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30">
             <Text variant="label" className="mb-1">{t('lost_found.title')}</Text>
             <View className="flex-row items-center justify-between">
               <Text variant="bodySmall" color="secondary">
@@ -366,7 +366,7 @@ export default function RideDetailScreen() {
               />
             </View>
             {lostItem.driver_found === true && lostItem.return_location && (
-              <View className="mt-2 pt-2 border-t border-amber-200">
+              <View className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
                 <Text variant="caption" color="secondary">{t('lost_found.return_location')}</Text>
                 <Text variant="bodySmall">{lostItem.return_location}</Text>
               </View>
@@ -388,7 +388,7 @@ export default function RideDetailScreen() {
               {disputesEnabled && !dispute && (
                 <Pressable
                   onPress={() => router.push(`/ride/dispute/${id}`)}
-                  className="flex-row items-center bg-white border border-orange-200 rounded-xl px-4 py-3.5"
+                  className="flex-row items-center bg-white dark:bg-neutral-800 border border-orange-200 dark:border-orange-800 rounded-xl px-4 py-3.5"
                   accessibilityRole="button"
                   accessibilityLabel={t('ride.report_issue')}
                 >
@@ -400,7 +400,7 @@ export default function RideDetailScreen() {
               {lostFoundEnabled && !lostItem && ride.driver_user_id && (
                 <Pressable
                   onPress={() => router.push(`/ride/lost-item/${id}?driverId=${ride.driver_user_id}`)}
-                  className="flex-row items-center bg-white border border-amber-200 rounded-xl px-4 py-3.5"
+                  className="flex-row items-center bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3.5"
                   accessibilityRole="button"
                   accessibilityLabel={t('ride.lost_item')}
                 >

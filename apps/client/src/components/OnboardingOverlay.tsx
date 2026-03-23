@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Modal,
@@ -6,6 +6,7 @@ import {
   Animated,
   Dimensions,
   StyleSheet,
+  useColorScheme,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -25,41 +26,46 @@ interface OnboardingStep {
   iconBg: string;
 }
 
-const STEPS: OnboardingStep[] = [
-  {
-    icon: 'rocket-outline',
-    titleKey: 'onboarding.slide1_title',
-    descKey: 'onboarding.slide1_desc',
-    iconColor: colors.brand.orange,
-    iconBg: colors.primary[50],
-  },
-  {
-    icon: 'car-sport',
-    titleKey: 'onboarding.slide2_title',
-    descKey: 'onboarding.slide2_desc',
-    iconColor: '#2563eb',
-    iconBg: '#eff6ff',
-  },
-  {
-    icon: 'shield-checkmark',
-    titleKey: 'onboarding.slide3_title',
-    descKey: 'onboarding.slide3_desc',
-    iconColor: '#16a34a',
-    iconBg: '#f0fdf4',
-  },
-  {
-    icon: 'wallet',
-    titleKey: 'onboarding.slide4_title',
-    descKey: 'onboarding.slide4_desc',
-    iconColor: '#7c3aed',
-    iconBg: '#f5f3ff',
-  },
-];
+function buildSteps(isDark: boolean): OnboardingStep[] {
+  return [
+    {
+      icon: 'rocket-outline',
+      titleKey: 'onboarding.slide1_title',
+      descKey: 'onboarding.slide1_desc',
+      iconColor: colors.brand.orange,
+      iconBg: colors.primary[50],
+    },
+    {
+      icon: 'car-sport',
+      titleKey: 'onboarding.slide2_title',
+      descKey: 'onboarding.slide2_desc',
+      iconColor: isDark ? '#60A5FA' : '#2563eb',
+      iconBg: isDark ? '#1E3A5F' : '#eff6ff',
+    },
+    {
+      icon: 'shield-checkmark',
+      titleKey: 'onboarding.slide3_title',
+      descKey: 'onboarding.slide3_desc',
+      iconColor: isDark ? '#4ADE80' : '#16a34a',
+      iconBg: isDark ? '#14532D' : '#f0fdf4',
+    },
+    {
+      icon: 'wallet',
+      titleKey: 'onboarding.slide4_title',
+      descKey: 'onboarding.slide4_desc',
+      iconColor: isDark ? '#A78BFA' : '#7c3aed',
+      iconBg: isDark ? '#3B0764' : '#f5f3ff',
+    },
+  ];
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const STEPS = useMemo(() => buildSteps(isDark), [isDark]);
   const [currentStep, setCurrentStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -99,11 +105,11 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: isDark ? '#1F2937' : '#ffffff' }]}>
           {/* Skip button */}
           {!isLastStep && (
             <Pressable style={styles.skipButton} onPress={handleSkip}>
-              <Text style={styles.skipText}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
+              <Text style={[styles.skipText, { color: isDark ? '#6B7280' : '#9ca3af' }]}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
             </Pressable>
           )}
 
@@ -119,10 +125,10 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             </View>
 
             {/* Title */}
-            <Text style={styles.title}>{t(step.titleKey)}</Text>
+            <Text style={[styles.title, { color: isDark ? '#F9FAFB' : '#111111' }]}>{t(step.titleKey)}</Text>
 
             {/* Description */}
-            <Text style={styles.description}>{t(step.descKey)}</Text>
+            <Text style={[styles.description, { color: isDark ? '#D1D5DB' : '#555555' }]}>{t(step.descKey)}</Text>
           </Animated.View>
 
           {/* Dots indicator */}
@@ -132,7 +138,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
                 key={i}
                 style={[
                   styles.dot,
-                  i === currentStep ? styles.dotActive : styles.dotInactive,
+                  i === currentStep ? styles.dotActive : [styles.dotInactive, { backgroundColor: isDark ? '#4B5563' : '#d4d4d8' }],
                 ]}
               />
             ))}
@@ -161,7 +167,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#ffffff', // overridden inline for dark mode
     borderRadius: 20,
     paddingHorizontal: 28,
     paddingTop: 40,

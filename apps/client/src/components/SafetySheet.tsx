@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, Linking, Alert, Share, ActivityIndicator } from 'react-native';
+import { View, Pressable, Linking, Alert, Share, ActivityIndicator, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
@@ -30,6 +30,8 @@ export function SafetySheet({
 }: SafetySheetProps) {
   const { t } = useTranslation('common');
   const { t: tr } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [sharing, setSharing] = useState(false);
   const [sharingWithContacts, setSharingWithContacts] = useState(false);
   const [contactsSent, setContactsSent] = useState(false);
@@ -213,7 +215,7 @@ export function SafetySheet({
         {sharingWithContacts ? (
           <ActivityIndicator size="small" color={colors.primary[500]} />
         ) : contactsSent ? (
-          <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+          <Ionicons name="checkmark-circle" size={20} color={isDark ? '#4ADE80' : '#16A34A'} />
         ) : (
           <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
         )}

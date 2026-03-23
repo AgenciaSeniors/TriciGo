@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Linking, Share } from 'react-native';
+import { View, Pressable, Linking, Share, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -21,6 +21,8 @@ const SAFETY_TIPS = ['tip_1', 'tip_2', 'tip_3', 'tip_4', 'tip_5'] as const;
 
 export default function SafetyCenterScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const user = useAuthStore((s) => s.user);
   const activeRide = useRideStore((s) => s.activeRide);
   const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string } | null>(null);
@@ -184,7 +186,7 @@ export default function SafetyCenterScreen() {
             onPress={() => router.push('/profile/help')}
           >
             <View className="w-10 h-10 rounded-full bg-warning-100 items-center justify-center mr-3">
-              <Ionicons name="flag-outline" size={20} color={colors.warning?.DEFAULT ?? '#F59E0B'} />
+              <Ionicons name="flag-outline" size={20} color={isDark ? '#FBBF24' : (colors.warning?.DEFAULT ?? '#F59E0B')} />
             </View>
             <View className="flex-1">
               <Text variant="body" className="font-semibold">{t('safety.report')}</Text>
@@ -202,7 +204,7 @@ export default function SafetyCenterScreen() {
           >
             <View className="flex-row items-center">
               <View className="w-10 h-10 rounded-full bg-success-100 items-center justify-center mr-3">
-                <Ionicons name="bulb-outline" size={20} color="#16A34A" />
+                <Ionicons name="bulb-outline" size={20} color={isDark ? '#4ADE80' : '#16A34A'} />
               </View>
               <Text variant="body" className="font-semibold">{t('safety.tips_title')}</Text>
             </View>
