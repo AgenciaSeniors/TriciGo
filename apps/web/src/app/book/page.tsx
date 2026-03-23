@@ -69,6 +69,19 @@ export default function BookPage() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeInfo, setRouteInfo] = useState<{ distance_m: number; duration_s: number } | null>(null);
 
+  /* ─── Waypoints state (W1.1) ─── */
+  const [waypoints, setWaypoints] = useState<LocationPreset[]>([]);
+
+  /* ─── Scheduled ride state (W1.2) ─── */
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+
+  /* ─── Promo code state (W1.3) ─── */
+  const [promoCode, setPromoCode] = useState('');
+
+  /* ─── Insurance state (W1.4) ─── */
+  const [insuranceSelected, setInsuranceSelected] = useState(false);
+
   /* ─── Nearby vehicles state ─── */
   const [nearbyVehicles, setNearbyVehicles] = useState<NearbyVehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
@@ -199,6 +212,11 @@ export default function BookPage() {
     setRouteCoords(null);
     setRouteInfo(null);
     setSelectionStep('pickup');
+    setWaypoints([]);
+    setIsScheduled(false);
+    setScheduleDate('');
+    setPromoCode('');
+    setInsuranceSelected(false);
   }
 
   async function handleUseMyLocation() {
@@ -272,6 +290,21 @@ export default function BookPage() {
         estimated_fare_cup: estimate.estimated_fare_cup,
         estimated_distance_m: estimate.estimated_distance_m,
         estimated_duration_s: estimate.estimated_duration_s,
+        // W1.1: Waypoints
+        ...(waypoints.length > 0 && {
+          waypoints: waypoints.map((wp, i) => ({
+            sort_order: i + 1,
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+            address: wp.address || wp.label,
+          })),
+        }),
+        // W1.2: Scheduled ride
+        ...(isScheduled && scheduleDate && {
+          scheduled_at: new Date(scheduleDate).toISOString(),
+        }),
+        // W1.4: Insurance
+        insurance_selected: insuranceSelected,
       });
       router.push(`/track/${ride.id}`);
     } catch (err) {
@@ -443,6 +476,88 @@ export default function BookPage() {
                 )}
               </div>
             )}
+            {/* ═══ Waypoints (W1.1) ═══ */}
+            {pickup && dropoff && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {waypoints.map((wp, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.5rem',
+                      background: '#fffbeb',
+                      border: '1px solid #fcd34d',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: '#f59e0b',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ fontWeight: 600 }}>Parada {idx + 1}:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{wp.label}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setWaypoints((prev) => prev.filter((_, i) => i !== idx))}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--error)',
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        padding: '0 0.25rem',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {waypoints.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Use the same location selection pattern: prompt for address via a simple approach
+                      // For now, use the map's current selection step mechanism
+                      const address = prompt('Dirección de la parada:');
+                      if (address && address.trim()) {
+                        // Create a waypoint at midpoint between pickup and dropoff as placeholder
+                        // In production, this would use a geocoding search
+                        const lat = (pickup!.latitude + dropoff!.latitude) / 2 + (Math.random() - 0.5) * 0.01;
+                        const lng = (pickup!.longitude + dropoff!.longitude) / 2 + (Math.random() - 0.5) * 0.01;
+                        setWaypoints((prev) => [
+                          ...prev,
+                          { label: address.trim(), address: address.trim(), latitude: lat, longitude: lng },
+                        ]);
+                      }
+                    }}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.5rem',
+                      border: '1px dashed var(--border)',
+                      background: 'var(--bg-card)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    + Agregar parada ({waypoints.length}/3)
+                  </button>
+                )}
+              </div>
+            )}
+
             {routeInfo && (
               <div
                 style={{
@@ -679,6 +794,86 @@ export default function BookPage() {
                     {t('book.payment_tricicoin')}
                   </button>
                 </div>
+              </div>
+
+              {/* ═══ Promo code (W1.3) ═══ */}
+              <div style={{ marginTop: '0.75rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Código promocional
+                </label>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Ingresa un código"
+                  style={{
+                    width: '100%',
+                    marginTop: '0.25rem',
+                    padding: '0.5rem',
+                    borderRadius: '0.5rem',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-card)',
+                    fontSize: '0.85rem',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* ═══ Insurance toggle (W1.4) ═══ */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  marginTop: '0.75rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={insuranceSelected}
+                  onChange={(e) => setInsuranceSelected(e.target.checked)}
+                />
+                <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
+              </label>
+
+              {/* ═══ Scheduled ride (W1.2) ═══ */}
+              <div style={{ marginTop: '0.75rem' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isScheduled}
+                    onChange={(e) => {
+                      setIsScheduled(e.target.checked);
+                      if (!e.target.checked) setScheduleDate('');
+                    }}
+                  />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
+                </label>
+                {isScheduled && (
+                  <input
+                    type="datetime-local"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
+                    style={{
+                      width: '100%',
+                      marginTop: '0.5rem',
+                      padding: '0.5rem',
+                      borderRadius: '0.5rem',
+                      border: '1px solid var(--border)',
+                      fontSize: '0.85rem',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                )}
               </div>
 
               {/* Request button */}
