@@ -303,11 +303,20 @@ function NativeWalletScreen() {
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     setTransferPhone('');
     setTransferAmount('');
     setTransferNote('');
     setTransferRecipient(null);
+    // X2.3: Refresh balance before opening transfer sheet to ensure freshness
+    if (userId) {
+      try {
+        const freshBalance = await walletService.getBalance(userId);
+        setBalance(freshBalance);
+      } catch {
+        // Best effort — continue with current balance
+      }
+    }
     setTransferSheetVisible(true);
   };
 

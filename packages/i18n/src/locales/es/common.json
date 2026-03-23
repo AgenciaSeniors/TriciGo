@@ -385,7 +385,10 @@
     "preferences_save_failed": "Error al guardar preferencias",
     "location_permission_failed": "Error al obtener ubicación",
     "operation_failed": "La operación falló. Inténtalo de nuevo.",
-    "estimate_expired": "Tu cotización expiró. Solicita una nueva."
+    "estimate_expired": "Tu cotización expiró. Solicita una nueva.",
+    "waiting_driver_location": "Esperando ubicación del conductor...",
+    "invalid_coordinates": "Ubicación inválida. Selecciona otra dirección.",
+    "invalid_tip": "Monto de propina inválido"
   },
 
   "preferences": {

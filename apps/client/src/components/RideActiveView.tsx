@@ -60,6 +60,42 @@ export function RideActiveView() {
     estimatedDurationS: activeRide?.estimated_duration_s,
   });
 
+  // X2.1: Driver position timeout — show message instead of spinner after 30s
+  const [positionTimeoutReached, setPositionTimeoutReached] = useState(false);
+  const positionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (driverPosition) {
+      // Position received — clear timeout and reset flag
+      if (positionTimeoutRef.current) {
+        clearTimeout(positionTimeoutRef.current);
+        positionTimeoutRef.current = null;
+      }
+      setPositionTimeoutReached(false);
+      return;
+    }
+
+    // driverPosition is null and ride is in accepted or driver_en_route
+    if (
+      activeRide?.status === 'accepted' ||
+      activeRide?.status === 'driver_en_route'
+    ) {
+      if (!positionTimeoutRef.current) {
+        positionTimeoutRef.current = setTimeout(() => {
+          setPositionTimeoutReached(true);
+          positionTimeoutRef.current = null;
+        }, 30_000);
+      }
+    }
+
+    return () => {
+      if (positionTimeoutRef.current) {
+        clearTimeout(positionTimeoutRef.current);
+        positionTimeoutRef.current = null;
+      }
+    };
+  }, [driverPosition, activeRide?.status]);
+
   // Driver-not-moving detection (4.2)
   const prevDriverPosRef = useRef<{ latitude: number; longitude: number; timestamp: number } | null>(null);
   const [driverNotMoving, setDriverNotMoving] = useState(false);
@@ -341,10 +377,18 @@ export function RideActiveView() {
             className="absolute inset-0 items-center justify-center bg-neutral-100/80"
             style={{ borderRadius: 12 }}
           >
-            <ActivityIndicator size="small" color={isDark ? '#FB923C' : '#F97316'} />
-            <Text variant="caption" color="secondary" className="mt-2">
-              {t('ride.loading_map', { defaultValue: 'Cargando mapa...' })}
-            </Text>
+            {positionTimeoutReached ? (
+              <Text variant="caption" color="secondary" className="mt-2 px-4 text-center">
+                {t('errors.waiting_driver_location', { ns: 'common', defaultValue: 'Esperando ubicación del conductor...' })}
+              </Text>
+            ) : (
+              <>
+                <ActivityIndicator size="small" color={isDark ? '#FB923C' : '#F97316'} />
+                <Text variant="caption" color="secondary" className="mt-2">
+                  {t('ride.loading_map', { defaultValue: 'Cargando mapa...' })}
+                </Text>
+              </>
+            )}
           </View>
         )}
       </View>

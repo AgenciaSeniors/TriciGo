@@ -11,6 +11,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
+import Toast from 'react-native-toast-message';
 import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
@@ -425,6 +426,11 @@ function IdleView() {
   );
 }
 
+// X2.4: Geocoding coordinate validation
+function isValidCoordinate(lat: number, lng: number): boolean {
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
+}
+
 // ── Selecting View ─────────────────────────────────────────
 
 function SelectingView() {
@@ -512,7 +518,13 @@ function SelectingView() {
       <AddressSearchInput
         placeholder={t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
         selectedAddress={draft.pickup?.address ?? null}
-        onSelect={(address, location) => setPickup(address, location)}
+        onSelect={(address, location) => {
+          if (!isValidCoordinate(location.latitude, location.longitude)) {
+            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
+            return;
+          }
+          setPickup(address, location);
+        }}
         savedLocations={savedLocations}
         recentAddresses={recentAddresses}
         showUseMyLocation
@@ -570,7 +582,13 @@ function SelectingView() {
       <AddressSearchInput
         placeholder={t('ride.enter_dropoff', { defaultValue: 'Destino' })}
         selectedAddress={draft.dropoff?.address ?? null}
-        onSelect={(address, location) => setDropoff(address, location)}
+        onSelect={(address, location) => {
+          if (!isValidCoordinate(location.latitude, location.longitude)) {
+            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
+            return;
+          }
+          setDropoff(address, location);
+        }}
         savedLocations={savedLocations}
         recentAddresses={recentAddresses}
         predictions={predictions}
@@ -588,7 +606,13 @@ function SelectingView() {
               <AddressSearchInput
                 placeholder={t('ride.stop_n', { n: idx + 1 })}
                 selectedAddress={wp.address || null}
-                onSelect={(address, location) => updateWaypoint(idx, address, location)}
+                onSelect={(address, location) => {
+                  if (!isValidCoordinate(location.latitude, location.longitude)) {
+                    Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
+                    return;
+                  }
+                  updateWaypoint(idx, address, location);
+                }}
               />
             </View>
             <Pressable

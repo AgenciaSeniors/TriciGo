@@ -385,7 +385,10 @@
     "preferences_save_failed": "Failed to save preferences",
     "location_permission_failed": "Failed to get location",
     "operation_failed": "Operation failed. Please try again.",
-    "estimate_expired": "Your estimate expired. Request a new one."
+    "estimate_expired": "Your estimate expired. Request a new one.",
+    "waiting_driver_location": "Waiting for driver location...",
+    "invalid_coordinates": "Invalid location. Select another address.",
+    "invalid_tip": "Invalid tip amount"
   },
 
   "preferences": {

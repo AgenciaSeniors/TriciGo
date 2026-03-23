@@ -102,6 +102,11 @@ export function RideCompleteView() {
 
   const handleTip = async (amount: number) => {
     if (!userId || !activeRide) return;
+    // X2.5: Validate tip amount
+    if (amount <= 0 || amount > 100000) {
+      Toast.show({ type: 'error', text1: t('errors.invalid_tip', { ns: 'common', defaultValue: 'Monto de propina inválido' }) });
+      return;
+    }
     setSendingTip(true);
     try {
       await rideService.addTip(activeRide.id, userId, amount);

@@ -183,8 +183,27 @@ export const useRideStore = create<RideState>((set, get) => ({
     const { activeRide } = get();
     if (!activeRide || activeRide.id !== ride.id) return;
 
-    // Fire local notification on status change
+    // X2.2: Validate forward-only status transitions
     if (ride.status !== activeRide.status) {
+      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'completed', 'canceled'];
+
+      const isValidTransition = (current: string, next: string): boolean => {
+        if (next === 'canceled') return true; // can always cancel
+        const currentIdx = STATUS_ORDER.indexOf(current);
+        const nextIdx = STATUS_ORDER.indexOf(next);
+        return nextIdx > currentIdx;
+      };
+
+      if (!isValidTransition(activeRide.status, ride.status)) {
+        logger.warn('Ignoring invalid ride status transition', {
+          rideId: ride.id,
+          from: activeRide.status,
+          to: ride.status,
+        });
+        return;
+      }
+
+      // Fire local notification on status change
       scheduleLocalNotification(ride.status);
     }
 
