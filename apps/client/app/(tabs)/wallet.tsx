@@ -193,6 +193,36 @@ function NativeWalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<TxnFilter>('all');
 
+  // U3.4: Count-up animation for balance after recharge
+  const [displayBalance, setDisplayBalance] = useState(0);
+  const prevBalanceRef = useRef(0);
+
+  useEffect(() => {
+    if (balance?.available != null) {
+      const prev = prevBalanceRef.current;
+      const next = balance.available;
+      if (next > prev && prev > 0) {
+        // Count up animation
+        const diff = next - prev;
+        const steps = 20;
+        const stepTime = 50; // 1s total
+        let step = 0;
+        const interval = setInterval(() => {
+          step++;
+          setDisplayBalance(Math.round(prev + (diff * step / steps)));
+          if (step >= steps) {
+            clearInterval(interval);
+            setDisplayBalance(next);
+          }
+        }, stepTime);
+        return () => clearInterval(interval);
+      } else {
+        setDisplayBalance(next);
+      }
+      prevBalanceRef.current = next;
+    }
+  }, [balance?.available]);
+
   // Recharge state
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('');
@@ -517,8 +547,9 @@ function NativeWalletScreen() {
         </View>
 
         <AnimatedCard delay={0}>
+          {/* U3.4: Use displayBalance for count-up animation */}
           <BalanceBadge
-            balance={balance.available}
+            balance={displayBalance}
             held={balance.held}
             size="lg"
             showHeld

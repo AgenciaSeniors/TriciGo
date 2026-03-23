@@ -234,7 +234,10 @@
     "driver_phone_unavailable": "Número do motorista indisponível",
     "share_location": "Compartilhar localização",
     "share_with_contacts": "Compartilhar com contatos de confiança",
-    "call_emergency": "Ligar para contato de emergência"
+    "call_emergency": "Ligar para contato de emergência",
+    "first_ride_title": "Sua primeira viagem com TriciGo!",
+    "invite_friends": "Convide amigos e ganhe TriciCoins",
+    "thanks_tip": "Obrigado!"
   },
 
   "dispute": {

@@ -238,7 +238,10 @@
     "driver_phone_unavailable": "Driver phone not available",
     "share_location": "Share location",
     "share_with_contacts": "Share with trusted contacts",
-    "call_emergency": "Call emergency contact"
+    "call_emergency": "Call emergency contact",
+    "first_ride_title": "Your first ride with TriciGo!",
+    "invite_friends": "Invite friends and earn TriciCoins",
+    "thanks_tip": "Thanks!"
   },
 
   "dispute": {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Pressable, Share, Animated, useColorScheme, type GestureResponderEvent } from 'react-native';
+import { useRouter } from 'expo-router';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -27,22 +28,35 @@ const FALLBACK_NEGATIVE_TAGS = [
   'dirty_vehicle', 'unsafe_driving', 'rude_behavior', 'wrong_route', 'long_wait',
 ];
 
-function AnimatedStar({ filled, onPress }: { filled: boolean; onPress: () => void }) {
+function AnimatedStar({ filled, onPress, delay = 0 }: { filled: boolean; onPress: () => void; delay?: number }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 1.3, friction: 3, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }),
-    ]).start();
-    onPress();
-  };
+  const fillAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (filled) {
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.spring(scale, { toValue: 1.3, friction: 3, useNativeDriver: true }),
+          Animated.timing(fillAnim, { toValue: 1, duration: 200, useNativeDriver: false }),
+        ]).start(() => {
+          Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+        });
+      }, delay);
+    } else {
+      fillAnim.setValue(0);
+      scale.setValue(1);
+    }
+  }, [filled]);
+
+  const color = fillAnim.interpolate({ inputRange: [0, 1], outputRange: ['#D1D5DB', '#FBBF24'] });
+
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={onPress}
       style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
-        <Text style={{ fontSize: 32, color: filled ? '#FBBF24' : '#D1D5DB' }}>★</Text>
+        <Animated.Text style={{ fontSize: 32, color }}>★</Animated.Text>
       </Animated.View>
     </Pressable>
   );
@@ -71,11 +85,14 @@ export function RideCompleteView() {
   const [sendingTip, setSendingTip] = useState(false);
   const [receiptEmailed, setReceiptEmailed] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [isFirstRide, setIsFirstRide] = useState(false);
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const tipScaleAnim = useRef(new Animated.Value(1)).current;
+  const router = useRouter();
 
   // Fetch dynamic tag definitions from DB
   useEffect(() => {
@@ -87,6 +104,16 @@ export function RideCompleteView() {
       if (neg.length > 0) setNegativeTags(neg.map((t) => t.key));
     }).catch(() => { /* use fallback tags */ });
   }, []);
+
+  // U3.1: Check if this is the user's first completed ride
+  useEffect(() => {
+    if (userId) {
+      rideService.getRideHistory(userId, { page: 0, pageSize: 1 }).then((rides) => {
+        // If only 1 ride (this one), it's their first
+        setIsFirstRide(rides.length <= 1);
+      }).catch(() => {});
+    }
+  }, [userId]);
 
   // Subscribe to real-time split updates (payment confirmations post-ride)
   useEffect(() => {
@@ -135,6 +162,12 @@ export function RideCompleteView() {
       await rideService.addTip(activeRide.id, userId, amount);
       setTipSent(true);
       triggerHaptic('success');
+      // U3.3: Tip thank-you animation (shrink → grow → settle)
+      Animated.sequence([
+        Animated.spring(tipScaleAnim, { toValue: 0.9, friction: 5, useNativeDriver: true }),
+        Animated.spring(tipScaleAnim, { toValue: 1.1, friction: 5, useNativeDriver: true }),
+        Animated.spring(tipScaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
+      ]).start();
       Toast.show({ type: 'success', text1: t('ride.tip_sent_confirmation') });
     } catch (err) {
       Toast.show({ type: 'error', text1: t('common.error'), text2: getErrorMessage(err) });
@@ -214,32 +247,44 @@ export function RideCompleteView() {
 
   useEffect(() => {
     if (submitted) {
+      // U3.1: Bigger bounce for first ride
+      if (isFirstRide) scaleAnim.setValue(0.5);
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
       ]).start();
     }
-  }, [submitted, fadeAnim, scaleAnim]);
+  }, [submitted, fadeAnim, scaleAnim, isFirstRide]);
 
   if (submitted) {
     return (
       <Animated.View style={{ flex: 1, paddingTop: 32, alignItems: 'center', justifyContent: 'center', opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
-        <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
+        <View className={`${isFirstRide ? 'w-24 h-24' : 'w-20 h-20'} rounded-full bg-success items-center justify-center mb-4`}>
           <Text variant="h1" color="inverse">✓</Text>
         </View>
-        <Text variant="h3">{t('ride.review_thanks')}</Text>
+        <Text variant="h3">{isFirstRide ? t('ride.first_ride_title') : t('ride.review_thanks')}</Text>
+        {isFirstRide && (
+          <Pressable onPress={() => router.push('/profile/referral')} className="mt-3">
+            <Text variant="bodySmall" color="accent">{t('ride.invite_friends')} →</Text>
+          </Pressable>
+        )}
       </Animated.View>
     );
   }
 
   return (
     <View className="flex-1 pt-8 items-center">
-      {/* Success icon */}
-      <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
+      {/* Success icon — U3.1: larger for first ride */}
+      <View className={`${isFirstRide ? 'w-24 h-24' : 'w-20 h-20'} rounded-full bg-success items-center justify-center mb-4`}>
         <Text variant="h1" color="inverse">✓</Text>
       </View>
 
-      <Text variant="h3" className="mb-2">{t('ride.completed')}</Text>
+      <Text variant="h3" className="mb-2">{isFirstRide ? t('ride.first_ride_title') : t('ride.completed')}</Text>
+      {isFirstRide && (
+        <Pressable onPress={() => router.push('/profile/referral')} className="mb-2">
+          <Text variant="bodySmall" color="accent">{t('ride.invite_friends')} →</Text>
+        </Pressable>
+      )}
 
       {/* Mini driver card */}
       {rideWithDriver?.driver_name && (
@@ -394,12 +439,14 @@ export function RideCompleteView() {
       {/* Rating + Tip */}
       {hasDriver ? (
         <>
+          {/* U3.2: Stars with cascade fill animation */}
           <View className="flex-row gap-2 mb-2" accessibilityRole="radiogroup" accessibilityLabel={t('ride.rate_driver')}>
-            {[1, 2, 3, 4, 5].map((star) => (
+            {[1, 2, 3, 4, 5].map((star, index) => (
               <AnimatedStar
                 key={star}
                 filled={!!selectedRating && star <= selectedRating}
                 onPress={() => { setSelectedRating(star); triggerSelection(); }}
+                delay={index * 80}
               />
             ))}
           </View>
@@ -436,10 +483,14 @@ export function RideCompleteView() {
               </View>
             </View>
           )}
+          {/* U3.3: Tip thank-you animated badge */}
           {tipSent && (
-            <View className="w-full mb-4 items-center" accessibilityLiveRegion="polite">
-              <Text variant="bodySmall" className="text-success-dark">{'✓ '}{t('ride.tip_sent_confirmation')}</Text>
-            </View>
+            <Animated.View style={{ transform: [{ scale: tipScaleAnim }] }} className="w-full mb-4 items-center" accessibilityLiveRegion="polite">
+              <View className="px-4 py-2 rounded-full bg-success/10 flex-row items-center gap-2">
+                <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+                <Text variant="bodySmall" className="text-success-dark font-semibold">{t('ride.thanks_tip')}</Text>
+              </View>
+            </Animated.View>
           )}
 
           {/* Tag chips */}
