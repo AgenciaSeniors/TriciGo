@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -15,7 +15,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -268,6 +268,26 @@ function IdleView() {
     };
   }, [user?.id, notifCenterEnabled]);
 
+  // U2.1: Live driver availability pulse
+  const [driverCount, setDriverCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchDriverCount = async () => {
+      try {
+        const { count } = await getSupabaseClient()
+          .from('driver_profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_online', true);
+        setDriverCount(count ?? 0);
+      } catch {
+        setDriverCount(0);
+      }
+    };
+    fetchDriverCount();
+    const interval = setInterval(fetchDriverCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleRecentTap = useCallback((addr: { address: string; latitude: number; longitude: number }) => {
     setDropoff(addr.address, { latitude: addr.latitude, longitude: addr.longitude });
     setFlowStep('selecting');
@@ -378,6 +398,27 @@ function IdleView() {
           {t('home.where_to')}
         </Text>
       </Pressable>
+
+      {/* U2.1: Driver availability pulse */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+        {driverCount === null ? (
+          <Skeleton width={180} height={16} />
+        ) : driverCount > 0 ? (
+          <>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
+            <Text variant="bodySmall" color="secondary">
+              {t('home.drivers_active', { count: driverCount })}
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' }} />
+            <Text variant="bodySmall" color="secondary">
+              {t('home.searching_drivers')}
+            </Text>
+          </>
+        )}
+      </View>
 
       {/* Predicted destinations — U1.1 large one-tap cards */}
       {predictions.length > 0 && (
@@ -1498,6 +1539,32 @@ function SearchingView() {
     activeRide?.dropoff_location ?? null,
   );
 
+  // U2.2: Progressive search messages
+  const [searchPhase, setSearchPhase] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setSearchPhase(1), 30000);
+    const t2 = setTimeout(() => setSearchPhase(2), 60000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // Animate text change on phase transition
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [searchPhase, fadeAnim]);
+
+  const searchMessage = searchPhase === 0
+    ? t('home.notifying_drivers')
+    : searchPhase === 1
+      ? t('home.expanding_search')
+      : t('home.few_drivers');
+
   const searchSteps = useMemo(() => [
     { key: 'searching', label: t('ride.searching_driver') },
     { key: 'accepted', label: t('ride.status_accepted') },
@@ -1531,9 +1598,11 @@ function SearchingView() {
       <Text variant="h4" className="mb-2 text-center">
         {t('ride.searching_driver')}
       </Text>
-      <Text variant="bodySmall" color="secondary" className="mb-8 text-center">
-        {t('ride.searching_wait', { defaultValue: 'Esto puede tomar hasta 2 minutos' })}
-      </Text>
+      <Animated.View style={{ opacity: fadeAnim }}>
+        <Text variant="bodySmall" color="secondary" className="mb-8 text-center">
+          {searchMessage}
+        </Text>
+      </Animated.View>
 
       {error && (
         <Text variant="bodySmall" color="error" className="mb-4 text-center">

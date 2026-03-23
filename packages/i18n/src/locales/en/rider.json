@@ -19,7 +19,12 @@
     "your_usual_service": "Your usual service",
     "request_service_fare_eta": "Request {{service}} for ₧{{fare}} · ~{{eta}} min",
     "usual_fare_range": "This trip usually costs ₧{{low}} - ₧{{high}}",
-    "calculating": "Calculating..."
+    "calculating": "Calculating...",
+    "drivers_active": "{{count}} active drivers in your area",
+    "searching_drivers": "Searching for drivers in your area...",
+    "notifying_drivers": "Notifying nearby drivers...",
+    "expanding_search": "Expanding search in your area...",
+    "few_drivers": "Few drivers available. Still searching..."
   },
 
   "ride": {
@@ -161,6 +166,7 @@
     "cancel_body": "Are you sure you want to cancel this ride?",
     "cancel_confirm": "Yes, cancel",
     "eta_driver_arriving": "Arrives in ~{{minutes}} min",
+    "distance_eta": "{{distance}} km away · ~{{eta}} min",
     "eta_driver_arrived": "Your driver has arrived",
     "eta_destination": "Arriving in ~{{minutes}} min",
     "eta_calculating": "Calculating...",

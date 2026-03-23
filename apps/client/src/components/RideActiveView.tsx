@@ -290,6 +290,21 @@ export function RideActiveView() {
     }).catch(() => {});
   }, [userId]);
 
+  // U2.3: Slide-up entrance animation for driver card
+  const slideUpAnim = useRef(new Animated.Value(100)).current;
+
+  useEffect(() => {
+    if (rideWithDriver?.driver_name) {
+      slideUpAnim.setValue(100);
+      Animated.spring(slideUpAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }).start();
+    }
+  }, [rideWithDriver?.driver_name, slideUpAnim]);
+
   if (!activeRide) return null;
 
   const canCancel =
@@ -482,7 +497,7 @@ export function RideActiveView() {
         {statusMessage[activeRide.status] ?? activeRide.status}
       </Text>
 
-      {/* ETA Badge */}
+      {/* ETA Badge — U2.4: Show distance + ETA during driver_en_route */}
       {etaMinutes !== null && (
         <View className="items-center mb-4">
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -492,7 +507,12 @@ export function RideActiveView() {
                   ? t('ride.eta_driver_arrived')
                   : activeRide.status === 'in_progress'
                     ? t('ride.eta_destination', { minutes: etaMinutes })
-                    : t('ride.eta_driver_arriving', { minutes: etaMinutes })
+                    : activeRide.status === 'driver_en_route' && driverPosition && activeRide.pickup_location
+                      ? t('ride.distance_eta', {
+                          distance: (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
+                          eta: etaMinutes,
+                        })
+                      : t('ride.eta_driver_arriving', { minutes: etaMinutes })
               }
               isCalculating={isCalculating}
               urgent={etaMinutes > 0 && etaMinutes <= 3}
@@ -504,7 +524,7 @@ export function RideActiveView() {
 
       {/* Driver info */}
       {rideWithDriver?.driver_name && (
-        <View className="mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 }}>
+        <Animated.View className="mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5, transform: [{ translateY: slideUpAnim }] }}>
           <DriverCard
             driverName={rideWithDriver.driver_name}
             driverAvatarUrl={rideWithDriver.driver_avatar_url}
@@ -556,7 +576,7 @@ export function RideActiveView() {
               </>
             }
           />
-        </View>
+        </Animated.View>
       )}
 
       {/* Route info */}
