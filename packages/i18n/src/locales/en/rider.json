@@ -224,7 +224,10 @@
     "comment_limit": "{{count}}/500",
     "report_issue": "Report issue",
     "lost_item": "Lost item",
-    "driver_phone_unavailable": "Driver phone not available"
+    "driver_phone_unavailable": "Driver phone not available",
+    "share_location": "Share location",
+    "share_with_contacts": "Share with trusted contacts",
+    "call_emergency": "Call emergency contact"
   },
 
   "dispute": {

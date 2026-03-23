@@ -112,7 +112,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
               style={styles.skipButton}
               onPress={handleSkip}
               accessibilityRole="button"
-              accessibilityLabel="Omitir introducción"
+              accessibilityLabel={t('onboarding.skip')}
             >
               <Text style={[styles.skipText, { color: isDark ? '#6B7280' : '#9ca3af' }]}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
             </Pressable>
@@ -155,7 +155,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             onPress={handleNext}
             fullWidth
             accessibilityRole="button"
-            accessibilityLabel="Siguiente"
+            accessibilityLabel={isLastStep ? t('onboarding.start') : t('onboarding.next')}
           />
         </View>
       </View>

@@ -51,6 +51,12 @@ export default function RidePreferencesScreen() {
     }).catch(() => setLoading(false));
   }, [userId]);
 
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
+
   const savePrefs = useCallback((updated: RidePreferences) => {
     setPrefs(updated);
     setRidePreferences(updated);
@@ -159,7 +165,7 @@ export default function RidePreferencesScreen() {
                     }`}
                   >
                     <Ionicons
-                      name={opt.icon as any}
+                      name={opt.icon as string}
                       size={16}
                       color={selected ? colors.primary[500] : colors.neutral[400]}
                     />
@@ -248,7 +254,7 @@ export default function RidePreferencesScreen() {
                   }`}
                 >
                   <Ionicons
-                    name={opt.icon as any}
+                    name={opt.icon as string}
                     size={20}
                     color={selected ? colors.primary[500] : colors.neutral[400]}
                   />

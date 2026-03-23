@@ -220,7 +220,10 @@
     "comment_limit": "{{count}}/500",
     "report_issue": "Reportar problema",
     "lost_item": "Objeto perdido",
-    "driver_phone_unavailable": "Número do motorista indisponível"
+    "driver_phone_unavailable": "Número do motorista indisponível",
+    "share_location": "Compartilhar localização",
+    "share_with_contacts": "Compartilhar com contatos de confiança",
+    "call_emergency": "Ligar para contato de emergência"
   },
 
   "dispute": {

@@ -12,6 +12,7 @@ import { customerService, trustedContactService } from '@tricigo/api';
 import { isValidCubanPhone, getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import type { CustomerProfile, TrustedContact } from '@tricigo/types';
 
 export default function EmergencyContactScreen() {
@@ -22,11 +23,13 @@ export default function EmergencyContactScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [relationship, setRelationship] = useState('');
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(() => {
     if (!user) return;
+    setLoading(true);
 
     // Load from customer_profiles (backward compat)
     customerService.ensureProfile(user.id).then((cp) => {
@@ -36,7 +39,7 @@ export default function EmergencyContactScreen() {
         setPhone(cp.emergency_contact.phone);
         setRelationship(cp.emergency_contact.relationship);
       }
-    }).catch((err) => setError(getErrorMessage(err)));
+    }).catch((err) => setError(getErrorMessage(err))).finally(() => setLoading(false));
 
     // Also check trusted_contacts for existing emergency contact
     trustedContactService.getContacts(user.id).then((contacts) => {
@@ -106,6 +109,17 @@ export default function EmergencyContactScreen() {
   };
 
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadData(); }} />;
+
+  if (loading) {
+    return (
+      <Screen scroll bg="white" padded>
+        <View className="pt-4">
+          <ScreenHeader title={t('profile.emergency_contact_title')} onBack={() => router.back()} />
+          <SkeletonCard lines={4} />
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen scroll bg="white" padded>

@@ -224,7 +224,10 @@
     "comment_limit": "{{count}}/500",
     "report_issue": "Reportar problema",
     "lost_item": "Objeto perdido",
-    "driver_phone_unavailable": "Número del conductor no disponible"
+    "driver_phone_unavailable": "Número del conductor no disponible",
+    "share_location": "Compartir ubicación",
+    "share_with_contacts": "Compartir con contactos de confianza",
+    "call_emergency": "Llamar a contacto de emergencia"
   },
 
   "dispute": {

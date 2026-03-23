@@ -8,7 +8,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
 import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger } from '@tricigo/utils';
-import type { Ride } from '@tricigo/types';
+import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
@@ -29,7 +29,7 @@ const PAGE_SIZE = 20;
 function WebRidesScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
-  const [rides, setRides] = useState<any[]>([]);
+  const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -131,8 +131,8 @@ function NativeRidesScreen() {
           page,
           pageSize: PAGE_SIZE,
           status: filters.status,
-          serviceType: filters.serviceType as any,
-          paymentMethod: filters.paymentMethod as any,
+          serviceType: filters.serviceType as ServiceTypeSlug | undefined,
+          paymentMethod: filters.paymentMethod as PaymentMethod | undefined,
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
         });
@@ -199,8 +199,8 @@ function NativeRidesScreen() {
         page: 0,
         pageSize: PAGE_SIZE,
         status: filters.status,
-        serviceType: filters.serviceType as any,
-        paymentMethod: filters.paymentMethod as any,
+        serviceType: filters.serviceType as ServiceTypeSlug | undefined,
+        paymentMethod: filters.paymentMethod as PaymentMethod | undefined,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
       });

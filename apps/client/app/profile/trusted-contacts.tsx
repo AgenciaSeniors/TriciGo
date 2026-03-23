@@ -9,6 +9,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
@@ -103,6 +104,15 @@ export default function TrustedContactsScreen() {
         <Text variant="bodySmall" color="secondary" className="mb-4">
           {t('trusted_contacts.desc')}
         </Text>
+
+        {/* Loading skeleton */}
+        {loading && contacts.length === 0 && (
+          <View className="gap-3 mb-4">
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+          </View>
+        )}
 
         {/* Contact List */}
         {contacts.map((contact) => (
