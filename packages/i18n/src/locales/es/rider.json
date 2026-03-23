@@ -15,7 +15,11 @@
     "passenger_capacity_hint": "Capacidad: Moto 1, Triciclo 2-3, Auto 1-4",
     "geocode_error": "No se pudo obtener la dirección. Intenta escribirla manualmente.",
     "surge_active_label": "Tarifa dinámica activa",
-    "surge_explanation": "Los precios son más altos debido a la alta demanda en tu zona"
+    "surge_explanation": "Los precios son más altos debido a la alta demanda en tu zona",
+    "your_usual_service": "Tu servicio habitual",
+    "request_service_fare_eta": "Solicitar {{service}} por ₧{{fare}} · ~{{eta}} min",
+    "usual_fare_range": "Este viaje suele costar ₧{{low}} - ₧{{high}}",
+    "calculating": "Calculando..."
   },
 
   "ride": {

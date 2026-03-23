@@ -42,6 +42,8 @@ import { FareSplitSheet } from '@/components/FareSplitSheet';
 import type { SavedLocation, ServiceTypeSlug, CorporateAccount } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
+import { rideService } from '@tricigo/api/services/ride';
+import { reverseGeocode } from '@tricigo/utils';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
@@ -201,6 +203,8 @@ function IdleView() {
   const user = useAuthStore((s) => s.user);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
+  const setPickup = useRideStore((s) => s.setPickup);
+  const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -268,6 +272,30 @@ function IdleView() {
     setDropoff(addr.address, { latitude: addr.latitude, longitude: addr.longitude });
     setFlowStep('selecting');
   }, [setDropoff, setFlowStep]);
+
+  // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → reviewing
+  const handleOneTapPrediction = useCallback(async (pred: PredictedDestination) => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        // Fall back to old behavior if no location permission
+        handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const pickupAddress = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+      setPickup(
+        pickupAddress ?? `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
+        { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+      );
+      setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
+      // requestEstimate will transition to 'reviewing' on success
+      requestEstimate();
+    } catch {
+      // Fallback: just go to selecting view
+      handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
+    }
+  }, [handleRecentTap, setPickup, setDropoff, requestEstimate]);
 
   if (initialLoading) {
     return (
@@ -351,7 +379,7 @@ function IdleView() {
         </Text>
       </Pressable>
 
-      {/* Predicted destinations */}
+      {/* Predicted destinations — U1.1 large one-tap cards */}
       {predictions.length > 0 && (
         <View className="mb-4">
           <Text variant="caption" color="secondary" className="mb-2">
@@ -360,27 +388,31 @@ function IdleView() {
           {predictions.slice(0, 3).map((pred, idx) => (
             <Pressable
               key={`pred-${idx}`}
-              className="flex-row items-center bg-primary-50 rounded-xl px-4 py-3 mb-2"
-              onPress={() => handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude })}
+              className="flex-row items-center bg-white border border-neutral-200 rounded-xl px-4 py-4 mb-2"
+              onPress={() => handleOneTapPrediction(pred)}
               accessibilityRole="button"
-              accessibilityLabel={pred.address || pred.name}
+              accessibilityLabel={pred.address}
             >
-              <Ionicons
-                name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                size={18}
-                color={colors.brand.orange}
-              />
+              <View className="w-10 h-10 rounded-full bg-primary-50 items-center justify-center">
+                <Ionicons
+                  name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
+                  size={22}
+                  color={colors.brand.orange}
+                />
+              </View>
               <View className="flex-1 ml-3">
-                <Text variant="bodySmall" numberOfLines={1}>{pred.address}</Text>
-                <Text variant="caption" color="accent">
+                <Text variant="h4" numberOfLines={1}>
                   {pred.reason === 'time_pattern'
                     ? t('prediction.time_pattern', { defaultValue: 'Según tu horario' })
                     : pred.reason === 'frequent'
                       ? t('prediction.frequent', { defaultValue: 'Destino frecuente' })
                       : t('prediction.recent', { defaultValue: 'Viaje reciente' })}
                 </Text>
+                <Text variant="bodySmall" color="tertiary" numberOfLines={1} className="mt-0.5">
+                  {pred.address}
+                </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+              <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
             </Pressable>
           ))}
         </View>
@@ -1002,14 +1034,43 @@ function SelectingView() {
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
-  const { draft, fareEstimate, setFlowStep, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
+  const { draft, fareEstimate, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const user = useAuthStore((s) => s.user);
   const [promoExpanded, setPromoExpanded] = useState(false);
   const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
   const preferencesEnabled = useFeatureFlag('ride_preferences_enabled');
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const [splitSheetVisible, setSplitSheetVisible] = useState(false);
+
+  // U1.2: Pre-select most-used service type from ride history
+  const [recentRides, setRecentRides] = useState<{ service_type?: string }[]>([]);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    rideService.getRideHistory(user.id, 0, 10).then((rides) => {
+      if (!cancelled) setRecentRides(rides);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const preferredService = useMemo(() => {
+    if (!recentRides || recentRides.length === 0) return 'auto_standard';
+    const counts: Record<string, number> = {};
+    recentRides.slice(0, 10).forEach((r) => {
+      if (r.service_type) counts[r.service_type] = (counts[r.service_type] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'auto_standard';
+  }, [recentRides]);
+
+  const [servicePreSelected, setServicePreSelected] = useState(false);
+  useEffect(() => {
+    if (!draft.serviceType && preferredService && !servicePreSelected) {
+      setServiceType(preferredService as ServiceTypeSlug);
+      setServicePreSelected(true);
+    }
+  }, [preferredService, draft.serviceType, servicePreSelected, setServiceType]);
   const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
   const nearbyVehicles = useNearbyVehicles(
     draft.pickup?.location?.latitude ?? null,
@@ -1113,7 +1174,17 @@ function ReviewingView() {
 
       {/* Fare total emphasis */}
       <View className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-3 mb-4 items-center">
-        <Text variant="caption" color="secondary" className="mb-1">{t('ride.estimated_fare')}</Text>
+        <View className="flex-row items-center mb-1">
+          <Text variant="caption" color="secondary">{t('ride.estimated_fare')}</Text>
+          {/* U1.2: Usual service badge */}
+          {draft.serviceType === preferredService && recentRides.length > 0 && (
+            <View className="bg-primary-100 rounded-full px-2 py-0.5 ml-2">
+              <Text variant="caption" style={{ color: colors.brand.orange, fontSize: 10, fontWeight: '600' }}>
+                {t('home.your_usual_service', { defaultValue: 'Tu servicio habitual' })}
+              </Text>
+            </View>
+          )}
+        </View>
         <Text variant="h2" color="accent">
           {formatTRC(fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup)}
         </Text>
@@ -1152,6 +1223,17 @@ function ReviewingView() {
           }}
         />
       </View>
+
+      {/* U1.4: Fare range context */}
+      {fareEstimate.estimated_fare_cup > 0 && (
+        <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
+          {t('home.usual_fare_range', {
+            low: Math.round(fareEstimate.estimated_fare_cup * 0.85).toLocaleString(),
+            high: Math.round(fareEstimate.estimated_fare_cup * 1.15).toLocaleString(),
+            defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
+          })}
+        </Text>
+      )}
 
       {/* Surge pricing explanation card (8.1) */}
       {fareEstimate.surge_multiplier != null && fareEstimate.surge_multiplier > 1 && (
@@ -1377,7 +1459,16 @@ function ReviewingView() {
       )}
 
       <Button
-        title={t('ride.confirm_ride', { defaultValue: 'Confirmar viaje' })}
+        title={
+          fareEstimate.estimated_fare_cup
+            ? t('home.request_service_fare_eta', {
+                service: t(`service_type.${draft.serviceType}` as const),
+                fare: fareEstimate.estimated_fare_cup.toLocaleString(),
+                eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
+                defaultValue: `Solicitar ${t(`service_type.${draft.serviceType}` as const)} por ₧${fareEstimate.estimated_fare_cup.toLocaleString()} · ~${Math.ceil((fareEstimate.estimated_duration_s || 0) / 60)} min`,
+              })
+            : t('home.calculating', { defaultValue: 'Calculando...' })
+        }
         size="lg"
         fullWidth
         onPress={debouncedConfirmRide}
