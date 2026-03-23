@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Alert, Pressable } from 'react-native';
+import { View, FlatList, Alert, Pressable, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
@@ -28,6 +28,7 @@ export default function SavedLocationsScreen() {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -47,6 +48,15 @@ export default function SavedLocationsScreen() {
   useEffect(() => {
     loadLocations();
   }, [loadLocations]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    if (!user) { setRefreshing(false); return; }
+    customerService.ensureProfile(user.id).then((cp) => {
+      setProfile(cp);
+      setLocations(cp.saved_locations ?? []);
+    }).catch(() => {}).finally(() => setRefreshing(false));
+  }, [user]);
 
   const handleSave = async () => {
     if (!profile || !newLabel.trim() || !selectedAddress) return;
@@ -130,6 +140,9 @@ export default function SavedLocationsScreen() {
         <FlatList
           data={locations}
           keyExtractor={(_, i) => String(i)}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+          }
           renderItem={({ item, index }) => (
             <Card variant="outlined" padding="md" className="mb-2">
               <View className="flex-row items-center justify-between">

@@ -392,5 +392,13 @@
     "saved": "Preferences saved"
   },
 
-  "recurring_rides": "Recurring Rides"
+  "recurring_rides": "Recurring Rides",
+
+  "copied": "Copied",
+  "pull_to_refresh": "Pull to refresh",
+  "just_now": "Just now",
+  "minutes_ago": "{{count}} min ago",
+  "hours_ago": "{{count}}h ago",
+  "days_ago": "{{count}}d ago",
+  "yesterday_relative": "Yesterday"
 }

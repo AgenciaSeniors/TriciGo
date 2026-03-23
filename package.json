@@ -28,5 +28,8 @@
     "sharp": "^0.34.5",
     "turbo": "^2.7.0",
     "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "expo-clipboard": "~55.0.9"
   }
 }

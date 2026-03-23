@@ -228,7 +228,7 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
           }
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}

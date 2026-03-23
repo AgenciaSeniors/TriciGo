@@ -131,3 +131,50 @@ export function getRelativeTime(isoString: string, locale = 'es'): string {
   if (diffDay === 1) return 'yesterday';
   return `${diffDay} days ago`;
 }
+
+const MONTH_NAMES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * Format a timestamp in one of three styles:
+ *  - `relative`: "hace 5 min", "hace 2h", "hace 3d", "ayer"
+ *  - `absolute`: "22 mar 2026, 14:30"
+ *  - `short`:    "22 mar"
+ *
+ * Uses plain Date operations — no external library.
+ */
+export function formatTimestamp(
+  date: string | Date,
+  style: 'relative' | 'absolute' | 'short',
+): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+
+  if (style === 'relative') {
+    const now = Date.now();
+    const diffMs = now - d.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return 'ahora';
+    if (diffMin < 60) return `hace ${diffMin} min`;
+    if (diffHour < 24) return `hace ${diffHour}h`;
+    if (diffDay === 1) return 'ayer';
+    if (diffDay < 30) return `hace ${diffDay}d`;
+    return `${d.getDate()} ${MONTH_NAMES_ES[d.getMonth()]}`;
+  }
+
+  if (style === 'absolute') {
+    const day = d.getDate();
+    const month = MONTH_NAMES_ES[d.getMonth()];
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${month} ${year}, ${hours}:${minutes}`;
+  }
+
+  // short
+  const day = d.getDate();
+  const month = MONTH_NAMES_ES[d.getMonth()];
+  return `${day} ${month}`;
+}

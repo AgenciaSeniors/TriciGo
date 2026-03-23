@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, Share } from 'react-native';
+import { View, Pressable, FlatList, Alert, Share, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -13,7 +15,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
-import { formatCUP, getErrorMessage } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Referral } from '@tricigo/types';
@@ -35,6 +37,7 @@ export default function ReferralScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -57,6 +60,19 @@ export default function ReferralScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, [fetchData]);
+
+  const handleCopyCode = async () => {
+    if (!myCode) return;
+    await Clipboard.setStringAsync(myCode);
+    Toast.show({ type: 'success', text1: t('copied') });
+    triggerHaptic('light');
+  };
 
   const handleShare = async () => {
     try {
@@ -124,6 +140,9 @@ export default function ReferralScreen() {
           data={referrals}
           keyExtractor={(item) => item.id}
           renderItem={renderReferral}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+          }
           ListHeaderComponent={
             <View>
               {/* My Code Section */}
@@ -131,9 +150,14 @@ export default function ReferralScreen() {
                 <Text variant="bodySmall" color="secondary" className="mb-2">
                   {t('profile.referral_your_code')}
                 </Text>
-                <Text variant="h2" color="primary" className="mb-3 tracking-widest">
-                  {myCode || '...'}
-                </Text>
+                <Pressable onPress={handleCopyCode} className="flex-row items-center mb-3">
+                  <Text variant="h2" color="primary" className="tracking-widest">
+                    {myCode || '...'}
+                  </Text>
+                  {myCode ? (
+                    <Ionicons name="copy-outline" size={20} color={colors.primary[500]} style={{ marginLeft: 8 }} />
+                  ) : null}
+                </Pressable>
                 <Button
                   title={t('profile.referral_share')}
                   variant="primary"

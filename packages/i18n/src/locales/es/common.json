@@ -392,5 +392,13 @@
     "saved": "Preferencias guardadas"
   },
 
-  "recurring_rides": "Viajes recurrentes"
+  "recurring_rides": "Viajes recurrentes",
+
+  "copied": "Copiado",
+  "pull_to_refresh": "Desliza para actualizar",
+  "just_now": "Ahora",
+  "minutes_ago": "hace {{count}} min",
+  "hours_ago": "hace {{count}}h",
+  "days_ago": "hace {{count}}d",
+  "yesterday_relative": "Ayer"
 }

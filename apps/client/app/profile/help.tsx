@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert } from 'react-native';
+import { View, Pressable, FlatList, Alert, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -49,6 +49,8 @@ export default function HelpScreen() {
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // Create ticket state
   const [sheetVisible, setSheetVisible] = useState(false);
   const [category, setCategory] = useState<TicketCategory>('ride_issue');
@@ -71,6 +73,12 @@ export default function HelpScreen() {
 
   useEffect(() => {
     fetchTickets();
+  }, [fetchTickets]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchTickets();
+    setRefreshing(false);
   }, [fetchTickets]);
 
   const handleCreateTicket = () => {
@@ -139,6 +147,9 @@ export default function HelpScreen() {
           data={tickets}
           keyExtractor={(item) => item.id}
           renderItem={renderTicket}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+          }
           ListHeaderComponent={
             <View>
               {/* FAQ Section */}

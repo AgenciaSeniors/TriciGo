@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch, Alert } from 'react-native';
+import { View, Pressable, Switch, Alert, ScrollView, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -25,6 +25,7 @@ export default function TrustedContactsScreen() {
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
   const loadContacts = useCallback(async () => {
@@ -41,6 +42,12 @@ export default function TrustedContactsScreen() {
 
   useEffect(() => {
     loadContacts();
+  }, [loadContacts]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadContacts();
+    setRefreshing(false);
   }, [loadContacts]);
 
   const handleToggleAutoShare = async (contact: TrustedContact) => {
@@ -81,7 +88,14 @@ export default function TrustedContactsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadContacts(); }} />;
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen bg="white" padded>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+        }
+      >
       <View className="pt-4">
         <ScreenHeader title={t('trusted_contacts.title')} onBack={() => router.back()} />
 
@@ -169,6 +183,8 @@ export default function TrustedContactsScreen() {
           </Text>
         )}
       </View>
+
+      </ScrollView>
 
       {user && (
         <AddContactSheet

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Pressable, Share } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -10,7 +12,8 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, cupToTrcCentavos } from '@tricigo/utils';
+import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic } from '@tricigo/utils';
+import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
@@ -130,6 +133,13 @@ export default function RideDetailScreen() {
   const fareCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
   const isCompleted = ride.status === 'completed';
 
+  const handleCopyRideId = useCallback(async () => {
+    if (!id) return;
+    await Clipboard.setStringAsync(id);
+    Toast.show({ type: 'success', text1: t('common:copied') });
+    triggerHaptic('light');
+  }, [id, t]);
+
   const handleShare = () => {
     if (ride.share_token) {
       Share.share({ message: `https://tricigo.app/ride/${ride.share_token}` });
@@ -150,6 +160,14 @@ export default function RideDetailScreen() {
             />
           }
         />
+
+        {/* Ride ID with copy */}
+        <View className="flex-row items-center mb-2">
+          <Text variant="caption" color="tertiary">ID: {id?.substring(0, 8)}</Text>
+          <Pressable onPress={handleCopyRideId} hitSlop={8} className="ml-2" accessibilityRole="button" accessibilityLabel={t('common:copied')}>
+            <Ionicons name="copy-outline" size={16} color={colors.neutral[400]} />
+          </Pressable>
+        </View>
 
         {/* Map */}
         <RideMapView

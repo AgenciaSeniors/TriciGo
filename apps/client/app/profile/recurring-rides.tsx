@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Pressable, Alert, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -34,6 +34,7 @@ export default function RecurringRidesScreen() {
   const [rides, setRides] = useState<RecurringRide[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingRide, setEditingRide] = useState<RecurringRide | null>(null);
@@ -52,6 +53,12 @@ export default function RecurringRidesScreen() {
 
   useEffect(() => {
     fetchRides();
+  }, [fetchRides]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchRides();
+    setRefreshing(false);
   }, [fetchRides]);
 
   const handlePause = useCallback(async (id: string) => {
@@ -147,7 +154,13 @@ export default function RecurringRidesScreen() {
           />
         </View>
       ) : (
-        <View className="flex-1 px-4 pt-4 gap-3">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, gap: 12 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FF4D00" />
+          }
+        >
           {rides.map((ride) => (
             <Card key={ride.id} variant="outlined" padding="md">
               {/* Route */}
@@ -240,7 +253,7 @@ export default function RecurringRidesScreen() {
               </View>
             </Card>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       <CreateRecurringRideSheet
