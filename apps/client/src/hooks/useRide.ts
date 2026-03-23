@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound, getErrorMessage } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger } from '@tricigo/utils';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
 import { useAuthStore } from '@/stores/auth.store';
@@ -51,8 +51,8 @@ export function useRideInit() {
           const rwd = await rideService.getRideWithDriver(active.id);
           if (mounted && rwd) setRideWithDriver(rwd);
         }
-      } catch {
-        // Silently fail — no active ride
+      } catch (err) {
+        logger.warn('No active ride or failed to check', { error: String(err) });
       }
     }
 
@@ -192,7 +192,7 @@ export function useRideActions() {
           }
         }
       } catch (balErr) {
-        console.warn('[Ride] Balance check failed:', balErr);
+        logger.warn('Balance check failed', { error: String(balErr) });
         isSubmittingRef.current = false;
         Alert.alert(
           i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),

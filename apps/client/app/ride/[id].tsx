@@ -12,7 +12,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic } from '@tricigo/utils';
+import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic, logger } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -96,7 +96,7 @@ export default function RideDetailScreen() {
           }
         }
       } catch (err) {
-        console.error('Error loading ride detail:', err);
+        logger.error('Error loading ride detail', { error: String(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }

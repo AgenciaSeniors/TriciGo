@@ -10,7 +10,8 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, logger } from '@tricigo/utils';
+import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -47,10 +48,16 @@ export default function SafetyCenterScreen() {
       if (emergency) {
         setEmergencyContact({ name: emergency.name, phone: emergency.phone });
       }
-    }).catch(() => {});
+    }).catch((err) => {
+      logger.error('Error loading trusted contacts', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.contacts_load_failed', { ns: 'common' }) });
+    });
 
     // Load incidents
-    incidentService.getMyIncidents(user.id).then(setIncidents).catch(() => {});
+    incidentService.getMyIncidents(user.id).then(setIncidents).catch((err) => {
+      logger.error('Error loading incidents', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.safety_load_failed', { ns: 'common' }) });
+    });
   }, [user]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, Switch, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import Toast from 'react-native-toast-message';
 import { customerService } from '@tricigo/api';
 import type { RidePreferences, AccessibilityNeed } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
@@ -38,6 +39,7 @@ export default function RidePreferencesScreen() {
   const [saving, setSaving] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<RidePreferences>({});
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -48,19 +50,24 @@ export default function RidePreferencesScreen() {
     }).catch(() => setLoading(false));
   }, [userId]);
 
-  const savePrefs = useCallback(async (updated: RidePreferences) => {
+  const savePrefs = useCallback((updated: RidePreferences) => {
     setPrefs(updated);
     setRidePreferences(updated);
     if (!profileId) return;
-    setSaving(true);
-    try {
-      await customerService.updateProfile(profileId, { ride_preferences: updated });
-    } catch {
-      // best-effort save
-    } finally {
-      setSaving(false);
-    }
-  }, [profileId, setRidePreferences]);
+
+    // Debounce the actual API save to prevent concurrent saves on rapid toggles
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await customerService.updateProfile(profileId, { ride_preferences: updated });
+      } catch {
+        Toast.show({ type: 'error', text1: t('errors.preferences_save_failed') });
+      } finally {
+        setSaving(false);
+      }
+    }, 500);
+  }, [profileId, setRidePreferences, t]);
 
   const toggleQuietMode = useCallback(() => {
     savePrefs({ ...prefs, quiet_mode: !prefs.quiet_mode });

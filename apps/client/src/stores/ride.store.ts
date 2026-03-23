@@ -11,6 +11,7 @@ import type {
   RidePreferences,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
+import { logger } from '@tricigo/utils';
 
 const STATUS_NOTIFICATIONS: Partial<Record<RideStatus, string>> = {
   accepted: 'Conductor asignado',
@@ -25,7 +26,7 @@ function scheduleLocalNotification(status: RideStatus) {
   Notifications.scheduleNotificationAsync({
     content: { title: 'TriciGo', body },
     trigger: null,
-  }).catch(() => { /* best-effort: local notification */ });
+  }).catch((err) => { logger.warn('Failed to schedule local notification', { error: String(err) }); });
 }
 
 export type RideFlowStep =

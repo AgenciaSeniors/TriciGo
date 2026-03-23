@@ -6,7 +6,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { rideService, notificationService, useFeatureFlag, getSupabaseClient } from '@tricigo/api';
@@ -129,7 +129,7 @@ export function RideCompleteView() {
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
       setTimeout(() => resetAll(), 3000);
     } catch (err) {
-      console.error('Error submitting review:', err);
+      logger.error('Error submitting review', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
       setSubmitting(false);
     }
@@ -161,7 +161,7 @@ export function RideCompleteView() {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });
       }
     } catch (err) {
-      console.error('Receipt generation failed:', err);
+      logger.error('Receipt generation failed', { error: String(err) });
     }
   };
 

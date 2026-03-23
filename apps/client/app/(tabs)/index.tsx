@@ -11,7 +11,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint } from '@tricigo/utils';
+import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService } from '@tricigo/api';
@@ -232,7 +232,7 @@ function IdleView() {
         await walletService.ensureAccount(user.id);
         const bal = await walletService.getBalance(user.id);
         if (!cancelled) setWalletBalance(bal.available);
-      } catch (err) { console.warn('[Home] Failed to load wallet:', err); }
+      } catch (err) { logger.warn('Failed to load wallet', { error: String(err) }); }
       if (!cancelled) setInitialLoading(false);
     })();
     return () => { cancelled = true; };
@@ -252,7 +252,7 @@ function IdleView() {
       try {
         const count = await notificationService.getUnreadCount(user.id);
         if (!cancelled) setUnreadCount(count);
-      } catch (err) { console.warn('[Notif] Failed to load unread count:', err); }
+      } catch (err) { logger.warn('Failed to load unread count', { error: String(err) }); }
     })();
     const subscription = notificationService.subscribeToNotifications(user.id, () => {
       if (!cancelled) incrementUnread();

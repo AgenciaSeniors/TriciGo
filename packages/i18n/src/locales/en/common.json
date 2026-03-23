@@ -383,7 +383,8 @@
     "notification_load_failed": "Failed to load notifications",
     "corporate_load_failed": "Failed to load corporate account",
     "preferences_save_failed": "Failed to save preferences",
-    "location_permission_failed": "Failed to get location"
+    "location_permission_failed": "Failed to get location",
+    "operation_failed": "Operation failed. Please try again."
   },
 
   "preferences": {

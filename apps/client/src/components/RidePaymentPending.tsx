@@ -4,7 +4,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, logger } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { paymentService } from '@tricigo/api';
 import { useRideStore } from '@/stores/ride.store';
@@ -42,7 +42,7 @@ export function RidePaymentPending() {
           setAmountUsd(result.amountUsd);
         }
       } catch (err) {
-        console.error('[RidePaymentPending] Failed to create payment link:', err);
+        logger.error('Failed to create payment link', { error: String(err) });
         if (!cancelled) {
           Toast.show({
             type: 'error',

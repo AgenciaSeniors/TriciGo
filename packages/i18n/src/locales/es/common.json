@@ -383,7 +383,8 @@
     "notification_load_failed": "Error al cargar notificaciones",
     "corporate_load_failed": "Error al cargar cuenta corporativa",
     "preferences_save_failed": "Error al guardar preferencias",
-    "location_permission_failed": "Error al obtener ubicación"
+    "location_permission_failed": "Error al obtener ubicación",
+    "operation_failed": "La operación falló. Inténtalo de nuevo."
   },
 
   "preferences": {

@@ -11,7 +11,8 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { recurringRideService, useFeatureFlag } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, logger } from '@tricigo/utils';
+import Toast from 'react-native-toast-message';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { RecurringRide } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
@@ -66,18 +67,24 @@ export default function RecurringRidesScreen() {
     try {
       await recurringRideService.pauseRecurringRide(id);
       await fetchRides();
-    } catch { /* best-effort */ }
+    } catch (err) {
+      logger.error('Error pausing recurring ride', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });
+    }
     setActionLoading(null);
-  }, [fetchRides]);
+  }, [fetchRides, t]);
 
   const handleResume = useCallback(async (id: string) => {
     setActionLoading(id);
     try {
       await recurringRideService.resumeRecurringRide(id);
       await fetchRides();
-    } catch { /* best-effort */ }
+    } catch (err) {
+      logger.error('Error resuming recurring ride', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });
+    }
     setActionLoading(null);
-  }, [fetchRides]);
+  }, [fetchRides, t]);
 
   const handleDelete = useCallback((id: string) => {
     Alert.alert(
@@ -93,7 +100,10 @@ export default function RecurringRidesScreen() {
             try {
               await recurringRideService.deleteRecurringRide(id);
               await fetchRides();
-            } catch { /* best-effort */ }
+            } catch (err) {
+              logger.error('Error deleting recurring ride', { error: String(err) });
+              Toast.show({ type: 'error', text1: t('errors.operation_failed', { ns: 'common' }) });
+            }
             setActionLoading(null);
           },
         },

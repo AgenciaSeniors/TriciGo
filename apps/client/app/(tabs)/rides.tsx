@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection } from '@tricigo/utils';
+import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -40,7 +40,7 @@ function WebRidesScreen() {
         const data = await rideService.getRideHistory(userId!, { page: 0, pageSize: 20 });
         if (!cancelled) setRides(data);
       } catch (err) {
-        console.error('Rides fetch error:', err);
+        logger.error('Rides fetch error', { error: String(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -152,7 +152,7 @@ function NativeRidesScreen() {
           }
         }
       } catch (err) {
-        console.error('Error fetching rides:', err);
+        logger.error('Error fetching rides', { error: String(err) });
         if (!cancelled) setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
@@ -177,7 +177,7 @@ function NativeRidesScreen() {
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar historial' });
     } catch (err) {
-      console.error('Error exporting CSV:', err);
+      logger.error('Error exporting CSV', { error: String(err) });
     }
   }, [rides]);
 
@@ -212,7 +212,7 @@ function NativeRidesScreen() {
       setScheduledRides(scheduled);
       setRides(history);
     } catch (err) {
-      console.error('Error refreshing rides:', err);
+      logger.error('Error refreshing rides', { error: String(err) });
       setError(getErrorMessage(err));
     } finally {
       setRefreshing(false);

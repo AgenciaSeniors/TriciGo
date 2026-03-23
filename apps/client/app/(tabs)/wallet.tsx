@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage } from '@tricigo/utils';
+import { formatTriciCoin, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -103,7 +103,7 @@ function WebWalletScreen() {
           if (!cancelled) setTransactions(txns as TransactionWithAmount[]);
         }
       } catch (err) {
-        console.error('Wallet fetch error:', err);
+        logger.error('Wallet fetch error', { error: String(err) });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -240,7 +240,7 @@ function NativeWalletScreen() {
         setExchangeRateStale(true);
       }
     } catch (err) {
-      console.error('Error fetching wallet:', err);
+      logger.error('Error fetching wallet', { error: String(err) });
     }
   }, [userId]);
 
@@ -286,7 +286,7 @@ function NativeWalletScreen() {
       triggerHaptic('success');
       Toast.show({ type: 'success', text1: t('wallet.recharge_success') });
     } catch (err) {
-      console.error('Error requesting recharge:', err);
+      logger.error('Error requesting recharge', { error: String(err) });
       Alert.alert(t('error'), t('errors.recharge_failed'));
     } finally {
       setRechargeSubmitting(false);
@@ -400,7 +400,7 @@ function NativeWalletScreen() {
         }, 5000);
       }
     } catch (err) {
-      console.error('Error creating TropiPay link:', err);
+      logger.error('Error creating TropiPay link', { error: String(err) });
       Alert.alert(t('error'), t('wallet.tropipay_error_creating'));
     } finally {
       setTropipaySubmitting(false);

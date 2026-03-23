@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, FlatList, Pressable, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -9,6 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification, NotificationType } from '@tricigo/types';
@@ -62,6 +63,7 @@ export default function NotificationsScreen() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const isLoadingMore = useRef(false);
 
   const fetchNotifications = useCallback(async (reset = false) => {
     if (!user?.id) return;
@@ -80,7 +82,7 @@ export default function NotificationsScreen() {
       }
       setHasMore(data.length === 20);
     } catch (err) {
-      console.error('Error fetching notifications:', err);
+      logger.error('Error fetching notifications', { error: String(err) });
     } finally {
       setLoading(false);
     }
@@ -106,7 +108,7 @@ export default function NotificationsScreen() {
       await notificationService.markAllAsRead(user.id);
       markAllRead();
     } catch (err) {
-      console.error('Error marking all as read:', err);
+      logger.error('Error marking all as read', { error: String(err) });
     }
   };
 
@@ -127,12 +129,17 @@ export default function NotificationsScreen() {
   };
 
   const handleLoadMore = () => {
-    if (!isLoading && hasMore) {
-      fetchNotifications(false);
+    if (!isLoading && hasMore && !isLoadingMore.current) {
+      isLoadingMore.current = true;
+      fetchNotifications(false).finally(() => {
+        isLoadingMore.current = false;
+      });
     }
   };
 
-  const filtered = notifications;
+  const filtered = filter === 'unread'
+    ? notifications.filter(n => !n.read_at)
+    : notifications;
 
   // Group by date
   const sections: { title: string; data: AppNotification[] }[] = [];
