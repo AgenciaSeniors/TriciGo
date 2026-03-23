@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -59,6 +59,38 @@ export function RideActiveView() {
     rideStatus: activeRide?.status ?? null,
     estimatedDurationS: activeRide?.estimated_duration_s,
   });
+
+  // X3.2: Dynamic map height — 40% of screen
+  const mapHeight = Math.round(Dimensions.get('window').height * 0.4);
+
+  // X3.3: ETA pulse animation when < 3 minutes
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (etaMinutes !== null && etaMinutes > 0 && etaMinutes < 3) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ]),
+      );
+      pulseLoopRef.current = loop;
+      loop.start();
+    } else {
+      if (pulseLoopRef.current) {
+        pulseLoopRef.current.stop();
+        pulseLoopRef.current = null;
+      }
+      pulseAnim.setValue(1);
+    }
+    return () => {
+      if (pulseLoopRef.current) {
+        pulseLoopRef.current.stop();
+        pulseLoopRef.current = null;
+      }
+    };
+  }, [etaMinutes, pulseAnim]);
 
   // X2.1: Driver position timeout — show message instead of spinner after 30s
   const [positionTimeoutReached, setPositionTimeoutReached] = useState(false);
@@ -370,7 +402,7 @@ export function RideActiveView() {
           driverLocation={driverPosition}
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
           routeCoordinates={routeCoordinates}
-          height={200}
+          height={mapHeight}
         />
         {!driverPosition && (
           <View
@@ -448,24 +480,26 @@ export function RideActiveView() {
       {/* ETA Badge */}
       {etaMinutes !== null && (
         <View className="items-center mb-4">
-          <ETABadge
-            label={
-              activeRide.status === 'arrived_at_pickup'
-                ? t('ride.eta_driver_arrived')
-                : activeRide.status === 'in_progress'
-                  ? t('ride.eta_destination', { minutes: etaMinutes })
-                  : t('ride.eta_driver_arriving', { minutes: etaMinutes })
-            }
-            isCalculating={isCalculating}
-            urgent={etaMinutes > 0 && etaMinutes <= 3}
-            variant="light"
-          />
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <ETABadge
+              label={
+                activeRide.status === 'arrived_at_pickup'
+                  ? t('ride.eta_driver_arrived')
+                  : activeRide.status === 'in_progress'
+                    ? t('ride.eta_destination', { minutes: etaMinutes })
+                    : t('ride.eta_driver_arriving', { minutes: etaMinutes })
+              }
+              isCalculating={isCalculating}
+              urgent={etaMinutes > 0 && etaMinutes <= 3}
+              variant="light"
+            />
+          </Animated.View>
         </View>
       )}
 
       {/* Driver info */}
       {rideWithDriver?.driver_name && (
-        <View className="mb-4">
+        <View className="mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5 }}>
           <DriverCard
             driverName={rideWithDriver.driver_name}
             driverAvatarUrl={rideWithDriver.driver_avatar_url}

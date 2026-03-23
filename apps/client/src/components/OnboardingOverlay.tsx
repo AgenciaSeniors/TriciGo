@@ -68,23 +68,26 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   const STEPS = useMemo(() => buildSteps(isDark), [isDark]);
   const [currentStep, setCurrentStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   const animateTransition = useCallback(
     (nextStep: number) => {
+      // Fade out current step
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: 150,
         useNativeDriver: true,
       }).start(() => {
         setCurrentStep(nextStep);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }).start();
+        // Slide in new step from right
+        slideAnim.setValue(300);
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
+        ]).start();
       });
     },
-    [fadeAnim],
+    [fadeAnim, slideAnim],
   );
 
   const handleNext = useCallback(() => {
@@ -118,7 +121,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             </Pressable>
           )}
 
-          <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
             {/* Icon */}
             <View
               style={[

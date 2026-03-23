@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Pressable, Share, Animated, useColorScheme } from 'react-native';
+import { View, Pressable, Share, Animated, useColorScheme, type GestureResponderEvent } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -25,6 +25,27 @@ const FALLBACK_POSITIVE_TAGS = [
 const FALLBACK_NEGATIVE_TAGS = [
   'dirty_vehicle', 'unsafe_driving', 'rude_behavior', 'wrong_route', 'long_wait',
 ];
+
+function AnimatedStar({ filled, onPress }: { filled: boolean; onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.3, friction: 3, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }),
+    ]).start();
+    onPress();
+  };
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Text style={{ fontSize: 32, color: filled ? '#FBBF24' : '#D1D5DB' }}>★</Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
@@ -53,6 +74,7 @@ export function RideCompleteView() {
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   // Fetch dynamic tag definitions from DB
   useEffect(() => {
@@ -191,17 +213,16 @@ export function RideCompleteView() {
 
   useEffect(() => {
     if (submitted) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
+      ]).start();
     }
-  }, [submitted, fadeAnim]);
+  }, [submitted, fadeAnim, scaleAnim]);
 
   if (submitted) {
     return (
-      <Animated.View style={{ flex: 1, paddingTop: 32, alignItems: 'center', justifyContent: 'center', opacity: fadeAnim }}>
+      <Animated.View style={{ flex: 1, paddingTop: 32, alignItems: 'center', justifyContent: 'center', opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
         <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
           <Text variant="h1" color="inverse">✓</Text>
         </View>
@@ -374,25 +395,11 @@ export function RideCompleteView() {
         <>
           <View className="flex-row gap-2 mb-2" accessibilityRole="radiogroup" accessibilityLabel={t('ride.rate_driver')}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <Pressable
+              <AnimatedStar
                 key={star}
+                filled={!!selectedRating && star <= selectedRating}
                 onPress={() => { setSelectedRating(star); triggerSelection(); }}
-                accessibilityRole="radio"
-                accessibilityLabel={`Calificar ${star} de 5 estrellas`}
-                accessibilityState={{ selected: selectedRating === star }}
-                style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text
-                  variant="h3"
-                  className={
-                    selectedRating && star <= selectedRating
-                      ? 'text-yellow-500'
-                      : 'text-neutral-300'
-                  }
-                >
-                  ★
-                </Text>
-              </Pressable>
+              />
             ))}
           </View>
           <Text variant="caption" color="tertiary" className="mb-2">

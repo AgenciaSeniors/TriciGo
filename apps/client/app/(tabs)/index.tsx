@@ -1111,6 +1111,14 @@ function ReviewingView() {
         );
       })()}
 
+      {/* Fare total emphasis */}
+      <View className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-3 mb-4 items-center">
+        <Text variant="caption" color="secondary" className="mb-1">{t('ride.estimated_fare')}</Text>
+        <Text variant="h2" color="accent">
+          {formatTRC(fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup)}
+        </Text>
+      </View>
+
       {/* Fare breakdown */}
       <View className="mb-4">
         <FareBreakdownCard
