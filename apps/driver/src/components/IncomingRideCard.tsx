@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { View, Animated, Pressable } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -114,6 +115,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       setAutoAcceptSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(interval);
+          Toast.show({ type: 'success', text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }), visibilityTime: 1500 });
           onAccept(ride.id); // Auto-accept!
           return 0;
         }
@@ -155,6 +157,21 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
           {t('home.net_earnings', { amount: `₧${netEarnings.toLocaleString()}` })}
         </Text>
       </View>
+
+      {/* Match confidence line */}
+      <Text style={{
+        fontSize: 12,
+        color: profitLevel === 'great' ? '#22C55E' : profitLevel === 'short' ? '#F59E0B' : '#9CA3AF',
+        marginTop: 2,
+        textAlign: 'center',
+      }}>
+        {profitLevel === 'great'
+          ? t('home.profitable_ride', { defaultValue: 'Viaje rentable cerca de ti' })
+          : profitLevel === 'short'
+            ? t('home.short_ride_reject', { defaultValue: 'Viaje corto · puedes rechazar' })
+            : t('home.available_ride', { defaultValue: 'Viaje disponible' })
+        }
+      </Text>
 
       {/* Fare (secondary) */}
       <View className="mb-3" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>

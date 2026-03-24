@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, ScrollView, Pressable, Linking, Alert, Animated } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
@@ -207,6 +208,7 @@ export function DriverTripView() {
     }
 
     if (dist < 50) {
+      Toast.show({ type: 'info', text1: t('trip.auto_arriving', { defaultValue: 'Marcando llegada automáticamente...' }), visibilityTime: 3000 });
       const timeout = setTimeout(() => {
         handleArriveAtWaypoint();
       }, 8000);

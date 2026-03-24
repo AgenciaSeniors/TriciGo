@@ -27,7 +27,13 @@
     "navigating_to_zone_in": "Navigating to active zone in {{seconds}}s",
     "stay_here": "Stay here",
     "next_ride_estimated": "Next ride ~{{minutes}} min",
-    "per_hour": "₧{{amount}}/h"
+    "per_hour": "₧{{amount}}/h",
+    "ride_accepted": "Ride accepted!",
+    "profitable_ride": "Profitable ride near you",
+    "available_ride": "Ride available",
+    "short_ride_reject": "Short ride · you can reject",
+    "high_demand_zone": "Navigating to high demand zone in {{seconds}}s",
+    "searching_rides": "Searching for rides near you..."
   },
 
   "trip": {
@@ -114,7 +120,8 @@
     "view_full_route": "View full route",
     "hide_route": "Hide route",
     "done": "Done",
-    "arriving_waypoint": "Arriving at Stop {{n}}..."
+    "arriving_waypoint": "Arriving at Stop {{n}}...",
+    "auto_arriving": "Auto-marking arrival..."
   },
 
   "ride": {

@@ -136,6 +136,7 @@ function NativeDriverHomeScreen() {
   const [serviceConfigs, setServiceConfigs] = useState<Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }>>({});
   // OMEGA: Auto-navigation countdown to hot zone
   const [navCountdown, setNavCountdown] = useState<number | null>(null);
+  const navCancelledRef = useRef(false);
 
   // OMEGA: Online time tracking for earnings per hour
   const [onlineSince, setOnlineSince] = useState<number | null>(null);
@@ -160,6 +161,9 @@ function NativeDriverHomeScreen() {
   // DT-2: Crossfade animation for trip transitions
   const tripFadeAnim = useRef(new Animated.Value(1)).current;
   const prevHadTrip = useRef(!!activeTrip);
+
+  // Fix 5: Pulsing "searching" signal during idle
+  const searchPulseAnim = useRef(new Animated.Value(1)).current;
 
   // Fetch service type configs once for fare calculation
   useEffect(() => {
@@ -227,6 +231,20 @@ function NativeDriverHomeScreen() {
       });
     }
   }, [activeTrip, tripFadeAnim]);
+
+  // Fix 5: Pulsing search animation when idle
+  useEffect(() => {
+    if (isOnline && !activeTrip && incomingRequests.length === 0) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(searchPulseAnim, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+          Animated.timing(searchPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      searchPulseAnim.setValue(1);
+    }
+  }, [isOnline, activeTrip, incomingRequests.length]);
 
   // DE-1.2: Auto-launch preferred navigation when ride is accepted
   useEffect(() => {
@@ -300,6 +318,7 @@ function NativeDriverHomeScreen() {
       setIdleSince(null);
       setIdleMinutes(0);
       setNearestHotZone(null);
+      navCancelledRef.current = false; // Reset cancel flag for next ride cycle
       return;
     }
 
@@ -338,7 +357,7 @@ function NativeDriverHomeScreen() {
 
   // OMEGA: Trigger auto-nav countdown when idle >= 10 min and hot zone found
   useEffect(() => {
-    if (idleMinutes >= 10 && nearestHotZone && navCountdown === null) {
+    if (idleMinutes >= 10 && nearestHotZone && navCountdown === null && !navCancelledRef.current) {
       setNavCountdown(10);
     }
   }, [idleMinutes, nearestHotZone]);
@@ -361,8 +380,7 @@ function NativeDriverHomeScreen() {
 
   const cancelAutoNav = useCallback(() => {
     setNavCountdown(null);
-    // Don't show again for 10 more minutes
-    setIdleSince(Date.now());
+    navCancelledRef.current = true; // Don't retry until next ride cycle
   }, []);
 
   // OMEGA: Wait time estimate based on heatmap proximity
@@ -662,7 +680,7 @@ function NativeDriverHomeScreen() {
               {navCountdown !== null && nearestHotZone && (
                 <View style={{ backgroundColor: '#1F2937', borderRadius: 12, padding: 12, marginTop: 12, borderColor: '#F59E0B', borderWidth: 1 }}>
                   <Text style={{ color: '#F59E0B', fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
-                    {t('home.navigating_to_zone_in', { seconds: navCountdown })}
+                    {t('home.high_demand_zone', { seconds: navCountdown, defaultValue: 'Navegando a zona con alta demanda en {{seconds}}s' })}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Text style={{ color: '#9CA3AF', fontSize: 12 }}>
@@ -679,11 +697,15 @@ function NativeDriverHomeScreen() {
                   </View>
                 </View>
               )}
-              <EmptyState
-                icon="car-outline"
-                title={t('home.waiting_requests')}
-                description={t('home.waiting_requests_desc', { defaultValue: 'Las solicitudes de viaje aparecerán aquí.' })}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 8 }}>
+                <Animated.View style={{
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E',
+                  opacity: searchPulseAnim, marginRight: 8,
+                }} />
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>
+                  {t('home.searching_rides', { defaultValue: 'Buscando viajes cerca de ti...' })}
+                </Text>
+              </View>
               {/* OMEGA: Wait time estimate */}
               {estimatedWaitMinutes && (
                 <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
