@@ -225,7 +225,7 @@ function NativeWalletScreen() {
 
   // Recharge state
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
-  const [rechargeAmount, setRechargeAmount] = useState('');
+  const [rechargeAmount, setRechargeAmount] = useState('10000');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
 
   // Transfer state
@@ -679,6 +679,24 @@ function NativeWalletScreen() {
           <Text variant="bodySmall" color="secondary" className="mb-3">
             {t('wallet.recharge_amount')} (CUP)
           </Text>
+          {/* UBER-4.2: Recharge preset amounts */}
+          <View className="flex-row justify-between mb-3">
+            {[5000, 10000, 20000].map((amount) => (
+              <Pressable
+                key={amount}
+                onPress={() => setRechargeAmount(String(amount))}
+                className={`flex-1 mx-1 py-2 rounded-full items-center ${
+                  rechargeAmount === String(amount)
+                    ? 'bg-primary-500'
+                    : 'bg-neutral-100 dark:bg-neutral-800'
+                }`}
+              >
+                <Text className={rechargeAmount === String(amount) ? 'text-white font-semibold' : 'text-neutral-700 dark:text-neutral-300'}>
+                  ₧{amount.toLocaleString()}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <Input
             placeholder="500"
             value={rechargeAmount}
@@ -756,7 +774,7 @@ function NativeWalletScreen() {
             {t('wallet.transfer_note')}
           </Text>
           <Input
-            placeholder="..."
+            placeholder={t('wallet.transfer_note_hint', { defaultValue: 'Ej: Compartimos el viaje' })}
             value={transferNote}
             onChangeText={setTransferNote}
             maxLength={200}

@@ -136,10 +136,16 @@ export function RideCompleteView() {
     };
   }, [activeRide?.id, activeRide?.is_split]);
 
-  // Reset tags when crossing the positive/negative boundary
+  // UBER-4.1: When rating changes, pre-select first tag of the appropriate category
   const ratingCategory = selectedRating ? (selectedRating >= 4 ? 'positive' : 'negative') : null;
   useEffect(() => {
-    setSelectedTags([]);
+    if (selectedRating && selectedRating >= 4 && positiveTags.length > 0) {
+      setSelectedTags([positiveTags[0]]);
+    } else if (selectedRating && selectedRating <= 3 && negativeTags.length > 0) {
+      setSelectedTags([negativeTags[0]]);
+    } else {
+      setSelectedTags([]);
+    }
   }, [ratingCategory]);
 
   if (!activeRide) return null;
@@ -500,7 +506,7 @@ export function RideCompleteView() {
                 {t('ride.rating_tags_title')}
               </Text>
               <View className="flex-row flex-wrap gap-2">
-                {(selectedRating >= 4 ? positiveTags : negativeTags).map((tag) => {
+                {(selectedRating >= 4 ? positiveTags : negativeTags).slice(0, 3).map((tag) => {
                   const isSelected = selectedTags.includes(tag);
                   return (
                     <Pressable

@@ -87,6 +87,7 @@
     "txn_refund": "Refund",
     "txn_bonus": "Bonus",
     "txn_referral_bonus": "Referral bonus",
+    "transfer_note_hint": "E.g.: We shared the ride",
     "this_month": "This month",
     "total_spent": "Total spent",
     "rides_count": "Rides",

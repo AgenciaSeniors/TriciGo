@@ -560,6 +560,21 @@ function SelectingView() {
   } | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
 
+  // UBER-4.4: Load saved payment method on mount
+  useEffect(() => {
+    AsyncStorage.getItem('last_payment_method').then((saved) => {
+      if (saved && (saved === 'cash' || saved === 'tricicoin') && !draft.paymentMethod) {
+        setPaymentMethod(saved);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // UBER-4.4: Persist payment method when it changes
+  const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin') => {
+    setPaymentMethod(method);
+    AsyncStorage.setItem('last_payment_method', method).catch(() => {});
+  }, [setPaymentMethod]);
+
   // Predictive pickup: suggest a better pickup point near a road
   useEffect(() => {
     setSuggestionDismissed(false);
@@ -980,7 +995,7 @@ function SelectingView() {
                 className={`flex-1 py-3 rounded-xl items-center ${
                   draft.paymentMethod === pm ? 'bg-primary-500' : 'bg-neutral-100'
                 }`}
-                onPress={() => setPaymentMethod(pm)}
+                onPress={() => handlePaymentMethodChange(pm)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: draft.paymentMethod === pm }}
               >

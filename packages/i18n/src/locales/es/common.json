@@ -87,6 +87,7 @@
     "txn_refund": "Reembolso",
     "txn_bonus": "Bonificación",
     "txn_referral_bonus": "Bonus de referido",
+    "transfer_note_hint": "Ej: Compartimos el viaje",
     "this_month": "Este mes",
     "total_spent": "Total gastado",
     "rides_count": "Viajes",
