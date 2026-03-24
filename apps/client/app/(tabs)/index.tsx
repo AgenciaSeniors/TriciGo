@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance } from '@tricigo/utils';
+import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -165,6 +165,28 @@ function NativeHomeScreen() {
 
   const flowStep = useRideStore((s) => s.flowStep);
 
+  // Crossfade animation between flow steps
+  const flowFadeAnim = useRef(new Animated.Value(1)).current;
+  const prevFlowStepRef = useRef(flowStep);
+
+  useEffect(() => {
+    if (prevFlowStepRef.current !== flowStep) {
+      prevFlowStepRef.current = flowStep;
+      // Fade out then fade in
+      Animated.timing(flowFadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        Animated.timing(flowFadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+    }
+  }, [flowStep, flowFadeAnim]);
+
   // Onboarding overlay — shows once on first app launch
   const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {
@@ -175,12 +197,14 @@ function NativeHomeScreen() {
 
   return (
     <Screen bg="white" padded scroll>
-      {flowStep === 'idle' && <IdleView />}
-      {flowStep === 'selecting' && <SelectingView />}
-      {flowStep === 'reviewing' && <ReviewingView />}
-      {flowStep === 'searching' && <SearchingView />}
-      {flowStep === 'active' && <RideActiveView />}
-      {flowStep === 'completed' && <RideCompleteView />}
+      <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
+        {flowStep === 'idle' && <IdleView />}
+        {flowStep === 'selecting' && <SelectingView />}
+        {flowStep === 'reviewing' && <ReviewingView />}
+        {flowStep === 'searching' && <SearchingView />}
+        {flowStep === 'active' && <RideActiveView />}
+        {flowStep === 'completed' && <RideCompleteView />}
+      </Animated.View>
       {/* Notification permission prompt (shows once on first visit) */}
       {flowStep === 'idle' && <NotificationPermissionSheet />}
       {/* Onboarding tutorial (shows once on first app launch) */}
@@ -1426,7 +1450,11 @@ function ReviewingView() {
         <View className="flex-row items-center mb-4 px-1">
           <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
           <Text variant="bodySmall" color="secondary" className="ml-2">
-            {t('home.estimated_time', { defaultValue: 'Tiempo estimado' })}: {Math.ceil(fareEstimate.estimated_duration_s / 60)} {t('home.min', { defaultValue: 'min' })}
+            {t('home.eta_with_clock', {
+              minutes: Math.ceil(fareEstimate.estimated_duration_s / 60),
+              time: formatArrivalTime(Math.ceil(fareEstimate.estimated_duration_s / 60)),
+              defaultValue: '~{{minutes}} min · llega ~{{time}}',
+            })}
           </Text>
         </View>
       )}

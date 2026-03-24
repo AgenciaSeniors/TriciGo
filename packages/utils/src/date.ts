@@ -178,3 +178,17 @@ export function formatTimestamp(
   const month = MONTH_NAMES_ES[d.getMonth()];
   return `${day} ${month}`;
 }
+
+/**
+ * Convert an ETA in minutes to a clock-time string (e.g. "2:35 PM").
+ * Uses the device's local time.
+ */
+export function formatArrivalTime(etaMinutes: number): string {
+  const arrival = new Date(Date.now() + etaMinutes * 60_000);
+  const hours = arrival.getHours();
+  const minutes = arrival.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h = hours % 12 || 12;
+  const m = minutes.toString().padStart(2, '0');
+  return `${h}:${m} ${ampm}`;
+}

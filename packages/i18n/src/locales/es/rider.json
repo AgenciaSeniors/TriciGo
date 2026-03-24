@@ -32,7 +32,8 @@
     "recommended": "Recomendado",
     "request_with_details": "Pedir {{service}} · ₧{{fare}} · {{eta}} min",
     "other_services": "Otras opciones",
-    "passengers_short": "{{count}} pax"
+    "passengers_short": "{{count}} pax",
+    "eta_with_clock": "~{{minutes}} min · llega ~{{time}}"
   },
 
   "ride": {
