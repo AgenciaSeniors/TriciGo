@@ -18,7 +18,10 @@
     "high_demand_area": "Zona de alta demanda",
     "net_earnings": "Seu ganho: ~{{amount}}",
     "km_away": "{{distance}} km · ~{{minutes}} min",
-    "today_earnings": "Hoje: {{amount}} · {{count}} viagens"
+    "today_earnings": "Hoje: {{amount}} · {{count}} viagens",
+    "no_requests_nudge": "Sem solicitações em {{minutes}} min",
+    "active_zone_nearby": "Zona ativa a {{distance}} km",
+    "navigate_to_zone": "Navegar"
   },
 
   "trip": {
@@ -104,7 +107,8 @@
     "hide_preferences": "Ocultar preferências",
     "view_full_route": "Ver rota completa",
     "hide_route": "Ocultar rota",
-    "done": "Pronto"
+    "done": "Pronto",
+    "arriving_waypoint": "Chegando na Parada {{n}}..."
   },
 
   "ride": {

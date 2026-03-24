@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, ScrollView, Pressable, Linking, Alert } from 'react-native';
+import { View, ScrollView, Pressable, Linking, Alert, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
@@ -8,7 +8,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic } from '@tricigo/utils';
+import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic, haversineDistance } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { incidentService, walletService } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -98,7 +98,12 @@ export function DriverTripView() {
   const [waypointLoading, setWaypointLoading] = useState<string | null>(null);
   const [prefsExpanded, setPrefsExpanded] = useState(false);
   const [routeExpanded, setRouteExpanded] = useState(false);
+  // DE-2.1: Auto-detect waypoint arrival
+  const [nearWaypoint, setNearWaypoint] = useState(false);
+  // DE-2.2: Pulsing button near dropoff
+  const [nearDropoff, setNearDropoff] = useState(false);
   const lastAdvancePressRef = useRef(0);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // In-app navigation
   const driverLat = useLocationStore((s) => s.latitude);
@@ -182,6 +187,70 @@ export function DriverTripView() {
       setWaypointLoading(null);
     }
   };
+
+  // DE-2.1: Auto-detect waypoint arrival by GPS proximity
+  useEffect(() => {
+    if (activeTrip?.status !== 'in_progress' || !nextWaypoint || !driverLocation) {
+      setNearWaypoint(false);
+      return;
+    }
+
+    const dist = haversineDistance(
+      driverLocation,
+      { latitude: nextWaypoint.latitude, longitude: nextWaypoint.longitude },
+    );
+
+    if (dist < 100) {
+      setNearWaypoint(true);
+    } else {
+      setNearWaypoint(false);
+    }
+
+    if (dist < 50) {
+      const timeout = setTimeout(() => {
+        handleArriveAtWaypoint();
+      }, 8000);
+      return () => clearTimeout(timeout);
+    }
+  }, [driverLat, driverLng, nextWaypoint?.id, activeTrip?.status]);
+
+  // DE-2.2: Detect proximity to dropoff for pulsing finish button
+  useEffect(() => {
+    if (activeTrip?.status !== 'in_progress' || !driverLocation || nextWaypoint) {
+      setNearDropoff(false);
+      return;
+    }
+
+    const dist = haversineDistance(
+      driverLocation,
+      {
+        latitude: activeTrip.dropoff_location?.latitude || 0,
+        longitude: activeTrip.dropoff_location?.longitude || 0,
+      },
+    );
+
+    if (dist < 80) {
+      setNearDropoff(true);
+      triggerHaptic('medium');
+    } else {
+      setNearDropoff(false);
+    }
+  }, [driverLat, driverLng, activeTrip?.status, nextWaypoint]);
+
+  // DE-2.2: Pulse animation for "Finalizar viaje" button
+  useEffect(() => {
+    if (nearDropoff) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.05, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ]),
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [nearDropoff, pulseAnim]);
+
   const debouncedAdvanceStatus = useCallback(() => {
     const now = Date.now();
     if (now - lastAdvancePressRef.current < 1000) return;
@@ -351,6 +420,15 @@ export function DriverTripView() {
               urgent={etaMinutes > 0 && etaMinutes <= 3}
               variant="dark"
             />
+          </View>
+        )}
+
+        {/* DE-2.1: Arriving at waypoint banner */}
+        {nearWaypoint && nextWaypoint && (
+          <View style={{ backgroundColor: '#22C55E20', padding: 8, borderRadius: 8, marginBottom: 4 }}>
+            <Text style={{ color: '#22C55E', textAlign: 'center', fontSize: 13 }}>
+              {t('trip.arriving_waypoint', { n: nextWaypoint.sort_order })}
+            </Text>
           </View>
         )}
 
@@ -679,14 +757,16 @@ export function DriverTripView() {
 
         {/* Main action button — color-coded by phase (hide "Finalizar" while pending waypoints) */}
         {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && (
-          <Button
-            title={actionLabel}
-            size="lg"
-            fullWidth
-            onPress={debouncedAdvanceStatus}
-            className="mb-2"
-            style={{ backgroundColor: actionButtonColor }}
-          />
+          <Animated.View style={{ transform: [{ scale: nearDropoff ? pulseAnim : 1 }] }}>
+            <Button
+              title={actionLabel}
+              size="lg"
+              fullWidth
+              onPress={debouncedAdvanceStatus}
+              className="mb-2"
+              style={{ backgroundColor: actionButtonColor }}
+            />
+          </Animated.View>
         )}
 
         {/* Cancel */}

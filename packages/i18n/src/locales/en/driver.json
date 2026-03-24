@@ -18,7 +18,10 @@
     "high_demand_area": "High demand area",
     "net_earnings": "Your earnings: ~{{amount}}",
     "km_away": "{{distance}} km · ~{{minutes}} min",
-    "today_earnings": "Today: {{amount}} · {{count}} rides"
+    "today_earnings": "Today: {{amount}} · {{count}} rides",
+    "no_requests_nudge": "No requests in {{minutes}} min",
+    "active_zone_nearby": "Active zone {{distance}} km away",
+    "navigate_to_zone": "Navigate"
   },
 
   "trip": {
@@ -104,7 +107,8 @@
     "hide_preferences": "Hide preferences",
     "view_full_route": "View full route",
     "hide_route": "Hide route",
-    "done": "Done"
+    "done": "Done",
+    "arriving_waypoint": "Arriving at Stop {{n}}..."
   },
 
   "ride": {

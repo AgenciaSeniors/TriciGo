@@ -138,6 +138,11 @@ function NativeDriverHomeScreen() {
   const autoAcceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // DE-2.3: Idle time tracking for demand nudge
+  const [idleSince, setIdleSince] = useState<number | null>(null);
+  const [idleMinutes, setIdleMinutes] = useState(0);
+  const [nearestHotZone, setNearestHotZone] = useState<{ lat: number; lng: number; distance: number } | null>(null);
+
   // DE-1.2: Preferred navigation memory
   const [preferredNav, setPreferredNav] = useState<'inapp' | 'external'>('external');
 
@@ -286,6 +291,48 @@ function NativeDriverHomeScreen() {
   // DE-1.3: Driver location for profitability calculation
   const driverLat = useLocationStore((s) => s.latitude);
   const driverLng = useLocationStore((s) => s.longitude);
+
+  // DE-2.3: Track idle time and find nearest hot zone for demand nudge
+  useEffect(() => {
+    if (!isOnline || activeTrip || incomingRequests.length > 0 || isOnBreak) {
+      setIdleSince(null);
+      setIdleMinutes(0);
+      setNearestHotZone(null);
+      return;
+    }
+
+    if (!idleSince) {
+      setIdleSince(Date.now());
+    }
+
+    const interval = setInterval(() => {
+      if (idleSince) {
+        const mins = Math.floor((Date.now() - idleSince) / 60000);
+        setIdleMinutes(mins);
+
+        // Find nearest hot zone after 10 min
+        if (mins >= 10 && heatmapData.length > 0 && driverLat && driverLng) {
+          const hotZones = heatmapData
+            .filter((p: any) => p.intensity > 0.7)
+            .map((p: any) => ({
+              lat: p.latitude,
+              lng: p.longitude,
+              distance: Math.round(haversineDistance(
+                { latitude: driverLat, longitude: driverLng },
+                { latitude: p.latitude, longitude: p.longitude },
+              ) / 100) / 10,
+            }))
+            .sort((a: any, b: any) => a.distance - b.distance);
+
+          if (hotZones.length > 0 && hotZones[0]) {
+            setNearestHotZone(hotZones[0]);
+          }
+        }
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [isOnline, activeTrip, incomingRequests.length, isOnBreak, idleSince, heatmapData, driverLat, driverLng]);
 
   // DE-1.3: Profitability level for first incoming ride (faster auto-accept for great rides)
   const firstRequest = incomingRequests[0];
@@ -608,6 +655,34 @@ function NativeDriverHomeScreen() {
             <View className="flex-1">
               {heatmapData.length > 0 && (
                 <RideMapView heatmapData={heatmapData} height={200} />
+              )}
+              {/* DE-2.3: Demand nudge after 10 min idle */}
+              {idleMinutes >= 10 && nearestHotZone && (
+                <View style={{
+                  backgroundColor: '#1F2937',
+                  borderRadius: 12,
+                  padding: 12,
+                  marginTop: 12,
+                  borderColor: '#F59E0B',
+                  borderWidth: 1,
+                }}>
+                  <Text style={{ color: '#F59E0B', fontSize: 13, marginBottom: 8 }}>
+                    {t('home.no_requests_nudge', { minutes: idleMinutes })}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 12 }}>
+                      {t('home.active_zone_nearby', { distance: nearestHotZone.distance })}
+                    </Text>
+                    <Pressable
+                      style={{ backgroundColor: '#F97316', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 }}
+                      onPress={() => openNavigation(nearestHotZone.lat, nearestHotZone.lng)}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                        {t('home.navigate_to_zone', { defaultValue: 'Navegar' })}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
               )}
               <EmptyState
                 icon="car-outline"
