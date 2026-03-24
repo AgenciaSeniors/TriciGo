@@ -9,7 +9,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic, haversineDistance } from '@tricigo/utils';
+import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic, haversineDistance, trackValidationEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { incidentService, walletService } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -104,6 +104,7 @@ export function DriverTripView() {
   // DE-2.2: Pulsing button near dropoff
   const [nearDropoff, setNearDropoff] = useState(false);
   const lastAdvancePressRef = useRef(0);
+  const nearDropoffTrackedRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // In-app navigation
@@ -210,6 +211,10 @@ export function DriverTripView() {
     if (dist < 50) {
       Toast.show({ type: 'info', text1: t('trip.auto_arriving', { defaultValue: 'Marcando llegada automáticamente...' }), visibilityTime: 3000 });
       const timeout = setTimeout(() => {
+        trackValidationEvent('driver_waypoint_auto_arrived', {
+          waypoint_sort_order: nextWaypoint.sort_order,
+          gps_distance_m: Math.round(dist),
+        }, activeTrip.id);
         handleArriveAtWaypoint();
       }, 8000);
       return () => clearTimeout(timeout);
@@ -234,8 +239,15 @@ export function DriverTripView() {
     if (dist < 80) {
       setNearDropoff(true);
       triggerHaptic('medium');
+      if (!nearDropoffTrackedRef.current) {
+        nearDropoffTrackedRef.current = true;
+        trackValidationEvent('driver_near_dropoff', {
+          distance_m: Math.round(dist),
+        }, activeTrip.id);
+      }
     } else {
       setNearDropoff(false);
+      nearDropoffTrackedRef.current = false;
     }
   }, [driverLat, driverLng, activeTrip?.status, nextWaypoint]);
 

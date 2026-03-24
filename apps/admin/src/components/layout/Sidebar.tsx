@@ -13,6 +13,7 @@ import {
   Headphones,
   Scale,
   ShieldAlert,
+  ShieldCheck,
   PackageSearch,
   Star,
   ClipboardList,
@@ -62,6 +63,7 @@ const navItems: NavItem[] = [
   { href: '/audit', labelKey: 'sidebar.audit', icon: ClipboardList },
   { href: '/reports', labelKey: 'sidebar.reports', icon: BarChart3 },
   { href: '/funnel', labelKey: 'sidebar.funnel', icon: TrendingUp },
+  { href: '/validation', labelKey: 'sidebar.validation', icon: ShieldCheck },
   { href: '/settings/cities', labelKey: 'sidebar.cities', icon: MapPin },
   { href: '/settings', labelKey: 'sidebar.settings', icon: Settings },
 ];

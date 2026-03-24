@@ -5,7 +5,7 @@ import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
-import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance } from '@tricigo/utils';
+import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useLocationStore } from '@/stores/location.store';
 import type { Ride } from '@tricigo/types';
@@ -35,8 +35,14 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   const { t } = useTranslation('driver');
 
   const handleReject = useCallback(() => {
+    trackValidationEvent('driver_ride_rejected', {
+      profit_level: profitLevel,
+      seconds_remaining: autoAcceptSecondsLeft,
+      distance_km: distanceKm,
+      net_earnings: netEarnings,
+    }, ride.id);
     onReject?.(ride.id);
-  }, [onReject, ride.id]);
+  }, [onReject, ride.id, profitLevel, autoAcceptSecondsLeft, distanceKm, netEarnings]);
 
   // ── Distance + ETA to pickup ──
   const driverLat = useLocationStore((s) => s.latitude);
@@ -115,6 +121,12 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       setAutoAcceptSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(interval);
+          trackValidationEvent('driver_ride_auto_accepted', {
+            profit_level: profitLevel,
+            countdown_duration: autoAcceptDuration,
+            distance_km: distanceKm,
+            net_earnings: netEarnings,
+          }, ride.id);
           Toast.show({ type: 'success', text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }), visibilityTime: 1500 });
           onAccept(ride.id); // Auto-accept!
           return 0;

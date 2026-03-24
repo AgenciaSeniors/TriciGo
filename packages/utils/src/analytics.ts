@@ -69,6 +69,36 @@ export function identifyUser(
 }
 
 /**
+ * Dual-write helper: sends event to PostHog AND persists to Supabase validation_events.
+ * All writes are fire-and-forget so they never block the UI.
+ */
+export async function trackValidationEvent(
+  eventType: string,
+  properties: Record<string, unknown>,
+  rideId?: string,
+) {
+  // Send to PostHog
+  trackEvent(eventType, properties);
+
+  // Send to Supabase validation_events (fire-and-forget)
+  try {
+    const { getSupabaseClient } = await import('@tricigo/api');
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      supabase.from('validation_events').insert({
+        driver_id: user.id,
+        event_type: eventType,
+        ride_id: rideId || null,
+        properties,
+      }).then(() => {}).catch(() => {});
+    }
+  } catch {
+    // Silently fail — validation events are non-critical
+  }
+}
+
+/**
  * Reset analytics (call on logout).
  */
 export function resetAnalytics() {

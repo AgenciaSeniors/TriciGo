@@ -8,7 +8,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService } from '@tricigo/api';
-import { HAVANA_CENTER, trackEvent, haversineDistance } from '@tricigo/utils';
+import { HAVANA_CENTER, trackEvent, trackValidationEvent, haversineDistance } from '@tricigo/utils';
 import { openNavigation } from '@/utils/navigation';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -368,6 +368,10 @@ function NativeDriverHomeScreen() {
     const timer = setTimeout(() => {
       if (navCountdown === 1) {
         // Auto-navigate!
+        trackValidationEvent('driver_auto_nav_triggered', {
+          zone_distance: nearestHotZone?.distance,
+          idle_minutes: idleMinutes,
+        });
         openNavigation(nearestHotZone!.lat, nearestHotZone!.lng);
         setNavCountdown(null);
         setIdleSince(Date.now()); // Reset idle timer
@@ -379,9 +383,13 @@ function NativeDriverHomeScreen() {
   }, [navCountdown]);
 
   const cancelAutoNav = useCallback(() => {
+    trackValidationEvent('driver_auto_nav_cancelled', {
+      zone_distance: nearestHotZone?.distance,
+      idle_minutes: idleMinutes,
+    });
     setNavCountdown(null);
     navCancelledRef.current = true; // Don't retry until next ride cycle
-  }, []);
+  }, [nearestHotZone?.distance, idleMinutes]);
 
   // OMEGA: Wait time estimate based on heatmap proximity
   const estimatedWaitMinutes = useMemo(() => {

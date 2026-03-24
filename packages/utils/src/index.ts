@@ -3,7 +3,7 @@ export * from './date';
 export * from './validation';
 export * from './geo';
 export * from './fareCalculator';
-export { initAnalytics, trackEvent, identifyUser, resetAnalytics } from './analytics';
+export { initAnalytics, trackEvent, trackValidationEvent, identifyUser, resetAnalytics } from './analytics';
 export type { AnalyticsEvent } from './analytics';
 export { generateReceiptHTML, type ReceiptData } from './receipt-template';
 export { triggerHaptic, triggerSelection } from './haptics';
