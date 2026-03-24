@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, Linking, Alert, Share, ActivityIndicator, useColorScheme } from 'react-native';
+import { View, Pressable, Linking, Share, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import Toast from 'react-native-toast-message';
 import { incidentService, rideService, trustedContactService, notificationService } from '@tricigo/api';
-import { logger } from '@tricigo/utils';
+import { logger, triggerHaptic } from '@tricigo/utils';
 import type { TrustedContact } from '@tricigo/types';
 
 interface SafetySheetProps {
@@ -32,44 +31,59 @@ export function SafetySheet({
 }: SafetySheetProps) {
   const { t } = useTranslation('common');
   const { t: tr } = useTranslation('rider');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const [sharing, setSharing] = useState(false);
-  const [sharingWithContacts, setSharingWithContacts] = useState(false);
-  const [contactsSent, setContactsSent] = useState(false);
   const [autoShareContacts, setAutoShareContacts] = useState<TrustedContact[]>([]);
 
   useEffect(() => {
     if (!visible || !userId) return;
     trustedContactService.getAutoShareContacts(userId).then(setAutoShareContacts).catch(() => {});
-    setContactsSent(false);
   }, [visible, userId]);
 
-  const handleSOS = () => {
+  const notifyTrustedContacts = async () => {
+    if (autoShareContacts.length === 0) return;
+    try {
+      let token = await rideService.getShareTokenForRide(rideId);
+      if (!token) {
+        token = await rideService.generateShareToken(rideId);
+      }
+      const url = `https://tricigo.app/track/share/${token}`;
+      const userName = emergencyContact?.name ?? t('safety.someone');
+      await notificationService.notifyTrustedContacts({
+        contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
+        message: `\u{1F6A8} SOS: ${userName} activó emergencia durante un viaje. Ubicación: ${url}`,
+        eventType: 'sos_emergency',
+      });
+    } catch (err) {
+      logger.error('Failed to notify trusted contacts during SOS', { error: String(err) });
+    }
+  };
+
+  const handleSOS = async () => {
     onClose();
-    Alert.alert(
-      tr('ride.sos_title'),
-      tr('ride.sos_body'),
-      [
-        { text: tr('ride.sos_cancel'), style: 'cancel' },
-        {
-          text: tr('ride.sos_call_emergency'),
-          style: 'destructive',
-          onPress: async () => {
-            incidentService.createSOSReport({
-              ride_id: rideId,
-              reported_by: userId,
-              against_user_id: driverId ?? undefined,
-              description: 'SOS activado por pasajero durante viaje',
-            }).catch((err) => {
-              logger.error('SOS report failed', { error: String(err) });
-              Toast.show({ type: 'error', text1: t('errors.sos_report_failed') });
-            });
-            Linking.openURL('tel:106');
-          },
-        },
-      ],
-    );
+
+    // Haptic feedback immediately
+    triggerHaptic('heavy');
+
+    // Call emergency number immediately
+    Linking.openURL('tel:106');
+
+    // Simultaneously notify contacts and create report
+    notifyTrustedContacts();
+
+    incidentService.createSOSReport({
+      ride_id: rideId,
+      reported_by: userId,
+      against_user_id: driverId ?? undefined,
+      description: 'SOS activado por pasajero durante viaje',
+    }).catch((err) => {
+      logger.error('SOS report failed', { error: String(err) });
+    });
+
+    // Show confirmation toast
+    Toast.show({
+      type: 'success',
+      text1: tr('ride.sos_activated'),
+    });
   };
 
   const handleShareTrip = async () => {
@@ -90,56 +104,61 @@ export function SafetySheet({
     }
   };
 
-  const handleShareWithContacts = async () => {
-    if (autoShareContacts.length === 0) {
-      onClose();
-      router.push('/profile/trusted-contacts');
-      return;
-    }
-    setSharingWithContacts(true);
-    try {
-      let token = await rideService.getShareTokenForRide(rideId);
-      if (!token) {
-        token = await rideService.generateShareToken(rideId);
-      }
-      const url = `https://tricigo.app/track/share/${token}`;
-
-      // Notify trusted contacts via SMS
-      const userName = emergencyContact?.name ?? t('safety.someone');
-      await notificationService.notifyTrustedContacts({
-        contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
-        message: `\u{1F4CD} ${userName} est\u00e1 en un viaje. Sigue su ubicaci\u00f3n en tiempo real: ${url}`,
-        eventType: 'trip_shared',
-      });
-
-      setContactsSent(true);
-    } catch (err) {
-      logger.error('Failed to share with trusted contacts', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('errors.contacts_load_failed') });
-    } finally {
-      setSharingWithContacts(false);
-    }
-  };
-
-  const handleCallContact = () => {
-    if (emergencyContact?.phone) {
-      Linking.openURL(`tel:${emergencyContact.phone}`);
-    } else {
-      onClose();
-      router.push('/profile/emergency-contact');
-    }
-  };
-
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <Text variant="h4" className="mb-4">
         {t('safety.title')}
       </Text>
 
-      {/* Call Driver (4.5) — only shown when driver phone is available */}
+      {/* ═══ TIER 1 — EMERGENCY ═══ */}
+      <View className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-4">
+        <Pressable
+          className="bg-red-600 rounded-xl py-4 items-center justify-center w-full"
+          onPress={handleSOS}
+          accessibilityRole="button"
+          accessibilityLabel={tr('ride.sos_full')}
+        >
+          <Text variant="h3" className="text-white text-center font-bold">
+            {tr('ride.sos_full')}
+          </Text>
+        </Pressable>
+        <Text variant="bodySmall" className="text-red-700 dark:text-red-400 text-center mt-2">
+          {tr('ride.sos_auto_notify')}
+        </Text>
+      </View>
+
+      {/* ═══ TIER 2 — PRECAUTION ═══ */}
+      <Text variant="bodySmall" className="text-neutral-500 mb-2">
+        {tr('ride.other_options')}
+      </Text>
+
+      {/* Share Trip */}
+      <Pressable
+        className="flex-row items-center py-3 border-b border-neutral-100"
+        onPress={handleShareTrip}
+        disabled={sharing}
+        accessibilityRole="button"
+        accessibilityLabel={tr('ride.share_location')}
+      >
+        <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
+          <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
+        </View>
+        <View className="flex-1">
+          <Text variant="body" className="font-semibold">
+            {t('safety.share_trip')}
+          </Text>
+        </View>
+        {sharing ? (
+          <ActivityIndicator size="small" color={colors.primary[500]} />
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+        )}
+      </Pressable>
+
+      {/* Call Driver — only shown when driver phone is available */}
       {driverPhone && (
         <Pressable
-          className="flex-row items-center py-4 border-b border-neutral-100"
+          className="flex-row items-center py-3"
           onPress={() => Linking.openURL(`tel:${driverPhone}`)}
           accessibilityRole="button"
           accessibilityLabel={tr('ride.call_driver_full')}
@@ -155,125 +174,6 @@ export function SafetySheet({
           <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
         </Pressable>
       )}
-
-      {/* SOS - Call Emergency */}
-      <Pressable
-        className="flex-row items-center py-4 border-b border-neutral-100"
-        onPress={handleSOS}
-        accessibilityRole="button"
-        accessibilityLabel={tr('ride.sos_activate')}
-      >
-        <View className="w-10 h-10 rounded-full bg-error items-center justify-center mr-3">
-          <Ionicons name="warning" size={20} color="white" />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" className="font-semibold">
-            {t('safety.emergency_call')}
-          </Text>
-          <Text variant="caption" color="secondary">
-            {t('safety.emergency_call_desc')}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
-      </Pressable>
-
-      {/* Share Trip */}
-      <Pressable
-        className="flex-row items-center py-4 border-b border-neutral-100"
-        onPress={handleShareTrip}
-        disabled={sharing}
-        accessibilityRole="button"
-        accessibilityLabel={tr('ride.share_location')}
-      >
-        <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" className="font-semibold">
-            {t('safety.share_trip')}
-          </Text>
-          <Text variant="caption" color="secondary">
-            {sharing ? t('safety.share_trip_sharing') : t('safety.share_trip_desc')}
-          </Text>
-        </View>
-        {sharing ? (
-          <ActivityIndicator size="small" color={colors.primary[500]} />
-        ) : (
-          <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
-        )}
-      </Pressable>
-
-      {/* Share with Trusted Contacts */}
-      <Pressable
-        className="flex-row items-center py-4 border-b border-neutral-100"
-        onPress={handleShareWithContacts}
-        disabled={sharingWithContacts || contactsSent}
-        accessibilityRole="button"
-        accessibilityLabel={tr('ride.share_with_contacts')}
-      >
-        <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="people-outline" size={20} color={colors.primary[500]} />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" className="font-semibold">
-            {t('safety.share_with_contacts')}
-          </Text>
-          <Text variant="caption" color="secondary">
-            {contactsSent
-              ? t('safety.share_sent_to_n', { count: autoShareContacts.length })
-              : autoShareContacts.length > 0
-                ? t('safety.share_with_contacts_desc', { count: autoShareContacts.length })
-                : t('safety.no_trusted_contacts')}
-          </Text>
-        </View>
-        {sharingWithContacts ? (
-          <ActivityIndicator size="small" color={colors.primary[500]} />
-        ) : contactsSent ? (
-          <Ionicons name="checkmark-circle" size={20} color={isDark ? '#4ADE80' : '#16A34A'} />
-        ) : (
-          <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
-        )}
-      </Pressable>
-
-      {/* Call Emergency Contact */}
-      <Pressable
-        className="flex-row items-center py-4 border-b border-neutral-100"
-        onPress={handleCallContact}
-        accessibilityRole="button"
-        accessibilityLabel={tr('ride.call_emergency')}
-      >
-        <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-          <Ionicons name="call-outline" size={20} color={colors.primary[500]} />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" className="font-semibold">
-            {emergencyContact
-              ? `${t('safety.call_contact')}: ${emergencyContact.name}`
-              : t('safety.set_emergency_contact')}
-          </Text>
-          <Text variant="caption" color="secondary">
-            {emergencyContact
-              ? emergencyContact.phone
-              : t('safety.emergency_contact_desc')}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
-      </Pressable>
-
-      {/* Report Issue (disabled during ride) */}
-      <View className="flex-row items-center py-4 opacity-40">
-        <View className="w-10 h-10 rounded-full bg-neutral-100 items-center justify-center mr-3">
-          <Ionicons name="flag-outline" size={20} color={colors.neutral[500]} />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" className="font-semibold">
-            {t('safety.report')}
-          </Text>
-          <Text variant="caption" color="secondary">
-            {t('safety.report_after_trip')}
-          </Text>
-        </View>
-      </View>
     </BottomSheet>
   );
 }

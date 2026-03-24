@@ -248,7 +248,11 @@
     "thanks_tip": "Obrigado!",
     "driver_coming": "Seu motorista já está a caminho",
     "driver_waiting": "Seu motorista está esperando por você",
-    "add_stop_preview": "Adicionar parada · +~₧200 · +~5 min"
+    "add_stop_preview": "Adicionar parada · +~₧200 · +~5 min",
+    "sos_full": "\ud83d\udea8 SOS — Ligar emergência",
+    "sos_auto_notify": "Ligará para 106 e notificará seus contatos",
+    "sos_activated": "SOS ativado. Seus contatos foram notificados.",
+    "other_options": "Outras opções"
   },
 
   "dispute": {
