@@ -1258,37 +1258,7 @@ function ReviewingView() {
           .map((wp) => wp.location!)}
         height={isTablet ? 250 : 150}
       />
-      {nearbyVehicles.length > 0 && (
-        <View className="mt-1 mb-1">
-          <Text variant="caption" color="secondary" className="text-center">
-            {t('ride.nearby_vehicles', { count: nearbyVehicles.length })}
-          </Text>
-        </View>
-      )}
       <View className="h-3" />
-
-      {/* Route summary */}
-      <Card variant="outlined" padding="md" className="mb-4">
-        <RouteSummary
-          pickupAddress={draft.pickup?.address ?? ''}
-          dropoffAddress={draft.dropoff?.address ?? ''}
-          pickupLabel={t('ride.pickup')}
-          dropoffLabel={t('ride.dropoff')}
-          waypoints={draft.waypoints.map((wp, i) => ({
-            address: wp.address,
-            label: t('ride.stop_n', { n: i + 1, defaultValue: `Parada ${i + 1}` }),
-          }))}
-        />
-        {draft.scheduledAt && (
-          <View className="flex-row items-center mt-3 pt-3 border-t border-neutral-200">
-            <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />
-            <Text variant="bodySmall" color="accent" className="ml-2">
-              {t('ride.scheduled_for', { defaultValue: 'Programado' })}:{' '}
-              {draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — {draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-          </View>
-        )}
-      </Card>
 
       {/* UBER-1.1: Recommended service PRIMARY card */}
       <View
@@ -1446,6 +1416,38 @@ function ReviewingView() {
       {/* Collapsible details section */}
       {detailsExpanded && (
         <>
+          {/* UX-3: Route summary (moved from main view) */}
+          <Card variant="outlined" padding="md" className="mb-4">
+            <RouteSummary
+              pickupAddress={draft.pickup?.address ?? ''}
+              dropoffAddress={draft.dropoff?.address ?? ''}
+              pickupLabel={t('ride.pickup')}
+              dropoffLabel={t('ride.dropoff')}
+              waypoints={draft.waypoints.map((wp, i) => ({
+                address: wp.address,
+                label: t('ride.stop_n', { n: i + 1, defaultValue: `Parada ${i + 1}` }),
+              }))}
+            />
+            {draft.scheduledAt && (
+              <View className="flex-row items-center mt-3 pt-3 border-t border-neutral-200">
+                <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />
+                <Text variant="bodySmall" color="accent" className="ml-2">
+                  {t('ride.scheduled_for', { defaultValue: 'Programado' })}:{' '}
+                  {draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — {draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            )}
+          </Card>
+
+          {/* UX-3: Nearby vehicles count (moved from main view) */}
+          {nearbyVehicles.length > 0 && (
+            <View className="mt-1 mb-3">
+              <Text variant="caption" color="secondary" className="text-center">
+                {t('ride.nearby_vehicles', { count: nearbyVehicles.length })}
+              </Text>
+            </View>
+          )}
+
           {/* Fare breakdown */}
           <View className="mb-4">
             <FareBreakdownCard
