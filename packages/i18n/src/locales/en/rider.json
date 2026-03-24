@@ -272,7 +272,10 @@
     "see_less": "See less",
     "cancel_no_charge": "No charge",
     "cancel_driver_coming": "Your driver is on the way",
-    "cancel_driver_waiting": "Your driver is waiting for you"
+    "cancel_driver_waiting": "Your driver is waiting for you",
+    "driver_assigned_body": "Your driver is on the way",
+    "trip_completed_notif": "Trip completed",
+    "driver_canceled_notif": "Your driver canceled the trip"
   },
 
   "dispute": {

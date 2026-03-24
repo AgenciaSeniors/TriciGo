@@ -7,6 +7,7 @@ import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger } from '@
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
+import { scheduleLocalNotification } from '@/services/push.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -301,6 +302,10 @@ export function useRideActions() {
           triggerHaptic('success');
           playSound('ride_accepted');
           Toast.show({ type: 'success', text1: i18next.t('ride.driver_assigned', { ns: 'rider' }) });
+          scheduleLocalNotification(
+            i18next.t('ride.driver_assigned', { ns: 'rider' }),
+            i18next.t('ride.driver_assigned_body', { ns: 'rider' }),
+          );
         }
         if (updated.status === 'driver_en_route' && prevRide?.status === 'accepted') {
           triggerHaptic('light');
@@ -308,6 +313,10 @@ export function useRideActions() {
         if (updated.status === 'arrived_at_pickup') {
           triggerHaptic('heavy');
           playSound('driver_arrived');
+          scheduleLocalNotification(
+            i18next.t('ride.driver_arrived_banner', { ns: 'rider' }),
+            '',
+          );
         }
         if (updated.status === 'in_progress' && prevRide?.status === 'arrived_at_pickup') {
           triggerHaptic('medium');
@@ -316,6 +325,10 @@ export function useRideActions() {
           triggerHaptic('success');
           playSound('trip_completed');
           trackEvent('ride_completed', { ride_id: updated.id, service_type: updated.service_type });
+          scheduleLocalNotification(
+            i18next.t('ride.trip_completed_notif', { ns: 'rider' }),
+            '',
+          );
           // Invalidate prediction cache so next load recalculates with new ride
           invalidatePredictionCache().catch(() => {});
 
@@ -356,6 +369,10 @@ export function useRideActions() {
             text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
             text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
           });
+          scheduleLocalNotification(
+            i18next.t('ride.driver_canceled_notif', { ns: 'rider' }),
+            '',
+          );
         }
 
         // When driver accepts, load driver info

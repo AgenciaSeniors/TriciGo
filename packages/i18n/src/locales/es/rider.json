@@ -272,7 +272,10 @@
     "see_less": "Ver menos",
     "cancel_no_charge": "Sin cargo",
     "cancel_driver_coming": "Tu conductor viene en camino",
-    "cancel_driver_waiting": "Tu conductor te está esperando"
+    "cancel_driver_waiting": "Tu conductor te está esperando",
+    "driver_assigned_body": "Tu conductor viene en camino",
+    "trip_completed_notif": "Viaje completado",
+    "driver_canceled_notif": "Tu conductor canceló el viaje"
   },
 
   "dispute": {

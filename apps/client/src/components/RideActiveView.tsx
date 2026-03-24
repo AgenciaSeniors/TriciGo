@@ -28,6 +28,7 @@ import { CancelRideSheet } from '@/components/CancelRideSheet';
 import { SafetySheet } from '@/components/SafetySheet';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import type { GeoPoint } from '@tricigo/utils';
+import { getRouteETA } from '@/services/mapbox.service';
 
 export function RideActiveView() {
   const { t } = useTranslation('rider');
@@ -62,6 +63,32 @@ export function RideActiveView() {
     estimatedDurationS: activeRide?.estimated_duration_s,
   });
 
+  // INFRA-2: Mapbox Directions route ETA (more accurate than haversine)
+  const [routeETA, setRouteETA] = useState<{ durationMinutes: number; distanceKm: number } | null>(null);
+
+  useEffect(() => {
+    if (!driverPosition || !activeRide) return;
+
+    const target = activeRide.status === 'driver_en_route' || activeRide.status === 'accepted'
+      ? { lat: activeRide.pickup_location?.latitude ?? 0, lng: activeRide.pickup_location?.longitude ?? 0 }
+      : { lat: activeRide.dropoff_location?.latitude ?? 0, lng: activeRide.dropoff_location?.longitude ?? 0 };
+
+    getRouteETA(
+      { lat: driverPosition.latitude, lng: driverPosition.longitude },
+      target,
+    ).then((result) => {
+      if (result) setRouteETA(result);
+    });
+  }, [driverPosition?.latitude, driverPosition?.longitude, activeRide?.status]);
+
+  // Use Mapbox route ETA when available, fall back to useETA hook
+  const displayEtaMinutes = routeETA?.durationMinutes ?? etaMinutes;
+  const displayDistanceKm = routeETA?.distanceKm ?? (
+    driverPosition && activeRide?.pickup_location
+      ? (haversineDistance(driverPosition, activeRide.pickup_location) / 1000)
+      : null
+  );
+
   // X3.2: Dynamic map height — 40% of screen
   const mapHeight = Math.round(Dimensions.get('window').height * 0.4);
 
@@ -73,7 +100,7 @@ export function RideActiveView() {
   const bannerScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (etaMinutes !== null && etaMinutes > 0 && etaMinutes < 3) {
+    if (displayEtaMinutes !== null && displayEtaMinutes > 0 && displayEtaMinutes < 3) {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
@@ -95,7 +122,7 @@ export function RideActiveView() {
         pulseLoopRef.current = null;
       }
     };
-  }, [etaMinutes, pulseAnim]);
+  }, [displayEtaMinutes, pulseAnim]);
 
   // I2: Trigger green banner animation on arrived_at_pickup
   useEffect(() => {
@@ -551,7 +578,7 @@ export function RideActiveView() {
       </Text>
 
       {/* ETA Badge — U2.4: Show distance + ETA during driver_en_route */}
-      {etaMinutes !== null && (
+      {displayEtaMinutes !== null && (
         <View className="items-center mb-4">
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
             <ETABadge
@@ -560,19 +587,19 @@ export function RideActiveView() {
                   ? t('ride.eta_driver_arrived')
                   : activeRide.status === 'in_progress'
                     ? t('ride.eta_destination_clock', {
-                        minutes: etaMinutes,
-                        time: formatArrivalTime(etaMinutes),
+                        minutes: displayEtaMinutes,
+                        time: formatArrivalTime(displayEtaMinutes),
                       })
                     : activeRide.status === 'driver_en_route' && driverPosition && activeRide.pickup_location
                       ? t('ride.distance_eta_clock', {
-                          distance: (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
-                          eta: etaMinutes,
-                          time: formatArrivalTime(etaMinutes),
+                          distance: displayDistanceKm !== null ? displayDistanceKm.toFixed(1) : (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
+                          eta: displayEtaMinutes,
+                          time: formatArrivalTime(displayEtaMinutes),
                         })
-                      : t('ride.eta_driver_arriving', { minutes: etaMinutes })
+                      : t('ride.eta_driver_arriving', { minutes: displayEtaMinutes })
               }
               isCalculating={isCalculating}
-              urgent={etaMinutes > 0 && etaMinutes <= 3}
+              urgent={displayEtaMinutes > 0 && displayEtaMinutes <= 3}
               variant="light"
             />
           </Animated.View>
