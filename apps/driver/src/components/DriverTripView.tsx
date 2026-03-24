@@ -95,6 +95,8 @@ export function DriverTripView() {
   const { advanceStatus, cancelTrip, clearCompletedTrip } = useDriverRideActions();
   const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
   const [waypointLoading, setWaypointLoading] = useState<string | null>(null);
+  const [prefsExpanded, setPrefsExpanded] = useState(false);
+  const [routeExpanded, setRouteExpanded] = useState(false);
   const lastAdvancePressRef = useRef(0);
 
   // In-app navigation
@@ -305,6 +307,11 @@ export function DriverTripView() {
             remainingDuration_s={inAppNav.remainingDuration_s}
             isRerouting={inAppNav.isRerouting}
             onStop={inAppNav.stopNavigation}
+            destinationLabel={
+              activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted'
+                ? `Pickup: ${activeTrip.pickup_address}`
+                : `Destino: ${nextWaypoint?.address || activeTrip.dropoff_address}`
+            }
           />
         )}
 
@@ -351,6 +358,27 @@ export function DriverTripView() {
           <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
         )}
 
+        {/* No-show button — appears after 5 min wait */}
+        {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at &&
+          Math.floor((Date.now() - new Date(activeTrip.driver_arrived_at).getTime()) / 60000) >= 5 && (
+          <Pressable
+            style={{
+              backgroundColor: '#F59E0B',
+              borderRadius: 12,
+              paddingVertical: 14,
+              paddingHorizontal: 24,
+              marginHorizontal: 16,
+              marginBottom: 8,
+              alignItems: 'center',
+            }}
+            onPress={() => cancelTrip('passenger_no_show')}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
+              {t('trip.passenger_no_show')} — {t('trip.cancel_no_show')}
+            </Text>
+          </Pressable>
+        )}
+
         {/* Cargo badge */}
         {activeTrip.service_type === 'triciclo_cargo' && (
           <View className="flex-row items-center justify-center mb-3 bg-orange-600 rounded-lg py-2 px-4">
@@ -359,136 +387,210 @@ export function DriverTripView() {
           </View>
         )}
 
-        {/* Rider preferences */}
+        {/* Rider preferences (collapsible) */}
         {activeTrip.rider_preferences && Object.values(activeTrip.rider_preferences).some(Boolean) && (
-          <View className="flex-row flex-wrap gap-1.5 mb-3 px-1">
-            <Ionicons name="options-outline" size={14} color="#9CA3AF" />
-            {activeTrip.rider_preferences.quiet_mode && (
-              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="volume-mute" size={12} color="#FFA726" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.temperature === 'cool' && (
-              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="snow" size={12} color="#42A5F5" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.temperature === 'warm' && (
-              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="sunny" size={12} color="#FFA726" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.conversation_ok && (
-              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.luggage_trunk && (
-              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="briefcase" size={12} color="#AB47BC" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.accessibility_needs?.includes('wheelchair') && (
-              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="accessibility" size={12} color="#64B5F6" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_wheelchair', { defaultValue: 'Silla de ruedas' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.accessibility_needs?.includes('hearing_impaired') && (
-              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="ear" size={12} color="#64B5F6" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_hearing', { defaultValue: 'Dificultad auditiva' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.accessibility_needs?.includes('visual_impaired') && (
-              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="eye-off" size={12} color="#64B5F6" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_visual', { defaultValue: 'Dificultad visual' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.accessibility_needs?.includes('service_animal') && (
-              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="paw" size={12} color="#64B5F6" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_service_animal', { defaultValue: 'Animal de servicio' })}</Text>
-              </View>
-            )}
-            {activeTrip.rider_preferences.accessibility_needs?.includes('extra_space') && (
-              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-                <Ionicons name="resize" size={12} color="#64B5F6" />
-                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_extra_space', { defaultValue: 'Espacio extra' })}</Text>
+          <View className="mb-3">
+            <Pressable onPress={() => setPrefsExpanded(!prefsExpanded)}>
+              <Text variant="bodySmall" color="accent" style={{ textAlign: 'center', marginVertical: 4 }}>
+                {prefsExpanded ? t('trip.hide_preferences') : t('trip.view_preferences')}
+              </Text>
+            </Pressable>
+            {prefsExpanded && (
+              <View className="flex-row flex-wrap gap-1.5 px-1">
+                <Ionicons name="options-outline" size={14} color="#9CA3AF" />
+                {activeTrip.rider_preferences.quiet_mode && (
+                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="volume-mute" size={12} color="#FFA726" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.temperature === 'cool' && (
+                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="snow" size={12} color="#42A5F5" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.temperature === 'warm' && (
+                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="sunny" size={12} color="#FFA726" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.conversation_ok && (
+                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.luggage_trunk && (
+                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="briefcase" size={12} color="#AB47BC" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.accessibility_needs?.includes('wheelchair') && (
+                  <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="accessibility" size={12} color="#64B5F6" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_wheelchair', { defaultValue: 'Silla de ruedas' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.accessibility_needs?.includes('hearing_impaired') && (
+                  <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="ear" size={12} color="#64B5F6" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_hearing', { defaultValue: 'Dificultad auditiva' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.accessibility_needs?.includes('visual_impaired') && (
+                  <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="eye-off" size={12} color="#64B5F6" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_visual', { defaultValue: 'Dificultad visual' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.accessibility_needs?.includes('service_animal') && (
+                  <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="paw" size={12} color="#64B5F6" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_service_animal', { defaultValue: 'Animal de servicio' })}</Text>
+                  </View>
+                )}
+                {activeTrip.rider_preferences.accessibility_needs?.includes('extra_space') && (
+                  <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                    <Ionicons name="resize" size={12} color="#64B5F6" />
+                    <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_extra_space', { defaultValue: 'Espacio extra' })}</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
         )}
 
         {/* Route info */}
-        <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
-          <View className="flex-row items-start mb-3">
-            <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="inverse" className="opacity-50">
-                {t('trip.pickup_address')}
-              </Text>
-              <Text variant="bodySmall" color="inverse">
-                {activeTrip.pickup_address}
+        {activeTrip.status === 'in_progress' ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
+              <Ionicons name="location" size={16} color="#F97316" />
+              <Text variant="body" color="primary" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
+                {nextWaypoint?.address || activeTrip.dropoff_address}
               </Text>
             </View>
-          </View>
-          {waypoints.map((wp) => (
-            <View key={wp.id} className="flex-row items-start mb-3">
-              <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2">
-                  <Text variant="caption" color="accent" className="opacity-70">
-                    {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
-                  </Text>
-                  {wp.departed_at && (
-                    <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
-                  )}
-                  {wp.arrived_at && !wp.departed_at && (
-                    <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
-                  )}
+            <Pressable onPress={() => setRouteExpanded(!routeExpanded)}>
+              <Text variant="caption" color="accent" style={{ textAlign: 'center' }}>
+                {routeExpanded ? t('trip.hide_route') : t('trip.view_full_route')}
+              </Text>
+            </Pressable>
+            {routeExpanded && (
+              <Card variant="filled" padding="md" className="bg-neutral-800 mb-4 mt-2">
+                <View className="flex-row items-start mb-3">
+                  <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
+                  <View className="flex-1">
+                    <Text variant="caption" color="inverse" className="opacity-50">
+                      {t('trip.pickup_address')}
+                    </Text>
+                    <Text variant="bodySmall" color="inverse">
+                      {activeTrip.pickup_address}
+                    </Text>
+                  </View>
                 </View>
+                {waypoints.map((wp) => (
+                  <View key={wp.id} className="flex-row items-start mb-3">
+                    <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
+                    <View className="flex-1">
+                      <View className="flex-row items-center gap-2">
+                        <Text variant="caption" color="accent" className="opacity-70">
+                          {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
+                        </Text>
+                        {wp.departed_at && (
+                          <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
+                        )}
+                        {wp.arrived_at && !wp.departed_at && (
+                          <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
+                        )}
+                      </View>
+                      <Text variant="bodySmall" color="inverse">
+                        {wp.address}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                <View className="flex-row items-start">
+                  <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
+                  <View className="flex-1">
+                    <Text variant="caption" color="inverse" className="opacity-50">
+                      {t('trip.dropoff_address')}
+                    </Text>
+                    <Text variant="bodySmall" color="inverse">
+                      {activeTrip.dropoff_address}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            )}
+          </>
+        ) : (
+          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+            <View className="flex-row items-start mb-3">
+              <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
+              <View className="flex-1">
+                <Text variant="caption" color="inverse" className="opacity-50">
+                  {t('trip.pickup_address')}
+                </Text>
                 <Text variant="bodySmall" color="inverse">
-                  {wp.address}
+                  {activeTrip.pickup_address}
                 </Text>
               </View>
             </View>
-          ))}
-          <View className="flex-row items-start">
-            <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="inverse" className="opacity-50">
-                {t('trip.dropoff_address')}
+            {waypoints.map((wp) => (
+              <View key={wp.id} className="flex-row items-start mb-3">
+                <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
+                <View className="flex-1">
+                  <View className="flex-row items-center gap-2">
+                    <Text variant="caption" color="accent" className="opacity-70">
+                      {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
+                    </Text>
+                    {wp.departed_at && (
+                      <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
+                    )}
+                    {wp.arrived_at && !wp.departed_at && (
+                      <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
+                    )}
+                  </View>
+                  <Text variant="bodySmall" color="inverse">
+                    {wp.address}
+                  </Text>
+                </View>
+              </View>
+            ))}
+            <View className="flex-row items-start">
+              <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
+              <View className="flex-1">
+                <Text variant="caption" color="inverse" className="opacity-50">
+                  {t('trip.dropoff_address')}
+                </Text>
+                <Text variant="bodySmall" color="inverse">
+                  {activeTrip.dropoff_address}
+                </Text>
+              </View>
+            </View>
+          </Card>
+        )}
+
+        {/* Fare — only visible during accepted (hidden while driving; completed has its own view) */}
+        {activeTrip.status === 'accepted' && (
+          <View className="flex-row justify-between items-center mb-4 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}>
+            <Text variant="bodySmall" color="inverse" className="opacity-50">
+              {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
+            </Text>
+            <View className="items-end">
+              <Text variant="h4" color="accent">
+                {formatCUP(activeTrip.estimated_fare_cup)}
               </Text>
-              <Text variant="bodySmall" color="inverse">
-                {activeTrip.dropoff_address}
-              </Text>
+              {activeTrip.estimated_fare_trc != null && (
+                <Text variant="caption" color="inverse" className="opacity-50">
+                  ~{formatTRC(activeTrip.estimated_fare_trc)}
+                </Text>
+              )}
             </View>
           </View>
-        </Card>
-
-        {/* Fare */}
-        <View className="flex-row justify-between items-center mb-4 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}>
-          <Text variant="bodySmall" color="inverse" className="opacity-50">
-            {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
-          </Text>
-          <View className="items-end">
-            <Text variant="h4" color="accent">
-              {formatCUP(activeTrip.estimated_fare_cup)}
-            </Text>
-            {activeTrip.estimated_fare_trc != null && (
-              <Text variant="caption" color="inverse" className="opacity-50">
-                ~{formatTRC(activeTrip.estimated_fare_trc)}
-              </Text>
-            )}
-          </View>
-        </View>
+        )}
       </ScrollView>
 
       {/* DT-3: Fixed bottom footer — icon toolbar + action buttons */}
@@ -623,6 +725,16 @@ function TripCompleteView() {
       .catch(() => { /* best-effort: rating still works without rider info */ });
   }, [activeTrip?.id]);
 
+  // DT-6: Auto-advance to home after 5s on completion
+  useEffect(() => {
+    if (activeTrip?.status === 'completed') {
+      const timeout = setTimeout(() => {
+        clearCompletedTrip();
+      }, 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [activeTrip?.status, clearCompletedTrip]);
+
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;
@@ -668,6 +780,21 @@ function TripCompleteView() {
 
   return (
     <View className="flex-1 pt-8 items-center">
+      {/* DT-6: Earnings delta — large green amount at top */}
+      {activeTrip.final_fare_cup != null && (
+        <Text style={{
+          fontSize: 28,
+          fontWeight: '800',
+          color: '#22C55E',
+          textAlign: 'center',
+          marginBottom: 8,
+        }}>
+          {t('trip.earned_this_ride', {
+            amount: `₧${Math.round((activeTrip.final_fare_cup || 0) * 0.85).toLocaleString()}`,
+          })}
+        </Text>
+      )}
+
       <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
         <Ionicons name="checkmark" size={40} color="white" />
       </View>
@@ -676,21 +803,10 @@ function TripCompleteView() {
         {t('trip.trip_completed')}
       </Text>
 
-      <Text variant="h2" color="accent" className="mb-2">
-        {formatCUP(fare)}
+      {/* DT-6: Compressed trip summary — single line */}
+      <Text style={{ fontSize: 14, color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>
+        {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {((activeTrip.actual_distance_m ?? 0) / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
       </Text>
-
-      {/* Trip stats */}
-      {activeTrip.actual_distance_m != null && (
-        <View className="flex-row gap-4 mb-4" accessible={true} accessibilityLabel={`${t('a11y.stat_distance', { ns: 'common', value: `${(activeTrip.actual_distance_m / 1000).toFixed(1)} km` })}, ${t('a11y.stat_duration', { ns: 'common', value: `${Math.round((activeTrip.actual_duration_s ?? 0) / 60)} min` })}`}>
-          <Text variant="caption" color="inverse" className="opacity-50">
-            {(activeTrip.actual_distance_m / 1000).toFixed(1)} km
-          </Text>
-          <Text variant="caption" color="inverse" className="opacity-50">
-            {Math.round((activeTrip.actual_duration_s ?? 0) / 60)} min
-          </Text>
-        </View>
-      )}
 
       {/* Commission breakdown */}
       <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
@@ -773,7 +889,7 @@ function TripCompleteView() {
       )}
 
       <Button
-        title={t('trip.back_to_home', { defaultValue: 'Volver al inicio' })}
+        title={t('trip.done', { defaultValue: 'Listo' })}
         size="lg"
         fullWidth
         onPress={clearCompletedTrip}

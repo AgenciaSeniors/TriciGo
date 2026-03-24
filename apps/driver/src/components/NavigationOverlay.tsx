@@ -14,6 +14,7 @@ interface NavigationOverlayProps {
   remainingDuration_s: number;
   isRerouting: boolean;
   onStop: () => void;
+  destinationLabel?: string;
 }
 
 function formatDistance(meters: number): string {
@@ -38,6 +39,7 @@ function NavigationOverlayInner({
   remainingDuration_s,
   isRerouting,
   onStop,
+  destinationLabel,
 }: NavigationOverlayProps) {
   const { t } = useTranslation('driver');
 
@@ -62,6 +64,20 @@ function NavigationOverlayInner({
     <View className="absolute top-0 left-0 right-0 z-50">
       {/* Main instruction card */}
       <View className="bg-neutral-900 mx-3 mt-3 rounded-2xl overflow-hidden shadow-xl">
+        {/* DT-5: Destination context line */}
+        {destinationLabel && (
+          <View style={{
+            backgroundColor: '#1F2937',
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+            borderBottomWidth: 1,
+            borderBottomColor: '#374151',
+          }}>
+            <Text style={{ fontSize: 12, color: '#9CA3AF' }} numberOfLines={1}>
+              {destinationLabel}
+            </Text>
+          </View>
+        )}
         {/* Current maneuver */}
         <View className="flex-row items-center px-4 py-4 gap-4">
           <View className="w-14 h-14 rounded-xl bg-primary-500 items-center justify-center">

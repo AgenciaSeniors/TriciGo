@@ -96,7 +96,15 @@
     "waypoint_n": "Parada {{n}}",
     "arrive_at_stop": "Llegué a Parada {{n}}",
     "depart_from_stop": "Continuar desde Parada {{n}}",
-    "waypoint_completed": "Parada {{n}} completada"
+    "waypoint_completed": "Parada {{n}} completada",
+    "earned_this_ride": "+{{amount}} este viaje",
+    "passenger_no_show": "Pasajero no aparece",
+    "cancel_no_show": "Cancelar sin cargo",
+    "view_preferences": "Ver preferencias",
+    "hide_preferences": "Ocultar preferencias",
+    "view_full_route": "Ver ruta completa",
+    "hide_route": "Ocultar ruta",
+    "done": "Listo"
   },
 
   "ride": {

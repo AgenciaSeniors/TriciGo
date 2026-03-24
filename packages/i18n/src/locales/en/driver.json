@@ -96,7 +96,15 @@
     "waypoint_n": "Stop {{n}}",
     "arrive_at_stop": "Arrived at Stop {{n}}",
     "depart_from_stop": "Continue from Stop {{n}}",
-    "waypoint_completed": "Stop {{n}} completed"
+    "waypoint_completed": "Stop {{n}} completed",
+    "earned_this_ride": "+{{amount}} this ride",
+    "passenger_no_show": "Passenger no-show",
+    "cancel_no_show": "Cancel - no charge",
+    "view_preferences": "View preferences",
+    "hide_preferences": "Hide preferences",
+    "view_full_route": "View full route",
+    "hide_route": "Hide route",
+    "done": "Done"
   },
 
   "ride": {
