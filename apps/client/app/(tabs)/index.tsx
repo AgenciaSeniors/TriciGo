@@ -1678,7 +1678,7 @@ function SearchingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
-  const { cancelRide } = useRideActions();
+  const { cancelRide, requestEstimate } = useRideActions();
   const routeCoordinates = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
@@ -1716,6 +1716,23 @@ function SearchingView() {
     }).start();
     return () => { progressAnim.stopAnimation(); };
   }, [progressAnim]);
+
+  // I3.1: Search timeout state
+  const [searchTimedOut, setSearchTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearchTimedOut(true), 120_000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // I3.3: Retry handler
+  const handleRetrySearch = useCallback(() => {
+    setSearchTimedOut(false);
+    setSearchPhase(0);
+    progressAnim.setValue(0);
+    Animated.timing(progressAnim, { toValue: 1, duration: 120000, useNativeDriver: false }).start();
+    requestEstimate();
+  }, [progressAnim, requestEstimate]);
 
   const SEARCH_MESSAGES = [
     t('home.searching_best'),
@@ -1755,35 +1772,56 @@ function SearchingView() {
         className="w-full mb-8"
       />
 
-      <ActivityIndicator size="large" color={colors.brand.orange} className="mb-4" />
-
-      <Text variant="h4" className="mb-2 text-center">
-        {t('ride.searching_driver')}
-      </Text>
-      <Animated.View style={{ opacity: searchFadeAnim }}>
-        <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
-          {searchMessage}
-        </Text>
-      </Animated.View>
-
-      {/* UBER-2.1: Thin progress bar showing search timeout */}
-      <View className="w-full px-8 mb-8">
-        <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
-          <Animated.View
-            style={{
-              height: '100%',
-              backgroundColor: colors.brand.orange,
-              borderRadius: 2,
-              width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-            }}
+      {/* I3.2: Timeout UI vs active search UI */}
+      {searchTimedOut ? (
+        <View className="items-center mb-6 px-6">
+          <Ionicons name="alert-circle-outline" size={48} color="#9CA3AF" />
+          <Text variant="h4" className="mt-3 mb-2 text-center">
+            {t('ride.no_driver_found_title')}
+          </Text>
+          <Text variant="bodySmall" color="secondary" className="mb-6 text-center">
+            {t('ride.no_driver_found_subtitle')}
+          </Text>
+          <Button
+            title={t('ride.retry_search')}
+            size="lg"
+            fullWidth
+            onPress={handleRetrySearch}
           />
         </View>
-      </View>
+      ) : (
+        <>
+          <ActivityIndicator size="large" color={colors.brand.orange} className="mb-4" />
 
-      {error && (
-        <Text variant="bodySmall" color="error" className="mb-4 text-center">
-          {error}
-        </Text>
+          <Text variant="h4" className="mb-2 text-center">
+            {t('ride.searching_driver')}
+          </Text>
+          <Animated.View style={{ opacity: searchFadeAnim }}>
+            <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
+              {searchMessage}
+            </Text>
+          </Animated.View>
+
+          {/* UBER-2.1: Thin progress bar showing search timeout */}
+          <View className="w-full px-8 mb-8">
+            <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
+              <Animated.View
+                style={{
+                  height: '100%',
+                  backgroundColor: colors.brand.orange,
+                  borderRadius: 2,
+                  width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                }}
+              />
+            </View>
+          </View>
+
+          {error && (
+            <Text variant="bodySmall" color="error" className="mb-4 text-center">
+              {error}
+            </Text>
+          )}
+        </>
       )}
 
       <Button

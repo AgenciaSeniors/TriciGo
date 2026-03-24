@@ -260,7 +260,12 @@
     "other_options": "Otras opciones",
     "driver_arrived_banner": "¡Tu conductor llegó!",
     "distance_eta_clock": "{{distance}} km · {{eta}} min · llega ~{{time}}",
-    "eta_destination_clock": "{{minutes}} min · llegas ~{{time}}"
+    "eta_destination_clock": "{{minutes}} min · llegas ~{{time}}",
+    "no_driver_found_title": "No encontramos conductor",
+    "no_driver_found_subtitle": "Todos los conductores están ocupados. Puedes intentar de nuevo.",
+    "retry_search": "Reintentar búsqueda",
+    "see_more": "Ver más",
+    "see_less": "Ver menos"
   },
 
   "dispute": {

@@ -293,6 +293,9 @@ export function RideActiveView() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [cancellationFeePreview, setCancellationFeePreview] = useState<import('@tricigo/types').CancellationFeePreview | null>(null);
 
+  // I4.1: Driver card expanded state
+  const [driverExpanded, setDriverExpanded] = useState(false);
+
   // Safety sheet state
   const [safetySheetVisible, setSafetySheetVisible] = useState(false);
   const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string } | null>(null);
@@ -582,14 +585,14 @@ export function RideActiveView() {
           <DriverCard
             driverName={rideWithDriver.driver_name}
             driverAvatarUrl={rideWithDriver.driver_avatar_url}
-            driverRating={rideWithDriver.driver_rating}
-            driverTotalRides={rideWithDriver.driver_total_rides}
+            driverRating={driverExpanded ? rideWithDriver.driver_rating : null}
+            driverTotalRides={driverExpanded ? rideWithDriver.driver_total_rides : null}
             vehicleMake={rideWithDriver.vehicle_make}
             vehicleModel={rideWithDriver.vehicle_model}
             vehicleColor={rideWithDriver.vehicle_color}
             vehiclePlate={rideWithDriver.vehicle_plate}
             vehiclePhotoUrl={rideWithDriver.vehicle_photo_url}
-            vehicleYear={rideWithDriver.vehicle_year}
+            vehicleYear={driverExpanded ? rideWithDriver.vehicle_year : null}
             ridesLabel={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0, defaultValue: '{{count}} viajes' }).replace(/^\d+\s*/, '')}
             actions={
               <>
@@ -630,6 +633,12 @@ export function RideActiveView() {
               </>
             }
           />
+          {/* I4.1: See more / See less toggle */}
+          <Pressable onPress={() => setDriverExpanded(!driverExpanded)}>
+            <Text variant="caption" color="accent" className="text-center mt-2">
+              {driverExpanded ? t('ride.see_less') : t('ride.see_more')}
+            </Text>
+          </Pressable>
         </Animated.View>
       )}
 

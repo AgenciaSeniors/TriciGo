@@ -256,7 +256,12 @@
     "other_options": "Outras opções",
     "driver_arrived_banner": "Seu motorista chegou!",
     "distance_eta_clock": "{{distance}} km · {{eta}} min · chega ~{{time}}",
-    "eta_destination_clock": "{{minutes}} min · chega ~{{time}}"
+    "eta_destination_clock": "{{minutes}} min · chega ~{{time}}",
+    "no_driver_found_title": "Nenhum motorista encontrado",
+    "no_driver_found_subtitle": "Todos os motoristas estão ocupados. Pode tentar novamente.",
+    "retry_search": "Tentar novamente",
+    "see_more": "Ver mais",
+    "see_less": "Ver menos"
   },
 
   "dispute": {

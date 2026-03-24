@@ -260,7 +260,12 @@
     "other_options": "Other options",
     "driver_arrived_banner": "Your driver has arrived!",
     "distance_eta_clock": "{{distance}} km · {{eta}} min · arrives ~{{time}}",
-    "eta_destination_clock": "{{minutes}} min · arriving ~{{time}}"
+    "eta_destination_clock": "{{minutes}} min · arriving ~{{time}}",
+    "no_driver_found_title": "No driver found",
+    "no_driver_found_subtitle": "All drivers are busy. You can try again.",
+    "retry_search": "Retry search",
+    "see_more": "See more",
+    "see_less": "See less"
   },
 
   "dispute": {
