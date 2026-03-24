@@ -15,7 +15,9 @@
     "ineligible_banner": "Sua conta está suspensa por saldo negativo. Recarregue sua carteira para poder aceitar viagens.",
     "ineligible_recharge": "Recarregar carteira",
     "demand_heatmap": "Zonas de demanda",
-    "high_demand_area": "Zona de alta demanda"
+    "high_demand_area": "Zona de alta demanda",
+    "net_earnings": "Seu ganho: ~{{amount}}",
+    "km_away": "{{distance}} km · ~{{minutes}} min"
   },
 
   "trip": {

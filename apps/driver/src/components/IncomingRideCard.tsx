@@ -1,13 +1,13 @@
-import React, { useMemo, useRef, useCallback } from 'react';
-import { View } from 'react-native';
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
+import { View, Animated } from 'react-native';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { Avatar } from '@tricigo/ui/Avatar';
-import { formatCUP, formatTRC, cupToTrcCentavos } from '@tricigo/utils';
+import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { useLocationStore } from '@/stores/location.store';
 import type { Ride } from '@tricigo/types';
 
 interface ServiceConfig {
@@ -31,7 +31,7 @@ interface IncomingRideCardProps {
   riderRating?: number | null;
 }
 
-function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig, riderName, riderAvatarUrl, riderRating }: IncomingRideCardProps) {
+function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
   const acceptingRef = useRef(false);
   const debouncedAccept = useCallback(() => {
@@ -46,10 +46,52 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     onReject?.(ride.id);
   }, [onReject, ride.id]);
 
-  // Calculate fare using the driver's own rate
+  // ── Countdown timer (30s) ──
+  const [secondsLeft, setSecondsLeft] = useState(30);
+  const progressAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onReject?.(ride.id); // Auto-reject when time runs out
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    Animated.timing(progressAnim, {
+      toValue: 0,
+      duration: 30000,
+      useNativeDriver: false,
+    }).start();
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Distance + ETA to pickup ──
+  const driverLat = useLocationStore((s) => s.latitude);
+  const driverLng = useLocationStore((s) => s.longitude);
+
+  const distanceKm = useMemo(() => {
+    if (!driverLat || !driverLng || !ride.pickup_location?.latitude || !ride.pickup_location?.longitude) return null;
+    const meters = haversineDistance(
+      { latitude: driverLat, longitude: driverLng },
+      ride.pickup_location,
+    );
+    return Math.round(meters / 100) / 10;
+  }, [driverLat, driverLng, ride.pickup_location]);
+
+  const etaMinutes = useMemo(() => {
+    if (!distanceKm) return null;
+    return Math.ceil(distanceKm / 0.33); // ~20 km/h average urban speed
+  }, [distanceKm]);
+
+  // ── Net earnings (fare minus 15% commission) ──
   const driverFare = useMemo(() => {
     if (!serviceConfig) {
-      // Fallback: use the platform estimate from the ride
       return { cup: ride.estimated_fare_cup, trc: ride.estimated_fare_trc };
     }
 
@@ -65,11 +107,9 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     const baseFare = Math.max(rawFare, serviceConfig.min_fare_cup);
     const surgedFare = Math.round(baseFare * (ride.surge_multiplier ?? 1));
 
-    // Apply discount
     const discount = ride.discount_amount_cup ?? 0;
     const fareCup = Math.max(surgedFare - discount, 0);
 
-    // Convert to TRC if exchange rate available
     const fareTrc = ride.exchange_rate_usd_cup
       ? cupToTrcCentavos(fareCup, ride.exchange_rate_usd_cup)
       : null;
@@ -77,123 +117,89 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     return { cup: fareCup, trc: fareTrc };
   }, [ride, driverCustomRateCup, serviceConfig]);
 
+  const netEarnings = useMemo(() => {
+    const fare = driverFare.cup || 0;
+    return Math.round(fare * 0.85);
+  }, [driverFare.cup]);
+
   return (
     <AnimatedCard delay={0} duration={300}>
     <Card variant="filled" padding="md" className="bg-neutral-800 mb-3">
-      {/* Rider info */}
-      {riderName && (
-        <View className="flex-row items-center mb-3 pb-3 border-b border-neutral-700" accessible={true} accessibilityLabel={`${riderName}${riderRating != null ? `, ${riderRating.toFixed(1)} ${t('common.stars', { defaultValue: 'stars' })}` : ''}`}>
-          <Avatar uri={riderAvatarUrl} size={36} name={riderName} />
-          <View className="ml-3 flex-1">
-            <Text variant="body" color="inverse" className="font-semibold">
-              {riderName}
-            </Text>
-            {riderRating != null && (
-              <Text variant="caption" color="inverse" className="opacity-60">
-                ★ {riderRating.toFixed(1)}
-              </Text>
-            )}
-          </View>
+      {/* Countdown bar */}
+      <View style={{ height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 8 }}>
+        <Animated.View style={{
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: secondsLeft <= 10 ? '#EF4444' : '#F97316',
+          width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+        }} />
+      </View>
+      <Text style={{ textAlign: 'right', fontSize: 12, color: secondsLeft <= 10 ? '#EF4444' : '#9CA3AF', marginBottom: 4 }}>
+        {secondsLeft}s
+      </Text>
+
+      {/* Distance + ETA to pickup */}
+      {distanceKm !== null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Ionicons name="navigate-outline" size={14} color="#9CA3AF" />
+          <Text style={{ fontSize: 13, color: '#9CA3AF', marginLeft: 4 }}>
+            {distanceKm} km · ~{etaMinutes} min
+          </Text>
         </View>
       )}
 
-      {/* Rider preferences */}
-      {ride.rider_preferences && Object.values(ride.rider_preferences).some(Boolean) && (
-        <View className="flex-row flex-wrap gap-1.5 mb-3 pb-3 border-b border-neutral-700">
-          {ride.rider_preferences.quiet_mode && (
-            <View className="flex-row items-center bg-neutral-700 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="volume-mute" size={12} color="#FFA726" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
-            </View>
-          )}
-          {ride.rider_preferences.temperature === 'cool' && (
-            <View className="flex-row items-center bg-neutral-700 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="snow" size={12} color="#42A5F5" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
-            </View>
-          )}
-          {ride.rider_preferences.temperature === 'warm' && (
-            <View className="flex-row items-center bg-neutral-700 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="sunny" size={12} color="#FFA726" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
-            </View>
-          )}
-          {ride.rider_preferences.conversation_ok && (
-            <View className="flex-row items-center bg-neutral-700 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
-            </View>
-          )}
-          {ride.rider_preferences.luggage_trunk && (
-            <View className="flex-row items-center bg-neutral-700 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="briefcase" size={12} color="#AB47BC" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
-            </View>
-          )}
-        </View>
-      )}
+      {/* Net earnings — most prominent */}
+      <Text style={{ fontSize: 22, fontWeight: '800', color: '#22C55E', marginBottom: 4 }}>
+        {t('home.net_earnings', { amount: `₧${netEarnings.toLocaleString()}` })}
+      </Text>
+
+      {/* Fare (secondary) */}
+      <View className="mb-3" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>
+        <Text variant="bodySmall" color="inverse" className="opacity-60">
+          {t('trip.total_fare')}: {formatCUP(driverFare.cup)}
+          {driverFare.trc != null ? ` (~${formatTRC(driverFare.trc)})` : ''}
+        </Text>
+      </View>
 
       {/* Pickup */}
       <View className="flex-row items-start mb-2" accessible={true} accessibilityLabel={t('a11y.pickup_address', { ns: 'common', address: ride.pickup_address })}>
         <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-        <View className="flex-1">
-          <Text variant="caption" color="inverse" className="opacity-50">
-            {t('trip.pickup_address')}
-          </Text>
-          <Text variant="bodySmall" color="inverse">
-            {ride.pickup_address}
-          </Text>
-        </View>
+        <Text variant="bodySmall" color="inverse" className="flex-1" numberOfLines={1}>
+          {ride.pickup_address}
+        </Text>
       </View>
 
       {/* Dropoff */}
       <View className="flex-row items-start mb-3" accessible={true} accessibilityLabel={t('a11y.dropoff_address', { ns: 'common', address: ride.dropoff_address })}>
         <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-        <View className="flex-1">
-          <Text variant="caption" color="inverse" className="opacity-50">
-            {t('trip.dropoff_address')}
-          </Text>
-          <Text variant="bodySmall" color="inverse">
-            {ride.dropoff_address}
+        <Text variant="bodySmall" color="inverse" className="flex-1" numberOfLines={1}>
+          {ride.dropoff_address}
+        </Text>
+      </View>
+
+      {/* Service type + payment badges */}
+      <View className="flex-row items-center gap-2 mb-3">
+        <View className="bg-neutral-700 px-2 py-1 rounded">
+          <Ionicons
+            name={ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
+            size={16}
+            color="white"
+            accessibilityLabel={ride.service_type === 'triciclo_basico' ? t('onboarding.triciclo', { defaultValue: 'Triciclo' }) : ride.service_type === 'triciclo_cargo' ? 'Cargo' : ride.service_type === 'moto_standard' ? t('onboarding.moto', { defaultValue: 'Moto' }) : t('onboarding.auto', { defaultValue: 'Auto' })}
+          />
+        </View>
+        {ride.service_type === 'triciclo_cargo' && (
+          <View className="bg-orange-600 px-2 py-1 rounded">
+            <Text variant="caption" color="inverse" className="font-bold">CARGO</Text>
+          </View>
+        )}
+        <View className="bg-neutral-700 px-2 py-1 rounded">
+          <Text variant="caption" color="inverse">
+            {ride.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
           </Text>
         </View>
       </View>
 
-      {/* Info row */}
-      <View className="flex-row items-center justify-between mb-3" accessible={true} accessibilityLabel={`${t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}, ${ride.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}`}>
-        <View>
-          <Text variant="h4" color="accent">
-            {formatCUP(driverFare.cup)}
-          </Text>
-          {driverFare.trc != null && (
-            <Text variant="caption" color="inverse" className="opacity-50">
-              ~{formatTRC(driverFare.trc)}
-            </Text>
-          )}
-        </View>
-        <View className="flex-row gap-2">
-          <View className="bg-neutral-700 px-2 py-1 rounded">
-            <Ionicons
-              name={ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
-              size={16}
-              color="white"
-              accessibilityLabel={ride.service_type === 'triciclo_basico' ? t('onboarding.triciclo', { defaultValue: 'Triciclo' }) : ride.service_type === 'triciclo_cargo' ? 'Cargo' : ride.service_type === 'moto_standard' ? t('onboarding.moto', { defaultValue: 'Moto' }) : t('onboarding.auto', { defaultValue: 'Auto' })}
-            />
-          </View>
-          {ride.service_type === 'triciclo_cargo' && (
-            <View className="bg-orange-600 px-2 py-1 rounded">
-              <Text variant="caption" color="inverse" className="font-bold">CARGO</Text>
-            </View>
-          )}
-          <View className="bg-neutral-700 px-2 py-1 rounded">
-            <Text variant="caption" color="inverse">
-              {ride.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Accept button */}
+      {/* Accept (75%) + Reject (25%) buttons */}
       <View className="flex-row gap-3">
         <View className="flex-1">
           <Button
@@ -204,7 +210,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
             onPress={handleReject}
           />
         </View>
-        <View className="flex-[2]">
+        <View className="flex-[3]">
           <Button
             title={t('home.accept')}
             size="lg"

@@ -15,7 +15,9 @@
     "ineligible_banner": "Your account is suspended due to a negative balance. Recharge your wallet to accept rides.",
     "ineligible_recharge": "Recharge wallet",
     "demand_heatmap": "Demand zones",
-    "high_demand_area": "High demand area"
+    "high_demand_area": "High demand area",
+    "net_earnings": "Your earnings: ~{{amount}}",
+    "km_away": "{{distance}} km · ~{{minutes}} min"
   },
 
   "trip": {

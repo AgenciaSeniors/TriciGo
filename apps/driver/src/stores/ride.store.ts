@@ -42,11 +42,11 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
       incomingRequests: s.incomingRequests.filter((r) => r.id !== rideId),
     })),
 
-  /** Remove requests older than 90 seconds */
+  /** Remove requests older than 30 seconds */
   removeStaleRequests: () =>
     set((s) => {
       const now = Date.now();
-      const fresh = s.incomingRequests.filter((r) => now - r._receivedAt < 90_000);
+      const fresh = s.incomingRequests.filter((r) => now - r._receivedAt < 30_000);
       if (fresh.length === s.incomingRequests.length) return s;
       return { incomingRequests: fresh };
     }),

@@ -82,7 +82,7 @@ export function useIncomingRequests(isOnline: boolean) {
   const { addRequest, removeRequest, removeStaleRequests, clearRequests } = useDriverRideStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Periodically remove stale requests (>90s old)
+  // Periodically remove stale requests (>30s old)
   useEffect(() => {
     const cleanup = setInterval(() => removeStaleRequests(), 15_000);
     return () => clearInterval(cleanup);
