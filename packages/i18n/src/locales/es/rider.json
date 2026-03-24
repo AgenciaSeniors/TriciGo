@@ -33,13 +33,15 @@
     "request_with_details": "Pedir {{service}} · ₧{{fare}} · {{eta}} min",
     "other_services": "Otras opciones",
     "passengers_short": "{{count}} pax",
-    "eta_with_clock": "~{{minutes}} min · llega ~{{time}}"
+    "eta_with_clock": "~{{minutes}} min · llega ~{{time}}",
+    "view_details": "Ver detalles",
+    "hide_details": "Ocultar detalles"
   },
 
   "ride": {
     "request": "Solicitar viaje",
     "searching_driver": "Buscando conductor...",
-    "driver_assigned": "Conductor asignado",
+    "driver_assigned": "\u00a1Conductor asignado!",
     "driver_arriving": "Tu conductor está en camino",
     "driver_arrived": "Tu conductor llegó",
     "in_progress": "En viaje",

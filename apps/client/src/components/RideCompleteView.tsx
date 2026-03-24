@@ -199,7 +199,7 @@ export function RideCompleteView() {
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
-      setTimeout(() => resetAll(), 3000);
+      setTimeout(() => resetAll(), 5000);
     } catch (err) {
       logger.error('Error submitting review', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
@@ -274,6 +274,13 @@ export function RideCompleteView() {
             <Text variant="bodySmall" color="accent">{t('ride.invite_friends')} →</Text>
           </Pressable>
         )}
+        <Button
+          title={t('ride.done', { defaultValue: 'Listo' })}
+          size="lg"
+          variant="outline"
+          onPress={() => resetAll()}
+          style={{ marginTop: 16 }}
+        />
       </Animated.View>
     );
   }
@@ -461,11 +468,9 @@ export function RideCompleteView() {
           </Text>
 
           {/* Skip rating */}
-          {!selectedRating && (
-            <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating')}>
-              <Text variant="bodySmall" color="tertiary">{t('ride.skip_rating')}</Text>
-            </Pressable>
-          )}
+          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating')}>
+            <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating')}</Text>
+          </Pressable>
 
           {/* Tip section (alongside rating) */}
           {activeRide.payment_method !== 'cash' && !tipSent && (

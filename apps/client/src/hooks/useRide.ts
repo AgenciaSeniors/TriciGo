@@ -300,6 +300,7 @@ export function useRideActions() {
         if (updated.status === 'accepted') {
           triggerHaptic('success');
           playSound('ride_accepted');
+          Toast.show({ type: 'success', text1: i18next.t('ride.driver_assigned', { ns: 'rider' }) });
         }
         if (updated.status === 'driver_en_route' && prevRide?.status === 'accepted') {
           triggerHaptic('light');

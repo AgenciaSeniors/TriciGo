@@ -1135,10 +1135,11 @@ function SelectingView() {
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
-  const { draft, fareEstimate, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences } = useRideStore();
+  const { draft, fareEstimate, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
   const [promoExpanded, setPromoExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
   const preferencesEnabled = useFeatureFlag('ride_preferences_enabled');
   const { accounts: corporateAccounts } = useCorporateAccounts();
@@ -1270,41 +1271,6 @@ function ReviewingView() {
         )}
       </Card>
 
-      {/* Corporate account info */}
-      {draft.corporateAccountId && (() => {
-        const corp = corporateAccounts.find((a) => a.id === draft.corporateAccountId);
-        if (!corp) return null;
-        const remaining = corp.monthly_budget_trc > 0
-          ? corp.monthly_budget_trc - corp.current_month_spent
-          : null;
-        return (
-          <Card variant="filled" padding="md" className="mb-4" style={{ backgroundColor: 'rgba(255, 77, 0, 0.06)' }}>
-            <View className="flex-row items-center mb-1">
-              <Ionicons name="business-outline" size={16} color={colors.brand.orange} />
-              <Text variant="bodySmall" className="ml-2 font-bold">
-                {corp.name}
-              </Text>
-            </View>
-            {remaining != null && (
-              <Text variant="caption" color="secondary">
-                {t('corporate.budget_remaining', {
-                  amount: formatTRC(remaining),
-                  defaultValue: 'Presupuesto restante: {{amount}}',
-                })}
-              </Text>
-            )}
-            {corp.per_ride_cap_trc > 0 && (
-              <Text variant="caption" color="secondary">
-                {t('corporate.per_ride_cap', {
-                  amount: formatTRC(corp.per_ride_cap_trc),
-                  defaultValue: 'Máximo por viaje: {{amount}}',
-                })}
-              </Text>
-            )}
-          </Card>
-        );
-      })()}
-
       {/* UBER-1.1: Recommended service PRIMARY card */}
       <View
         className="border-2 border-primary-500 rounded-xl p-4 mb-3 relative"
@@ -1381,52 +1347,21 @@ function ReviewingView() {
         </ScrollView>
       </View>
 
-      {/* Fare breakdown */}
-      <View className="mb-4">
-        <FareBreakdownCard
-          title={t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
-          baseFareCup={fareEstimate.base_fare_cup}
-          distanceM={fareEstimate.estimated_distance_m}
-          perKmRateCup={fareEstimate.per_km_rate_cup}
-          durationS={fareEstimate.estimated_duration_s}
-          perMinRateCup={fareEstimate.per_minute_rate_cup}
-          surgeMultiplier={fareEstimate.surge_multiplier ?? 1}
-          surgeLabel={fareEstimate.surge_multiplier && fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { defaultValue: 'Tarifa dinámica' }) : undefined}
-          surgeType={fareEstimate.surge_type}
-          totalCup={fareEstimate.estimated_fare_cup}
-          totalTrc={fareEstimate.estimated_fare_trc}
-          totalLabel={t('ride.estimated_fare')}
-          discountTrc={discount}
-          discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
-          minFareApplied={fareEstimate.min_fare_applied}
-          minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
-          fareRangeMinTrc={fareEstimate.fare_range_min_trc}
-          fareRangeMaxTrc={fareEstimate.fare_range_max_trc}
-          fareRangeLabel={t('ride.fare_range', { defaultValue: 'Rango estimado' })}
-          insurancePremiumTrc={draft.insuranceSelected ? (fareEstimate.insurance_premium_trc ?? 0) : 0}
-          insuranceLabel={draft.insuranceSelected ? t('ride.insurance_premium', { defaultValue: 'Seguro de viaje' }) : undefined}
-          paymentMethod={draft.paymentMethod === 'tricicoin' ? 'tricicoin' : 'cash'}
-          labels={{
-            baseFare: t('ride.base_fare'),
-            distanceCharge: t('ride.distance_charge'),
-            timeCharge: t('ride.time_charge'),
-            subtotal: t('ride.subtotal', { defaultValue: 'Subtotal' }),
-          }}
-        />
-      </View>
-
-      {/* U1.4: Fare range context */}
-      {fareEstimate.estimated_fare_cup > 0 && (
-        <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
-          {t('home.usual_fare_range', {
-            low: Math.round(fareEstimate.estimated_fare_cup * 0.85).toLocaleString(),
-            high: Math.round(fareEstimate.estimated_fare_cup * 1.15).toLocaleString(),
-            defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
-          })}
-        </Text>
+      {/* ETA display */}
+      {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
+        <View className="flex-row items-center mb-4 px-1">
+          <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
+          <Text variant="bodySmall" color="secondary" className="ml-2">
+            {t('home.eta_with_clock', {
+              minutes: Math.ceil(fareEstimate.estimated_duration_s / 60),
+              time: formatArrivalTime(Math.ceil(fareEstimate.estimated_duration_s / 60)),
+              defaultValue: '~{{minutes}} min · llega ~{{time}}',
+            })}
+          </Text>
+        </View>
       )}
 
-      {/* Surge pricing explanation card (8.1) */}
+      {/* Surge pricing alert (always visible when active) */}
       {fareEstimate.surge_multiplier != null && fareEstimate.surge_multiplier > 1 && (
         <View
           className="flex-row items-center rounded-xl px-4 py-3 mb-4"
@@ -1443,196 +1378,6 @@ function ReviewingView() {
             </Text>
           </View>
         </View>
-      )}
-
-      {/* ETA display */}
-      {fareEstimate.estimated_duration_s != null && fareEstimate.estimated_duration_s > 0 && (
-        <View className="flex-row items-center mb-4 px-1">
-          <Ionicons name="time-outline" size={16} color={colors.neutral[500]} />
-          <Text variant="bodySmall" color="secondary" className="ml-2">
-            {t('home.eta_with_clock', {
-              minutes: Math.ceil(fareEstimate.estimated_duration_s / 60),
-              time: formatArrivalTime(Math.ceil(fareEstimate.estimated_duration_s / 60)),
-              defaultValue: '~{{minutes}} min · llega ~{{time}}',
-            })}
-          </Text>
-        </View>
-      )}
-
-      {/* Trip insurance toggle */}
-      {insuranceEnabled && fareEstimate.insurance_available && fareEstimate.insurance_premium_trc != null && (
-        <Pressable
-          className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
-            draft.insuranceSelected ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-          }`}
-          onPress={() => setInsurance(!draft.insuranceSelected)}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: draft.insuranceSelected }}
-          accessibilityLabel={t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
-        >
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={20}
-            color={draft.insuranceSelected ? colors.brand.orange : colors.neutral[500]}
-          />
-          <View className="flex-1 ml-3">
-            <Text variant="body" color={draft.insuranceSelected ? 'primary' : undefined}>
-              {t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
-            </Text>
-            <Text variant="caption" color="secondary">
-              {fareEstimate.insurance_coverage_desc ?? t('ride.insurance_desc', { defaultValue: 'Cobertura por accidentes y daños' })}
-              {' · '}
-              {formatTRC(fareEstimate.insurance_premium_trc)}
-            </Text>
-          </View>
-          <Switch
-            value={draft.insuranceSelected}
-            onValueChange={(val) => setInsurance(val)}
-            trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
-            thumbColor="white"
-          />
-        </Pressable>
-      )}
-
-      {/* Promo code */}
-      {!promoExpanded && !promoResult?.valid ? (
-        <Pressable
-          className="mb-6 py-2"
-          onPress={() => setPromoExpanded(true)}
-        >
-          <Text variant="bodySmall" color="accent" className="text-center underline">
-            {t('home.have_promo_code', { defaultValue: '¿Tienes un código?' })}
-          </Text>
-        </Pressable>
-      ) : (
-        <Card variant="outlined" padding="md" className="mb-6">
-          <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
-          <View className="flex-row gap-2">
-            <View className="flex-1">
-              <Input
-                placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
-                value={promoCode}
-                onChangeText={setPromoCode}
-                autoCapitalize="characters"
-              />
-            </View>
-            <Button
-              title={t('ride.apply', { defaultValue: 'Aplicar' })}
-              size="sm"
-              variant="outline"
-              onPress={validatePromo}
-              loading={validatingPromo}
-              disabled={!promoCode.trim()}
-            />
-          </View>
-          {promoResult && (
-            <Text
-              variant="caption"
-              color={promoResult.valid ? 'accent' : 'error'}
-              className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
-            >
-              {promoResult.valid
-                ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
-                : promoResult.error ?? t('ride.promo_invalid')}
-            </Text>
-          )}
-        </Card>
-      )}
-
-      {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
-      {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
-        <>
-          <Pressable
-            className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${
-              splits.length > 0 ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-            }`}
-            onPress={() => setSplitSheetVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
-          >
-            <Ionicons
-              name="people-outline"
-              size={20}
-              color={splits.length > 0 ? colors.brand.orange : colors.neutral[500]}
-            />
-            <Text
-              variant="body"
-              color={splits.length > 0 ? 'accent' : 'secondary'}
-              className="ml-3 flex-1"
-            >
-              {splits.length > 0
-                ? t('ride.split_with_count', {
-                    count: splits.length,
-                    defaultValue: 'Dividido con {{count}} persona(s)',
-                  })
-                : t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
-          </Pressable>
-
-          <FareSplitSheet
-            visible={splitSheetVisible}
-            onClose={() => setSplitSheetVisible(false)}
-            rideId={activeRide?.id ?? ''}
-            estimatedFareTrc={fareEstimate.estimated_fare_trc}
-          />
-        </>
-      )}
-
-      {/* Ride preferences */}
-      {preferencesEnabled && (
-        <Pressable
-          className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
-            Object.values(draft.ridePreferences).some(Boolean) ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-          }`}
-          onPress={() => router.push('/profile/ride-preferences')}
-          accessibilityRole="button"
-          accessibilityLabel={t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
-        >
-          <Ionicons
-            name="options-outline"
-            size={20}
-            color={Object.values(draft.ridePreferences).some(Boolean) ? colors.brand.orange : colors.neutral[500]}
-          />
-          <View className="flex-1 ml-3">
-            <Text
-              variant="body"
-              color={Object.values(draft.ridePreferences).some(Boolean) ? 'accent' : 'secondary'}
-            >
-              {t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
-            </Text>
-            {Object.values(draft.ridePreferences).some(Boolean) && (
-              <View className="flex-row flex-wrap gap-1 mt-1">
-                {draft.ridePreferences.quiet_mode && (
-                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
-                    <Text className="text-xs text-primary-700">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
-                  </View>
-                )}
-                {draft.ridePreferences.temperature === 'cool' && (
-                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
-                    <Text className="text-xs text-primary-700">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
-                  </View>
-                )}
-                {draft.ridePreferences.temperature === 'warm' && (
-                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
-                    <Text className="text-xs text-primary-700">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
-                  </View>
-                )}
-                {draft.ridePreferences.conversation_ok && (
-                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
-                    <Text className="text-xs text-primary-700">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
-                  </View>
-                )}
-                {draft.ridePreferences.luggage_trunk && (
-                  <View className="bg-primary-100 px-2 py-0.5 rounded-full">
-                    <Text className="text-xs text-primary-700">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
-        </Pressable>
       )}
 
       {/* Inline error banner with retry */}
@@ -1668,6 +1413,277 @@ function ReviewingView() {
         fullWidth
         onPress={() => setFlowStep('selecting')}
       />
+
+      {/* View details toggle */}
+      <Pressable
+        className="py-3 items-center"
+        onPress={() => setDetailsExpanded(!detailsExpanded)}
+      >
+        <Text variant="bodySmall" color="accent" className="underline">
+          {detailsExpanded ? t('home.hide_details') : t('home.view_details')}
+        </Text>
+      </Pressable>
+
+      {/* Collapsible details section */}
+      {detailsExpanded && (
+        <>
+          {/* Fare breakdown */}
+          <View className="mb-4">
+            <FareBreakdownCard
+              title={t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
+              baseFareCup={fareEstimate.base_fare_cup}
+              distanceM={fareEstimate.estimated_distance_m}
+              perKmRateCup={fareEstimate.per_km_rate_cup}
+              durationS={fareEstimate.estimated_duration_s}
+              perMinRateCup={fareEstimate.per_minute_rate_cup}
+              surgeMultiplier={fareEstimate.surge_multiplier ?? 1}
+              surgeLabel={fareEstimate.surge_multiplier && fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { defaultValue: 'Tarifa dinámica' }) : undefined}
+              surgeType={fareEstimate.surge_type}
+              totalCup={fareEstimate.estimated_fare_cup}
+              totalTrc={fareEstimate.estimated_fare_trc}
+              totalLabel={t('ride.estimated_fare')}
+              discountTrc={discount}
+              discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
+              minFareApplied={fareEstimate.min_fare_applied}
+              minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
+              fareRangeMinTrc={fareEstimate.fare_range_min_trc}
+              fareRangeMaxTrc={fareEstimate.fare_range_max_trc}
+              fareRangeLabel={t('ride.fare_range', { defaultValue: 'Rango estimado' })}
+              insurancePremiumTrc={draft.insuranceSelected ? (fareEstimate.insurance_premium_trc ?? 0) : 0}
+              insuranceLabel={draft.insuranceSelected ? t('ride.insurance_premium', { defaultValue: 'Seguro de viaje' }) : undefined}
+              paymentMethod={draft.paymentMethod === 'tricicoin' ? 'tricicoin' : 'cash'}
+              labels={{
+                baseFare: t('ride.base_fare'),
+                distanceCharge: t('ride.distance_charge'),
+                timeCharge: t('ride.time_charge'),
+                subtotal: t('ride.subtotal', { defaultValue: 'Subtotal' }),
+              }}
+            />
+          </View>
+
+          {/* U1.4: Fare range context */}
+          {fareEstimate.estimated_fare_cup > 0 && (
+            <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
+              {t('home.usual_fare_range', {
+                low: Math.round(fareEstimate.estimated_fare_cup * 0.85).toLocaleString(),
+                high: Math.round(fareEstimate.estimated_fare_cup * 1.15).toLocaleString(),
+                defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
+              })}
+            </Text>
+          )}
+
+          {/* Trip insurance toggle */}
+          {insuranceEnabled && fareEstimate.insurance_available && fareEstimate.insurance_premium_trc != null && (
+            <Pressable
+              className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
+                draft.insuranceSelected ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+              }`}
+              onPress={() => setInsurance(!draft.insuranceSelected)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: draft.insuranceSelected }}
+              accessibilityLabel={t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={draft.insuranceSelected ? colors.brand.orange : colors.neutral[500]}
+              />
+              <View className="flex-1 ml-3">
+                <Text variant="body" color={draft.insuranceSelected ? 'primary' : undefined}>
+                  {t('ride.insurance_toggle', { defaultValue: 'Seguro de viaje' })}
+                </Text>
+                <Text variant="caption" color="secondary">
+                  {fareEstimate.insurance_coverage_desc ?? t('ride.insurance_desc', { defaultValue: 'Cobertura por accidentes y daños' })}
+                  {' · '}
+                  {formatTRC(fareEstimate.insurance_premium_trc)}
+                </Text>
+              </View>
+              <Switch
+                value={draft.insuranceSelected}
+                onValueChange={(val) => setInsurance(val)}
+                trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
+                thumbColor="white"
+              />
+            </Pressable>
+          )}
+
+          {/* Promo code */}
+          {!promoExpanded && !promoResult?.valid ? (
+            <Pressable
+              className="mb-6 py-2"
+              onPress={() => setPromoExpanded(true)}
+            >
+              <Text variant="bodySmall" color="accent" className="text-center underline">
+                {t('home.have_promo_code', { defaultValue: '¿Tienes un código?' })}
+              </Text>
+            </Pressable>
+          ) : (
+            <Card variant="outlined" padding="md" className="mb-6">
+              <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
+              <View className="flex-row gap-2">
+                <View className="flex-1">
+                  <Input
+                    placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
+                    value={promoCode}
+                    onChangeText={setPromoCode}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <Button
+                  title={t('ride.apply', { defaultValue: 'Aplicar' })}
+                  size="sm"
+                  variant="outline"
+                  onPress={validatePromo}
+                  loading={validatingPromo}
+                  disabled={!promoCode.trim()}
+                />
+              </View>
+              {promoResult && (
+                <Text
+                  variant="caption"
+                  color={promoResult.valid ? 'accent' : 'error'}
+                  className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
+                >
+                  {promoResult.valid
+                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
+                    : promoResult.error ?? t('ride.promo_invalid')}
+                </Text>
+              )}
+            </Card>
+          )}
+
+          {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
+          {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
+            <>
+              <Pressable
+                className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${
+                  splits.length > 0 ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+                }`}
+                onPress={() => setSplitSheetVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={20}
+                  color={splits.length > 0 ? colors.brand.orange : colors.neutral[500]}
+                />
+                <Text
+                  variant="body"
+                  color={splits.length > 0 ? 'accent' : 'secondary'}
+                  className="ml-3 flex-1"
+                >
+                  {splits.length > 0
+                    ? t('ride.split_with_count', {
+                        count: splits.length,
+                        defaultValue: 'Dividido con {{count}} persona(s)',
+                      })
+                    : t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+              </Pressable>
+
+              <FareSplitSheet
+                visible={splitSheetVisible}
+                onClose={() => setSplitSheetVisible(false)}
+                rideId={activeRide?.id ?? ''}
+                estimatedFareTrc={fareEstimate.estimated_fare_trc}
+              />
+            </>
+          )}
+
+          {/* Ride preferences */}
+          {preferencesEnabled && (
+            <Pressable
+              className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
+                Object.values(draft.ridePreferences).some(Boolean) ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+              }`}
+              onPress={() => router.push('/profile/ride-preferences')}
+              accessibilityRole="button"
+              accessibilityLabel={t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+            >
+              <Ionicons
+                name="options-outline"
+                size={20}
+                color={Object.values(draft.ridePreferences).some(Boolean) ? colors.brand.orange : colors.neutral[500]}
+              />
+              <View className="flex-1 ml-3">
+                <Text
+                  variant="body"
+                  color={Object.values(draft.ridePreferences).some(Boolean) ? 'accent' : 'secondary'}
+                >
+                  {t('ride.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+                </Text>
+                {Object.values(draft.ridePreferences).some(Boolean) && (
+                  <View className="flex-row flex-wrap gap-1 mt-1">
+                    {draft.ridePreferences.quiet_mode && (
+                      <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                        <Text className="text-xs text-primary-700">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
+                      </View>
+                    )}
+                    {draft.ridePreferences.temperature === 'cool' && (
+                      <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                        <Text className="text-xs text-primary-700">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
+                      </View>
+                    )}
+                    {draft.ridePreferences.temperature === 'warm' && (
+                      <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                        <Text className="text-xs text-primary-700">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
+                      </View>
+                    )}
+                    {draft.ridePreferences.conversation_ok && (
+                      <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                        <Text className="text-xs text-primary-700">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
+                      </View>
+                    )}
+                    {draft.ridePreferences.luggage_trunk && (
+                      <View className="bg-primary-100 px-2 py-0.5 rounded-full">
+                        <Text className="text-xs text-primary-700">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+            </Pressable>
+          )}
+
+          {/* Corporate account info */}
+          {draft.corporateAccountId && (() => {
+            const corp = corporateAccounts.find((a) => a.id === draft.corporateAccountId);
+            if (!corp) return null;
+            const remaining = corp.monthly_budget_trc > 0
+              ? corp.monthly_budget_trc - corp.current_month_spent
+              : null;
+            return (
+              <Card variant="filled" padding="md" className="mb-4" style={{ backgroundColor: 'rgba(255, 77, 0, 0.06)' }}>
+                <View className="flex-row items-center mb-1">
+                  <Ionicons name="business-outline" size={16} color={colors.brand.orange} />
+                  <Text variant="bodySmall" className="ml-2 font-bold">
+                    {corp.name}
+                  </Text>
+                </View>
+                {remaining != null && (
+                  <Text variant="caption" color="secondary">
+                    {t('corporate.budget_remaining', {
+                      amount: formatTRC(remaining),
+                      defaultValue: 'Presupuesto restante: {{amount}}',
+                    })}
+                  </Text>
+                )}
+                {corp.per_ride_cap_trc > 0 && (
+                  <Text variant="caption" color="secondary">
+                    {t('corporate.per_ride_cap', {
+                      amount: formatTRC(corp.per_ride_cap_trc),
+                      defaultValue: 'Máximo por viaje: {{amount}}',
+                    })}
+                  </Text>
+                )}
+              </Card>
+            );
+          })()}
+        </>
+      )}
     </View>
   );
 }
