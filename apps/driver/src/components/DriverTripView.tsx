@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Pressable, Linking, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { View, ScrollView, Pressable, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
@@ -198,6 +198,28 @@ export function DriverTripView() {
     rideStatus: activeTrip?.status ?? null,
   });
 
+  // DT-3: Color-coded action button by phase
+  const actionButtonColor = useMemo(() => {
+    switch (activeTrip?.status) {
+      case 'accepted': return '#3B82F6'; // blue
+      case 'driver_en_route': return '#F97316'; // orange
+      case 'arrived_at_pickup': return '#22C55E'; // green
+      case 'in_progress': return '#EF4444'; // red
+      default: return '#F97316'; // orange fallback
+    }
+  }, [activeTrip?.status]);
+
+  // DT-4: Stepper tint by phase
+  const stepperTint = useMemo(() => {
+    switch (activeTrip?.status) {
+      case 'accepted': return 'rgba(59,130,246,0.1)'; // blue tint
+      case 'driver_en_route': return 'rgba(249,115,22,0.1)'; // orange tint
+      case 'arrived_at_pickup': return 'rgba(34,197,94,0.1)'; // green tint
+      case 'in_progress': return 'rgba(168,85,247,0.1)'; // purple tint
+      default: return 'transparent';
+    }
+  }, [activeTrip?.status]);
+
   if (!activeTrip) return null;
 
   // Completed state
@@ -261,319 +283,314 @@ export function DriverTripView() {
   };
 
   return (
-    <View className="flex-1 pt-4">
-      {/* Chained ride banner */}
-      {activeTrip.next_ride_id && (
-        <View className="bg-info px-4 py-3 rounded-xl mb-3 flex-row items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <Ionicons name="link-outline" size={18} color="white" />
-          <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
-            {t('trip.next_ride_queued', { defaultValue: 'Proximo viaje asignado' })}
-          </Text>
-        </View>
-      )}
+    <View style={{ flex: 1 }}>
+      {/* Scrollable content */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140, paddingTop: 16 }}>
+        {/* Chained ride banner */}
+        {activeTrip.next_ride_id && (
+          <View className="bg-info px-4 py-3 rounded-xl mb-3 flex-row items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
+            <Ionicons name="link-outline" size={18} color="white" />
+            <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
+              {t('trip.next_ride_queued', { defaultValue: 'Proximo viaje asignado' })}
+            </Text>
+          </View>
+        )}
 
-      {/* In-app navigation overlay */}
-      {inAppNav.isNavigating && (
-        <NavigationOverlay
-          currentStep={inAppNav.currentStep}
-          nextStep={inAppNav.nextStep}
-          remainingDistance_m={inAppNav.remainingDistance_m}
-          remainingDuration_s={inAppNav.remainingDuration_s}
-          isRerouting={inAppNav.isRerouting}
-          onStop={inAppNav.stopNavigation}
+        {/* In-app navigation overlay */}
+        {inAppNav.isNavigating && (
+          <NavigationOverlay
+            currentStep={inAppNav.currentStep}
+            nextStep={inAppNav.nextStep}
+            remainingDistance_m={inAppNav.remainingDistance_m}
+            remainingDuration_s={inAppNav.remainingDuration_s}
+            isRerouting={inAppNav.isRerouting}
+            onStop={inAppNav.stopNavigation}
+          />
+        )}
+
+        {/* Map with route polyline */}
+        <RideMapView
+          pickupLocation={activeTrip.pickup_location}
+          dropoffLocation={activeTrip.dropoff_location}
+          driverLocation={driverLocation}
+          routeCoordinates={inAppNav.isNavigating && inAppNav.routeCoordinates.length > 0
+            ? inAppNav.routeCoordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }))
+            : routeCoordinates}
+          height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
         />
-      )}
 
-      {/* Map with route polyline */}
-      <RideMapView
-        pickupLocation={activeTrip.pickup_location}
-        dropoffLocation={activeTrip.dropoff_location}
-        driverLocation={driverLocation}
-        routeCoordinates={inAppNav.isNavigating && inAppNav.routeCoordinates.length > 0
-          ? inAppNav.routeCoordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }))
-          : routeCoordinates}
-        height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
-      />
-
-      {/* Navigate button */}
-      {navTarget && (
-        <Pressable
-          onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
-          className="flex-row items-center justify-center bg-blue-600 rounded-xl py-3 mt-3 mb-3 mx-1"
-          accessibilityRole="button"
-          accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
-        >
-          <Ionicons name="navigate" size={20} color="white" />
-          <Text variant="body" color="inverse" className="ml-2 font-bold">
-            {t('trip.navigate', { defaultValue: 'Navegar' })}
-          </Text>
-        </Pressable>
-      )}
-
-      {/* Status stepper */}
-      <StatusStepper
-        steps={TRIP_STEPS}
-        currentStep={activeTrip.status}
-        variant="dark"
-        className="mb-6"
-      />
-
-      {/* ETA Badge */}
-      {etaMinutes !== null && (
-        <View className="items-center mb-3">
-          <ETABadge
-            label={
-              activeTrip.status === 'arrived_at_pickup'
-                ? t('trip.eta_driver_arrived')
-                : activeTrip.status === 'in_progress'
-                  ? t('trip.eta_to_destination', { minutes: etaMinutes })
-                  : t('trip.eta_driver_to_pickup', { minutes: etaMinutes })
-            }
-            isCalculating={isCalculating}
-            urgent={etaMinutes > 0 && etaMinutes <= 3}
+        {/* DT-4: Status stepper with phase-colored tint */}
+        <View style={{ backgroundColor: stepperTint, borderRadius: 12, padding: 8, marginTop: 12, marginBottom: 8 }}>
+          <StatusStepper
+            steps={TRIP_STEPS}
+            currentStep={activeTrip.status}
             variant="dark"
           />
         </View>
-      )}
 
-      {/* Wait timer (visible when arrived at pickup) */}
-      {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at && (
-        <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
-      )}
-
-      {/* Cargo badge */}
-      {activeTrip.service_type === 'triciclo_cargo' && (
-        <View className="flex-row items-center justify-center mb-3 bg-orange-600 rounded-lg py-2 px-4">
-          <Ionicons name="cube" size={16} color="white" />
-          <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">CARGO</Text>
-        </View>
-      )}
-
-      {/* Rider preferences */}
-      {activeTrip.rider_preferences && Object.values(activeTrip.rider_preferences).some(Boolean) && (
-        <View className="flex-row flex-wrap gap-1.5 mb-3 px-1">
-          <Ionicons name="options-outline" size={14} color="#9CA3AF" />
-          {activeTrip.rider_preferences.quiet_mode && (
-            <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="volume-mute" size={12} color="#FFA726" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.temperature === 'cool' && (
-            <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="snow" size={12} color="#42A5F5" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.temperature === 'warm' && (
-            <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="sunny" size={12} color="#FFA726" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.conversation_ok && (
-            <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.luggage_trunk && (
-            <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="briefcase" size={12} color="#AB47BC" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.accessibility_needs?.includes('wheelchair') && (
-            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="accessibility" size={12} color="#64B5F6" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_wheelchair', { defaultValue: 'Silla de ruedas' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.accessibility_needs?.includes('hearing_impaired') && (
-            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="ear" size={12} color="#64B5F6" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_hearing', { defaultValue: 'Dificultad auditiva' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.accessibility_needs?.includes('visual_impaired') && (
-            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="eye-off" size={12} color="#64B5F6" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_visual', { defaultValue: 'Dificultad visual' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.accessibility_needs?.includes('service_animal') && (
-            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="paw" size={12} color="#64B5F6" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_service_animal', { defaultValue: 'Animal de servicio' })}</Text>
-            </View>
-          )}
-          {activeTrip.rider_preferences.accessibility_needs?.includes('extra_space') && (
-            <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
-              <Ionicons name="resize" size={12} color="#64B5F6" />
-              <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_extra_space', { defaultValue: 'Espacio extra' })}</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Route info */}
-      <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
-        <View className="flex-row items-start mb-3">
-          <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="inverse" className="opacity-50">
-              {t('trip.pickup_address')}
-            </Text>
-            <Text variant="bodySmall" color="inverse">
-              {activeTrip.pickup_address}
-            </Text>
+        {/* ETA Badge */}
+        {etaMinutes !== null && (
+          <View className="items-center mb-3">
+            <ETABadge
+              label={
+                activeTrip.status === 'arrived_at_pickup'
+                  ? t('trip.eta_driver_arrived')
+                  : activeTrip.status === 'in_progress'
+                    ? t('trip.eta_to_destination', { minutes: etaMinutes })
+                    : t('trip.eta_driver_to_pickup', { minutes: etaMinutes })
+              }
+              isCalculating={isCalculating}
+              urgent={etaMinutes > 0 && etaMinutes <= 3}
+              variant="dark"
+            />
           </View>
-        </View>
-        {waypoints.map((wp) => (
-          <View key={wp.id} className="flex-row items-start mb-3">
-            <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
-            <View className="flex-1">
-              <View className="flex-row items-center gap-2">
-                <Text variant="caption" color="accent" className="opacity-70">
-                  {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
-                </Text>
-                {wp.departed_at && (
-                  <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
-                )}
-                {wp.arrived_at && !wp.departed_at && (
-                  <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
-                )}
+        )}
+
+        {/* Wait timer (visible when arrived at pickup) */}
+        {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at && (
+          <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
+        )}
+
+        {/* Cargo badge */}
+        {activeTrip.service_type === 'triciclo_cargo' && (
+          <View className="flex-row items-center justify-center mb-3 bg-orange-600 rounded-lg py-2 px-4">
+            <Ionicons name="cube" size={16} color="white" />
+            <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">CARGO</Text>
+          </View>
+        )}
+
+        {/* Rider preferences */}
+        {activeTrip.rider_preferences && Object.values(activeTrip.rider_preferences).some(Boolean) && (
+          <View className="flex-row flex-wrap gap-1.5 mb-3 px-1">
+            <Ionicons name="options-outline" size={14} color="#9CA3AF" />
+            {activeTrip.rider_preferences.quiet_mode && (
+              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="volume-mute" size={12} color="#FFA726" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
               </View>
+            )}
+            {activeTrip.rider_preferences.temperature === 'cool' && (
+              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="snow" size={12} color="#42A5F5" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.temperature === 'warm' && (
+              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="sunny" size={12} color="#FFA726" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.conversation_ok && (
+              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.luggage_trunk && (
+              <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="briefcase" size={12} color="#AB47BC" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.accessibility_needs?.includes('wheelchair') && (
+              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="accessibility" size={12} color="#64B5F6" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_wheelchair', { defaultValue: 'Silla de ruedas' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.accessibility_needs?.includes('hearing_impaired') && (
+              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="ear" size={12} color="#64B5F6" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_hearing', { defaultValue: 'Dificultad auditiva' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.accessibility_needs?.includes('visual_impaired') && (
+              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="eye-off" size={12} color="#64B5F6" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_visual', { defaultValue: 'Dificultad visual' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.accessibility_needs?.includes('service_animal') && (
+              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="paw" size={12} color="#64B5F6" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_service_animal', { defaultValue: 'Animal de servicio' })}</Text>
+              </View>
+            )}
+            {activeTrip.rider_preferences.accessibility_needs?.includes('extra_space') && (
+              <View className="flex-row items-center bg-blue-900 px-2.5 py-1 rounded-full gap-1">
+                <Ionicons name="resize" size={12} color="#64B5F6" />
+                <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_extra_space', { defaultValue: 'Espacio extra' })}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Route info */}
+        <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <View className="flex-row items-start mb-3">
+            <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
+            <View className="flex-1">
+              <Text variant="caption" color="inverse" className="opacity-50">
+                {t('trip.pickup_address')}
+              </Text>
               <Text variant="bodySmall" color="inverse">
-                {wp.address}
+                {activeTrip.pickup_address}
               </Text>
             </View>
           </View>
-        ))}
-        <View className="flex-row items-start">
-          <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-          <View className="flex-1">
-            <Text variant="caption" color="inverse" className="opacity-50">
-              {t('trip.dropoff_address')}
-            </Text>
-            <Text variant="bodySmall" color="inverse">
-              {activeTrip.dropoff_address}
-            </Text>
-          </View>
-        </View>
-      </Card>
-
-      {/* Navigate + Chat + SOS buttons */}
-      <View className="flex-row justify-center gap-3 mb-4">
-        {navTarget && !inAppNav.isNavigating && (
-          <Pressable
-            className="bg-primary-500 px-5 py-3 rounded-full flex-row items-center"
-            onPress={() => inAppNav.startNavigation(navTarget)}
-            accessibilityRole="button"
-            accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
-          >
-            <View className="flex-row items-center gap-2">
-              <Ionicons name="compass-outline" size={18} color="white" />
-              <Text variant="body" color="inverse">{t('trip.navigate_inapp', { defaultValue: 'En app' })}</Text>
+          {waypoints.map((wp) => (
+            <View key={wp.id} className="flex-row items-start mb-3">
+              <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  <Text variant="caption" color="accent" className="opacity-70">
+                    {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
+                  </Text>
+                  {wp.departed_at && (
+                    <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
+                  )}
+                  {wp.arrived_at && !wp.departed_at && (
+                    <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
+                  )}
+                </View>
+                <Text variant="bodySmall" color="inverse">
+                  {wp.address}
+                </Text>
+              </View>
             </View>
-          </Pressable>
-        )}
-        {navTarget && !inAppNav.isNavigating && (
-          <Pressable
-            className="bg-info px-5 py-3 rounded-full flex-row items-center"
-            onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
-            accessibilityRole="button"
-            accessibilityLabel={t('trip.navigate_external', { defaultValue: 'Navegar externo' })}
-          >
-            <View className="flex-row items-center gap-2">
-              <Ionicons name="navigate-outline" size={18} color="white" />
-              <Text variant="body" color="inverse">{t('trip.navigate', { defaultValue: 'Navegar' })}</Text>
+          ))}
+          <View className="flex-row items-start">
+            <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
+            <View className="flex-1">
+              <Text variant="caption" color="inverse" className="opacity-50">
+                {t('trip.dropoff_address')}
+              </Text>
+              <Text variant="bodySmall" color="inverse">
+                {activeTrip.dropoff_address}
+              </Text>
             </View>
-          </Pressable>
-        )}
-        <Pressable
-          className="bg-neutral-700 px-5 py-3 rounded-full flex-row items-center"
-          onPress={() => router.push(`/chat/${activeTrip.id}`)}
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
-        >
-          <View className="flex-row items-center gap-2">
-            <Ionicons name="chatbubble-outline" size={18} color="white" />
-            <Text variant="body" color="inverse">{t('chat.title', { defaultValue: 'Chat' })}</Text>
           </View>
-        </Pressable>
-        <Pressable
-          className="bg-error w-12 h-12 rounded-full items-center justify-center"
-          onPress={handleSOS}
-          accessibilityRole="button"
-          accessibilityLabel="SOS"
-          accessibilityHint={t('trip.sos_body')}
-        >
-          <Text variant="caption" color="inverse" className="font-bold">SOS</Text>
-        </Pressable>
-      </View>
+        </Card>
 
-      {/* Fare */}
-      <View className="flex-row justify-between items-center mb-6 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}>
-        <Text variant="bodySmall" color="inverse" className="opacity-50">
-          {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
-        </Text>
-        <View className="items-end">
-          <Text variant="h4" color="accent">
-            {formatCUP(activeTrip.estimated_fare_cup)}
+        {/* Fare */}
+        <View className="flex-row justify-between items-center mb-4 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}>
+          <Text variant="bodySmall" color="inverse" className="opacity-50">
+            {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
           </Text>
-          {activeTrip.estimated_fare_trc != null && (
-            <Text variant="caption" color="inverse" className="opacity-50">
-              ~{formatTRC(activeTrip.estimated_fare_trc)}
+          <View className="items-end">
+            <Text variant="h4" color="accent">
+              {formatCUP(activeTrip.estimated_fare_cup)}
             </Text>
-          )}
+            {activeTrip.estimated_fare_trc != null && (
+              <Text variant="caption" color="inverse" className="opacity-50">
+                ~{formatTRC(activeTrip.estimated_fare_trc)}
+              </Text>
+            )}
+          </View>
         </View>
+      </ScrollView>
+
+      {/* DT-3: Fixed bottom footer — icon toolbar + action buttons */}
+      <View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#111827',
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#1F2937',
+      }}>
+        {/* Icon toolbar: navigate, in-app nav, chat, SOS */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 }}>
+          {navTarget && !inAppNav.isNavigating && (
+            <Pressable
+              onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
+              style={{ padding: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
+            >
+              <Ionicons name="navigate" size={22} color="#60A5FA" />
+            </Pressable>
+          )}
+          {navTarget && !inAppNav.isNavigating && (
+            <Pressable
+              onPress={() => inAppNav.startNavigation(navTarget)}
+              style={{ padding: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
+            >
+              <Ionicons name="compass" size={22} color="#F97316" />
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => router.push(`/chat/${activeTrip.id}`)}
+            style={{ padding: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
+          >
+            <Ionicons name="chatbubble" size={22} color="#9CA3AF" />
+          </Pressable>
+          <Pressable
+            onPress={handleSOS}
+            style={{ padding: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="SOS"
+            accessibilityHint={t('trip.sos_body')}
+          >
+            <Ionicons name="alert-circle" size={22} color="#EF4444" />
+          </Pressable>
+        </View>
+
+        {/* Waypoint action buttons (arrive / depart) */}
+        {activeTrip.status === 'in_progress' && nextWaypoint && !isAtWaypoint && (
+          <Button
+            title={t('trip.arrive_at_stop', { n: nextWaypoint.sort_order, defaultValue: `Llegué a Parada ${nextWaypoint.sort_order}` })}
+            variant="outline"
+            size="lg"
+            fullWidth
+            onPress={handleArriveAtWaypoint}
+            loading={waypointLoading === nextWaypoint.id}
+            className="mb-2"
+          />
+        )}
+        {activeTrip.status === 'in_progress' && isAtWaypoint && nextWaypoint && (
+          <Button
+            title={t('trip.depart_from_stop', { n: nextWaypoint.sort_order, defaultValue: `Continuar desde Parada ${nextWaypoint.sort_order}` })}
+            size="lg"
+            fullWidth
+            onPress={handleDepartFromWaypoint}
+            loading={waypointLoading === nextWaypoint.id}
+            className="mb-2"
+          />
+        )}
+
+        {/* Main action button — color-coded by phase (hide "Finalizar" while pending waypoints) */}
+        {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && (
+          <Button
+            title={actionLabel}
+            size="lg"
+            fullWidth
+            onPress={debouncedAdvanceStatus}
+            className="mb-2"
+            style={{ backgroundColor: actionButtonColor }}
+          />
+        )}
+
+        {/* Cancel */}
+        {canCancel && (
+          <Button
+            title={t('trip.cancel_trip')}
+            variant="outline"
+            size="lg"
+            fullWidth
+            onPress={handleCancel}
+          />
+        )}
       </View>
-
-      {/* Waypoint action buttons (arrive / depart) */}
-      {activeTrip.status === 'in_progress' && nextWaypoint && !isAtWaypoint && (
-        <Button
-          title={t('trip.arrive_at_stop', { n: nextWaypoint.sort_order, defaultValue: `Llegué a Parada ${nextWaypoint.sort_order}` })}
-          variant="outline"
-          size="lg"
-          fullWidth
-          onPress={handleArriveAtWaypoint}
-          loading={waypointLoading === nextWaypoint.id}
-          className="mb-3"
-        />
-      )}
-      {activeTrip.status === 'in_progress' && isAtWaypoint && nextWaypoint && (
-        <Button
-          title={t('trip.depart_from_stop', { n: nextWaypoint.sort_order, defaultValue: `Continuar desde Parada ${nextWaypoint.sort_order}` })}
-          size="lg"
-          fullWidth
-          onPress={handleDepartFromWaypoint}
-          loading={waypointLoading === nextWaypoint.id}
-          className="mb-3"
-        />
-      )}
-
-      {/* Main action button (hide "Finalizar" while there are pending waypoints) */}
-      {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && (
-        <Button
-          title={actionLabel}
-          size="lg"
-          fullWidth
-          onPress={debouncedAdvanceStatus}
-          className="mb-3"
-        />
-      )}
-
-      {/* Cancel */}
-      {canCancel && (
-        <Button
-          title={t('trip.cancel_trip')}
-          variant="outline"
-          size="lg"
-          fullWidth
-          onPress={handleCancel}
-        />
-      )}
     </View>
   );
 }
