@@ -122,9 +122,23 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     return Math.round(fare * 0.85);
   }, [driverFare.cup]);
 
+  const profitLevel = useMemo(() => {
+    if (!distanceKm || distanceKm <= 0) return 'good';
+    const perKm = netEarnings / distanceKm;
+    if (perKm >= 80) return 'great';
+    if (perKm >= 40) return 'good';
+    return 'short';
+  }, [netEarnings, distanceKm]);
+
+  const cardBorderStyle = profitLevel === 'great'
+    ? { borderColor: '#22C55E', borderWidth: 2 }
+    : profitLevel === 'short'
+      ? { borderColor: '#F59E0B', borderWidth: 2 }
+      : {};
+
   return (
     <AnimatedCard delay={0} duration={300}>
-    <Card variant="filled" padding="md" className="bg-neutral-800 mb-3">
+    <Card variant="filled" padding="md" className="bg-neutral-800 mb-3" style={cardBorderStyle}>
       {/* Countdown bar */}
       <View style={{ height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 8 }}>
         <Animated.View style={{
@@ -149,9 +163,17 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       )}
 
       {/* Net earnings — most prominent */}
-      <Text style={{ fontSize: 22, fontWeight: '800', color: '#22C55E', marginBottom: 4 }}>
-        {t('home.net_earnings', { amount: `₧${netEarnings.toLocaleString()}` })}
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+        {profitLevel === 'great' && (
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', marginRight: 6 }} />
+        )}
+        {profitLevel === 'short' && (
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F59E0B', marginRight: 6 }} />
+        )}
+        <Text style={{ fontSize: 22, fontWeight: '800', color: '#22C55E' }}>
+          {t('home.net_earnings', { amount: `₧${netEarnings.toLocaleString()}` })}
+        </Text>
+      </View>
 
       {/* Fare (secondary) */}
       <View className="mb-3" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>

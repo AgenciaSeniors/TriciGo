@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, FlatList, Image, Animated } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,7 +8,9 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService } from '@tricigo/api';
-import { HAVANA_CENTER, trackEvent } from '@tricigo/utils';
+import { HAVANA_CENTER, trackEvent, haversineDistance } from '@tricigo/utils';
+import { openNavigation } from '@/utils/navigation';
+import { useLocationStore } from '@/stores/location.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -135,6 +138,15 @@ function NativeDriverHomeScreen() {
   const autoAcceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // DE-1.2: Preferred navigation memory
+  const [preferredNav, setPreferredNav] = useState<'inapp' | 'external'>('external');
+
+  useEffect(() => {
+    AsyncStorage.getItem('preferred_nav').then((val) => {
+      if (val === 'inapp' || val === 'external') setPreferredNav(val);
+    }).catch(() => {});
+  }, []);
+
   // DT-2: Today's earnings state
   const [todayEarnings, setTodayEarnings] = useState({ amount: 0, trips: 0 });
 
@@ -209,6 +221,18 @@ function NativeDriverHomeScreen() {
     }
   }, [activeTrip, tripFadeAnim]);
 
+  // DE-1.2: Auto-launch preferred navigation when ride is accepted
+  useEffect(() => {
+    if (!activeTrip || activeTrip.status !== 'accepted') return;
+    const target = activeTrip.pickup_location;
+    if (!target) return;
+
+    if (preferredNav === 'external') {
+      openNavigation(target.latitude, target.longitude);
+    }
+    // In-app nav is handled by DriverTripView component
+  }, [activeTrip?.id, activeTrip?.status]);
+
   // Check financial eligibility on mount and every 60s while online
   useEffect(() => {
     if (!profile?.id) return;
@@ -259,12 +283,37 @@ function NativeDriverHomeScreen() {
 
   const { acceptRide } = useDriverRideActions();
 
+  // DE-1.3: Driver location for profitability calculation
+  const driverLat = useLocationStore((s) => s.latitude);
+  const driverLng = useLocationStore((s) => s.longitude);
+
+  // DE-1.3: Profitability level for first incoming ride (faster auto-accept for great rides)
+  const firstRequest = incomingRequests[0];
+  const firstRequestProfitLevel = useMemo(() => {
+    if (!firstRequest || !driverLat || !driverLng) return 'good';
+    const pickupLat = firstRequest.pickup_location?.latitude;
+    const pickupLng = firstRequest.pickup_location?.longitude;
+    if (!pickupLat || !pickupLng) return 'good';
+    const dist = haversineDistance(
+      { latitude: driverLat, longitude: driverLng },
+      { latitude: pickupLat, longitude: pickupLng },
+    ) / 1000;
+    if (dist <= 0) return 'good';
+    const fare = (firstRequest.estimated_fare_cup || 0) * 0.85;
+    const perKm = fare / dist;
+    if (perKm >= 80) return 'great';
+    if (perKm >= 40) return 'good';
+    return 'short';
+  }, [firstRequest, driverLat, driverLng]);
+
+  const autoAcceptDelay = firstRequestProfitLevel === 'great' ? 2000 : 5000;
+  const autoAcceptSeconds = firstRequestProfitLevel === 'great' ? 2 : 5;
+
   // Auto-accept countdown for first incoming ride when auto_accept_enabled
   useEffect(() => {
-    const firstRequest = incomingRequests[0];
     if (firstRequest && profile?.auto_accept_enabled) {
-      // Start a 5-second countdown
-      setAutoAcceptCountdown(5);
+      // Start countdown (2s for great rides, 5s otherwise)
+      setAutoAcceptCountdown(autoAcceptSeconds);
 
       countdownIntervalRef.current = setInterval(() => {
         setAutoAcceptCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : prev));
@@ -274,7 +323,7 @@ function NativeDriverHomeScreen() {
         acceptRide(firstRequest.id);
         setAutoAcceptCountdown(null);
         if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      }, 5000);
+      }, autoAcceptDelay);
 
       return () => {
         if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);
@@ -285,7 +334,7 @@ function NativeDriverHomeScreen() {
     // No incoming rides or auto-accept off — clear
     setAutoAcceptCountdown(null);
     return undefined;
-  }, [incomingRequests, profile?.auto_accept_enabled, acceptRide]);
+  }, [incomingRequests, profile?.auto_accept_enabled, acceptRide, autoAcceptDelay, autoAcceptSeconds]);
 
   const cancelAutoAccept = useCallback(() => {
     if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);

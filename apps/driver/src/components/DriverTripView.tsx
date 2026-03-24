@@ -20,6 +20,7 @@ import { openNavigation } from '@/utils/navigation';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useDriverETA } from '@/hooks/useDriverETA';
 import { ETABadge } from '@tricigo/ui/ETABadge';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInAppNavigation } from '@/hooks/useInAppNavigation';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
@@ -610,7 +611,10 @@ export function DriverTripView() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 }}>
           {navTarget && !inAppNav.isNavigating && (
             <Pressable
-              onPress={() => openNavigation(navTarget.latitude, navTarget.longitude)}
+              onPress={() => {
+                AsyncStorage.setItem('preferred_nav', 'external');
+                openNavigation(navTarget.latitude, navTarget.longitude);
+              }}
               style={{ padding: 12 }}
               accessibilityRole="button"
               accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
@@ -620,7 +624,10 @@ export function DriverTripView() {
           )}
           {navTarget && !inAppNav.isNavigating && (
             <Pressable
-              onPress={() => inAppNav.startNavigation(navTarget)}
+              onPress={() => {
+                AsyncStorage.setItem('preferred_nav', 'inapp');
+                inAppNav.startNavigation(navTarget);
+              }}
               style={{ padding: 12 }}
               accessibilityRole="button"
               accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
