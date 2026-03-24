@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC, haversineDistance, logger } from '@tricigo/utils';
+import { formatTRC, haversineDistance, logger, formatArrivalTime } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
@@ -69,6 +69,9 @@ export function RideActiveView() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
+  // I2: Green arrival banner scale animation
+  const bannerScaleAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (etaMinutes !== null && etaMinutes > 0 && etaMinutes < 3) {
       const loop = Animated.loop(
@@ -93,6 +96,20 @@ export function RideActiveView() {
       }
     };
   }, [etaMinutes, pulseAnim]);
+
+  // I2: Trigger green banner animation on arrived_at_pickup
+  useEffect(() => {
+    if (activeRide?.status === 'arrived_at_pickup') {
+      Animated.spring(bannerScaleAnim, {
+        toValue: 1,
+        tension: 80,
+        friction: 8,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      bannerScaleAnim.setValue(0);
+    }
+  }, [activeRide?.status, bannerScaleAnim]);
 
   // X2.1: Driver position timeout — show message instead of spinner after 30s
   const [positionTimeoutReached, setPositionTimeoutReached] = useState(false);
@@ -502,6 +519,24 @@ export function RideActiveView() {
         className="mb-6"
       />
 
+      {/* I2: Green arrival banner */}
+      {activeRide.status === 'arrived_at_pickup' && (
+        <Animated.View style={{
+          transform: [{ scale: bannerScaleAnim }],
+          backgroundColor: '#16A34A',
+          borderRadius: 12,
+          paddingVertical: 16,
+          paddingHorizontal: 24,
+          marginHorizontal: 16,
+          marginBottom: 12,
+          alignItems: 'center',
+        }}>
+          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
+            {t('ride.driver_arrived_banner', { ns: 'rider' })}
+          </Text>
+        </Animated.View>
+      )}
+
       {/* Status message */}
       <Text
         variant="h4"
@@ -521,11 +556,15 @@ export function RideActiveView() {
                 activeRide.status === 'arrived_at_pickup'
                   ? t('ride.eta_driver_arrived')
                   : activeRide.status === 'in_progress'
-                    ? t('ride.eta_destination', { minutes: etaMinutes })
+                    ? t('ride.eta_destination_clock', {
+                        minutes: etaMinutes,
+                        time: formatArrivalTime(etaMinutes),
+                      })
                     : activeRide.status === 'driver_en_route' && driverPosition && activeRide.pickup_location
-                      ? t('ride.distance_eta', {
+                      ? t('ride.distance_eta_clock', {
                           distance: (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
                           eta: etaMinutes,
+                          time: formatArrivalTime(etaMinutes),
                         })
                       : t('ride.eta_driver_arriving', { minutes: etaMinutes })
               }

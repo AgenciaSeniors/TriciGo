@@ -253,7 +253,10 @@
     "sos_full": "\ud83d\udea8 SOS — Ligar emergência",
     "sos_auto_notify": "Ligará para 106 e notificará seus contatos",
     "sos_activated": "SOS ativado. Seus contatos foram notificados.",
-    "other_options": "Outras opções"
+    "other_options": "Outras opções",
+    "driver_arrived_banner": "Seu motorista chegou!",
+    "distance_eta_clock": "{{distance}} km · {{eta}} min · chega ~{{time}}",
+    "eta_destination_clock": "{{minutes}} min · chega ~{{time}}"
   },
 
   "dispute": {

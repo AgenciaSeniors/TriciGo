@@ -257,7 +257,10 @@
     "sos_full": "\ud83d\udea8 SOS — Call emergency",
     "sos_auto_notify": "Will call 106 and notify your contacts",
     "sos_activated": "SOS activated. Your contacts were notified.",
-    "other_options": "Other options"
+    "other_options": "Other options",
+    "driver_arrived_banner": "Your driver has arrived!",
+    "distance_eta_clock": "{{distance}} km · {{eta}} min · arrives ~{{time}}",
+    "eta_destination_clock": "{{minutes}} min · arriving ~{{time}}"
   },
 
   "dispute": {

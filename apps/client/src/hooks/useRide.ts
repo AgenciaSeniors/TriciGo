@@ -301,9 +301,15 @@ export function useRideActions() {
           triggerHaptic('success');
           playSound('ride_accepted');
         }
+        if (updated.status === 'driver_en_route' && prevRide?.status === 'accepted') {
+          triggerHaptic('light');
+        }
         if (updated.status === 'arrived_at_pickup') {
-          triggerHaptic('medium');
+          triggerHaptic('heavy');
           playSound('driver_arrived');
+        }
+        if (updated.status === 'in_progress' && prevRide?.status === 'arrived_at_pickup') {
+          triggerHaptic('medium');
         }
         if (updated.status === 'completed') {
           triggerHaptic('success');
