@@ -12,6 +12,8 @@
     "have_promo_code": "Have a promo code?",
     "retry_estimate": "Retry",
     "optional": "optional",
+    "more_options": "More options",
+    "fewer_options": "Fewer options",
     "passenger_capacity_hint": "Capacity: Moto 1, Triciclo 2-3, Auto 1-4",
     "geocode_error": "Could not get the address. Try typing it manually.",
     "surge_active_label": "Dynamic pricing active",

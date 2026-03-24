@@ -12,6 +12,8 @@
     "have_promo_code": "¿Tienes un código?",
     "retry_estimate": "Reintentar",
     "optional": "opcional",
+    "more_options": "Más opciones",
+    "fewer_options": "Menos opciones",
     "passenger_capacity_hint": "Capacidad: Moto 1, Triciclo 2-3, Auto 1-4",
     "geocode_error": "No se pudo obtener la dirección. Intenta escribirla manualmente.",
     "surge_active_label": "Tarifa dinámica activa",

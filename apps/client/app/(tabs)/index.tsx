@@ -583,6 +583,7 @@ function SelectingView() {
     latitude: number; longitude: number; address: string;
   } | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
 
   // UBER-4.4: Load saved payment method on mount
   useEffect(() => {
@@ -727,54 +728,6 @@ function SelectingView() {
         predictions={predictions}
       />
 
-      {/* Waypoints */}
-      {draft.waypoints.map((wp, idx) => (
-        <View key={`waypoint-${idx}`}>
-          <View className="h-2" />
-          <View className="flex-row items-center">
-            <View className="flex-1">
-              <Text variant="label" className="mb-1">
-                {t('ride.stop_n', { n: idx + 1 })}
-              </Text>
-              <AddressSearchInput
-                placeholder={t('ride.stop_n', { n: idx + 1 })}
-                selectedAddress={wp.address || null}
-                onSelect={(address, location) => {
-                  if (!isValidCoordinate(location.latitude, location.longitude)) {
-                    Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-                    return;
-                  }
-                  updateWaypoint(idx, address, location);
-                }}
-              />
-            </View>
-            <Pressable
-              onPress={() => removeWaypoint(idx)}
-              className="ml-2 mt-5 p-2"
-              accessibilityRole="button"
-              accessibilityLabel={t('ride.remove_stop', { defaultValue: `Remove stop ${idx + 1}`, n: idx + 1 })}
-            >
-              <Ionicons name="close-circle" size={24} color={colors.error.DEFAULT} />
-            </Pressable>
-          </View>
-        </View>
-      ))}
-
-      {/* Add stop button */}
-      {draft.waypoints.length < 3 && (
-        <Pressable
-          onPress={addWaypoint}
-          className="flex-row items-center mt-2 mb-2 py-2"
-          accessibilityRole="button"
-          accessibilityLabel={t('ride.add_stop')}
-        >
-          <Ionicons name="add-circle-outline" size={20} color={colors.brand.orange} />
-          <Text variant="bodySmall" color="accent" className="ml-2">
-            {t('ride.add_stop')}
-          </Text>
-        </Pressable>
-      )}
-
       <View className="h-4" />
 
       {/* Service type */}
@@ -912,102 +865,6 @@ function SelectingView() {
         </Card>
       )}
 
-      {/* Passenger count selector */}
-      {draft.serviceType !== 'triciclo_cargo' && draft.serviceType !== 'mensajeria' && (
-        (() => {
-          const maxP = draft.serviceType === 'moto_standard' ? 1
-            : (draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_premium') ? 8
-            : 4; // auto_standard, auto_confort
-          if (maxP <= 1) return null;
-          return (
-            <View className="mb-4">
-              <Text variant="label" className="mb-2">
-                {t('ride.passengers', { defaultValue: 'Pasajeros' })}
-              </Text>
-              <View className="flex-row gap-2">
-                {Array.from({ length: maxP }, (_, i) => i + 1).map((n) => (
-                  <Pressable
-                    key={n}
-                    className={`w-10 h-10 rounded-lg items-center justify-center ${draft.passengerCount === n ? 'bg-primary-500' : 'bg-neutral-100'}`}
-                    onPress={() => setPassengerCount(n)}
-                  >
-                    <Text variant="bodySmall" className={draft.passengerCount === n ? 'text-white font-bold' : 'text-neutral-600'}>
-                      {n}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text variant="caption" color="tertiary" className="mt-2">
-                {t('home.passenger_capacity_hint', { defaultValue: 'Capacidad: Moto 1, Triciclo 2-3, Auto 1-4' })}
-              </Text>
-            </View>
-          );
-        })()
-      )}
-
-      {/* Corporate account toggle */}
-      {corporateAccounts.length > 0 && (
-        <View className="mb-4">
-          <Text variant="label" className="mb-2">
-            {t('corporate.riding_as_label', { defaultValue: 'Cobrar a' })}
-          </Text>
-          <View className="flex-row gap-3" accessibilityRole="radiogroup">
-            <Pressable
-              className={`flex-1 py-3 rounded-xl items-center ${
-                !draft.corporateAccountId ? 'bg-primary-500' : 'bg-neutral-100'
-              }`}
-              onPress={() => setCorporateAccount(null)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: !draft.corporateAccountId }}
-            >
-              <Text
-                variant="caption"
-                color={!draft.corporateAccountId ? 'inverse' : 'secondary'}
-              >
-                {t('corporate.personal')}
-              </Text>
-            </Pressable>
-            {corporateAccounts.map((acc) => (
-              <Pressable
-                key={acc.id}
-                className={`flex-1 py-3 rounded-xl items-center ${
-                  draft.corporateAccountId === acc.id ? 'bg-primary-500' : 'bg-neutral-100'
-                }`}
-                onPress={() => setCorporateAccount(acc.id)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: draft.corporateAccountId === acc.id }}
-              >
-                <Text
-                  variant="caption"
-                  color={draft.corporateAccountId === acc.id ? 'inverse' : 'secondary'}
-                  numberOfLines={1}
-                >
-                  {acc.name}
-                </Text>
-                {acc.monthly_budget_trc > 0 && (
-                  <Text
-                    variant="caption"
-                    color={draft.corporateAccountId === acc.id ? 'inverse' : 'tertiary'}
-                    style={{ fontSize: 9 }}
-                  >
-                    {formatTRC(acc.monthly_budget_trc - acc.current_month_spent)} {t('corporate.remaining', { defaultValue: 'disp.' })}
-                  </Text>
-                )}
-              </Pressable>
-            ))}
-          </View>
-          {draft.corporateAccountId && (
-            <View className="mt-2 bg-primary-50 rounded-lg px-3 py-2">
-              <Text variant="caption" color="accent">
-                {t('corporate.riding_as', {
-                  company: corporateAccounts.find((a) => a.id === draft.corporateAccountId)?.name ?? '',
-                })}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-
       {/* Payment method */}
       {!draft.corporateAccountId && (
         <>
@@ -1036,78 +893,240 @@ function SelectingView() {
         </>
       )}
 
-      {/* Schedule ride */}
-      <View className="mb-6">
-        <Pressable
-          className={`flex-row items-center rounded-xl px-4 py-3 ${
-            draft.scheduledAt ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-          }`}
-          onPress={() => {
-            if (draft.scheduledAt) {
-              setScheduledAt(null);
-            } else {
-              setShowDatePicker(true);
-            }
-          }}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={20}
-            color={draft.scheduledAt ? colors.brand.orange : colors.neutral[500]}
-          />
-          <Text
-            variant="body"
-            color={draft.scheduledAt ? 'accent' : 'secondary'}
-            className="ml-3 flex-1"
-          >
-            {draft.scheduledAt
-              ? `${draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — ${draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}`
-              : t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}
-          </Text>
-          {draft.scheduledAt && (
-            <Ionicons name="close-circle" size={20} color={colors.neutral[400]} />
+      {/* UX-1: Collapsible secondary options toggle */}
+      <Pressable
+        className="py-3 items-center"
+        onPress={() => setSelectingDetailsExpanded(!selectingDetailsExpanded)}
+      >
+        <Text variant="bodySmall" color="accent" className="underline">
+          {selectingDetailsExpanded
+            ? t('home.fewer_options', { defaultValue: 'Menos opciones' })
+            : t('home.more_options', { defaultValue: 'Más opciones' })
+          }
+        </Text>
+      </Pressable>
+
+      {/* UX-1: Collapsible secondary options */}
+      {selectingDetailsExpanded && (
+        <>
+          {/* Waypoints */}
+          {draft.waypoints.map((wp, idx) => (
+            <View key={`waypoint-${idx}`}>
+              <View className="h-2" />
+              <View className="flex-row items-center">
+                <View className="flex-1">
+                  <Text variant="label" className="mb-1">
+                    {t('ride.stop_n', { n: idx + 1 })}
+                  </Text>
+                  <AddressSearchInput
+                    placeholder={t('ride.stop_n', { n: idx + 1 })}
+                    selectedAddress={wp.address || null}
+                    onSelect={(address, location) => {
+                      if (!isValidCoordinate(location.latitude, location.longitude)) {
+                        Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
+                        return;
+                      }
+                      updateWaypoint(idx, address, location);
+                    }}
+                  />
+                </View>
+                <Pressable
+                  onPress={() => removeWaypoint(idx)}
+                  className="ml-2 mt-5 p-2"
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.remove_stop', { defaultValue: `Remove stop ${idx + 1}`, n: idx + 1 })}
+                >
+                  <Ionicons name="close-circle" size={24} color={colors.error.DEFAULT} />
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          {/* Add stop button */}
+          {draft.waypoints.length < 3 && (
+            <Pressable
+              onPress={addWaypoint}
+              className="flex-row items-center mt-2 mb-2 py-2"
+              accessibilityRole="button"
+              accessibilityLabel={t('ride.add_stop')}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.brand.orange} />
+              <Text variant="bodySmall" color="accent" className="ml-2">
+                {t('ride.add_stop')}
+              </Text>
+            </Pressable>
           )}
-        </Pressable>
-      </View>
 
-      {/* Date picker */}
-      {showDatePicker && (
-        <DateTimePicker
-          value={draft.scheduledAt ?? minScheduleDate}
-          mode="date"
-          minimumDate={minScheduleDate}
-          onChange={(_e, date) => {
-            setShowDatePicker(false);
-            if (date) {
-              const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(date);
-              merged.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-              setScheduledAt(merged);
-              // On Android, show time picker right after date
-              if (Platform.OS === 'android') {
-                setTimeout(() => setShowTimePicker(true), 300);
-              } else {
-                setShowTimePicker(true);
-              }
-            }
-          }}
-        />
-      )}
+          {/* Passenger count selector */}
+          {draft.serviceType !== 'triciclo_cargo' && draft.serviceType !== 'mensajeria' && (
+            (() => {
+              const maxP = draft.serviceType === 'moto_standard' ? 1
+                : (draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_premium') ? 8
+                : 4; // auto_standard, auto_confort
+              if (maxP <= 1) return null;
+              return (
+                <View className="mb-4">
+                  <Text variant="label" className="mb-2">
+                    {t('ride.passengers', { defaultValue: 'Pasajeros' })}
+                  </Text>
+                  <View className="flex-row gap-2">
+                    {Array.from({ length: maxP }, (_, i) => i + 1).map((n) => (
+                      <Pressable
+                        key={n}
+                        className={`w-10 h-10 rounded-lg items-center justify-center ${draft.passengerCount === n ? 'bg-primary-500' : 'bg-neutral-100'}`}
+                        onPress={() => setPassengerCount(n)}
+                      >
+                        <Text variant="bodySmall" className={draft.passengerCount === n ? 'text-white font-bold' : 'text-neutral-600'}>
+                          {n}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text variant="caption" color="tertiary" className="mt-2">
+                    {t('home.passenger_capacity_hint', { defaultValue: 'Capacidad: Moto 1, Triciclo 2-3, Auto 1-4' })}
+                  </Text>
+                </View>
+              );
+            })()
+          )}
 
-      {/* Time picker */}
-      {showTimePicker && (
-        <DateTimePicker
-          value={draft.scheduledAt ?? minScheduleDate}
-          mode="time"
-          minimumDate={minScheduleDate}
-          onChange={(_e, time) => {
-            setShowTimePicker(false);
-            if (time) {
-              const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(time);
-              merged.setHours(time.getHours(), time.getMinutes());
-              setScheduledAt(merged);
-            }
-          }}
-        />
+          {/* Corporate account toggle */}
+          {corporateAccounts.length > 0 && (
+            <View className="mb-4">
+              <Text variant="label" className="mb-2">
+                {t('corporate.riding_as_label', { defaultValue: 'Cobrar a' })}
+              </Text>
+              <View className="flex-row gap-3" accessibilityRole="radiogroup">
+                <Pressable
+                  className={`flex-1 py-3 rounded-xl items-center ${
+                    !draft.corporateAccountId ? 'bg-primary-500' : 'bg-neutral-100'
+                  }`}
+                  onPress={() => setCorporateAccount(null)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: !draft.corporateAccountId }}
+                >
+                  <Text
+                    variant="caption"
+                    color={!draft.corporateAccountId ? 'inverse' : 'secondary'}
+                  >
+                    {t('corporate.personal')}
+                  </Text>
+                </Pressable>
+                {corporateAccounts.map((acc) => (
+                  <Pressable
+                    key={acc.id}
+                    className={`flex-1 py-3 rounded-xl items-center ${
+                      draft.corporateAccountId === acc.id ? 'bg-primary-500' : 'bg-neutral-100'
+                    }`}
+                    onPress={() => setCorporateAccount(acc.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: draft.corporateAccountId === acc.id }}
+                  >
+                    <Text
+                      variant="caption"
+                      color={draft.corporateAccountId === acc.id ? 'inverse' : 'secondary'}
+                      numberOfLines={1}
+                    >
+                      {acc.name}
+                    </Text>
+                    {acc.monthly_budget_trc > 0 && (
+                      <Text
+                        variant="caption"
+                        color={draft.corporateAccountId === acc.id ? 'inverse' : 'tertiary'}
+                        style={{ fontSize: 9 }}
+                      >
+                        {formatTRC(acc.monthly_budget_trc - acc.current_month_spent)} {t('corporate.remaining', { defaultValue: 'disp.' })}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+              {draft.corporateAccountId && (
+                <View className="mt-2 bg-primary-50 rounded-lg px-3 py-2">
+                  <Text variant="caption" color="accent">
+                    {t('corporate.riding_as', {
+                      company: corporateAccounts.find((a) => a.id === draft.corporateAccountId)?.name ?? '',
+                    })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Schedule ride */}
+          <View className="mb-6">
+            <Pressable
+              className={`flex-row items-center rounded-xl px-4 py-3 ${
+                draft.scheduledAt ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+              }`}
+              onPress={() => {
+                if (draft.scheduledAt) {
+                  setScheduledAt(null);
+                } else {
+                  setShowDatePicker(true);
+                }
+              }}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={20}
+                color={draft.scheduledAt ? colors.brand.orange : colors.neutral[500]}
+              />
+              <Text
+                variant="body"
+                color={draft.scheduledAt ? 'accent' : 'secondary'}
+                className="ml-3 flex-1"
+              >
+                {draft.scheduledAt
+                  ? `${draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — ${draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}`
+                  : t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}
+              </Text>
+              {draft.scheduledAt && (
+                <Ionicons name="close-circle" size={20} color={colors.neutral[400]} />
+              )}
+            </Pressable>
+          </View>
+
+          {/* Date picker */}
+          {showDatePicker && (
+            <DateTimePicker
+              value={draft.scheduledAt ?? minScheduleDate}
+              mode="date"
+              minimumDate={minScheduleDate}
+              onChange={(_e, date) => {
+                setShowDatePicker(false);
+                if (date) {
+                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(date);
+                  merged.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                  setScheduledAt(merged);
+                  // On Android, show time picker right after date
+                  if (Platform.OS === 'android') {
+                    setTimeout(() => setShowTimePicker(true), 300);
+                  } else {
+                    setShowTimePicker(true);
+                  }
+                }
+              }}
+            />
+          )}
+
+          {/* Time picker */}
+          {showTimePicker && (
+            <DateTimePicker
+              value={draft.scheduledAt ?? minScheduleDate}
+              mode="time"
+              minimumDate={minScheduleDate}
+              onChange={(_e, time) => {
+                setShowTimePicker(false);
+                if (time) {
+                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(time);
+                  merged.setHours(time.getHours(), time.getMinutes());
+                  setScheduledAt(merged);
+                }
+              }}
+            />
+          )}
+        </>
       )}
 
       {error && (
