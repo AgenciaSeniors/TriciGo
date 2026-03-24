@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -305,6 +305,21 @@ export function RideActiveView() {
     }
   }, [rideWithDriver?.driver_name, slideUpAnim]);
 
+  // UBER-2.2: Emotional cancel context based on ride status
+  const cancelContext = useMemo(() => {
+    if (!activeRide) return { emotion: '', fee: '' };
+    const fee = cancellationFeePreview?.fee_amount ?? 0;
+    if (activeRide.status === 'driver_en_route') return {
+      emotion: t('ride.driver_coming', { defaultValue: 'Tu conductor ya viene en camino' }),
+      fee: fee > 0 ? `· ${t('ride.cancel_ride')} (₧${fee})` : `· ${t('ride.cancel_ride')} ${t('cancel_fee_free', { ns: 'rider', defaultValue: 'gratis' })}`,
+    };
+    if (activeRide.status === 'arrived_at_pickup') return {
+      emotion: t('ride.driver_waiting', { defaultValue: 'Tu conductor te está esperando' }),
+      fee: fee > 0 ? `· ${t('ride.cancel_ride')} (₧${fee})` : '',
+    };
+    return { emotion: '', fee: '' };
+  }, [activeRide?.status, cancellationFeePreview, t]);
+
   if (!activeRide) return null;
 
   const canCancel =
@@ -599,14 +614,19 @@ export function RideActiveView() {
 
       {/* Add stop button (only during active trip, max 3 stops) */}
       {activeRide.status === 'in_progress' && waypoints.length < 3 && (
-        <Button
-          title={t('ride.add_stop', { defaultValue: 'Agregar parada' })}
-          variant="outline"
-          size="md"
-          fullWidth
-          onPress={() => setAddStopVisible(true)}
-          className="mb-4"
-        />
+        <View className="mb-4">
+          <Button
+            title={t('ride.add_stop', { defaultValue: 'Agregar parada' })}
+            variant="outline"
+            size="md"
+            fullWidth
+            onPress={() => setAddStopVisible(true)}
+          />
+          {/* UBER-2.3: Waypoint cost/time preview */}
+          <Text variant="caption" color="secondary" className="text-center mt-1">
+            {t('ride.add_stop_preview', { defaultValue: 'Agregar parada · +~₧200 · +~5 min' })}
+          </Text>
+        </View>
       )}
 
       {/* Fare */}
@@ -619,14 +639,24 @@ export function RideActiveView() {
 
       {/* Cancel button */}
       {canCancel && (
-        <Button
-          title={t('ride.cancel_ride')}
-          variant="outline"
-          size="lg"
-          fullWidth
-          onPress={handleCancelPress}
-          loading={previewLoading}
-        />
+        <>
+          <Button
+            title={t('ride.cancel_ride')}
+            variant="outline"
+            size="lg"
+            fullWidth
+            onPress={handleCancelPress}
+            loading={previewLoading}
+          />
+          {/* UBER-2.2: Emotional cancel context */}
+          {cancelContext.emotion !== '' && (
+            <View className="px-4 mt-2">
+              <Text variant="caption" color="secondary" className="text-center">
+                {cancelContext.emotion} {cancelContext.fee}
+              </Text>
+            </View>
+          )}
+        </>
       )}
 
       {/* Cancel unavailable explanation (4.4) */}

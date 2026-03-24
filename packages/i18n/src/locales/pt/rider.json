@@ -25,6 +25,10 @@
     "notifying_drivers": "Notificando motoristas próximos...",
     "expanding_search": "Ampliando busca na sua área...",
     "few_drivers": "Poucos motoristas disponíveis. Continuamos buscando...",
+    "searching_best": "Encontrando o melhor motorista para você...",
+    "checking_nearby": "Verificando motoristas próximos...",
+    "drivers_evaluating": "{{count}} motoristas avaliando...",
+    "expanding_moment": "Ampliando a busca, um momento...",
     "recommended": "Recomendado",
     "request_with_details": "Pedir {{service}} · ₧{{fare}} · {{eta}} min",
     "other_services": "Outras opções",
@@ -241,7 +245,10 @@
     "call_emergency": "Ligar para contato de emergência",
     "first_ride_title": "Sua primeira viagem com TriciGo!",
     "invite_friends": "Convide amigos e ganhe TriciCoins",
-    "thanks_tip": "Obrigado!"
+    "thanks_tip": "Obrigado!",
+    "driver_coming": "Seu motorista já está a caminho",
+    "driver_waiting": "Seu motorista está esperando por você",
+    "add_stop_preview": "Adicionar parada · +~₧200 · +~5 min"
   },
 
   "dispute": {

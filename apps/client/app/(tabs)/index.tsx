@@ -1641,31 +1641,48 @@ function SearchingView() {
     activeRide?.dropoff_location ?? null,
   );
 
-  // U2.2: Progressive search messages
+  // UBER-2.1: 5-phase progressive search messages with fade transitions
   const [searchPhase, setSearchPhase] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const searchFadeAnim = useRef(new Animated.Value(1)).current;
+
+  const fadeAndSetPhase = useCallback((phase: number) => {
+    Animated.timing(searchFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setSearchPhase(phase);
+      Animated.timing(searchFadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    });
+  }, [searchFadeAnim]);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setSearchPhase(1), 30000);
-    const t2 = setTimeout(() => setSearchPhase(2), 60000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+    const timers = [
+      setTimeout(() => { fadeAndSetPhase(1); }, 15000),
+      setTimeout(() => { fadeAndSetPhase(2); }, 30000),
+      setTimeout(() => { fadeAndSetPhase(3); }, 60000),
+      setTimeout(() => { fadeAndSetPhase(4); }, 90000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [fadeAndSetPhase]);
 
-  // Animate text change on phase transition
+  // UBER-2.1: Progress bar animation (0% to 100% over 120s search timeout)
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, {
+    Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
+      duration: 120000,
+      useNativeDriver: false,
     }).start();
-  }, [searchPhase, fadeAnim]);
+    return () => { progressAnim.stopAnimation(); };
+  }, [progressAnim]);
 
-  const searchMessage = searchPhase === 0
-    ? t('home.notifying_drivers')
-    : searchPhase === 1
-      ? t('home.expanding_search')
-      : t('home.few_drivers');
+  const SEARCH_MESSAGES = [
+    t('home.searching_best'),
+    t('home.checking_nearby'),
+    t('home.drivers_evaluating', { count: 2 }),
+    t('home.expanding_moment'),
+    t('home.few_drivers'),
+  ];
+
+  const searchMessage = SEARCH_MESSAGES[searchPhase] ?? SEARCH_MESSAGES[0];
 
   const searchSteps = useMemo(() => [
     { key: 'searching', label: t('ride.searching_driver') },
@@ -1700,11 +1717,25 @@ function SearchingView() {
       <Text variant="h4" className="mb-2 text-center">
         {t('ride.searching_driver')}
       </Text>
-      <Animated.View style={{ opacity: fadeAnim }}>
-        <Text variant="bodySmall" color="secondary" className="mb-8 text-center">
+      <Animated.View style={{ opacity: searchFadeAnim }}>
+        <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
           {searchMessage}
         </Text>
       </Animated.View>
+
+      {/* UBER-2.1: Thin progress bar showing search timeout */}
+      <View className="w-full px-8 mb-8">
+        <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
+          <Animated.View
+            style={{
+              height: '100%',
+              backgroundColor: colors.brand.orange,
+              borderRadius: 2,
+              width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+            }}
+          />
+        </View>
+      </View>
 
       {error && (
         <Text variant="bodySmall" color="error" className="mb-4 text-center">
