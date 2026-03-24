@@ -134,9 +134,11 @@ function NativeDriverHomeScreen() {
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
   const [serviceConfigs, setServiceConfigs] = useState<Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }>>({});
-  const [autoAcceptCountdown, setAutoAcceptCountdown] = useState<number | null>(null);
-  const autoAcceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // OMEGA: Auto-navigation countdown to hot zone
+  const [navCountdown, setNavCountdown] = useState<number | null>(null);
+
+  // OMEGA: Online time tracking for earnings per hour
+  const [onlineSince, setOnlineSince] = useState<number | null>(null);
 
   // DE-2.3: Idle time tracking for demand nudge
   const [idleSince, setIdleSince] = useState<number | null>(null);
@@ -334,62 +336,73 @@ function NativeDriverHomeScreen() {
     return () => clearInterval(interval);
   }, [isOnline, activeTrip, incomingRequests.length, isOnBreak, idleSince, heatmapData, driverLat, driverLng]);
 
-  // DE-1.3: Profitability level for first incoming ride (faster auto-accept for great rides)
-  const firstRequest = incomingRequests[0];
-  const firstRequestProfitLevel = useMemo(() => {
-    if (!firstRequest || !driverLat || !driverLng) return 'good';
-    const pickupLat = firstRequest.pickup_location?.latitude;
-    const pickupLng = firstRequest.pickup_location?.longitude;
-    if (!pickupLat || !pickupLng) return 'good';
-    const dist = haversineDistance(
-      { latitude: driverLat, longitude: driverLng },
-      { latitude: pickupLat, longitude: pickupLng },
-    ) / 1000;
-    if (dist <= 0) return 'good';
-    const fare = (firstRequest.estimated_fare_cup || 0) * 0.85;
-    const perKm = fare / dist;
-    if (perKm >= 80) return 'great';
-    if (perKm >= 40) return 'good';
-    return 'short';
-  }, [firstRequest, driverLat, driverLng]);
-
-  const autoAcceptDelay = firstRequestProfitLevel === 'great' ? 2000 : 5000;
-  const autoAcceptSeconds = firstRequestProfitLevel === 'great' ? 2 : 5;
-
-  // Auto-accept countdown for first incoming ride when auto_accept_enabled
+  // OMEGA: Trigger auto-nav countdown when idle >= 10 min and hot zone found
   useEffect(() => {
-    if (firstRequest && profile?.auto_accept_enabled) {
-      // Start countdown (2s for great rides, 5s otherwise)
-      setAutoAcceptCountdown(autoAcceptSeconds);
-
-      countdownIntervalRef.current = setInterval(() => {
-        setAutoAcceptCountdown((prev) => (prev !== null && prev > 1 ? prev - 1 : prev));
-      }, 1000);
-
-      autoAcceptTimerRef.current = setTimeout(() => {
-        acceptRide(firstRequest.id);
-        setAutoAcceptCountdown(null);
-        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      }, autoAcceptDelay);
-
-      return () => {
-        if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);
-        if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-        setAutoAcceptCountdown(null);
-      };
+    if (idleMinutes >= 10 && nearestHotZone && navCountdown === null) {
+      setNavCountdown(10);
     }
-    // No incoming rides or auto-accept off — clear
-    setAutoAcceptCountdown(null);
-    return undefined;
-  }, [incomingRequests, profile?.auto_accept_enabled, acceptRide, autoAcceptDelay, autoAcceptSeconds]);
+  }, [idleMinutes, nearestHotZone]);
 
-  const cancelAutoAccept = useCallback(() => {
-    if (autoAcceptTimerRef.current) clearTimeout(autoAcceptTimerRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    autoAcceptTimerRef.current = null;
-    countdownIntervalRef.current = null;
-    setAutoAcceptCountdown(null);
+  // OMEGA: Auto-nav countdown timer
+  useEffect(() => {
+    if (navCountdown === null || navCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      if (navCountdown === 1) {
+        // Auto-navigate!
+        openNavigation(nearestHotZone!.lat, nearestHotZone!.lng);
+        setNavCountdown(null);
+        setIdleSince(Date.now()); // Reset idle timer
+      } else {
+        setNavCountdown(navCountdown - 1);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [navCountdown]);
+
+  const cancelAutoNav = useCallback(() => {
+    setNavCountdown(null);
+    // Don't show again for 10 more minutes
+    setIdleSince(Date.now());
   }, []);
+
+  // OMEGA: Wait time estimate based on heatmap proximity
+  const estimatedWaitMinutes = useMemo(() => {
+    if (!heatmapData.length || !driverLat || !driverLng) return null;
+    const nearest = heatmapData
+      .map((p: any) => ({
+        ...p,
+        dist: haversineDistance(
+          { latitude: driverLat, longitude: driverLng },
+          { latitude: p.latitude, longitude: p.longitude },
+        ),
+      }))
+      .sort((a: any, b: any) => a.dist - b.dist)[0];
+    if (!nearest || nearest.dist > 2000) return null;
+    if (nearest.intensity > 0.8) return 3;
+    if (nearest.intensity > 0.5) return 8;
+    if (nearest.intensity > 0.2) return 15;
+    return null;
+  }, [heatmapData, driverLat, driverLng]);
+
+  // OMEGA: Online time tracking for earnings per hour
+  useEffect(() => {
+    if (isOnline && !onlineSince) {
+      const now = Date.now();
+      setOnlineSince(now);
+      // Also try to load from AsyncStorage
+      AsyncStorage.getItem('driver_online_since').then(val => {
+        if (val) setOnlineSince(parseInt(val, 10));
+      }).catch(() => {});
+    } else if (isOnline && onlineSince) {
+      AsyncStorage.setItem('driver_online_since', String(onlineSince)).catch(() => {});
+    } else if (!isOnline) {
+      setOnlineSince(null);
+      AsyncStorage.removeItem('driver_online_since').catch(() => {});
+    }
+  }, [isOnline]);
+
+  const hoursOnline = onlineSince ? Math.max((Date.now() - onlineSince) / 3600000, 0.1) : 0;
+  const perHour = hoursOnline >= 0.5 ? Math.round(todayEarnings.amount / hoursOnline) : 0;
 
   const handleToggleOnline = useCallback(async () => {
     if (!profile || toggling) return; // Bug 38: Prevent rapid toggle
@@ -555,6 +568,7 @@ function NativeDriverHomeScreen() {
                 amount: `\u20A7${todayEarnings.amount.toLocaleString()}`,
                 count: todayEarnings.trips,
               })}
+              {perHour > 0 ? ` · ${t('home.per_hour', { amount: perHour.toLocaleString() })}` : ''}
             </Text>
           </View>
         )}
@@ -619,19 +633,7 @@ function NativeDriverHomeScreen() {
           </View>
         )}
 
-        {/* Auto-accept countdown banner */}
-        {autoAcceptCountdown !== null && (
-          <View className="bg-green-600 rounded-xl p-3 mb-2 flex-row items-center justify-between">
-            <Text variant="body" color="inverse">
-              {t('home.auto_accepting', { defaultValue: 'Aceptando automáticamente en' })} {autoAcceptCountdown}...
-            </Text>
-            <Pressable onPress={cancelAutoAccept}>
-              <Text variant="body" color="inverse" className="font-bold">
-                {t('common.cancel', { defaultValue: 'Cancelar' })}
-              </Text>
-            </Pressable>
-          </View>
-        )}
+        {/* Auto-accept is now handled inside IncomingRideCard (OMEGA) */}
 
         {/* Content based on online state */}
         {isOnline ? (
@@ -656,29 +658,22 @@ function NativeDriverHomeScreen() {
               {heatmapData.length > 0 && (
                 <RideMapView heatmapData={heatmapData} height={200} />
               )}
-              {/* DE-2.3: Demand nudge after 10 min idle */}
-              {idleMinutes >= 10 && nearestHotZone && (
-                <View style={{
-                  backgroundColor: '#1F2937',
-                  borderRadius: 12,
-                  padding: 12,
-                  marginTop: 12,
-                  borderColor: '#F59E0B',
-                  borderWidth: 1,
-                }}>
-                  <Text style={{ color: '#F59E0B', fontSize: 13, marginBottom: 8 }}>
-                    {t('home.no_requests_nudge', { minutes: idleMinutes })}
+              {/* OMEGA: Auto-navigation countdown to hot zone */}
+              {navCountdown !== null && nearestHotZone && (
+                <View style={{ backgroundColor: '#1F2937', borderRadius: 12, padding: 12, marginTop: 12, borderColor: '#F59E0B', borderWidth: 1 }}>
+                  <Text style={{ color: '#F59E0B', fontSize: 14, fontWeight: '600', marginBottom: 4 }}>
+                    {t('home.navigating_to_zone_in', { seconds: navCountdown })}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Text style={{ color: '#9CA3AF', fontSize: 12 }}>
                       {t('home.active_zone_nearby', { distance: nearestHotZone.distance })}
                     </Text>
                     <Pressable
-                      style={{ backgroundColor: '#F97316', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 }}
-                      onPress={() => openNavigation(nearestHotZone.lat, nearestHotZone.lng)}
+                      style={{ backgroundColor: '#374151', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 }}
+                      onPress={cancelAutoNav}
                     >
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                        {t('home.navigate_to_zone', { defaultValue: 'Navegar' })}
+                      <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>
+                        {t('home.stay_here', { defaultValue: 'Quedarme aquí' })}
                       </Text>
                     </Pressable>
                   </View>
@@ -689,6 +684,12 @@ function NativeDriverHomeScreen() {
                 title={t('home.waiting_requests')}
                 description={t('home.waiting_requests_desc', { defaultValue: 'Las solicitudes de viaje aparecerán aquí.' })}
               />
+              {/* OMEGA: Wait time estimate */}
+              {estimatedWaitMinutes && (
+                <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+                  {t('home.next_ride_estimated', { minutes: estimatedWaitMinutes })}
+                </Text>
+              )}
             </View>
           )
         ) : (

@@ -1,10 +1,9 @@
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
-import { View, Animated } from 'react-native';
+import { View, Animated, Pressable } from 'react-native';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
-import { Button } from '@tricigo/ui/Button';
 import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useLocationStore } from '@/stores/location.store';
@@ -33,43 +32,10 @@ interface IncomingRideCardProps {
 
 function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
-  const acceptingRef = useRef(false);
-  const debouncedAccept = useCallback(() => {
-    if (acceptingRef.current) return;
-    acceptingRef.current = true;
-    onAccept(ride.id);
-    // Reset after 3s in case accept fails silently
-    setTimeout(() => { acceptingRef.current = false; }, 3000);
-  }, [onAccept, ride.id]);
 
   const handleReject = useCallback(() => {
     onReject?.(ride.id);
   }, [onReject, ride.id]);
-
-  // ── Countdown timer (30s) ──
-  const [secondsLeft, setSecondsLeft] = useState(30);
-  const progressAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSecondsLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onReject?.(ride.id); // Auto-reject when time runs out
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: 30000,
-      useNativeDriver: false,
-    }).start();
-
-    return () => clearInterval(interval);
-  }, []);
 
   // ── Distance + ETA to pickup ──
   const driverLat = useLocationStore((s) => s.latitude);
@@ -130,6 +96,34 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     return 'short';
   }, [netEarnings, distanceKm]);
 
+  // ── OMEGA: Auto-accept countdown (must be after profitLevel) ──
+  const autoAcceptDuration = profitLevel === 'great' ? 2 : profitLevel === 'good' ? 5 : 8;
+  const countdownProgress = useRef(new Animated.Value(1)).current;
+  const [autoAcceptSecondsLeft, setAutoAcceptSecondsLeft] = useState(autoAcceptDuration);
+
+  useEffect(() => {
+    // Countdown animation
+    Animated.timing(countdownProgress, {
+      toValue: 0,
+      duration: autoAcceptDuration * 1000,
+      useNativeDriver: false,
+    }).start();
+
+    // Seconds countdown
+    const interval = setInterval(() => {
+      setAutoAcceptSecondsLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onAccept(ride.id); // Auto-accept!
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const cardBorderStyle = profitLevel === 'great'
     ? { borderColor: '#22C55E', borderWidth: 2 }
     : profitLevel === 'short'
@@ -139,19 +133,6 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   return (
     <AnimatedCard delay={0} duration={300}>
     <Card variant="filled" padding="md" className="bg-neutral-800 mb-3" style={cardBorderStyle}>
-      {/* Countdown bar */}
-      <View style={{ height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 8 }}>
-        <Animated.View style={{
-          height: 4,
-          borderRadius: 2,
-          backgroundColor: secondsLeft <= 10 ? '#EF4444' : '#F97316',
-          width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-        }} />
-      </View>
-      <Text style={{ textAlign: 'right', fontSize: 12, color: secondsLeft <= 10 ? '#EF4444' : '#9CA3AF', marginBottom: 4 }}>
-        {secondsLeft}s
-      </Text>
-
       {/* Distance + ETA to pickup */}
       {distanceKm !== null && (
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -221,26 +202,29 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
         </View>
       </View>
 
-      {/* Accept (75%) + Reject (25%) buttons */}
-      <View className="flex-row gap-3">
-        <View className="flex-1">
-          <Button
-            title={t('home.reject', { defaultValue: 'Rechazar' })}
-            size="lg"
-            fullWidth
-            variant="outline"
-            onPress={handleReject}
-          />
-        </View>
-        <View className="flex-[3]">
-          <Button
-            title={t('home.accept')}
-            size="lg"
-            fullWidth
-            onPress={debouncedAccept}
-          />
-        </View>
+      {/* OMEGA: Auto-accept countdown bar */}
+      <View style={{ height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 8 }}>
+        <Animated.View style={{
+          height: 4,
+          backgroundColor: profitLevel === 'great' ? '#22C55E' : profitLevel === 'good' ? '#3B82F6' : '#F59E0B',
+          borderRadius: 2,
+          width: countdownProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+        }} />
       </View>
+
+      <Text style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>
+        {t('home.auto_accepting_in', { seconds: autoAcceptSecondsLeft })}
+      </Text>
+
+      {/* Only REJECT button */}
+      <Pressable
+        style={{ backgroundColor: '#EF4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+        onPress={handleReject}
+      >
+        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
+          {t('home.reject', { defaultValue: 'Rechazar' })}
+        </Text>
+      </Pressable>
     </Card>
     </AnimatedCard>
   );

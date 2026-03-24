@@ -21,7 +21,13 @@
     "today_earnings": "Hoje: {{amount}} · {{count}} viagens",
     "no_requests_nudge": "Sem solicitações em {{minutes}} min",
     "active_zone_nearby": "Zona ativa a {{distance}} km",
-    "navigate_to_zone": "Navegar"
+    "navigate_to_zone": "Navegar",
+    "auto_accepting_in": "Aceitando em {{seconds}}s",
+    "reject": "Rejeitar",
+    "navigating_to_zone_in": "Navegando para zona ativa em {{seconds}}s",
+    "stay_here": "Ficar aqui",
+    "next_ride_estimated": "Próxima viagem ~{{minutes}} min",
+    "per_hour": "₧{{amount}}/h"
   },
 
   "trip": {
