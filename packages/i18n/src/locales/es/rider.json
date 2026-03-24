@@ -269,7 +269,10 @@
     "no_driver_found_subtitle": "Todos los conductores están ocupados. Puedes intentar de nuevo.",
     "retry_search": "Reintentar búsqueda",
     "see_more": "Ver más",
-    "see_less": "Ver menos"
+    "see_less": "Ver menos",
+    "cancel_no_charge": "Sin cargo",
+    "cancel_driver_coming": "Tu conductor viene en camino",
+    "cancel_driver_waiting": "Tu conductor te está esperando"
   },
 
   "dispute": {

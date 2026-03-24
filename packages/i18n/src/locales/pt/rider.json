@@ -265,7 +265,10 @@
     "no_driver_found_subtitle": "Todos os motoristas estão ocupados. Pode tentar novamente.",
     "retry_search": "Tentar novamente",
     "see_more": "Ver mais",
-    "see_less": "Ver menos"
+    "see_less": "Ver menos",
+    "cancel_no_charge": "Sem cobrança",
+    "cancel_driver_coming": "Seu motorista está a caminho",
+    "cancel_driver_waiting": "Seu motorista está esperando"
   },
 
   "dispute": {

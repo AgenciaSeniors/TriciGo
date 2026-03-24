@@ -742,6 +742,7 @@ export function RideActiveView() {
         cancelCount24h={penaltyPreview.cancelCount24h}
         isLoading={isLoading}
         cancellationFee={cancellationFeePreview}
+        rideStatus={activeRide?.status ?? null}
       />
 
       {/* Safety bottom sheet */}

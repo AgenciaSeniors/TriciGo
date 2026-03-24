@@ -269,7 +269,10 @@
     "no_driver_found_subtitle": "All drivers are busy. You can try again.",
     "retry_search": "Retry search",
     "see_more": "See more",
-    "see_less": "See less"
+    "see_less": "See less",
+    "cancel_no_charge": "No charge",
+    "cancel_driver_coming": "Your driver is on the way",
+    "cancel_driver_waiting": "Your driver is waiting for you"
   },
 
   "dispute": {
