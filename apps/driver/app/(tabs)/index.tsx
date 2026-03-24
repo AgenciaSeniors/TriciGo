@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, FlatList, Image } from 'react-native';
+import { View, Pressable, FlatList, Image, Animated } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -135,6 +135,13 @@ function NativeDriverHomeScreen() {
   const autoAcceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // DT-2: Today's earnings state
+  const [todayEarnings, setTodayEarnings] = useState({ amount: 0, trips: 0 });
+
+  // DT-2: Crossfade animation for trip transitions
+  const tripFadeAnim = useRef(new Animated.Value(1)).current;
+  const prevHadTrip = useRef(!!activeTrip);
+
   // Fetch service type configs once for fare calculation
   useEffect(() => {
     getSupabaseClient()
@@ -157,6 +164,50 @@ function NativeDriverHomeScreen() {
     if (!profile) return;
     setIsOnBreak(!!(profile as any).is_on_break);
   }, [profile]);
+
+  // DT-2: Fetch today's earnings when online
+  useEffect(() => {
+    if (!isOnline) return;
+    const fetchEarnings = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const { data } = await supabase
+          .from('ledger_entries')
+          .select('amount, entry_type')
+          .eq('user_id', profile?.user_id)
+          .gte('created_at', today.toISOString())
+          .in('entry_type', ['ride_payment_credit', 'tip_credit', 'bonus_credit']);
+
+        if (data) {
+          const amount = data.reduce((sum: number, e: { amount: number }) => sum + Math.abs(e.amount), 0);
+          const trips = data.filter((e: { entry_type: string }) => e.entry_type === 'ride_payment_credit').length;
+          setTodayEarnings({ amount, trips });
+        }
+      } catch {}
+    };
+    fetchEarnings();
+  }, [isOnline, profile?.user_id]);
+
+  // DT-2: Crossfade animation when activeTrip changes
+  useEffect(() => {
+    const hasTrip = !!activeTrip;
+    if (hasTrip !== prevHadTrip.current) {
+      prevHadTrip.current = hasTrip;
+      Animated.timing(tripFadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        Animated.timing(tripFadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+    }
+  }, [activeTrip, tripFadeAnim]);
 
   // Check financial eligibility on mount and every 60s while online
   useEffect(() => {
@@ -314,20 +365,23 @@ function NativeDriverHomeScreen() {
     [handleAccept, handleReject, profile?.custom_per_km_rate_cup, serviceConfigs],
   );
 
-  // Active trip view
+  // DT-2: Active trip view wrapped in crossfade
   if (activeTrip) {
     return (
       <Screen bg="dark" statusBarStyle="light-content" padded>
-        <View className="pt-4 flex-1">
-          <Header isOnline={isOnline} />
-          <DriverTripView />
-        </View>
+        <Animated.View style={{ opacity: tripFadeAnim, flex: 1 }}>
+          <View className="pt-4 flex-1">
+            <Header isOnline={isOnline} />
+            <DriverTripView />
+          </View>
+        </Animated.View>
       </Screen>
     );
   }
 
   return (
     <Screen bg="dark" statusBarStyle="light-content" padded>
+      <Animated.View style={{ opacity: tripFadeAnim, flex: 1 }}>
       <View className="pt-4 flex-1">
         <Header isOnline={isOnline} />
 
@@ -386,6 +440,26 @@ function NativeDriverHomeScreen() {
                 />
               </>
             )}
+          </View>
+        )}
+
+        {/* DT-2: Today's earnings card */}
+        {isOnline && (
+          <View style={{
+            backgroundColor: '#1F2937',
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 14, color: '#22C55E', fontWeight: '700' }}>
+              {t('home.today_earnings', {
+                amount: `\u20A7${todayEarnings.amount.toLocaleString()}`,
+                count: todayEarnings.trips,
+              })}
+            </Text>
           </View>
         )}
 
@@ -475,7 +549,7 @@ function NativeDriverHomeScreen() {
                 <RideMapView heatmapData={heatmapData} height={150} />
               )}
               <FlatList
-                data={incomingRequests}
+                data={incomingRequests.length > 1 ? incomingRequests.slice(1) : []}
                 renderItem={renderRequest}
                 keyExtractor={(item) => item.id}
                 showsVerticalScrollIndicator={false}
@@ -501,6 +575,30 @@ function NativeDriverHomeScreen() {
           </View>
         )}
       </View>
+
+      {/* DT-2: First ride as modal overlay */}
+      {incomingRequests.length > 0 && !activeTrip && (() => {
+        const firstRide = incomingRequests[0]!;
+        return (
+          <View style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            zIndex: 100,
+            justifyContent: 'center',
+            paddingHorizontal: 16,
+          }}>
+            <IncomingRideCard
+              ride={firstRide}
+              onAccept={() => handleAccept(firstRide.id)}
+              onReject={() => handleReject(firstRide.id)}
+              driverCustomRateCup={profile?.custom_per_km_rate_cup ?? null}
+              serviceConfig={serviceConfigs[firstRide.service_type] ?? null}
+            />
+          </View>
+        );
+      })()}
+      </Animated.View>
     </Screen>
   );
 }

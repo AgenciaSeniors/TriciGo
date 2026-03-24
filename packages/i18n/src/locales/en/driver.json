@@ -17,7 +17,8 @@
     "demand_heatmap": "Demand zones",
     "high_demand_area": "High demand area",
     "net_earnings": "Your earnings: ~{{amount}}",
-    "km_away": "{{distance}} km · ~{{minutes}} min"
+    "km_away": "{{distance}} km · ~{{minutes}} min",
+    "today_earnings": "Today: {{amount}} · {{count}} rides"
   },
 
   "trip": {
