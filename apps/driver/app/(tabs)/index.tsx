@@ -8,7 +8,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService } from '@tricigo/api';
-import { HAVANA_CENTER, trackEvent, trackValidationEvent, haversineDistance } from '@tricigo/utils';
+import { HAVANA_CENTER, trackEvent, trackValidationEvent, haversineDistance, logger, getErrorMessage } from '@tricigo/utils';
 import { openNavigation } from '@/utils/navigation';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -134,6 +134,9 @@ function NativeDriverHomeScreen() {
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
   const [serviceConfigs, setServiceConfigs] = useState<Record<string, { base_fare_cup: number; per_km_rate_cup: number; per_minute_rate_cup: number; min_fare_cup: number }>>({});
+  // HF-1: Heartbeat failure counter
+  const heartbeatFailCountRef = useRef(0);
+
   // OMEGA: Auto-navigation countdown to hot zone
   const [navCountdown, setNavCountdown] = useState<number | null>(null);
   const navCancelledRef = useRef(false);
@@ -187,6 +190,34 @@ function NativeDriverHomeScreen() {
     if (!profile) return;
     setIsOnBreak(!!(profile as any).is_on_break);
   }, [profile]);
+
+  // HF-1: Heartbeat every 2 min while online
+  useEffect(() => {
+    if (!isOnline || !profile?.id) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.from('driver_profiles')
+          .update({ last_heartbeat_at: new Date().toISOString() })
+          .eq('id', profile.id);
+        heartbeatFailCountRef.current = 0;
+        logger.info('[Heartbeat] Sent', { driver_id: profile.id });
+      } catch (err) {
+        heartbeatFailCountRef.current += 1;
+        logger.warn('[Heartbeat] Failed', {
+          driver_id: profile.id,
+          error: getErrorMessage(err),
+          consecutive_failures: heartbeatFailCountRef.current
+        });
+      }
+    };
+
+    // Immediate first heartbeat
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 120_000);
+    return () => clearInterval(interval);
+  }, [isOnline, profile?.id]);
 
   // DT-2: Fetch today's earnings when online
   useEffect(() => {

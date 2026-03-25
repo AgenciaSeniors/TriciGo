@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, driverService, locationService, notificationService } from '@tricigo/api';
-import { triggerHaptic, playSound } from '@tricigo/utils';
+import { triggerHaptic, playSound, logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -36,7 +36,17 @@ export function useDriverRideInit() {
     async function checkActive() {
       try {
         const trip = await driverService.getActiveTrip(profile!.id);
-        if (!trip || !mounted) return;
+        if (!mounted) return;
+
+        if (!trip) {
+          const localTrip = useDriverRideStore.getState().activeTrip;
+          if (localTrip) {
+            logger.info('[Reconcile] Clearing stale local trip', { ride_id: localTrip.id });
+            useDriverRideStore.getState().clearActiveTrip?.() || useDriverRideStore.getState().setActiveTrip?.(null);
+          }
+          logger.info('[Reconcile] Result', { had_local_trip: !!localTrip, server_trip: false, action: 'cleared' });
+          return;
+        }
 
         // If trip already completed/canceled, don't set as active
         if (trip.status === 'completed' || trip.status === 'canceled') {
@@ -45,6 +55,12 @@ export function useDriverRideInit() {
         }
 
         setActiveTrip(trip);
+
+        logger.info('[Reconcile] Result', {
+          had_local_trip: !!useDriverRideStore.getState().activeTrip,
+          server_trip: true,
+          action: 'synced',
+        });
 
         // Subscribe to trip updates
         if (channelRef.current) {
@@ -55,8 +71,40 @@ export function useDriverRideInit() {
         channelRef.current = rideService.subscribeToRide(trip.id, (ride) => {
           useDriverRideStore.getState().updateActiveTrip(ride);
         });
-      } catch {
-        // No active trip
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+
+        const isNetworkError = errorMsg.includes('network') ||
+          errorMsg.includes('timeout') ||
+          errorMsg.includes('fetch') ||
+          errorMsg.includes('Failed to fetch') ||
+          (err instanceof Error && err.name === 'AbortError');
+
+        const isAuthError = errorMsg.includes('JWT') ||
+          errorMsg.includes('token') ||
+          errorMsg.includes('401') ||
+          errorMsg.includes('auth');
+
+        if (isNetworkError) {
+          logger.warn('[Reconcile] Network error, keeping local state', { error: errorMsg });
+          // Retry in 30 seconds
+          setTimeout(() => { if (mounted) checkActive(); }, 30_000);
+        } else if (isAuthError) {
+          logger.error('[Reconcile] Auth error', { error: errorMsg });
+        } else {
+          logger.error('[Reconcile] Server error', { error: errorMsg });
+          // Only clear if we don't have a local trip
+          const localTrip = useDriverRideStore.getState().activeTrip;
+          if (localTrip) {
+            logger.warn('[Reconcile] Keeping local trip despite server error');
+          }
+        }
+
+        logger.info('[Reconcile] Result', {
+          had_local_trip: !!useDriverRideStore.getState().activeTrip,
+          server_trip: false,
+          action: isNetworkError ? 'retry' : 'kept_local',
+        });
       }
     }
 
