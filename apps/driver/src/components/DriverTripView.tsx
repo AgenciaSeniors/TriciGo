@@ -36,11 +36,16 @@ function WaitTimer({ arrivedAt, freeMinutes }: { arrivedAt: string; freeMinutes:
 
   useEffect(() => {
     const arrived = new Date(arrivedAt).getTime();
+    if (isNaN(arrived)) return;
     const update = () => setElapsed(Math.floor((Date.now() - arrived) / 1000));
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [arrivedAt]);
+
+  // HF-3: Guard against invalid arrivedAt date
+  const arrivedTime = new Date(arrivedAt).getTime();
+  if (isNaN(arrivedTime)) return null;
 
   const elapsedMin = Math.floor(elapsed / 60);
   const elapsedSec = elapsed % 60;
@@ -228,11 +233,17 @@ export function DriverTripView() {
       return;
     }
 
+    // HF-3: Guard against null dropoff coordinates
+    if (!activeTrip?.dropoff_location?.latitude || !activeTrip?.dropoff_location?.longitude) {
+      setNearDropoff(false);
+      return;
+    }
+
     const dist = haversineDistance(
       driverLocation,
       {
-        latitude: activeTrip.dropoff_location?.latitude || 0,
-        longitude: activeTrip.dropoff_location?.longitude || 0,
+        latitude: activeTrip.dropoff_location.latitude,
+        longitude: activeTrip.dropoff_location.longitude,
       },
     );
 

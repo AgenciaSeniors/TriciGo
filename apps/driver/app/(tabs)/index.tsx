@@ -23,6 +23,7 @@ import {
 import { IncomingRideCard } from '@/components/IncomingRideCard';
 import { DriverTripView } from '@/components/DriverTripView';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
+import * as Location from 'expo-location';
 import { useDemandHeatmap } from '@/hooks/useDemandHeatmap';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
@@ -448,7 +449,10 @@ function NativeDriverHomeScreen() {
       setOnlineSince(now);
       // Also try to load from AsyncStorage
       AsyncStorage.getItem('driver_online_since').then(val => {
-        if (val) setOnlineSince(parseInt(val, 10));
+        if (val) {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed) && parsed > 0) setOnlineSince(parsed);
+        }
       }).catch(() => {});
     } else if (isOnline && onlineSince) {
       AsyncStorage.setItem('driver_online_since', String(onlineSince)).catch(() => {});
@@ -463,6 +467,15 @@ function NativeDriverHomeScreen() {
 
   const handleToggleOnline = useCallback(async () => {
     if (!profile || toggling) return; // Bug 38: Prevent rapid toggle
+    // HF-3: Check GPS permission before going online
+    if (!isOnline) {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({ type: 'error', text1: t('home.location_required') });
+        logger.warn('[GPS] Permission denied, blocking online');
+        return;
+      }
+    }
     // Bug 12: Block going offline during active ride
     if (isOnline && activeTrip) {
       Toast.show({ type: 'error', text1: t('driver.cannot_offline_active_ride', { defaultValue: 'No puedes desconectarte durante un viaje activo' }) });

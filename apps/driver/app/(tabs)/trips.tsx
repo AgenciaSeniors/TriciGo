@@ -208,7 +208,7 @@ function NativeTripsScreen() {
 
   const renderItem = useCallback(({ item }: { item: Ride }) => {
     const isCompleted = item.status === 'completed';
-    const fare = item.final_fare_cup ?? item.estimated_fare_cup;
+    const fare = item.final_fare_cup ?? item.estimated_fare_cup ?? 0;
 
     return (
       <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${formatCUP(fare)}`}>

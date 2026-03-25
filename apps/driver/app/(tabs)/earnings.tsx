@@ -257,7 +257,8 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
 
   const saveGoal = useCallback(() => {
     const parsed = parseInt(inputValue.replace(/\D/g, ''), 10);
-    if (!isNaN(parsed) && parsed > 0) {
+    // HF-3: Validate goal bounds to prevent unreasonable values
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 999999) {
       setGoal(parsed);
       AsyncStorage.setItem(GOAL_STORAGE_KEY, String(parsed));
       // Reset milestones for new goal

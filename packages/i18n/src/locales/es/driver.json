@@ -33,7 +33,8 @@
     "available_ride": "Viaje disponible",
     "short_ride_reject": "Viaje corto · puedes rechazar",
     "high_demand_zone": "Navegando a zona con alta demanda en {{seconds}}s",
-    "searching_rides": "Buscando viajes cerca de ti..."
+    "searching_rides": "Buscando viajes cerca de ti...",
+    "location_required": "Activa la ubicación para conectarte"
   },
 
   "trip": {

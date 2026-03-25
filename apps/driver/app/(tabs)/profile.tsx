@@ -154,7 +154,9 @@ function NativeDriverProfileScreen() {
               </View>
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">
-                  {driverProfile.rating_avg?.toFixed(1) ?? '--'}
+                  {driverProfile.rating_avg != null && !isNaN(driverProfile.rating_avg)
+                    ? driverProfile.rating_avg.toFixed(1)
+                    : '--'}
                 </Text>
                 <Text variant="bodySmall" color="inverse" className="opacity-50">
                   {td('earnings.rating')}

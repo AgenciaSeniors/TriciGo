@@ -136,7 +136,8 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- HF-3: include critical deps to avoid stale closures
+  }, [autoAcceptDuration, onAccept]);
 
   const cardBorderStyle = profitLevel === 'great'
     ? { borderColor: '#22C55E', borderWidth: 2 }

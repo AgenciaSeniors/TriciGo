@@ -33,7 +33,8 @@
     "available_ride": "Ride available",
     "short_ride_reject": "Short ride · you can reject",
     "high_demand_zone": "Navigating to high demand zone in {{seconds}}s",
-    "searching_rides": "Searching for rides near you..."
+    "searching_rides": "Searching for rides near you...",
+    "location_required": "Enable location to go online"
   },
 
   "trip": {
