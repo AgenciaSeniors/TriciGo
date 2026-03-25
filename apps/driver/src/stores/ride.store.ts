@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
 import type { Ride } from '@tricigo/types';
+import { logger } from '@tricigo/utils';
 
 /** Ride with a local timestamp for TTL expiry */
 type TimestampedRide = Ride & { _receivedAt: number };
@@ -58,6 +59,17 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   updateActiveTrip: (trip) => {
     const { activeTrip } = get();
     if (!activeTrip || activeTrip.id !== trip.id) return;
+    // V2: Ignore stale realtime updates
+    if (activeTrip && trip.updated_at && activeTrip.updated_at) {
+      if (new Date(trip.updated_at) <= new Date(activeTrip.updated_at)) {
+        logger.warn('[Realtime] Stale update ignored', {
+          ride_id: trip.id,
+          local_updated: activeTrip.updated_at,
+          received_updated: trip.updated_at,
+        });
+        return;
+      }
+    }
     set({ activeTrip: trip });
   },
 

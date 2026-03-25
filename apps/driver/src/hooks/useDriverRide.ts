@@ -27,6 +27,7 @@ export function useDriverRideInit() {
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const { setActiveTrip } = useDriverRideStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const activeChannelIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isInitialized || !profile) return;
@@ -62,15 +63,20 @@ export function useDriverRideInit() {
           action: 'synced',
         });
 
-        // Subscribe to trip updates
-        if (channelRef.current) {
-          const old = channelRef.current;
-          channelRef.current = null;
-          old.unsubscribe();
+        // Subscribe to trip updates (with dedup)
+        if (activeChannelIdRef.current === trip.id) {
+          logger.info('[Subscription] Dedup prevented', { ride_id: trip.id });
+        } else {
+          if (channelRef.current) {
+            const old = channelRef.current;
+            channelRef.current = null;
+            old.unsubscribe();
+          }
+          activeChannelIdRef.current = trip.id;
+          channelRef.current = rideService.subscribeToRide(trip.id, (ride) => {
+            useDriverRideStore.getState().updateActiveTrip(ride);
+          });
         }
-        channelRef.current = rideService.subscribeToRide(trip.id, (ride) => {
-          useDriverRideStore.getState().updateActiveTrip(ride);
-        });
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : String(err);
 
@@ -118,6 +124,7 @@ export function useDriverRideInit() {
     return () => {
       mounted = false;
       channelRef.current?.unsubscribe();
+      activeChannelIdRef.current = null;
       appStateSub.remove();
     };
   }, [isInitialized, profile, setActiveTrip]);
@@ -191,11 +198,13 @@ export function useDriverRideActions() {
   const user = useAuthStore((s) => s.user);
   const { setActiveTrip, removeRequest, reset } = useDriverRideStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const activeChannelIdRef = useRef<string | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       channelRef.current?.unsubscribe();
+      activeChannelIdRef.current = null;
     };
   }, []);
 
@@ -216,15 +225,20 @@ export function useDriverRideActions() {
       triggerHaptic('success');
       playSound('ride_accepted');
 
-      // Clean up previous subscription before creating new one
-      if (channelRef.current) {
-        const oldChannel = channelRef.current;
-        channelRef.current = null;
-        oldChannel.unsubscribe();
+      // Clean up previous subscription before creating new one (with dedup)
+      if (activeChannelIdRef.current === ride.id) {
+        logger.info('[Subscription] Dedup prevented', { ride_id: ride.id });
+      } else {
+        if (channelRef.current) {
+          const oldChannel = channelRef.current;
+          channelRef.current = null;
+          oldChannel.unsubscribe();
+        }
+        activeChannelIdRef.current = ride.id;
+        channelRef.current = rideService.subscribeToRide(ride.id, (updated) => {
+          useDriverRideStore.getState().updateActiveTrip(updated);
+        });
       }
-      channelRef.current = rideService.subscribeToRide(ride.id, (updated) => {
-        useDriverRideStore.getState().updateActiveTrip(updated);
-      });
     } catch {
       Toast.show({ type: 'error', text1: i18next.t('driver:common.ride_already_accepted') });
       removeRequest(rideId);
@@ -335,6 +349,7 @@ export function useDriverRideActions() {
       await rideService.cancelRide(activeTrip.id, user?.id, reason);
       channelRef.current?.unsubscribe();
       channelRef.current = null;
+      activeChannelIdRef.current = null;
       reset();
     } catch {
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
@@ -344,6 +359,7 @@ export function useDriverRideActions() {
   const clearCompletedTrip = useCallback(() => {
     channelRef.current?.unsubscribe();
     channelRef.current = null;
+    activeChannelIdRef.current = null;
     useDriverRideStore.getState().setActiveTrip(null);
   }, []);
 

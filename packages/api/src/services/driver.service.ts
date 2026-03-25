@@ -15,7 +15,7 @@ import type {
   SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
-import { cupToTrcCentavos } from '@tricigo/utils';
+import { cupToTrcCentavos, logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 
@@ -210,7 +210,6 @@ export const driverService = {
       .from('rides')
       .select('*')
       .eq('id', rideId)
-      .eq('status', 'searching')
       .single();
     if (rideErr) throw rideErr;
     const ride = rideData as Ride;
@@ -249,23 +248,49 @@ export const driverService = {
       ?? await exchangeRateService.getUsdCupRate();
     const estimatedFareTrc = cupToTrcCentavos(estimatedFareCup, exchangeRate);
 
-    // 5. Update ride atomically with driver rate + recalculated fare
-    const { data, error } = await supabase
-      .from('rides')
-      .update({
-        driver_id: driverId,
-        status: 'accepted' as RideStatus,
-        accepted_at: new Date().toISOString(),
-        driver_custom_rate_cup: driverCustomRate,
+    // 5. Atomic accept via RPC (handles locking, idempotency, heartbeat, active-ride check)
+    const { data: result, error: rpcError } = await supabase.rpc('accept_ride', {
+      p_ride_id: rideId,
+      p_driver_id: driverId,
+    });
+
+    if (rpcError) throw rpcError;
+
+    logger.info('[Accept] RPC result', {
+      ride_id: rideId,
+      result: result?.success ? 'ok' : result?.error,
+      idempotent: result?.idempotent || false,
+    });
+
+    if (result?.error) {
+      if (result.error === 'ride_already_taken' || result.error === 'ride_not_found') {
+        throw new Error(result.error);
+      }
+      if (result.idempotent) {
+        // Same driver already accepted this ride — treat as success
+        logger.info('[Accept] Idempotent success', { ride_id: rideId });
+      } else {
+        throw new Error(result.error);
+      }
+    }
+
+    // 6. Update fare data (non-critical follow-up after atomic accept)
+    if (result?.success) {
+      await supabase.from('rides').update({
         estimated_fare_cup: estimatedFareCup,
         estimated_fare_trc: estimatedFareTrc,
-      })
+        driver_custom_rate_cup: driverCustomRate,
+      }).eq('id', rideId);
+    }
+
+    // 7. Return the updated ride
+    const { data: updatedRide, error: fetchErr } = await supabase
+      .from('rides')
+      .select('*')
       .eq('id', rideId)
-      .eq('status', 'searching')
-      .select()
       .single();
-    if (error) throw error;
-    return data as Ride;
+    if (fetchErr) throw fetchErr;
+    return updatedRide as Ride;
   },
 
   /**
