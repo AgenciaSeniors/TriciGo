@@ -98,6 +98,7 @@ export default function BookPage() {
 
   /* ─── Waypoints state (W1.1) ─── */
   const [waypoints, setWaypoints] = useState<LocationPreset[]>([]);
+  const [addingWaypoint, setAddingWaypoint] = useState(false);
 
   /* ─── Scheduled ride state (W1.2) ─── */
   const [isScheduled, setIsScheduled] = useState(false);
@@ -579,24 +580,10 @@ export default function BookPage() {
                     </button>
                   </div>
                 ))}
-                {waypoints.length < 3 && (
+                {waypoints.length < 3 && !addingWaypoint && (
                   <button
                     type="button"
-                    onClick={() => {
-                      // Use the same location selection pattern: prompt for address via a simple approach
-                      // For now, use the map's current selection step mechanism
-                      const address = prompt('Dirección de la parada:');
-                      if (address && address.trim()) {
-                        // Create a waypoint at midpoint between pickup and dropoff as placeholder
-                        // In production, this would use a geocoding search
-                        const lat = (pickup!.latitude + dropoff!.latitude) / 2 + (Math.random() - 0.5) * 0.01;
-                        const lng = (pickup!.longitude + dropoff!.longitude) / 2 + (Math.random() - 0.5) * 0.01;
-                        setWaypoints((prev) => [
-                          ...prev,
-                          { label: address.trim(), address: address.trim(), latitude: lat, longitude: lng },
-                        ]);
-                      }
-                    }}
+                    onClick={() => setAddingWaypoint(true)}
                     style={{
                       padding: '0.5rem 0.75rem',
                       borderRadius: '0.5rem',
@@ -608,8 +595,46 @@ export default function BookPage() {
                       fontWeight: 600,
                     }}
                   >
-                    + Agregar parada ({waypoints.length}/3)
+                    + {t('book.add_stop', { defaultValue: 'Agregar parada' })} ({waypoints.length}/3)
                   </button>
+                )}
+                {addingWaypoint && (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <AddressAutocomplete
+                        label={t('book.stop_address', { defaultValue: 'Parada' })}
+                        placeholder={t('book.stop_placeholder', { defaultValue: 'Dirección de la parada' })}
+                        mapboxToken={mapboxToken}
+                        proximity={mapCenter}
+                        enrichAddress={reverseGeocode}
+                        savedLocations={savedLocations}
+                        onSelect={(r) => {
+                          setWaypoints((prev) => [
+                            ...prev,
+                            { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude },
+                          ]);
+                          setAddingWaypoint(false);
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAddingWaypoint(false)}
+                      style={{
+                        marginTop: 28,
+                        padding: '0.5rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-card)',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-tertiary)',
+                      }}
+                      aria-label={t('common.cancel', { defaultValue: 'Cancelar' })}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 )}
               </div>
             )}
