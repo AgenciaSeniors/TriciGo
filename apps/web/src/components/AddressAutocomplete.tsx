@@ -73,12 +73,27 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${mapboxToken}&country=cu&language=es&limit=5&types=address,poi,place,neighborhood,locality`;
       const res = await fetch(url);
       const data = await res.json();
-      const items: AddressResult[] = (data.features || []).map((f: any) => ({
-        address: f.place_name,
-        latitude: f.center[1],
-        longitude: f.center[0],
-        place_name: f.text,
-      }));
+      const items: AddressResult[] = (data.features || []).map((f: any) => {
+        // Extract neighborhood/locality from context for Cuban-style display
+        const context = f.context || [];
+        const neighborhood = context.find((c: any) => c.id?.startsWith('neighborhood'))?.text;
+        const locality = context.find((c: any) => c.id?.startsWith('locality'))?.text;
+        const place = context.find((c: any) => c.id?.startsWith('place'))?.text;
+        const area = neighborhood || locality || place || '';
+
+        // Build Cuban-style address: "Street, Neighborhood"
+        const streetPart = f.text || '';
+        const displayAddress = area && area !== streetPart
+          ? `${streetPart}, ${area}`
+          : f.place_name;
+
+        return {
+          address: f.place_name,
+          latitude: f.center[1],
+          longitude: f.center[0],
+          place_name: displayAddress,
+        };
+      });
       setResults(items);
       setIsOpen(true);
       setActiveIndex(-1);

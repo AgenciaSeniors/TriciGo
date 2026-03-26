@@ -206,20 +206,7 @@ export default function BookingMap({
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
 
-      // Add preset location markers
-      HAVANA_PRESETS.forEach((p) => {
-        const el = document.createElement('div');
-        el.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.2);cursor:pointer;transition:all 0.2s;';
-        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.5)'; el.style.background = 'rgba(255,255,255,0.7)'; });
-        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; el.style.background = 'rgba(255,255,255,0.4)'; });
-
-        const marker = new mapboxgl.Marker({ element: el })
-          .setLngLat([p.longitude, p.latitude])
-          .setPopup(new mapboxgl.Popup({ offset: 10, closeButton: false }).setText(p.label))
-          .addTo(map);
-
-        presetMarkersRef.current.push(marker);
-      });
+      // Preset location markers removed — always use reverse geocoding
     });
 
     mapRef.current = map;
@@ -238,20 +225,15 @@ export default function BookingMap({
     const handleClick = async (e: mapboxgl.MapMouseEvent) => {
       if (selectionStep === 'done') return;
       const { lat, lng } = e.lngLat;
-      const nearest = findNearestPreset({ latitude: lat, longitude: lng });
-      let preset: LocationPreset;
-      if (nearest) {
-        preset = nearest;
-      } else {
-        const address = await reverseGeocode(lat, lng);
-        const label = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-        preset = {
-          label,
-          address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-          latitude: lat,
-          longitude: lng,
-        };
-      }
+      // Always use reverse geocoding for accurate street addresses
+      const address = await reverseGeocode(lat, lng);
+      const label = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      const preset: LocationPreset = {
+        label,
+        address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        latitude: lat,
+        longitude: lng,
+      };
       if (selectionStep === 'pickup') onSetPickup(preset);
       else onSetDropoff(preset);
     };
