@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 
 export default function ReferralPage() {
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -42,7 +44,7 @@ export default function ReferralPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -50,9 +52,9 @@ export default function ReferralPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tu codigo de referido</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.referral_login_required', { defaultValue: 'Inicia sesion para ver tu codigo de referido' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('web.login', { defaultValue: 'Iniciar sesion' })}
         </Link>
       </div>
     );
@@ -67,7 +69,7 @@ export default function ReferralPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Programa de referidos</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.referral_title', { defaultValue: 'Programa de referidos' })}</h1>
       </div>
 
       {/* Promo Banner */}
@@ -85,17 +87,17 @@ export default function ReferralPage() {
           </svg>
         </div>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem' }}>
-          Invita amigos y gana TriciCoins
+          {t('web.referral_banner_title', { defaultValue: 'Invita amigos y gana TriciCoins' })}
         </h2>
         <p style={{ fontSize: '0.9rem', opacity: 0.9, margin: 0 }}>
-          Comparte tu codigo y ambos reciben 500 CUP en TriciCoins cuando tu amigo complete su primer viaje.
+          {t('web.referral_banner_desc', { defaultValue: 'Comparte tu codigo y ambos reciben 500 CUP en TriciCoins cuando tu amigo complete su primer viaje.' })}
         </p>
       </div>
 
       {/* Referral Code */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Tu codigo de referido
+          {t('web.referral_your_code', { defaultValue: 'Tu codigo de referido' })}
         </h2>
         <div style={{
           background: 'var(--bg-page)',
@@ -120,7 +122,7 @@ export default function ReferralPage() {
       {/* Share Link */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Enlace para compartir
+          {t('web.referral_share_link', { defaultValue: 'Enlace para compartir' })}
         </h2>
         <div style={{
           display: 'flex',
@@ -155,7 +157,7 @@ export default function ReferralPage() {
               transition: 'background 0.2s',
             }}
           >
-            {copied ? 'Copiado!' : 'Copiar'}
+            {copied ? t('web.referral_copied', { defaultValue: 'Copiado!' }) : t('web.referral_copy', { defaultValue: 'Copiar' })}
           </button>
         </div>
       </div>
@@ -169,7 +171,7 @@ export default function ReferralPage() {
         marginBottom: '1.5rem',
       }}>
         <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          Comparte tu codigo y gana recompensas
+          {t('web.referral_stats_cta', { defaultValue: 'Comparte tu codigo y gana recompensas' })}
         </p>
       </div>
 
@@ -181,12 +183,12 @@ export default function ReferralPage() {
         padding: '1.5rem',
       }}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem', color: 'var(--text-primary)' }}>
-          Como funciona
+          {t('web.referral_how_title', { defaultValue: 'Como funciona' })}
         </h2>
         {[
-          { num: '1', text: 'Comparte tu codigo o enlace con un amigo' },
-          { num: '2', text: 'Tu amigo se registra y hace su primer viaje' },
-          { num: '3', text: 'Ambos reciben 500 CUP en TriciCoins' },
+          { num: '1', text: t('web.referral_step_1', { defaultValue: 'Comparte tu codigo o enlace con un amigo' }) },
+          { num: '2', text: t('web.referral_step_2', { defaultValue: 'Tu amigo se registra y hace su primer viaje' }) },
+          { num: '3', text: t('web.referral_step_3', { defaultValue: 'Ambos reciben 500 CUP en TriciCoins' }) },
         ].map((step) => (
           <div key={step.num} style={{
             display: 'flex',

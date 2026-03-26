@@ -12,7 +12,7 @@ const languages = [
 ];
 
 export default function SettingsPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('common.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -54,9 +54,9 @@ export default function SettingsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver la configuracion</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required', { defaultValue: 'Inicia sesion para ver la configuracion' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('web.login', { defaultValue: 'Iniciar sesion' })}
         </Link>
       </div>
     );
@@ -96,13 +96,13 @@ export default function SettingsPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Configuracion</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.settings', { defaultValue: 'Configuracion' })}</h1>
       </div>
 
       {/* Language Section */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Idioma
+          {t('web.language', { defaultValue: 'Idioma' })}
         </h2>
         <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden' }}>
           {languages.map((lang, index) => (
@@ -138,7 +138,7 @@ export default function SettingsPage() {
       {/* Notification Preferences */}
       <div>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Notificaciones
+          {t('web.notifications', { defaultValue: 'Notificaciones' })}
         </h2>
         <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden' }}>
           {/* Push */}
@@ -150,8 +150,8 @@ export default function SettingsPage() {
             borderBottom: '1px solid var(--border-light)',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>Notificaciones push</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Alertas en tiempo real</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.push_notifications', { defaultValue: 'Notificaciones push' })}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.realtime_alerts', { defaultValue: 'Alertas en tiempo real' })}</p>
             </div>
             <button onClick={() => setPushNotifications(!pushNotifications)} style={toggleStyle(pushNotifications)}>
               <div style={toggleKnobStyle(pushNotifications)} />
@@ -167,8 +167,8 @@ export default function SettingsPage() {
             borderBottom: '1px solid var(--border-light)',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>Correo electronico</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Recibos y promociones</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.email_notifications', { defaultValue: 'Correo electronico' })}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.receipts_promos', { defaultValue: 'Recibos y promociones' })}</p>
             </div>
             <button onClick={() => setEmailNotifications(!emailNotifications)} style={toggleStyle(emailNotifications)}>
               <div style={toggleKnobStyle(emailNotifications)} />
@@ -183,8 +183,8 @@ export default function SettingsPage() {
             padding: '1rem 1.25rem',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>SMS</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Actualizaciones por mensaje de texto</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.sms', { defaultValue: 'SMS' })}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.sms_updates', { defaultValue: 'Actualizaciones por mensaje de texto' })}</p>
             </div>
             <button onClick={() => setSmsNotifications(!smsNotifications)} style={toggleStyle(smsNotifications)}>
               <div style={toggleKnobStyle(smsNotifications)} />

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, trustedContactService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { TrustedContact } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -11,6 +12,7 @@ import { WebEmptyState } from '@/components/WebEmptyState';
 const MAX_CONTACTS = 5;
 
 export default function TrustedContactsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -38,7 +40,11 @@ export default function TrustedContactsPage() {
       const data = await trustedContactService.getContacts(userId);
       setContacts(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      // Only show error if we have NO contacts loaded (initial load failure)
+      if (contacts.length === 0) {
+        setError(err instanceof Error ? err.message : t('web.unknown_error', { defaultValue: 'Error desconocido' }));
+      }
+      // If contacts exist, silently fail reload — data is already displayed
     } finally {
       setLoading(false);
     }
@@ -55,23 +61,24 @@ export default function TrustedContactsPage() {
       });
       setContacts((prev) => prev.map((c) => (c.id === contact.id ? updated : c)));
     } catch {
-      alert('No se pudo actualizar el contacto');
+      alert(t('web.update_contact_error', { defaultValue: 'No se pudo actualizar el contacto' }));
     }
   };
 
   const handleDelete = async (contact: TrustedContact) => {
-    if (!confirm(`Eliminar a ${contact.name}?`)) return;
+    if (!confirm(t('web.delete_contact_confirm', { defaultValue: 'Eliminar a {{name}}?', name: contact.name }))) return;
     try {
       await trustedContactService.deleteContact(contact.id);
       setContacts((prev) => prev.filter((c) => c.id !== contact.id));
     } catch {
-      alert('No se pudo eliminar el contacto');
+      alert(t('web.delete_contact_error', { defaultValue: 'No se pudo eliminar el contacto' }));
     }
   };
 
   const handleAdd = async () => {
     if (!userId || !newName.trim() || !newPhone.trim()) return;
     setAdding(true);
+    setError(null); // Clear any previous error
     try {
       await trustedContactService.addContact({
         user_id: userId,
@@ -88,11 +95,11 @@ export default function TrustedContactsPage() {
     } catch (err: any) {
       console.error('Error adding trusted contact:', err);
       if (err?.message === 'Maximum contacts reached') {
-        alert('Maximo de contactos alcanzado (' + MAX_CONTACTS + ').');
+        alert(t('web.max_contacts_reached', { defaultValue: 'Maximo de contactos alcanzado ({{max}}).', max: MAX_CONTACTS }));
       } else if (err?.message?.includes('duplicate')) {
-        alert('Este contacto ya existe. Verifica el numero de telefono.');
+        alert(t('web.duplicate_contact', { defaultValue: 'Este contacto ya existe. Verifica el numero de telefono.' }));
       } else {
-        alert('Error al agregar contacto: ' + (err?.message || 'Error desconocido. Intenta de nuevo.'));
+        alert(t('web.add_contact_error', { defaultValue: 'Error al agregar contacto: {{error}}', error: err?.message || t('web.unknown_error', { defaultValue: 'Error desconocido. Intenta de nuevo.' }) }));
       }
     } finally {
       setAdding(false);
@@ -102,7 +109,7 @@ export default function TrustedContactsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('common.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -121,18 +128,18 @@ export default function TrustedContactsPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Contactos de confianza</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.trusted_contacts', { defaultValue: 'Contactos de confianza' })}</h1>
       </div>
 
       <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-        Estas personas seran notificadas si activas el boton SOS durante un viaje.
+        {t('web.trusted_contacts_desc', { defaultValue: 'Estas personas seran notificadas si activas el boton SOS durante un viaje.' })}
       </p>
 
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
           <p style={{ color: '#c53030', margin: 0, fontSize: '0.9rem' }}>{error}</p>
           <button onClick={() => { setError(null); loadContacts(); }} style={{ marginTop: '0.5rem', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
-            Reintentar
+            {t('common.retry', { defaultValue: 'Reintentar' })}
           </button>
         </div>
       )}
@@ -143,8 +150,8 @@ export default function TrustedContactsPage() {
       ) : contacts.length === 0 ? (
         <WebEmptyState
           icon="👥"
-          title="No tienes contactos de confianza aun"
-          description="Estas personas seran notificadas si activas el boton SOS durante un viaje."
+          title={t('web.no_trusted_contacts', { defaultValue: 'No tienes contactos de confianza aun' })}
+          description={t('web.trusted_contacts_desc', { defaultValue: 'Estas personas seran notificadas si activas el boton SOS durante un viaje.' })}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -161,7 +168,7 @@ export default function TrustedContactsPage() {
                     <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{contact.name}</span>
                     {contact.is_emergency && (
                       <span style={{ background: '#e53e3e', color: '#fff', fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
-                        Emergencia
+                        {t('web.emergency', { defaultValue: 'Emergencia' })}
                       </span>
                     )}
                   </div>
@@ -183,7 +190,7 @@ export default function TrustedContactsPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)',
               }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Compartir viaje automaticamente</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })}</span>
                 <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
                   <input
                     type="checkbox"
@@ -218,13 +225,13 @@ export default function TrustedContactsPage() {
             borderRadius: '0.75rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer',
           }}
         >
-          + Agregar contacto
+          {t('web.add_contact', { defaultValue: '+ Agregar contacto' })}
         </button>
       )}
 
       {contacts.length >= MAX_CONTACTS && (
         <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: '1rem' }}>
-          Has alcanzado el maximo de {MAX_CONTACTS} contactos.
+          {t('web.max_contacts_reached', { defaultValue: 'Has alcanzado el maximo de {{max}} contactos.', max: MAX_CONTACTS })}
         </p>
       )}
 
@@ -233,10 +240,10 @@ export default function TrustedContactsPage() {
           marginTop: '1.5rem', background: 'var(--bg-card)', borderRadius: '1rem',
           border: '1px solid var(--border-light)', padding: '1.5rem',
         }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem' }}>Nuevo contacto</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem' }}>{t('web.new_contact', { defaultValue: 'Nuevo contacto' })}</h3>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Nombre</label>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.name', { defaultValue: 'Nombre' })}</label>
             <input
               type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
               placeholder="Juan Perez"
@@ -248,7 +255,7 @@ export default function TrustedContactsPage() {
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Telefono</label>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.phone', { defaultValue: 'Telefono' })}</label>
             <input
               type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
               placeholder="+53 5XXXXXXX"
@@ -260,10 +267,10 @@ export default function TrustedContactsPage() {
           </div>
 
           <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Relacion</label>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.relationship', { defaultValue: 'Relacion' })}</label>
             <input
               type="text" value={newRelationship} onChange={(e) => setNewRelationship(e.target.value)}
-              placeholder="Familiar, Amigo..."
+              placeholder={t('web.relationship_placeholder', { defaultValue: 'Familiar, Amigo...' })}
               style={{
                 width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
@@ -279,7 +286,7 @@ export default function TrustedContactsPage() {
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
               }}
             >
-              Cancelar
+              {t('common.cancel', { defaultValue: 'Cancelar' })}
             </button>
             <button
               onClick={handleAdd} disabled={adding || !newName.trim() || !newPhone.trim()}
@@ -289,7 +296,7 @@ export default function TrustedContactsPage() {
                 cursor: adding ? 'not-allowed' : 'pointer', opacity: adding || !newName.trim() || !newPhone.trim() ? 0.6 : 1,
               }}
             >
-              {adding ? 'Agregando...' : 'Agregar'}
+              {adding ? t('web.adding', { defaultValue: 'Agregando...' }) : t('web.add', { defaultValue: 'Agregar' })}
             </button>
           </div>
         </div>

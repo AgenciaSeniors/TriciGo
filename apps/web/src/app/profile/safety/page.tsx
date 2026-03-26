@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, customerService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 
 export default function SafetyPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -34,7 +36,7 @@ export default function SafetyPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('common.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -42,9 +44,9 @@ export default function SafetyPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver la configuracion de seguridad</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_safety', { defaultValue: 'Inicia sesion para ver la configuracion de seguridad' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('web.login', { defaultValue: 'Iniciar sesion' })}
         </Link>
       </div>
     );
@@ -59,7 +61,7 @@ export default function SafetyPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Seguridad</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.safety', { defaultValue: 'Seguridad' })}</h1>
       </div>
 
       {/* SOS Info Section */}
@@ -87,17 +89,17 @@ export default function SafetyPage() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           </div>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>Boton SOS</h2>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>{t('web.sos_button', { defaultValue: 'Boton SOS' })}</h2>
         </div>
         <p style={{ fontSize: '0.9rem', color: '#744210', margin: 0, lineHeight: 1.5 }}>
-          Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real. Tu seguridad es nuestra prioridad.
+          {t('web.sos_description', { defaultValue: 'Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real. Tu seguridad es nuestra prioridad.' })}
         </p>
       </div>
 
       {/* Emergency Contact */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Contacto de emergencia
+          {t('web.emergency_contact', { defaultValue: 'Contacto de emergencia' })}
         </h2>
         <div style={{
           background: 'var(--bg-card)',
@@ -128,8 +130,8 @@ export default function SafetyPage() {
                   </>
                 ) : (
                   <>
-                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>No configurado</p>
-                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Agrega un contacto de emergencia</p>
+                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>{t('web.not_configured', { defaultValue: 'No configurado' })}</p>
+                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.add_emergency_hint', { defaultValue: 'Agrega un contacto de emergencia' })}</p>
                   </>
                 )}
               </div>
@@ -147,7 +149,7 @@ export default function SafetyPage() {
                 cursor: 'pointer',
               }}
             >
-              {emergencyContact ? 'Editar' : 'Agregar'}
+              {emergencyContact ? t('web.edit', { defaultValue: 'Editar' }) : t('web.add', { defaultValue: 'Agregar' })}
             </button>
           </div>
         </div>
@@ -156,7 +158,7 @@ export default function SafetyPage() {
       {/* Trusted Contacts */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Contactos de confianza
+          {t('web.trusted_contacts', { defaultValue: 'Contactos de confianza' })}
         </h2>
         <div style={{
           background: 'var(--bg-card)',
@@ -172,7 +174,7 @@ export default function SafetyPage() {
             <path d="M16 3.13a4 4 0 010 7.75" />
           </svg>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0.75rem 0 0' }}>
-            Agrega personas de confianza que seran notificadas si activas el boton SOS.
+            {t('web.trusted_contacts_hint', { defaultValue: 'Agrega personas de confianza que seran notificadas si activas el boton SOS.' })}
           </p>
           <button
             onClick={() => router.push('/profile/trusted-contacts')}
@@ -188,7 +190,7 @@ export default function SafetyPage() {
               cursor: 'pointer',
             }}
           >
-            Agregar contacto
+            {t('web.add_contact_button', { defaultValue: 'Agregar contacto' })}
           </button>
         </div>
       </div>
@@ -201,13 +203,13 @@ export default function SafetyPage() {
         border: '1px solid #bbf7d0',
       }}>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.75rem', color: '#166534' }}>
-          Consejos de seguridad
+          {t('web.safety_tips', { defaultValue: 'Consejos de seguridad' })}
         </h3>
         <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Verifica siempre la placa del vehiculo antes de abordar</li>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Comparte tu viaje en tiempo real con tus contactos</li>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Usa el boton SOS si te sientes en peligro</li>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>Califica a tu conductor despues de cada viaje</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_1', { defaultValue: 'Verifica siempre la placa del vehiculo antes de abordar' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_2', { defaultValue: 'Comparte tu viaje en tiempo real con tus contactos' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_3', { defaultValue: 'Usa el boton SOS si te sientes en peligro' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_4', { defaultValue: 'Califica a tu conductor despues de cada viaje' })}</li>
         </ul>
       </div>
     </main>

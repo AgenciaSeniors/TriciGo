@@ -15,9 +15,9 @@ import { useAuth } from '../providers';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 /* Dynamic import — Mapbox GL JS requires `window` */
-const BookingMap = dynamic(() => import('./BookingMap'), {
-  ssr: false,
-  loading: () => (
+function MapLoadingFallback() {
+  const { t } = useTranslation('web');
+  return (
     <div
       style={{
         height: 420,
@@ -32,9 +32,14 @@ const BookingMap = dynamic(() => import('./BookingMap'), {
         fontSize: '0.875rem',
       }}
     >
-      Cargando mapa...
+      {t('web.loading_map', { defaultValue: 'Cargando mapa...' })}
     </div>
-  ),
+  );
+}
+
+const BookingMap = dynamic(() => import('./BookingMap'), {
+  ssr: false,
+  loading: () => <MapLoadingFallback />,
 });
 
 const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; labelKey: string }[] = [
@@ -335,7 +340,7 @@ export default function BookPage() {
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+          <p style={{ fontSize: '0.875rem' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
         </div>
       </div>
     );
@@ -372,7 +377,7 @@ export default function BookPage() {
         {/* ═══ Address Autocomplete (WF-2) ═══ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
           <AddressAutocomplete
-            label="Origen"
+            label={t('web.address_origin', { defaultValue: 'Origen' })}
             placeholder="¿Dónde te recogemos?"
             value={pickupAddress || ''}
             mapboxToken={mapboxToken}
@@ -382,7 +387,7 @@ export default function BookPage() {
             }}
           />
           <AddressAutocomplete
-            label="Destino"
+            label={t('web.address_destination', { defaultValue: 'Destino' })}
             placeholder="¿A dónde vas?"
             value={dropoffAddress || ''}
             mapboxToken={mapboxToken}

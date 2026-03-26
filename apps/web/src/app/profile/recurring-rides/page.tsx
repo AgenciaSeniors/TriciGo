@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, recurringRideService } from '@tricigo/api';
 import type { RecurringRide } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -18,6 +19,7 @@ function formatNextOccurrence(dateStr: string | null): string {
 
 export default function RecurringRidesPage() {
   const router = useRouter();
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [rides, setRides] = useState<RecurringRide[]>([]);
@@ -38,11 +40,11 @@ export default function RecurringRidesPage() {
       const data = await recurringRideService.getRecurringRides(userId);
       setRides(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron cargar los viajes recurrentes');
+      setError(err instanceof Error ? err.message : t('web.recurring_load_error', { defaultValue: 'No se pudieron cargar los viajes recurrentes' }));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     if (userId) fetchRides();
@@ -67,7 +69,7 @@ export default function RecurringRidesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Eliminar este viaje recurrente?')) return;
+    if (!confirm(t('web.recurring_delete_confirm', { defaultValue: 'Eliminar este viaje recurrente?' }))) return;
     setActionLoading(id);
     try {
       await recurringRideService.deleteRecurringRide(id);
@@ -79,7 +81,7 @@ export default function RecurringRidesPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -93,19 +95,19 @@ export default function RecurringRidesPage() {
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" aria-label="Volver al perfil" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" aria-label={t('web.back_to_profile', { defaultValue: 'Volver al perfil' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Viajes recurrentes</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.recurring_title', { defaultValue: 'Viajes recurrentes' })}</h1>
       </div>
 
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem' }}>
           <p style={{ color: '#c53030', margin: 0, fontSize: '0.9rem' }}>{error}</p>
           <button onClick={() => { setError(null); fetchRides(); }} style={{ marginTop: '0.5rem', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
-            Reintentar
+            {t('web.retry', { defaultValue: 'Reintentar' })}
           </button>
         </div>
       )}
@@ -115,9 +117,9 @@ export default function RecurringRidesPage() {
       ) : rides.length === 0 ? (
         <WebEmptyState
           icon="🔄"
-          title="No tienes viajes recurrentes"
-          description="Configura viajes que se repiten para ahorrar tiempo."
-          action={{ label: 'Solicitar un viaje', href: '/book' }}
+          title={t('web.recurring_empty_title', { defaultValue: 'No tienes viajes recurrentes' })}
+          description={t('web.recurring_empty_desc', { defaultValue: 'Configura viajes que se repiten para ahorrar tiempo.' })}
+          action={{ label: t('web.recurring_request_ride', { defaultValue: 'Solicitar un viaje' }), href: '/book' }}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -143,7 +145,7 @@ export default function RecurringRidesPage() {
                   color: ride.status === 'active' ? '#16a34a' : '#737373',
                   border: ride.status === 'active' ? '1px solid #bbf7d0' : '1px solid #e5e5e5',
                 }}>
-                  {ride.status === 'active' ? 'Activo' : 'Pausado'}
+                  {ride.status === 'active' ? t('web.recurring_status_active', { defaultValue: 'Activo' }) : t('web.recurring_status_paused', { defaultValue: 'Pausado' })}
                 </span>
               </div>
 
@@ -168,35 +170,35 @@ export default function RecurringRidesPage() {
               {/* Next occurrence */}
               {ride.next_occurrence_at && (
                 <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                  Proximo: {formatNextOccurrence(ride.next_occurrence_at)}
+                  {t('web.recurring_next', { defaultValue: 'Proximo' })}: {formatNextOccurrence(ride.next_occurrence_at)}
                 </p>
               )}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)' }}>
                 {actionLoading === ride.id ? (
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Procesando...</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{t('web.recurring_processing', { defaultValue: 'Procesando...' })}</span>
                 ) : (
                   <>
                     <button
                       onClick={() => ride.status === 'active' ? handlePause(ride.id) : handleResume(ride.id)}
-                      aria-label={ride.status === 'active' ? 'Pausar viaje recurrente' : 'Reanudar viaje recurrente'}
+                      aria-label={ride.status === 'active' ? t('web.recurring_pause_label', { defaultValue: 'Pausar viaje recurrente' }) : t('web.recurring_resume_label', { defaultValue: 'Reanudar viaje recurrente' })}
                       style={{
                         padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 500,
                         background: 'var(--border-light)', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer',
                       }}
                     >
-                      {ride.status === 'active' ? 'Pausar' : 'Reanudar'}
+                      {ride.status === 'active' ? t('web.recurring_pause', { defaultValue: 'Pausar' }) : t('web.recurring_resume', { defaultValue: 'Reanudar' })}
                     </button>
                     <button
                       onClick={() => handleDelete(ride.id)}
-                      aria-label="Eliminar viaje recurrente"
+                      aria-label={t('web.recurring_delete_label', { defaultValue: 'Eliminar viaje recurrente' })}
                       style={{
                         padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 500,
                         background: '#fef2f2', color: '#dc2626', border: 'none', cursor: 'pointer',
                       }}
                     >
-                      Eliminar
+                      {t('web.recurring_delete', { defaultValue: 'Eliminar' })}
                     </button>
                   </>
                 )}

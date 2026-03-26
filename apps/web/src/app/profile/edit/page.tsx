@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 
 export default function EditProfilePage() {
+  const { t } = useTranslation();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -14,6 +16,7 @@ export default function EditProfilePage() {
   const [originalEmail, setOriginalEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastIsSuccess, setToastIsSuccess] = useState(false);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -39,16 +42,16 @@ export default function EditProfilePage() {
 
   const handleSave = async () => {
     if (!fullName.trim()) {
-      alert('El nombre no puede estar vacio');
+      alert(t('web.name_required', { defaultValue: 'El nombre no puede estar vacio' }));
       return;
     }
     const phoneDigits = phone.replace(/\D/g, '');
     if (phone.trim() && phoneDigits.length < 8) {
-      alert('El telefono debe tener al menos 8 digitos');
+      alert(t('web.phone_invalid', { defaultValue: 'El telefono debe tener al menos 8 digitos' }));
       return;
     }
     if (email.trim() && !email.includes('@')) {
-      alert('Ingresa un correo electronico valido');
+      alert(t('web.email_invalid', { defaultValue: 'Ingresa un correo electronico valido' }));
       return;
     }
     setSaving(true);
@@ -62,9 +65,11 @@ export default function EditProfilePage() {
         await supabase.auth.updateUser({ email: email.trim() });
       }
 
-      setToast('Guardado');
+      setToastIsSuccess(true);
+      setToast(t('web.saved', { defaultValue: 'Guardado' }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar';
+      const msg = err instanceof Error ? err.message : t('web.save_error', { defaultValue: 'Error al guardar' });
+      setToastIsSuccess(false);
       setToast(msg);
     } finally {
       setSaving(false);
@@ -74,7 +79,7 @@ export default function EditProfilePage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('common.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -82,9 +87,9 @@ export default function EditProfilePage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para editar tu perfil</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_edit', { defaultValue: 'Inicia sesion para editar tu perfil' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('web.login', { defaultValue: 'Iniciar sesion' })}
         </Link>
       </div>
     );
@@ -101,7 +106,7 @@ export default function EditProfilePage() {
           top: 24,
           left: '50%',
           transform: 'translateX(-50%)',
-          background: toast === 'Guardado' ? 'var(--success)' : 'var(--error)',
+          background: toastIsSuccess ? 'var(--success)' : 'var(--error)',
           color: '#fff',
           padding: '0.75rem 1.5rem',
           borderRadius: '0.75rem',
@@ -121,7 +126,7 @@ export default function EditProfilePage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Editar perfil</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.edit_profile', { defaultValue: 'Editar perfil' })}</h1>
       </div>
 
       {/* Avatar */}
@@ -151,7 +156,7 @@ export default function EditProfilePage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Nombre completo
+            {t('web.full_name', { defaultValue: 'Nombre completo' })}
           </label>
           <input
             type="text"
@@ -171,7 +176,7 @@ export default function EditProfilePage() {
 
         <div>
           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Correo electronico
+            {t('web.email', { defaultValue: 'Correo electronico' })}
           </label>
           <input
             type="email"
@@ -191,7 +196,7 @@ export default function EditProfilePage() {
 
         <div>
           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Telefono
+            {t('web.phone', { defaultValue: 'Telefono' })}
           </label>
           <input
             type="tel"
@@ -225,7 +230,7 @@ export default function EditProfilePage() {
             opacity: saving ? 0.7 : 1,
           }}
         >
-          {saving ? 'Guardando...' : 'Guardar cambios'}
+          {saving ? t('web.saving', { defaultValue: 'Guardando...' }) : t('web.save_changes', { defaultValue: 'Guardar cambios' })}
         </button>
       </div>
     </main>

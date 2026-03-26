@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, customerService, trustedContactService } from '@tricigo/api';
 import type { TrustedContact } from '@tricigo/types';
 
 export default function EmergencyContactPage() {
   const router = useRouter();
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -47,9 +49,9 @@ export default function EmergencyContactPage() {
         setRelationship(emergency.relationship);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(err instanceof Error ? err.message : t('web.emergency_unknown_error', { defaultValue: 'Error desconocido' }));
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     if (userId) loadData();
@@ -58,11 +60,11 @@ export default function EmergencyContactPage() {
   const handleSave = async () => {
     if (!profileId || !userId) return;
     if (!name.trim() || name.trim().length < 2) {
-      alert('Ingresa el nombre del contacto');
+      alert(t('web.emergency_name_required', { defaultValue: 'Ingresa el nombre del contacto' }));
       return;
     }
     if (!phone.trim()) {
-      alert('Ingresa un numero de telefono valido');
+      alert(t('web.emergency_phone_required', { defaultValue: 'Ingresa un numero de telefono valido' }));
       return;
     }
     setSaving(true);
@@ -94,14 +96,14 @@ export default function EmergencyContactPage() {
             is_emergency: true,
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Error al guardar contacto';
+          const msg = err instanceof Error ? err.message : t('web.emergency_save_contact_error', { defaultValue: 'Error al guardar contacto' });
           console.error('Error adding emergency contact as trusted contact:', msg);
           // May fail if duplicate phone -- ok, don't block save
         }
       }
       setSaved(true);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar contacto de emergencia';
+      const msg = err instanceof Error ? err.message : t('web.emergency_save_error', { defaultValue: 'Error al guardar contacto de emergencia' });
       console.error('Error saving emergency contact:', msg);
       alert(msg);
     } finally {
@@ -112,7 +114,7 @@ export default function EmergencyContactPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -131,7 +133,7 @@ export default function EmergencyContactPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Contacto de emergencia</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.emergency_title', { defaultValue: 'Contacto de emergencia' })}</h1>
       </div>
 
       {error && (
@@ -142,11 +144,11 @@ export default function EmergencyContactPage() {
 
       <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', padding: '1.5rem' }}>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 0, marginBottom: '1.25rem', lineHeight: 1.5 }}>
-          Este contacto sera notificado en caso de emergencia durante un viaje.
+          {t('web.emergency_desc', { defaultValue: 'Este contacto sera notificado en caso de emergencia durante un viaje.' })}
         </p>
 
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Nombre</label>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.emergency_name_label', { defaultValue: 'Nombre' })}</label>
           <input
             type="text" value={name} onChange={(e) => setName(e.target.value)}
             placeholder="Juan Perez"
@@ -158,7 +160,7 @@ export default function EmergencyContactPage() {
         </div>
 
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Telefono</label>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.emergency_phone_label', { defaultValue: 'Telefono' })}</label>
           <input
             type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
             placeholder="+53 5XXXXXXX"
@@ -170,10 +172,10 @@ export default function EmergencyContactPage() {
         </div>
 
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Relacion</label>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.emergency_relationship_label', { defaultValue: 'Relacion' })}</label>
           <input
             type="text" value={relationship} onChange={(e) => setRelationship(e.target.value)}
-            placeholder="Familiar, Amigo..."
+            placeholder={t('web.relationship_placeholder', { defaultValue: 'Familiar, Amigo...' })}
             style={{
               width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
               fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
@@ -190,12 +192,12 @@ export default function EmergencyContactPage() {
             cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || !name.trim() || !phone.trim() ? 0.6 : 1,
           }}
         >
-          {saving ? 'Guardando...' : 'Guardar'}
+          {saving ? t('web.saving', { defaultValue: 'Guardando...' }) : t('web.emergency_save_btn', { defaultValue: 'Guardar' })}
         </button>
 
         {saved && (
           <p style={{ color: '#16a34a', fontSize: '0.85rem', textAlign: 'center', marginTop: '0.75rem', marginBottom: 0 }}>
-            Contacto de emergencia guardado correctamente.
+            {t('web.emergency_saved', { defaultValue: 'Contacto de emergencia guardado correctamente.' })}
           </p>
         )}
       </div>

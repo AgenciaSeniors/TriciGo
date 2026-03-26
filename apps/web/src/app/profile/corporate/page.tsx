@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, corporateService } from '@tricigo/api';
 import type { CorporateAccount } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -10,6 +11,7 @@ import { WebEmptyState } from '@/components/WebEmptyState';
 
 export default function CorporatePage() {
   const router = useRouter();
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accounts, setAccounts] = useState<CorporateAccount[]>([]);
@@ -29,15 +31,15 @@ export default function CorporatePage() {
       setAccounts(data);
       setLoading(false);
     }).catch(() => {
-      setError('No se pudieron cargar las cuentas corporativas');
+      setError(t('web.corporate_load_error', { defaultValue: 'No se pudieron cargar las cuentas corporativas' }));
       setLoading(false);
     });
-  }, [userId]);
+  }, [userId, t]);
 
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -57,12 +59,12 @@ export default function CorporatePage() {
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" aria-label="Volver al perfil" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+        <Link href="/profile" aria-label={t('web.back_to_profile', { defaultValue: 'Volver al perfil' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Cuentas corporativas</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.corporate_title', { defaultValue: 'Cuentas corporativas' })}</h1>
       </div>
 
       {error && (
@@ -76,8 +78,8 @@ export default function CorporatePage() {
       ) : accounts.length === 0 ? (
         <WebEmptyState
           icon="🏢"
-          title="No tienes cuentas corporativas"
-          description="Contacta a tu empresa para vincular tu cuenta de TriciGo."
+          title={t('web.corporate_empty_title', { defaultValue: 'No tienes cuentas corporativas' })}
+          description={t('web.corporate_empty_desc', { defaultValue: 'Contacta a tu empresa para vincular tu cuenta de TriciGo.' })}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -99,13 +101,13 @@ export default function CorporatePage() {
                     fontSize: '0.75rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '999px',
                     background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
                   }}>
-                    {(acc.status as string) === 'active' ? 'Activa' : (acc.status as string) === 'suspended' ? 'Suspendida' : acc.status}
+                    {(acc.status as string) === 'active' ? t('web.status_active', { defaultValue: 'Activa' }) : (acc.status as string) === 'suspended' ? t('web.status_suspended', { defaultValue: 'Suspendida' }) : acc.status}
                   </span>
                 </div>
 
                 {/* Contact */}
                 <div style={{ marginBottom: '0.75rem' }}>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Contacto</p>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>{t('web.corporate_contact', { defaultValue: 'Contacto' })}</p>
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{acc.contact_phone}</p>
                   {acc.contact_email && (
                     <p style={{ margin: '0.15rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{acc.contact_email}</p>
@@ -115,12 +117,12 @@ export default function CorporatePage() {
                 {/* Budget */}
                 {acc.monthly_budget_trc > 0 && (
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Presupuesto</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>{t('web.corporate_budget', { defaultValue: 'Presupuesto' })}</p>
                     <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: '0.4rem', background: 'var(--border-light)' }}>
                       <div style={{ width: `${budgetPercent}%`, background: 'var(--primary)', borderRadius: 3 }} />
                     </div>
                     <p style={{ margin: '0.3rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {budgetRemaining.toFixed(2)} / {acc.monthly_budget_trc.toFixed(2)} TRC restante
+                      {budgetRemaining.toFixed(2)} / {acc.monthly_budget_trc.toFixed(2)} {t('web.corporate_remaining', { defaultValue: 'TRC restante' })}
                     </p>
                   </div>
                 )}
@@ -128,7 +130,7 @@ export default function CorporatePage() {
                 {/* Per-ride cap */}
                 {acc.per_ride_cap_trc > 0 && (
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Maximo por viaje</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>{t('web.corporate_per_ride', { defaultValue: 'Maximo por viaje' })}</p>
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{acc.per_ride_cap_trc.toFixed(2)} TRC</p>
                   </div>
                 )}
@@ -136,7 +138,7 @@ export default function CorporatePage() {
                 {/* Allowed services */}
                 {acc.allowed_service_types && acc.allowed_service_types.length > 0 && (
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Servicios permitidos</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>{t('web.corporate_services', { defaultValue: 'Servicios permitidos' })}</p>
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{acc.allowed_service_types.join(', ')}</p>
                   </div>
                 )}
@@ -144,7 +146,7 @@ export default function CorporatePage() {
                 {/* Allowed hours */}
                 {acc.allowed_hours_start && acc.allowed_hours_end && (
                   <div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>Horario permitido</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600 }}>{t('web.corporate_hours', { defaultValue: 'Horario permitido' })}</p>
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{acc.allowed_hours_start} - {acc.allowed_hours_end}</p>
                   </div>
                 )}

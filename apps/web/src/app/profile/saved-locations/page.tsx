@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient, customerService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 interface SavedLocation {
@@ -13,6 +14,7 @@ interface SavedLocation {
 }
 
 export default function SavedLocationsPage() {
+  const { t } = useTranslation();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -80,20 +82,20 @@ export default function SavedLocationsPage() {
       setFormLng(0);
     } catch (err) {
       console.error('Error saving location:', err);
-      alert('Error al guardar ubicacion. Intenta de nuevo.');
+      alert(t('web.save_location_error', { defaultValue: 'Error al guardar ubicacion. Intenta de nuevo.' }));
     }
   }
 
   async function handleDelete(index: number) {
     if (!profileId) return;
-    if (!confirm('Eliminar ubicacion?')) return;
+    if (!confirm(t('web.delete_location_confirm', { defaultValue: 'Eliminar ubicacion?' }))) return;
     const updated = locations.filter((_, i) => i !== index);
     try {
       await customerService.updateProfile(profileId, { saved_locations: updated });
       setLocations(updated);
     } catch (err) {
       console.error('Error deleting location:', err);
-      alert('Error al eliminar ubicacion.');
+      alert(t('web.delete_location_error', { defaultValue: 'Error al eliminar ubicacion.' }));
     }
   }
 
@@ -119,7 +121,7 @@ export default function SavedLocationsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('common.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -127,9 +129,9 @@ export default function SavedLocationsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tus ubicaciones</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_locations', { defaultValue: 'Inicia sesion para ver tus ubicaciones' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('web.login', { defaultValue: 'Iniciar sesion' })}
         </Link>
       </div>
     );
@@ -183,11 +185,11 @@ export default function SavedLocationsPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Ubicaciones guardadas</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.saved_locations', { defaultValue: 'Ubicaciones guardadas' })}</h1>
       </div>
 
       {loading ? (
-        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>Cargando ubicaciones...</p>
+        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>{t('web.loading_locations', { defaultValue: 'Cargando ubicaciones...' })}</p>
       ) : locations.length === 0 && !showForm ? (
         <div style={{
           background: 'var(--bg-card)',
@@ -198,7 +200,7 @@ export default function SavedLocationsPage() {
           marginBottom: '1.5rem',
         }}>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem' }}>
-            No tienes ubicaciones guardadas aun.
+            {t('web.no_saved_locations', { defaultValue: 'No tienes ubicaciones guardadas aun.' })}
           </p>
         </div>
       ) : (
@@ -236,7 +238,7 @@ export default function SavedLocationsPage() {
               <div style={{ flex: 1 }}>
                 <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{loc.label}</p>
                 <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                  {loc.address || 'Sin direccion'}
+                  {loc.address || t('web.no_address', { defaultValue: 'Sin direccion' })}
                 </p>
               </div>
               <button onClick={() => handleEdit(index)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
@@ -260,14 +262,14 @@ export default function SavedLocationsPage() {
           marginBottom: '1.5rem',
         }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem' }}>
-            {editingIndex !== null ? 'Editar ubicacion' : 'Nueva ubicacion'}
+            {editingIndex !== null ? t('web.edit_location', { defaultValue: 'Editar ubicacion' }) : t('web.new_location', { defaultValue: 'Nueva ubicacion' })}
           </h3>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Nombre</label>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.name', { defaultValue: 'Nombre' })}</label>
             <input
               type="text" value={formLabel} onChange={(e) => setFormLabel(e.target.value)}
-              placeholder="Casa, Trabajo, Gym..."
+              placeholder={t('web.location_placeholder', { defaultValue: 'Casa, Trabajo, Gym...' })}
               style={{
                 width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
@@ -277,7 +279,7 @@ export default function SavedLocationsPage() {
 
           <div style={{ marginBottom: '1.25rem' }}>
             <AddressAutocomplete
-              label="Direccion"
+              label={t('web.address', { defaultValue: 'Direccion' })}
               placeholder="Buscar dirección..."
               value={formAddress}
               mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''}
@@ -297,7 +299,7 @@ export default function SavedLocationsPage() {
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
               }}
             >
-              Cancelar
+              {t('common.cancel', { defaultValue: 'Cancelar' })}
             </button>
             <button
               onClick={handleSave}
@@ -309,7 +311,7 @@ export default function SavedLocationsPage() {
                 opacity: !formLabel.trim() || !formAddress.trim() ? 0.6 : 1,
               }}
             >
-              Guardar
+              {t('common.save', { defaultValue: 'Guardar' })}
             </button>
           </div>
         </div>
@@ -325,7 +327,7 @@ export default function SavedLocationsPage() {
             borderRadius: '0.75rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer',
           }}
         >
-          + Agregar ubicacion
+          {t('web.add_location', { defaultValue: '+ Agregar ubicacion' })}
         </button>
       )}
     </main>
