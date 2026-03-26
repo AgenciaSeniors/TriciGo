@@ -431,12 +431,43 @@ export async function fetchNavigationRoute(
   }
 }
 
+/* ─── Cross-Street Detection via Overpass API ─── */
+
+/**
+ * Find cross streets near a coordinate using the Overpass API.
+ * Returns up to 2 street names that are different from the main road.
+ */
+async function findCrossStreets(
+  lat: number,
+  lng: number,
+  mainRoad: string,
+): Promise<string[]> {
+  const query = `[out:json][timeout:5];way(around:50,${lat},${lng})["highway"]["name"];out tags;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) return [];
+
+  const data = await res.json();
+
+  // Extract unique road names that aren't the main road
+  const mainLower = mainRoad.toLowerCase();
+  const roads = (data.elements || [])
+    .map((el: { tags?: { name?: string } }) => el.tags?.name)
+    .filter((name?: string): name is string =>
+      !!name && name.toLowerCase() !== mainLower,
+    );
+
+  // Deduplicate and return max 2
+  return [...new Set(roads)].slice(0, 2) as string[];
+}
+
 /* ─── Nominatim Reverse Geocoding ─── */
 
 /**
- * Reverse geocode coordinates to a human-readable address using Nominatim.
- * Formats the result with `formatCubanAddress()`.
- * Returns null if the request fails.
+ * Reverse geocode coordinates to a Cuban-style street address.
+ * Uses Nominatim for the main road, then Overpass API for cross streets.
+ * Format: "Cruz del Padre e/ Velázquez y Carballo"
  */
 export async function reverseGeocode(
   lat: number,
@@ -453,19 +484,35 @@ export async function reverseGeocode(
     const data = await res.json();
     if (!data?.address) return null;
 
-    const formatted = formatCubanAddress(data.address);
+    const mainRoad = data.address.road;
+    const area = data.address.suburb || data.address.neighbourhood || data.address.city_district || '';
 
-    // Try to get nearby streets for cross-street context (best effort)
-    try {
-      const nearbyUrl =
-        `https://nominatim.openstreetmap.org/search` +
-        `?q=street+near+${lat},${lng}&format=json&limit=3&accept-language=es` +
-        `&viewbox=${lng - 0.002},${lat + 0.002},${lng + 0.002},${lat - 0.002}&bounded=1`;
-      // This is best-effort — if it fails, we just use the main address
-    } catch {
-      // Ignore cross-street lookup failure
+    // If we have a main road, try to find cross streets
+    if (mainRoad) {
+      try {
+        const crossStreets = await findCrossStreets(lat, lng, mainRoad);
+        if (crossStreets.length >= 2) {
+          // Full Cuban format: "Cruz del Padre e/ Velázquez y Carballo"
+          const base = data.address.house_number
+            ? `${mainRoad} #${data.address.house_number}`
+            : mainRoad;
+          return `${base} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+        }
+        if (crossStreets.length === 1) {
+          const base = data.address.house_number
+            ? `${mainRoad} #${data.address.house_number}`
+            : mainRoad;
+          return area
+            ? `${base} y ${crossStreets[0]}, ${area}`
+            : `${base} y ${crossStreets[0]}`;
+        }
+      } catch {
+        // Overpass failed — fallback to basic format
+      }
     }
 
+    // Fallback: basic format without cross streets
+    const formatted = formatCubanAddress(data.address);
     return formatted || null;
   } catch {
     return null;
