@@ -13,7 +13,11 @@ export const metadata: Metadata = {
   description:
     'Pide un taxi en La Habana con TriciGo. Triciclos, motos y autos disponibles 24/7. La app de transporte #1 en Cuba. Descarga gratis.',
   keywords: ['taxi La Habana', 'transporte Cuba', 'triciclo taxi', 'pedir taxi Cuba', 'TriciGo', 'ride hailing Havana', 'taxi app Cuba', 'triciclo La Habana'],
-  icons: { icon: '/favicon.ico' },
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
   openGraph: {
     type: 'website',
     locale: 'es_CU',

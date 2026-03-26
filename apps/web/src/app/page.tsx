@@ -1,272 +1,112 @@
-'use client';
-
-import Image from 'next/image';
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { useTranslation } from '@tricigo/i18n';
+import HomeClient from './HomeClient';
 
-/* ── SVG Icons for Features ── */
+export const metadata: Metadata = {
+  title: 'TriciGo — Pide tu taxi en Cuba | Triciclos, Motos y Autos',
+  description:
+    'Solicita un taxi en Cuba con TriciGo. Triciclos, motos y autos disponibles 24/7 en La Habana y 15 ciudades. Rápido, seguro y económico.',
+  alternates: {
+    canonical: 'https://tricigo.com',
+  },
+};
 
-function IconPricing() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23" />
-      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  );
-}
-
-function IconTracking() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="3 11 22 2 13 21 11 13 3 11" />
-    </svg>
-  );
-}
-
-function IconSafety() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <polyline points="9 12 11 14 15 10" />
-    </svg>
-  );
-}
-
-function IconPayment() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-      <line x1="1" y1="10" x2="23" y2="10" />
-    </svg>
-  );
-}
-
-function GooglePlayIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.807 1.626a1 1 0 010 1.732l-2.807 1.626L15.206 12l2.492-2.492zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" />
-    </svg>
-  );
-}
-
-function AppStoreIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-    </svg>
-  );
-}
-
-/* ── Store Buttons (reusable) ── */
-
-function StoreButtons({ variant = 'dark' }: { variant?: 'dark' | 'white' }) {
-  const cls = variant === 'white' ? 'btn-store btn-store--white' : 'btn-store';
-  return (
-    <>
-      <a
-        href="https://play.google.com/store/apps/details?id=app.tricigo.client"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cls}
-      >
-        <GooglePlayIcon /> Google Play
-      </a>
-      <a
-        href="https://apps.apple.com/app/tricigo/id000000000"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cls}
-      >
-        <AppStoreIcon /> App Store
-      </a>
-    </>
-  );
-}
-
-/* ── Page ── */
+/* ── Static SSR content visible to crawlers ── */
 
 export default function HomePage() {
-  const { t } = useTranslation('web');
-
-  const steps = [
-    { num: 1, title: t('home.how_step1_title'), desc: t('home.how_step1_desc') },
-    { num: 2, title: t('home.how_step2_title'), desc: t('home.how_step2_desc') },
-    { num: 3, title: t('home.how_step3_title'), desc: t('home.how_step3_desc') },
-  ];
-
-  const services = [
-    { key: 'triciclo', img: '/images/vehicles/triciclo.png', title: t('home.service_triciclo'), desc: t('home.service_triciclo_desc') },
-    { key: 'moto', img: '/images/vehicles/moto.png', title: t('home.service_moto'), desc: t('home.service_moto_desc') },
-    { key: 'auto', img: '/images/vehicles/auto.png', title: t('home.service_auto'), desc: t('home.service_auto_desc') },
-    { key: 'mensajeria', img: '/images/vehicles/mensajeria.png', title: t('home.service_mensajeria'), desc: t('home.service_mensajeria_desc') },
-  ];
-
-  const features = [
-    { icon: <IconPricing />, title: t('home.feature_pricing_title'), desc: t('home.feature_pricing_desc') },
-    { icon: <IconTracking />, title: t('home.feature_tracking_title'), desc: t('home.feature_tracking_desc') },
-    { icon: <IconSafety />, title: t('home.feature_safety_title'), desc: t('home.feature_safety_desc') },
-    { icon: <IconPayment />, title: t('home.feature_payment_title'), desc: t('home.feature_payment_desc') },
-  ];
-
   return (
     <main>
-      {/* ── Hero ── */}
-      <section className="section">
-        <div className="container">
-          <div className="hero">
-            <div>
-              <h1>
-                {t('home.hero_title_1')}<br />
-                <span style={{ color: 'var(--primary)' }}>{t('home.hero_title_2')}</span>
-              </h1>
-              <p>{t('home.hero_subtitle')}</p>
-              <div className="hero__buttons">
-                <Link href="/book" className="btn-primary">
-                  {t('home.hero_cta')}
-                </Link>
-              </div>
-              <div className="hero__store-buttons">
-                <StoreButtons />
-              </div>
-            </div>
-            <div className="hero__visual">
-              <div className="hero__phone-frame">
-                <Image
-                  src="/images/screenshots/02-home.png"
-                  alt="TriciGo - App de taxi en La Habana, Cuba. Pide triciclos, motos y autos."
-                  width={390}
-                  height={844}
-                  priority
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── SSR: Static SEO content ── */}
+      <article className="sr-only" aria-hidden="false">
+        <h1>Pide tu taxi en Cuba con TriciGo</h1>
+        <p>
+          TriciGo es la app de transporte #1 en Cuba. Solicita triciclos, motos y autos
+          disponibles 24/7 en La Habana y 15 ciudades. Rápido, seguro y económico.
+        </p>
 
-      {/* ── How it works ── */}
-      <section className="section section--gray">
-        <div className="container">
-          <h2 className="section-title text-center">{t('home.how_title')}</h2>
-          <p className="section-subtitle text-center" style={{ maxWidth: 500, margin: '0.75rem auto 0' }}>
-            {t('home.how_subtitle')}
+        <section>
+          <h2>¿Cómo funciona?</h2>
+          <ol>
+            <li>
+              <strong>Elige tu destino</strong> — Abre la app, ingresa tu dirección de
+              recogida y destino. Verás el precio estimado al instante.
+            </li>
+            <li>
+              <strong>Selecciona tu vehículo</strong> — Elige entre triciclo, moto o auto
+              según tu preferencia y presupuesto.
+            </li>
+            <li>
+              <strong>Viaja seguro</strong> — Tu conductor llega en minutos. Sigue el
+              viaje en tiempo real y paga fácilmente.
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>Nuestros servicios</h2>
+          <ul>
+            <li>
+              <strong>Triciclo</strong> — Económico y ecológico. Perfecto para distancias
+              cortas en La Habana.
+            </li>
+            <li>
+              <strong>Moto</strong> — Rápido y ágil. Ideal para moverte sin tráfico por
+              la ciudad.
+            </li>
+            <li>
+              <strong>Auto</strong> — Cómodo y espacioso. La mejor opción para viajes
+              largos o en grupo.
+            </li>
+            <li>
+              <strong>Mensajería</strong> — Envía paquetes de forma rápida y segura a
+              cualquier punto de la ciudad.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Ciudades disponibles</h2>
+          <p>
+            La Habana, Santiago de Cuba, Camagüey, Holguín, Santa Clara, Guantánamo,
+            Bayamo, Las Tunas, Pinar del Río, Cienfuegos, Matanzas, Sancti Spíritus,
+            Ciego de Ávila, Villa Clara y Trinidad.
           </p>
-          <div className="steps-grid">
-            {steps.map((s) => (
-              <div key={s.num} className="step-card">
-                <div className="step-number">{s.num}</div>
-                <h3>{s.title}</h3>
-                <p>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── Services ── */}
-      <section className="section">
-        <div className="container">
-          <h2 className="section-title text-center">{t('home.services_title')}</h2>
-          <p className="section-subtitle text-center" style={{ maxWidth: 500, margin: '0.75rem auto 0' }}>
-            {t('home.services_subtitle')}
+        <section>
+          <h2>¿Por qué TriciGo?</h2>
+          <ul>
+            <li>
+              <strong>Precios transparentes</strong> — Conoce el costo antes de viajar.
+              Sin sorpresas ni tarifas ocultas.
+            </li>
+            <li>
+              <strong>Seguimiento en tiempo real</strong> — Sigue tu viaje en el mapa.
+              Comparte tu ubicación con familiares.
+            </li>
+            <li>
+              <strong>Viajes seguros</strong> — Conductores verificados, soporte 24/7 y
+              botón de emergencia en cada viaje.
+            </li>
+            <li>
+              <strong>Pagos flexibles</strong> — Paga en efectivo, TriciCoin o
+              transferencia. Tú decides.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Solicita tu viaje ahora</h2>
+          <p>
+            Descarga TriciGo y pide tu primer viaje en minutos. Disponible en Google
+            Play y App Store.
           </p>
-          <div className="services-grid">
-            {services.map((svc) => (
-              <div key={svc.key} className="service-card">
-                <Image
-                  src={svc.img}
-                  alt={svc.title}
-                  width={64}
-                  height={64}
-                  style={{ width: 64, height: 64, objectFit: 'contain', margin: '0 auto 1rem', display: 'block' }}
-                />
-                <h3>{svc.title}</h3>
-                <p>{svc.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+          <Link href="/book">Solicitar viaje</Link>
+        </section>
+      </article>
 
-      {/* ── Features ── */}
-      <section className="section section--gray">
-        <div className="container">
-          <h2 className="section-title text-center">{t('home.features_title')}</h2>
-          <div className="features-grid">
-            {features.map((f, i) => (
-              <div key={i} className="feature-card">
-                <div className="feature-icon">{f.icon}</div>
-                <div>
-                  <h3>{f.title}</h3>
-                  <p>{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Social Proof / Stats ── */}
-      <section className="section">
-        <div className="container">
-          <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'La Habana confía en TriciGo' })}</h2>
-          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', marginTop: '2rem', textAlign: 'center' }}>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>500+</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_drivers', { defaultValue: 'Conductores registrados' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>10,000+</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_rides', { defaultValue: 'Viajes completados' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>4.8★</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_rating', { defaultValue: 'Calificación promedio' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>24/7</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_available', { defaultValue: 'Disponible siempre' })}</p>
-            </div>
-          </div>
-
-          {/* Testimonials */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '3rem' }}>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— María G., Vedado</p>
-            </div>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— Carlos R., Centro Habana</p>
-            </div>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— Ana P., Miramar</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Download CTA ── */}
-      <section className="section section--orange">
-        <div className="container">
-          <div className="download-cta">
-            <div>
-              <h2>{t('home.download_cta_title')}</h2>
-              <p>{t('home.download_cta_subtitle')}</p>
-            </div>
-            <div className="download-cta__buttons">
-              <StoreButtons variant="white" />
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── Client: interactive translated content ── */}
+      <HomeClient />
     </main>
   );
 }

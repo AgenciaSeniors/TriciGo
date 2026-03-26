@@ -3,14 +3,16 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["TEAMID.app.tricigo.client"],
+        "appIDs": ["XXXXXXXXXX.app.tricigo.client"],
+        "comment": "Replace XXXXXXXXXX with your actual Apple Developer Team ID from https://developer.apple.com/account → Membership Details",
         "components": [
           { "/": "/track/*", "comment": "Ride tracking" },
           { "/": "/book", "comment": "Booking" }
         ]
       },
       {
-        "appIDs": ["TEAMID.app.tricigo.driver"],
+        "appIDs": ["XXXXXXXXXX.app.tricigo.driver"],
+        "comment": "Replace XXXXXXXXXX with your actual Apple Developer Team ID",
         "components": [
           { "/": "/driver/*", "comment": "Driver links" }
         ]

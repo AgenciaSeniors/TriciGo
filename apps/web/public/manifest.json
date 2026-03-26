@@ -1,0 +1,12 @@
+{
+  "name": "TriciGo",
+  "short_name": "TriciGo",
+  "description": "Pide tu taxi en Cuba",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#FF4D00",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
+}
