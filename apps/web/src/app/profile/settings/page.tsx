@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 
 const languages = [
   { code: 'es', label: 'Espanol' },
@@ -11,6 +12,7 @@ const languages = [
 ];
 
 export default function SettingsPage() {
+  const { i18n } = useTranslation();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -36,6 +38,7 @@ export default function SettingsPage() {
 
   function handleLanguageChange(code: string) {
     setLanguage(code);
+    i18n.changeLanguage(code);
     localStorage.setItem('tricigo_language', code);
     document.documentElement.lang = code;
   }

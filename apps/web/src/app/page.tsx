@@ -92,7 +92,11 @@ export default function HomePage() {
       <JsonLd data={faqJsonLd} />
       <JsonLd data={serviceJsonLd} />
       {/* ── SSR: Static SEO content ── */}
-      <article className="sr-only" aria-hidden="false">
+      <article
+        className="sr-only"
+        aria-hidden="true"
+        style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}
+      >
         <h1>Pide tu taxi en Cuba con TriciGo</h1>
         <p>
           TriciGo es la app de transporte #1 en Cuba. Solicita triciclos, motos y autos

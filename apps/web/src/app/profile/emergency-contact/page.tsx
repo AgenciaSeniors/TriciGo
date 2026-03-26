@@ -94,14 +94,16 @@ export default function EmergencyContactPage() {
             is_emergency: true,
           });
         } catch (err) {
-          console.error('Error adding emergency contact as trusted contact (may be duplicate):', err);
-          // May fail if duplicate phone -- ok
+          const msg = err instanceof Error ? err.message : 'Error al guardar contacto';
+          console.error('Error adding emergency contact as trusted contact:', msg);
+          // May fail if duplicate phone -- ok, don't block save
         }
       }
       setSaved(true);
     } catch (err) {
-      console.error('Error saving emergency contact:', err);
-      alert('Error al guardar contacto de emergencia');
+      const msg = err instanceof Error ? err.message : 'Error al guardar contacto de emergencia';
+      console.error('Error saving emergency contact:', msg);
+      alert(msg);
     } finally {
       setSaving(false);
     }

@@ -9,6 +9,9 @@ export default function EditProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [originalEmail, setOriginalEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -20,6 +23,9 @@ export default function EditProfilePage() {
       if (session?.user) {
         const meta = session.user.user_metadata;
         setFullName(meta?.full_name || meta?.name || '');
+        setPhone(session.user.phone || meta?.phone || '');
+        setEmail(session.user.email || '');
+        setOriginalEmail(session.user.email || '');
       }
     });
   }, []);
@@ -36,14 +42,30 @@ export default function EditProfilePage() {
       alert('El nombre no puede estar vacio');
       return;
     }
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phone.trim() && phoneDigits.length < 8) {
+      alert('El telefono debe tener al menos 8 digitos');
+      return;
+    }
+    if (email.trim() && !email.includes('@')) {
+      alert('Ingresa un correo electronico valido');
+      return;
+    }
     setSaving(true);
     try {
-      await getSupabaseClient().auth.updateUser({
-        data: { full_name: fullName },
+      const supabase = getSupabaseClient();
+      await supabase.auth.updateUser({
+        data: { full_name: fullName.trim(), phone: phone.trim() },
       });
+
+      if (email.trim() !== originalEmail) {
+        await supabase.auth.updateUser({ email: email.trim() });
+      }
+
       setToast('Guardado');
-    } catch {
-      setToast('Error al guardar');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar';
+      setToast(msg);
     } finally {
       setSaving(false);
     }
@@ -69,8 +91,6 @@ export default function EditProfilePage() {
   }
 
   const avatarUrl = user?.user_metadata?.avatar_url;
-  const email = user?.email || '';
-  const phone = user?.phone || user?.user_metadata?.phone || '';
 
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
@@ -156,15 +176,14 @@ export default function EditProfilePage() {
           <input
             type="email"
             value={email}
-            readOnly
+            onChange={(e) => setEmail(e.target.value)}
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
-              border: '1px solid var(--border-light)',
+              border: '1px solid var(--border)',
               borderRadius: '0.75rem',
               fontSize: '0.95rem',
-              background: 'var(--bg-page)',
-              color: 'var(--text-tertiary)',
+              outline: 'none',
               boxSizing: 'border-box',
             }}
           />
@@ -177,15 +196,14 @@ export default function EditProfilePage() {
           <input
             type="tel"
             value={phone}
-            readOnly
+            onChange={(e) => setPhone(e.target.value)}
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
-              border: '1px solid var(--border-light)',
+              border: '1px solid var(--border)',
               borderRadius: '0.75rem',
               fontSize: '0.95rem',
-              background: 'var(--bg-page)',
-              color: 'var(--text-tertiary)',
+              outline: 'none',
               boxSizing: 'border-box',
             }}
           />
