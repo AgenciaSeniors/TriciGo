@@ -86,7 +86,14 @@ export default function TrustedContactsPage() {
       setShowForm(false);
       await loadContacts();
     } catch (err: any) {
-      alert(err?.message === 'Maximum contacts reached' ? 'Maximo de contactos alcanzado' : 'Error al agregar contacto');
+      console.error('Error adding trusted contact:', err);
+      if (err?.message === 'Maximum contacts reached') {
+        alert('Maximo de contactos alcanzado (' + MAX_CONTACTS + ').');
+      } else if (err?.message?.includes('duplicate')) {
+        alert('Este contacto ya existe. Verifica el numero de telefono.');
+      } else {
+        alert('Error al agregar contacto: ' + (err?.message || 'Error desconocido. Intenta de nuevo.'));
+      }
     } finally {
       setAdding(false);
     }

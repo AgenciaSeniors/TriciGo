@@ -61,8 +61,9 @@ export default function RidePreferencesPage() {
     setSaving(true);
     try {
       await customerService.updateProfile(profileId, { ride_preferences: updated });
-    } catch {
-      // best-effort
+    } catch (err) {
+      console.error('Error saving preferences:', err);
+      alert('Error al guardar preferencias. Intenta de nuevo.');
     } finally {
       setSaving(false);
     }

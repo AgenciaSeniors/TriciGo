@@ -93,13 +93,15 @@ export default function EmergencyContactPage() {
             auto_share: true,
             is_emergency: true,
           });
-        } catch {
+        } catch (err) {
+          console.error('Error adding emergency contact as trusted contact (may be duplicate):', err);
           // May fail if duplicate phone -- ok
         }
       }
       setSaved(true);
-    } catch {
-      alert('No se pudo guardar el contacto');
+    } catch (err) {
+      console.error('Error saving emergency contact:', err);
+      alert('Error al guardar contacto de emergencia');
     } finally {
       setSaving(false);
     }

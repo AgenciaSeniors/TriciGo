@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { useRouter } from 'next/navigation';
+import { getSupabaseClient, customerService } from '@tricigo/api';
 
 export default function SafetyPage() {
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [emergencyContact, setEmergencyContact] = useState<any>(null);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -16,6 +19,17 @@ export default function SafetyPage() {
       setAuthLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    customerService.getProfile(userId).then((profile) => {
+      if (profile?.emergency_contact) {
+        setEmergencyContact(profile.emergency_contact);
+      }
+    }).catch((err) => {
+      console.error('Error loading emergency contact:', err);
+    });
+  }, [userId]);
 
   if (authLoading) {
     return (
@@ -107,21 +121,33 @@ export default function SafetyPage() {
                 </svg>
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>No configurado</p>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Agrega un contacto de emergencia</p>
+                {emergencyContact ? (
+                  <>
+                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{emergencyContact.name}</p>
+                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{emergencyContact.phone}</p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>No configurado</p>
+                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Agrega un contacto de emergencia</p>
+                  </>
+                )}
               </div>
             </div>
-            <button style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '0.5rem',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}>
-              Agregar
+            <button
+              onClick={() => router.push('/profile/emergency-contact')}
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'var(--primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {emergencyContact ? 'Editar' : 'Agregar'}
             </button>
           </div>
         </div>
@@ -148,17 +174,20 @@ export default function SafetyPage() {
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0.75rem 0 0' }}>
             Agrega personas de confianza que seran notificadas si activas el boton SOS.
           </p>
-          <button style={{
-            marginTop: '1rem',
-            padding: '0.6rem 1.5rem',
-            background: 'transparent',
-            color: 'var(--primary)',
-            border: '1px solid var(--primary)',
-            borderRadius: '0.5rem',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}>
+          <button
+            onClick={() => router.push('/profile/trusted-contacts')}
+            style={{
+              marginTop: '1rem',
+              padding: '0.6rem 1.5rem',
+              background: 'transparent',
+              color: 'var(--primary)',
+              border: '1px solid var(--primary)',
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
             Agregar contacto
           </button>
         </div>

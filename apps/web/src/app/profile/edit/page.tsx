@@ -32,6 +32,10 @@ export default function EditProfilePage() {
   }, [toast]);
 
   const handleSave = async () => {
+    if (!fullName.trim()) {
+      alert('El nombre no puede estar vacio');
+      return;
+    }
     setSaving(true);
     try {
       await getSupabaseClient().auth.updateUser({
@@ -189,7 +193,7 @@ export default function EditProfilePage() {
 
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !fullName.trim()}
           style={{
             marginTop: '0.5rem',
             padding: '0.875rem',

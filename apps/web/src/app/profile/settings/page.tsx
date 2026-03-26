@@ -27,6 +27,19 @@ export default function SettingsPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('tricigo_language');
+    if (saved) {
+      setLanguage(saved);
+    }
+  }, []);
+
+  function handleLanguageChange(code: string) {
+    setLanguage(code);
+    localStorage.setItem('tricigo_language', code);
+    document.documentElement.lang = code;
+  }
+
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -92,7 +105,7 @@ export default function SettingsPage() {
           {languages.map((lang, index) => (
             <button
               key={lang.code}
-              onClick={() => setLanguage(lang.code)}
+              onClick={() => handleLanguageChange(lang.code)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
