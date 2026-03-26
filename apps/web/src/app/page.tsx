@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import HomeClient from './HomeClient';
+import { JsonLd } from '../components/JsonLd';
 
 export const metadata: Metadata = {
   title: 'TriciGo — Pide tu taxi en Cuba | Triciclos, Motos y Autos',
@@ -11,11 +12,85 @@ export const metadata: Metadata = {
   },
 };
 
+/* ── Structured data for SEO ── */
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: '¿Cómo funciona TriciGo?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Descarga la app, ingresa tu destino, elige entre triciclo, moto o auto, y confirma tu viaje. Un conductor cercano te recogerá en minutos.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: '¿En qué ciudades opera TriciGo?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'TriciGo opera en La Habana y 14 ciudades más de Cuba, incluyendo Santiago de Cuba, Camagüey, Holguín, Santa Clara y más.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: '¿Cómo pago mi viaje?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Puedes pagar en efectivo (CUP), con TriciCoin (monedero digital) o con métodos mixtos. También aceptamos TropiPay.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: '¿Es seguro viajar con TriciGo?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Sí. TriciGo incluye botón SOS, seguimiento en tiempo real, contactos de confianza y verificación de conductores.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: '¿Cuánto cuesta un viaje?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'El precio depende de la distancia, tipo de vehículo y demanda. Siempre ves el precio estimado antes de confirmar.',
+      },
+    },
+  ],
+};
+
+const serviceJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Service',
+  name: 'TriciGo - Servicio de Transporte',
+  serviceType: 'Taxi Service',
+  provider: {
+    '@type': 'Organization',
+    name: 'TriciGo',
+    url: 'https://tricigo.com',
+  },
+  areaServed: {
+    '@type': 'Country',
+    name: 'Cuba',
+  },
+  description: 'Servicio de transporte bajo demanda en Cuba. Triciclos, motos y autos disponibles 24/7.',
+  offers: {
+    '@type': 'Offer',
+    priceCurrency: 'CUP',
+    availability: 'https://schema.org/InStock',
+  },
+};
+
 /* ── Static SSR content visible to crawlers ── */
 
 export default function HomePage() {
   return (
     <main>
+      {/* ── Structured Data ── */}
+      <JsonLd data={faqJsonLd} />
+      <JsonLd data={serviceJsonLd} />
       {/* ── SSR: Static SEO content ── */}
       <article className="sr-only" aria-hidden="false">
         <h1>Pide tu taxi en Cuba con TriciGo</h1>

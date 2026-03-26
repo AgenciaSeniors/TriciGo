@@ -33,12 +33,14 @@ export const metadata: Metadata = {
     title: 'TriciGo — Pide tu viaje en La Habana',
     description:
       'Solicita un viaje en La Habana con TriciGo. Triciclos, motos y autos al mejor precio.',
+    images: [{ url: '/og-image.svg', width: 1200, height: 630, alt: 'TriciGo - Pide tu taxi en Cuba' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'TriciGo — Pide tu viaje en La Habana',
     description:
       'Solicita un viaje en La Habana con TriciGo. Rápido, seguro y al mejor precio.',
+    images: ['/og-image.svg'],
   },
   metadataBase: new URL('https://tricigo.com'),
   alternates: {
