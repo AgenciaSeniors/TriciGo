@@ -449,7 +449,7 @@ const OVERPASS_MIRRORS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string } }> }> {
+async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string }; center?: { lat: number; lon: number } }> }> {
   const encoded = encodeURIComponent(query);
   const controller = new AbortController();
 
@@ -634,7 +634,7 @@ export async function suggestPickupPoint(
 
 /**
  * Find the intersection point of a main street with one or two cross streets.
- * Uses Nominatim to locate the main street, then Overpass to find cross streets nearby.
+ * Uses Overpass-only approach (no Nominatim) for speed.
  */
 export async function findIntersection(
   mainStreet: string,
@@ -643,73 +643,88 @@ export async function findIntersection(
   proximity?: { latitude: number; longitude: number },
 ): Promise<{ address: string; latitude: number; longitude: number } | null> {
   try {
-    // 1. Find the main street via Nominatim
-    const viewbox = proximity
-      ? `${proximity.longitude - 0.15},${proximity.latitude - 0.15},${proximity.longitude + 0.15},${proximity.latitude + 0.15}`
-      : '-85.0,19.5,-74.0,23.5';
+    const lat = proximity?.latitude || 23.1136;
+    const lng = proximity?.longitude || -82.3666;
 
-    const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mainStreet)}&format=json&countrycodes=cu&limit=1&viewbox=${viewbox}&bounded=0`;
-    const nomRes = await fetch(nomUrl, {
-      headers: { 'User-Agent': 'TriciGo/1.0', 'Accept-Language': 'es' },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!nomRes.ok) return null;
-    const nomData = await nomRes.json();
-    if (!nomData.length) return null;
+    // Escape for Overpass regex
+    const esc = (s: string) => s.replace(/[\\"/]/g, '');
 
-    const mainLat = parseFloat(nomData[0].lat);
-    const mainLng = parseFloat(nomData[0].lon);
+    // Build ONE Overpass query for ALL streets at once
+    const streets = [mainStreet, crossStreet1];
+    if (crossStreet2) streets.push(crossStreet2);
 
-    // 2. Search for cross streets near the main street via Overpass
-    const cross1Escaped = crossStreet1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const crossQuery2 = crossStreet2
-      ? `way["name"~"${crossStreet2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}","i"]["highway"](around:800,${mainLat},${mainLng});`
-      : '';
+    const wayQueries = streets.map(s =>
+      `way["name"~"${esc(s)}","i"]["highway"](around:2000,${lat},${lng});`
+    ).join('');
 
-    const query = `[out:json][timeout:5];(way["name"~"${cross1Escaped}","i"]["highway"](around:800,${mainLat},${mainLng});${crossQuery2});out center;`;
+    const query = `[out:json][timeout:5];(${wayQueries});out center;`;
 
-    let overpassData: any = null;
-    try {
-      overpassData = await queryOverpassRace(query);
-    } catch {
-      return null;
+    // Use existing mirror-racing function
+    const data = await queryOverpassRace(query);
+    if (!data?.elements?.length) return null;
+
+    // Group elements by which street they match
+    const mainLower = mainStreet.toLowerCase();
+    const cross1Lower = crossStreet1.toLowerCase();
+    const cross2Lower = crossStreet2?.toLowerCase();
+
+    const mainWays: Array<{ lat: number; lon: number }> = [];
+    const cross1Ways: Array<{ lat: number; lon: number }> = [];
+    const cross2Ways: Array<{ lat: number; lon: number }> = [];
+
+    for (const el of data.elements) {
+      if (!el.center || !el.tags?.name) continue;
+      const name = el.tags.name.toLowerCase();
+      if (name.includes(mainLower)) mainWays.push(el.center);
+      if (name.includes(cross1Lower)) cross1Ways.push(el.center);
+      if (cross2Lower && name.includes(cross2Lower)) cross2Ways.push(el.center);
     }
 
-    if (!overpassData?.elements?.length) return null;
+    if (!mainWays.length || !cross1Ways.length) return null;
 
-    // 3. Find centers of cross streets
-    const elements = overpassData.elements.filter((e: any) => e.center);
-
-    let cross1Center: { lat: number; lon: number } | null = null;
-    let cross2Center: { lat: number; lon: number } | null = null;
-
-    for (const el of elements) {
-      const name = (el.tags?.name || '').toLowerCase();
-      if (!cross1Center && name.includes(crossStreet1.toLowerCase())) {
-        cross1Center = el.center;
-      } else if (crossStreet2 && !cross2Center && name.includes(crossStreet2.toLowerCase())) {
-        cross2Center = el.center;
+    // Find closest pair between main street and cross street 1
+    let bestDist = Infinity;
+    let bestPoint = { lat: 0, lon: 0 };
+    for (const mw of mainWays) {
+      for (const cw of cross1Ways) {
+        const d = haversineDistance(
+          { latitude: mw.lat, longitude: mw.lon },
+          { latitude: cw.lat, longitude: cw.lon },
+        );
+        if (d < bestDist) {
+          bestDist = d;
+          bestPoint = { lat: (mw.lat + cw.lat) / 2, lon: (mw.lon + cw.lon) / 2 };
+        }
       }
     }
 
-    if (!cross1Center) return null;
-
-    // 4. Calculate intersection point
-    let lat: number, lng: number;
-    if (cross1Center && cross2Center) {
-      lat = (cross1Center.lat + cross2Center.lat) / 2;
-      lng = (cross1Center.lon + cross2Center.lon) / 2;
-    } else {
-      lat = cross1Center.lat;
-      lng = cross1Center.lon;
+    // If cross2 exists, find its intersection with main too
+    let point2: { lat: number; lon: number } | null = null;
+    if (cross2Ways.length) {
+      let best2 = Infinity;
+      for (const mw of mainWays) {
+        for (const cw of cross2Ways) {
+          const d = haversineDistance(
+            { latitude: mw.lat, longitude: mw.lon },
+            { latitude: cw.lat, longitude: cw.lon },
+          );
+          if (d < best2) {
+            best2 = d;
+            point2 = { lat: (mw.lat + cw.lat) / 2, lon: (mw.lon + cw.lon) / 2 };
+          }
+        }
+      }
     }
 
-    // 5. Format address
+    // Final point: midpoint of both intersections or just the first
+    const finalLat = point2 ? (bestPoint.lat + point2.lat) / 2 : bestPoint.lat;
+    const finalLng = point2 ? (bestPoint.lon + point2.lon) / 2 : bestPoint.lon;
+
     const address = crossStreet2
       ? `${mainStreet} e/ ${crossStreet1} y ${crossStreet2}`
       : `${mainStreet} y ${crossStreet1}`;
 
-    return { address, latitude: lat, longitude: lng };
+    return { address, latitude: finalLat, longitude: finalLng };
   } catch {
     return null;
   }
