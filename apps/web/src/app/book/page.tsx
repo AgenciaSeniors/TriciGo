@@ -229,20 +229,15 @@ export default function BookPage() {
   async function handleUseMyLocation() {
     try {
       const coords = await requestLocation();
-      const nearest = findNearestPreset(coords);
-      let preset: LocationPreset;
-      if (nearest) {
-        preset = nearest;
-      } else {
-        const address = await reverseGeocode(coords.latitude, coords.longitude);
-        const label = address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
-        preset = {
-          label,
-          address: address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        };
-      }
+      // Always use reverse geocoding for accurate street address with cross streets
+      const address = await reverseGeocode(coords.latitude, coords.longitude);
+      const label = address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+      const preset: LocationPreset = {
+        label,
+        address: address || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      };
       if (selectionStep === 'pickup') {
         handleSetPickup(preset);
       } else if (selectionStep === 'dropoff') {

@@ -492,7 +492,8 @@ async function findCrossStreets(
   }
 
   // 2. Query Overpass — reduced radius (30m) + 3s server timeout for speed
-  const query = `[out:json][timeout:3];way(around:30,${lat},${lng})["highway"]["name"];out tags;`;
+  // 75m radius covers typical Havana city blocks (80-100m wide)
+  const query = `[out:json][timeout:3];way(around:75,${lat},${lng})["highway"]["name"];out tags;`;
 
   try {
     const data = await queryOverpassRace(query);

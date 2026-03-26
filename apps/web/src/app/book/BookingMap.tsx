@@ -455,48 +455,7 @@ export default function BookingMap({
         </p>
       )}
 
-      {/* Quick-select preset buttons */}
-      <div>
-        <p style={{
-          fontSize: '0.75rem', fontWeight: 600, color: '#666',
-          textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem',
-        }}>
-          {t('book.map_preset_buttons_label')}
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-          {HAVANA_PRESETS.map((p) => {
-            const isPickup = pickup?.label === p.label;
-            const isDropoff = dropoff?.label === p.label;
-            const isSelected = isPickup || isDropoff;
-            return (
-              <button
-                key={p.label}
-                type="button"
-                disabled={selectionStep === 'done'}
-                onClick={() => handlePresetClick(p)}
-                style={{
-                  padding: '0.5rem 0.625rem',
-                  borderRadius: '0.5rem',
-                  border: isSelected ? '2px solid var(--primary)' : '1px solid #ddd',
-                  background: isSelected ? '#FFF5F0' : 'white',
-                  cursor: selectionStep === 'done' ? 'not-allowed' : 'pointer',
-                  fontSize: '0.75rem',
-                  fontWeight: isSelected ? 600 : 400,
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
-                  opacity: selectionStep === 'done' && !isSelected ? 0.5 : 1,
-                }}
-              >
-                {isPickup && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />}
-                {isDropoff && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />}
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Preset buttons removed — user types address or clicks map */}
     </div>
   );
 }
