@@ -12,6 +12,7 @@ import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle } from
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 /* Dynamic import — Mapbox GL JS requires `window` */
 const BookingMap = dynamic(() => import('./BookingMap'), {
@@ -48,6 +49,7 @@ export default function BookPage() {
   const router = useRouter();
   const { t } = useTranslation('web');
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
   /* ─── Location state ─── */
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
@@ -366,6 +368,30 @@ export default function BookPage() {
           {t('book.title')}
         </h1>
         <p style={{ color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>{t('book.subtitle')}</p>
+
+        {/* ═══ Address Autocomplete (WF-2) ═══ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+          <AddressAutocomplete
+            label="Origen"
+            placeholder="¿Dónde te recogemos?"
+            value={pickupAddress || ''}
+            mapboxToken={mapboxToken}
+            onSelect={(r) => {
+              const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
+              handleSetPickup(loc);
+            }}
+          />
+          <AddressAutocomplete
+            label="Destino"
+            placeholder="¿A dónde vas?"
+            value={dropoffAddress || ''}
+            mapboxToken={mapboxToken}
+            onSelect={(r) => {
+              const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
+              handleSetDropoff(loc);
+            }}
+          />
+        </div>
 
         {/* ═══ MAP ═══ */}
         <BookingMap

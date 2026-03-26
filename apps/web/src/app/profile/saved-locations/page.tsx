@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient, customerService } from '@tricigo/api';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 
 interface SavedLocation {
   label: string;
@@ -23,6 +24,8 @@ export default function SavedLocationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [formLabel, setFormLabel] = useState('');
   const [formAddress, setFormAddress] = useState('');
+  const [formLat, setFormLat] = useState(0);
+  const [formLng, setFormLng] = useState(0);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -55,8 +58,8 @@ export default function SavedLocationsPage() {
     const newLoc: SavedLocation = {
       label: formLabel.trim(),
       address: formAddress.trim(),
-      latitude: 0,
-      longitude: 0,
+      latitude: formLat,
+      longitude: formLng,
     };
 
     let updated: SavedLocation[];
@@ -73,6 +76,8 @@ export default function SavedLocationsPage() {
       setEditingIndex(null);
       setFormLabel('');
       setFormAddress('');
+      setFormLat(0);
+      setFormLng(0);
     } catch (err) {
       console.error('Error saving location:', err);
       alert('Error al guardar ubicacion. Intenta de nuevo.');
@@ -97,6 +102,8 @@ export default function SavedLocationsPage() {
     setEditingIndex(index);
     setFormLabel(loc.label);
     setFormAddress(loc.address);
+    setFormLat(loc.latitude);
+    setFormLng(loc.longitude);
     setShowForm(true);
   }
 
@@ -104,6 +111,8 @@ export default function SavedLocationsPage() {
     setEditingIndex(null);
     setFormLabel('');
     setFormAddress('');
+    setFormLat(0);
+    setFormLng(0);
     setShowForm(true);
   }
 
@@ -267,20 +276,22 @@ export default function SavedLocationsPage() {
           </div>
 
           <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Direccion</label>
-            <input
-              type="text" value={formAddress} onChange={(e) => setFormAddress(e.target.value)}
-              placeholder="Calle 23 #456, Vedado"
-              style={{
-                width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
-                fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
+            <AddressAutocomplete
+              label="Direccion"
+              placeholder="Buscar dirección..."
+              value={formAddress}
+              mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''}
+              onSelect={(r) => {
+                setFormAddress(r.address);
+                setFormLat(r.latitude);
+                setFormLng(r.longitude);
               }}
             />
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={() => { setShowForm(false); setEditingIndex(null); setFormLabel(''); setFormAddress(''); }}
+              onClick={() => { setShowForm(false); setEditingIndex(null); setFormLabel(''); setFormAddress(''); setFormLat(0); setFormLng(0); }}
               style={{
                 flex: 1, padding: '0.75rem', background: 'transparent', color: 'var(--text-secondary)',
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
