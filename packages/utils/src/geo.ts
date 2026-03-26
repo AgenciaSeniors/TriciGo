@@ -433,8 +433,50 @@ export async function fetchNavigationRoute(
 
 /* ─── Cross-Street Detection via Overpass API ─── */
 
+// In-memory cache for cross-street results (streets don't change)
+const crossStreetCache = new Map<string, { streets: string[]; ts: number }>();
+const CROSS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const CROSS_CACHE_MAX = 200;
+
+function crossCacheKey(lat: number, lng: number): string {
+  // Round to ~11m precision — same block = same cross streets
+  return `${lat.toFixed(4)},${lng.toFixed(4)}`;
+}
+
+// Overpass API mirrors — race for fastest response
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string } }> }> {
+  const encoded = encodeURIComponent(query);
+  const controller = new AbortController();
+
+  const promises = OVERPASS_MIRRORS.map((mirror) =>
+    fetch(`${mirror}?data=${encoded}`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'TriciGo/1.0 (https://tricigo.com)' },
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }),
+  );
+
+  try {
+    // Promise.any resolves with the FIRST successful response
+    const result = await Promise.any(promises);
+    controller.abort(); // Cancel slower mirror
+    return result;
+  } catch {
+    // All mirrors failed
+    return { elements: [] };
+  }
+}
+
 /**
  * Find cross streets near a coordinate using the Overpass API.
+ * Uses in-memory cache + mirror racing for reliability and speed.
  * Returns up to 2 street names that are different from the main road.
  */
 async function findCrossStreets(
@@ -442,24 +484,40 @@ async function findCrossStreets(
   lng: number,
   mainRoad: string,
 ): Promise<string[]> {
-  const query = `[out:json][timeout:5];way(around:50,${lat},${lng})["highway"]["name"];out tags;`;
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  // 1. Check cache first (instant)
+  const key = crossCacheKey(lat, lng);
+  const cached = crossStreetCache.get(key);
+  if (cached && Date.now() - cached.ts < CROSS_CACHE_TTL) {
+    return cached.streets;
+  }
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  if (!res.ok) return [];
+  // 2. Query Overpass — reduced radius (30m) + 3s server timeout for speed
+  const query = `[out:json][timeout:3];way(around:30,${lat},${lng})["highway"]["name"];out tags;`;
 
-  const data = await res.json();
+  try {
+    const data = await queryOverpassRace(query);
 
-  // Extract unique road names that aren't the main road
-  const mainLower = mainRoad.toLowerCase();
-  const roads = (data.elements || [])
-    .map((el: { tags?: { name?: string } }) => el.tags?.name)
-    .filter((name?: string): name is string =>
-      !!name && name.toLowerCase() !== mainLower,
-    );
+    // Extract unique road names that aren't the main road
+    const mainLower = mainRoad.toLowerCase();
+    const roads = (data.elements || [])
+      .map((el) => el.tags?.name)
+      .filter((name): name is string =>
+        !!name && name.toLowerCase() !== mainLower,
+      );
 
-  // Deduplicate and return max 2
-  return [...new Set(roads)].slice(0, 2) as string[];
+    const streets = [...new Set(roads)].slice(0, 2);
+
+    // 3. Cache result (evict oldest if full)
+    if (crossStreetCache.size >= CROSS_CACHE_MAX) {
+      const oldest = crossStreetCache.keys().next().value;
+      if (oldest) crossStreetCache.delete(oldest);
+    }
+    crossStreetCache.set(key, { streets, ts: Date.now() });
+
+    return streets;
+  } catch {
+    return [];
+  }
 }
 
 /* ─── Nominatim Reverse Geocoding ─── */
@@ -507,7 +565,7 @@ export async function reverseGeocode(
             : `${base} y ${crossStreets[0]}`;
         }
       } catch {
-        // Overpass failed — fallback to basic format
+        // Both Overpass mirrors failed — use Nominatim address only
       }
     }
 
