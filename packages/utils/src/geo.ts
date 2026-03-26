@@ -630,6 +630,91 @@ export async function suggestPickupPoint(
   }
 }
 
+/* ─── Cuban Intersection Search ─── */
+
+/**
+ * Find the intersection point of a main street with one or two cross streets.
+ * Uses Nominatim to locate the main street, then Overpass to find cross streets nearby.
+ */
+export async function findIntersection(
+  mainStreet: string,
+  crossStreet1: string,
+  crossStreet2?: string,
+  proximity?: { latitude: number; longitude: number },
+): Promise<{ address: string; latitude: number; longitude: number } | null> {
+  try {
+    // 1. Find the main street via Nominatim
+    const viewbox = proximity
+      ? `${proximity.longitude - 0.15},${proximity.latitude - 0.15},${proximity.longitude + 0.15},${proximity.latitude + 0.15}`
+      : '-85.0,19.5,-74.0,23.5';
+
+    const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(mainStreet)}&format=json&countrycodes=cu&limit=1&viewbox=${viewbox}&bounded=0`;
+    const nomRes = await fetch(nomUrl, {
+      headers: { 'User-Agent': 'TriciGo/1.0', 'Accept-Language': 'es' },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!nomRes.ok) return null;
+    const nomData = await nomRes.json();
+    if (!nomData.length) return null;
+
+    const mainLat = parseFloat(nomData[0].lat);
+    const mainLng = parseFloat(nomData[0].lon);
+
+    // 2. Search for cross streets near the main street via Overpass
+    const cross1Escaped = crossStreet1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const crossQuery2 = crossStreet2
+      ? `way["name"~"${crossStreet2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}","i"]["highway"](around:800,${mainLat},${mainLng});`
+      : '';
+
+    const query = `[out:json][timeout:5];(way["name"~"${cross1Escaped}","i"]["highway"](around:800,${mainLat},${mainLng});${crossQuery2});out center;`;
+
+    let overpassData: any = null;
+    try {
+      overpassData = await queryOverpassRace(query);
+    } catch {
+      return null;
+    }
+
+    if (!overpassData?.elements?.length) return null;
+
+    // 3. Find centers of cross streets
+    const elements = overpassData.elements.filter((e: any) => e.center);
+
+    let cross1Center: { lat: number; lon: number } | null = null;
+    let cross2Center: { lat: number; lon: number } | null = null;
+
+    for (const el of elements) {
+      const name = (el.tags?.name || '').toLowerCase();
+      if (!cross1Center && name.includes(crossStreet1.toLowerCase())) {
+        cross1Center = el.center;
+      } else if (crossStreet2 && !cross2Center && name.includes(crossStreet2.toLowerCase())) {
+        cross2Center = el.center;
+      }
+    }
+
+    if (!cross1Center) return null;
+
+    // 4. Calculate intersection point
+    let lat: number, lng: number;
+    if (cross1Center && cross2Center) {
+      lat = (cross1Center.lat + cross2Center.lat) / 2;
+      lng = (cross1Center.lon + cross2Center.lon) / 2;
+    } else {
+      lat = cross1Center.lat;
+      lng = cross1Center.lon;
+    }
+
+    // 5. Format address
+    const address = crossStreet2
+      ? `${mainStreet} e/ ${crossStreet1} y ${crossStreet2}`
+      : `${mainStreet} y ${crossStreet1}`;
+
+    return { address, latitude: lat, longitude: lng };
+  } catch {
+    return null;
+  }
+}
+
 /* ─── Nominatim Forward Geocoding (Address Search) ─── */
 
 /**

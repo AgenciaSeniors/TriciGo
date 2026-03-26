@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance } from '@tricigo/utils';
+import { haversineDistance, findIntersection } from '@tricigo/utils';
 
 interface AddressResult {
   address: string;
@@ -36,6 +36,24 @@ function getSavedIcon(label: string): string {
   if (lower.includes('gym') || lower.includes('gimnasio')) return '🏋️';
   if (lower.includes('escuela') || lower.includes('school') || lower.includes('universidad')) return '🎓';
   return '⭐';
+}
+
+function parseCubanAddress(query: string): { main: string; cross1: string; cross2?: string } | null {
+  let m: RegExpMatchArray | null;
+
+  // "X entre Y y Z"
+  m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+
+  // "X e/ Y y Z"
+  m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+
+  // "X entre Y"
+  m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim() };
+
+  return null;
 }
 
 export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
@@ -116,10 +134,16 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
         mapboxUrl += `&proximity=${proximity.longitude},${proximity.latitude}`;
       }
 
-      // Run Mapbox AND Nominatim in parallel
-      const [mapboxSettled, nominatimSettled] = await Promise.allSettled([
+      // Check if query matches Cuban address pattern ("X entre Y y Z")
+      const cubanParsed = parseCubanAddress(q);
+
+      // Run Mapbox, Nominatim, and Cuban intersection search in parallel
+      const [mapboxSettled, nominatimSettled, cubanSettled] = await Promise.allSettled([
         fetch(mapboxUrl).then(r => r.json()),
         searchNominatim(q, proximity),
+        cubanParsed
+          ? findIntersection(cubanParsed.main, cubanParsed.cross1, cubanParsed.cross2, proximity || undefined)
+          : Promise.resolve(null),
       ]);
 
       // Parse Mapbox results
@@ -148,6 +172,17 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
       // Get Nominatim results
       const nominatimItems: AddressResult[] =
         nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
+
+      // Build Cuban intersection result if found
+      const cubanResult: AddressResult | null =
+        cubanSettled.status === 'fulfilled' && cubanSettled.value
+          ? {
+              address: cubanSettled.value.address,
+              latitude: cubanSettled.value.latitude,
+              longitude: cubanSettled.value.longitude,
+              place_name: cubanSettled.value.address,
+            }
+          : null;
 
       // Merge: Mapbox first, then Nominatim results that aren't duplicates (within 200m)
       const merged = [...mapboxItems];
@@ -178,8 +213,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
         });
       }
 
-      // Limit to 5 results
-      const items = merged.slice(0, 5);
+      // Cuban intersection result goes first, then normal results (limit total to 5)
+      const items = cubanResult
+        ? [cubanResult, ...merged.slice(0, 4)]
+        : merged.slice(0, 5);
 
       setResults(items);
       setIsOpen(true);
