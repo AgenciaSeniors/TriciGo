@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService } from '@tricigo/api';
+import { rideService, nearbyService, customerService } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
@@ -55,6 +55,25 @@ export default function BookPage() {
   const { t } = useTranslation('web');
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+
+  /* ─── Saved locations ─── */
+  const [savedLocations, setSavedLocations] = useState<Array<{ label: string; address: string; latitude: number; longitude: number }>>([]);
+
+  useEffect(() => {
+    async function loadSaved() {
+      try {
+        const { getSupabaseClient } = await import('@tricigo/api');
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const profile = await customerService.getProfile(user.id);
+        if (profile?.saved_locations?.length) {
+          setSavedLocations(profile.saved_locations.filter((l: any) => l.latitude && l.longitude));
+        }
+      } catch { /* ignore — saved locations are optional */ }
+    }
+    loadSaved();
+  }, []);
 
   /* ─── Location state ─── */
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
@@ -376,6 +395,7 @@ export default function BookPage() {
             placeholder="¿Dónde te recogemos?"
             value={pickupAddress || ''}
             mapboxToken={mapboxToken}
+            savedLocations={savedLocations}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetPickup(loc);
@@ -386,6 +406,7 @@ export default function BookPage() {
             placeholder="¿A dónde vas?"
             value={dropoffAddress || ''}
             mapboxToken={mapboxToken}
+            savedLocations={savedLocations}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetDropoff(loc);

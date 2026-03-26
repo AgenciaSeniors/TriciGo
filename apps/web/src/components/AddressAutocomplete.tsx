@@ -10,15 +10,32 @@ interface AddressResult {
   place_name: string;
 }
 
+interface SavedLocationItem {
+  label: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface AddressAutocompleteProps {
   label?: string;
   placeholder?: string;
   value?: string;
   onSelect: (result: AddressResult) => void;
   mapboxToken: string;
+  savedLocations?: SavedLocationItem[];
 }
 
-export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken }: AddressAutocompleteProps) {
+function getSavedIcon(label: string): string {
+  const lower = label.toLowerCase();
+  if (lower.includes('casa') || lower.includes('home')) return '🏠';
+  if (lower.includes('trabajo') || lower.includes('work') || lower.includes('oficina')) return '🏢';
+  if (lower.includes('gym') || lower.includes('gimnasio')) return '🏋️';
+  if (lower.includes('escuela') || lower.includes('school') || lower.includes('universidad')) return '🎓';
+  return '⭐';
+}
+
+export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken, savedLocations }: AddressAutocompleteProps) {
   const { t } = useTranslation('web');
   const [query, setQuery] = useState(value || '');
   const [results, setResults] = useState<AddressResult[]>([]);
@@ -158,7 +175,8 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
   }
 
   const showNoResults = query.length >= 2 && !loading && results.length === 0 && isOpen;
-  const showDropdown = isOpen && (results.length > 0 || showNoResults);
+  const hasSavedToShow = query.length === 0 && savedLocations && savedLocations.length > 0;
+  const showDropdown = isOpen && (results.length > 0 || showNoResults || hasSavedToShow);
   const activeDescendant = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
 
   return (
@@ -211,7 +229,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
           value={query}
           onChange={handleChange}
           onFocus={() => {
-            if (results.length > 0 || (query.length >= 2 && !loading && results.length === 0)) {
+            // Show saved locations when empty, or search results when typing
+            if (query.length === 0 && savedLocations && savedLocations.length > 0) {
+              setIsOpen(true);
+            } else if (results.length > 0 || (query.length >= 2 && !loading && results.length === 0)) {
               setIsOpen(true);
             }
           }}
@@ -324,7 +345,40 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
             transition: 'opacity 0.15s ease',
           }}
         >
-          {results.length > 0 ? (
+          {/* Saved locations when query is empty */}
+          {query.length === 0 && savedLocations && savedLocations.length > 0 ? (
+            <>
+              <li style={{ padding: '0.5rem 0.75rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {t('web.saved_locations_header', { defaultValue: 'Ubicaciones guardadas' })}
+              </li>
+              {savedLocations.map((loc, i) => (
+                <li
+                  key={`saved-${i}`}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onClick={() => handleSelect({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, place_name: loc.label })}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    padding: '0.65rem 0.75rem',
+                    minHeight: 48,
+                    cursor: 'pointer',
+                    background: i === activeIndex ? 'rgba(var(--primary-rgb, 255,140,0), 0.08)' : 'transparent',
+                    borderBottom: i < savedLocations.length - 1 ? '1px solid var(--border-light)' : 'none',
+                    transition: 'background 0.1s ease',
+                  }}
+                >
+                  <span style={{ flexShrink: 0, fontSize: '1.2rem' }} aria-hidden="true">{getSavedIcon(loc.label)}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>{loc.label}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.address}</div>
+                  </div>
+                </li>
+              ))}
+            </>
+          ) : results.length > 0 ? (
             results.map((r, i) => (
               <li
                 key={i}
