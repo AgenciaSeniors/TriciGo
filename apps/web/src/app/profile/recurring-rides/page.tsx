@@ -38,7 +38,7 @@ export default function RecurringRidesPage() {
       const data = await recurringRideService.getRecurringRides(userId);
       setRides(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los viajes recurrentes');
     } finally {
       setLoading(false);
     }
@@ -114,9 +114,9 @@ export default function RecurringRidesPage() {
         <WebSkeletonList count={3} />
       ) : rides.length === 0 ? (
         <WebEmptyState
-          icon="🔁"
-          title="Sin viajes recurrentes"
-          description="Programa viajes que se repitan automaticamente cada semana."
+          icon="🔄"
+          title="No tienes viajes recurrentes"
+          description="Configura viajes que se repiten para ahorrar tiempo."
           action={{ label: 'Solicitar un viaje', href: '/book' }}
         />
       ) : (

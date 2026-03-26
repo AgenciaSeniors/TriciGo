@@ -28,8 +28,8 @@ export default function CorporatePage() {
     corporateService.getMyAccounts(userId).then((data) => {
       setAccounts(data);
       setLoading(false);
-    }).catch((err) => {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+    }).catch(() => {
+      setError('No se pudieron cargar las cuentas corporativas');
       setLoading(false);
     });
   }, [userId]);
@@ -76,8 +76,8 @@ export default function CorporatePage() {
       ) : accounts.length === 0 ? (
         <WebEmptyState
           icon="🏢"
-          title="Sin cuentas corporativas"
-          description="No estas asociado a ninguna cuenta corporativa."
+          title="No tienes cuentas corporativas"
+          description="Contacta a tu empresa para vincular tu cuenta de TriciGo."
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

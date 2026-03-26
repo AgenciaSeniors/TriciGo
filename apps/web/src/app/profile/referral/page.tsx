@@ -18,29 +18,24 @@ export default function ReferralPage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (copied) {
-      const timer = setTimeout(() => setCopied(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copied]);
-
-  const referralCode = userId ? userId.substring(0, 8).toUpperCase() : '';
+  const referralCode = userId ? `TRICI${userId.substring(0, 6).toUpperCase()}` : '';
   const shareLink = `https://tricigo.com/refer/${referralCode}`;
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(shareLink);
+      await navigator.clipboard.writeText(referralCode);
       setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback
+      // Fallback for environments without Clipboard API
       const input = document.createElement('input');
-      input.value = shareLink;
+      input.value = referralCode;
       document.body.appendChild(input);
       input.select();
       document.execCommand('copy');
       document.body.removeChild(input);
       setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -163,6 +158,19 @@ export default function ReferralPage() {
             {copied ? 'Copiado!' : 'Copiar'}
           </button>
         </div>
+      </div>
+
+      {/* Referral stats placeholder */}
+      <div style={{
+        background: 'var(--bg-page)',
+        borderRadius: '0.75rem',
+        padding: '1rem',
+        textAlign: 'center',
+        marginBottom: '1.5rem',
+      }}>
+        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+          Comparte tu codigo y gana recompensas
+        </p>
       </div>
 
       {/* How it works */}
