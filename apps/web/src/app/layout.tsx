@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
+import { Montserrat } from 'next/font/google';
 import './globals.css';
 import { I18nProvider } from './providers';
 import { WebHeader } from './web-header';
 import { WebFooter } from './web-footer';
 import { JsonLd } from '../components/JsonLd';
+
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-montserrat',
+});
 
 export const metadata: Metadata = {
   title: {
@@ -90,7 +97,7 @@ const localBusinessJsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" className={montserrat.variable}>
       <head>
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={localBusinessJsonLd} />
