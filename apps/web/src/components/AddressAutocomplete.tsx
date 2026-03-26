@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
+import { haversineDistance } from '@tricigo/utils';
 
 interface AddressResult {
   address: string;
@@ -24,6 +25,8 @@ interface AddressAutocompleteProps {
   onSelect: (result: AddressResult) => void;
   mapboxToken: string;
   savedLocations?: SavedLocationItem[];
+  proximity?: { latitude: number; longitude: number };
+  enrichAddress?: (lat: number, lng: number) => Promise<string | null>;
 }
 
 function getSavedIcon(label: string): string {
@@ -35,7 +38,7 @@ function getSavedIcon(label: string): string {
   return '⭐';
 }
 
-export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken, savedLocations }: AddressAutocompleteProps) {
+export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
   const { t } = useTranslation('web');
   const [query, setQuery] = useState(value || '');
   const [results, setResults] = useState<AddressResult[]>([]);
@@ -83,34 +86,101 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
     }
   }, [activeIndex]);
 
+  async function searchNominatim(q: string, prox?: { latitude: number; longitude: number }): Promise<AddressResult[]> {
+    try {
+      const viewbox = prox
+        ? `${prox.longitude - 0.1},${prox.latitude - 0.1},${prox.longitude + 0.1},${prox.latitude + 0.1}`
+        : '-85.0,19.5,-74.0,23.5'; // Cuba bounding box
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=5&viewbox=${viewbox}&bounded=0&addressdetails=1`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.map((item: any) => ({
+        address: item.display_name || '',
+        latitude: parseFloat(item.lat),
+        longitude: parseFloat(item.lon),
+        place_name: item.name || item.display_name?.split(',')[0] || '',
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); setIsOpen(false); return; }
     setLoading(true);
     try {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${mapboxToken}&country=cu&language=es&limit=5&types=address,poi,place,neighborhood,locality`;
-      const res = await fetch(url);
-      const data = await res.json();
-      const items: AddressResult[] = (data.features || []).map((f: any) => {
-        // Extract neighborhood/locality from context for Cuban-style display
-        const context = f.context || [];
-        const neighborhood = context.find((c: any) => c.id?.startsWith('neighborhood'))?.text;
-        const locality = context.find((c: any) => c.id?.startsWith('locality'))?.text;
-        const place = context.find((c: any) => c.id?.startsWith('place'))?.text;
-        const area = neighborhood || locality || place || '';
+      // Build Mapbox URL with optional proximity
+      let mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${mapboxToken}&country=cu&language=es&limit=5&types=address,poi,place,neighborhood,locality`;
+      if (proximity) {
+        mapboxUrl += `&proximity=${proximity.longitude},${proximity.latitude}`;
+      }
 
-        // Build Cuban-style address: "Street, Neighborhood"
-        const streetPart = f.text || '';
-        const displayAddress = area && area !== streetPart
-          ? `${streetPart}, ${area}`
-          : f.place_name;
+      // Run Mapbox AND Nominatim in parallel
+      const [mapboxSettled, nominatimSettled] = await Promise.allSettled([
+        fetch(mapboxUrl).then(r => r.json()),
+        searchNominatim(q, proximity),
+      ]);
 
-        return {
-          address: f.place_name,
-          latitude: f.center[1],
-          longitude: f.center[0],
-          place_name: displayAddress,
-        };
-      });
+      // Parse Mapbox results
+      const mapboxItems: AddressResult[] = [];
+      if (mapboxSettled.status === 'fulfilled') {
+        const data = mapboxSettled.value;
+        for (const f of (data.features || [])) {
+          const context = f.context || [];
+          const neighborhood = context.find((c: any) => c.id?.startsWith('neighborhood'))?.text;
+          const locality = context.find((c: any) => c.id?.startsWith('locality'))?.text;
+          const place = context.find((c: any) => c.id?.startsWith('place'))?.text;
+          const area = neighborhood || locality || place || '';
+          const streetPart = f.text || '';
+          const displayAddress = area && area !== streetPart
+            ? `${streetPart}, ${area}`
+            : f.place_name;
+          mapboxItems.push({
+            address: f.place_name,
+            latitude: f.center[1],
+            longitude: f.center[0],
+            place_name: displayAddress,
+          });
+        }
+      }
+
+      // Get Nominatim results
+      const nominatimItems: AddressResult[] =
+        nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
+
+      // Merge: Mapbox first, then Nominatim results that aren't duplicates (within 200m)
+      const merged = [...mapboxItems];
+      for (const nom of nominatimItems) {
+        const isDuplicate = merged.some((existing) =>
+          haversineDistance(
+            { latitude: existing.latitude, longitude: existing.longitude },
+            { latitude: nom.latitude, longitude: nom.longitude },
+          ) < 200,
+        );
+        if (!isDuplicate) {
+          merged.push(nom);
+        }
+      }
+
+      // Sort by distance to proximity if available
+      if (proximity) {
+        merged.sort((a, b) => {
+          const distA = haversineDistance(
+            { latitude: a.latitude, longitude: a.longitude },
+            { latitude: proximity.latitude, longitude: proximity.longitude },
+          );
+          const distB = haversineDistance(
+            { latitude: b.latitude, longitude: b.longitude },
+            { latitude: proximity.latitude, longitude: proximity.longitude },
+          );
+          return distA - distB;
+        });
+      }
+
+      // Limit to 5 results
+      const items = merged.slice(0, 5);
+
       setResults(items);
       setIsOpen(true);
       setActiveIndex(-1);
@@ -119,7 +189,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
     } finally {
       setLoading(false);
     }
-  }, [mapboxToken]);
+  }, [mapboxToken, proximity]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
@@ -133,10 +203,22 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
     debounceRef.current = setTimeout(() => search(val), 300);
   }
 
-  function handleSelect(result: AddressResult) {
-    setQuery(result.address);
+  async function handleSelect(result: AddressResult) {
+    setQuery(result.place_name); // Show immediately
     setIsOpen(false);
     setActiveIndex(-1);
+
+    if (enrichAddress) {
+      try {
+        const enriched = await enrichAddress(result.latitude, result.longitude);
+        if (enriched) {
+          setQuery(enriched);
+          onSelect({ ...result, address: enriched, place_name: enriched });
+          return;
+        }
+      } catch { /* fallback to original */ }
+    }
+
     onSelect(result);
   }
 

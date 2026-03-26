@@ -79,6 +79,7 @@ export default function BookPage() {
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
   const [dropoff, setDropoff] = useState<LocationPreset | null>(null);
   const [selectionStep, setSelectionStep] = useState<SelectionStep>('pickup');
+  const [mapCenter, setMapCenter] = useState({ latitude: 23.1136, longitude: -82.3666 });
 
   /* ─── Ride state ─── */
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
@@ -396,6 +397,8 @@ export default function BookPage() {
             value={pickupAddress || ''}
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
+            proximity={mapCenter}
+            enrichAddress={reverseGeocode}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetPickup(loc);
@@ -407,6 +410,8 @@ export default function BookPage() {
             value={dropoffAddress || ''}
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
+            proximity={mapCenter}
+            enrichAddress={reverseGeocode}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetDropoff(loc);
@@ -431,6 +436,7 @@ export default function BookPage() {
           routeLoading={routeLoading}
           nearbyVehicles={nearbyVehicles}
           selectedServiceType={serviceType}
+          onMapCenterChange={setMapCenter}
         />
 
         {/* ═══ Reset button ═══ */}

@@ -28,6 +28,7 @@ export interface BookingMapProps {
   routeLoading: boolean;
   nearbyVehicles?: NearbyVehicle[];
   selectedServiceType?: ServiceTypeSlug;
+  onMapCenterChange?: (center: { latitude: number; longitude: number }) => void;
 }
 
 /* ── Marker HTML builders ── */
@@ -143,6 +144,7 @@ export default function BookingMap({
   routeLoading,
   nearbyVehicles = [],
   selectedServiceType,
+  onMapCenterChange,
 }: BookingMapProps) {
   const { t } = useTranslation('web');
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -207,6 +209,13 @@ export default function BookingMap({
       });
 
       // Preset location markers removed — always use reverse geocoding
+    });
+
+    map.on('moveend', () => {
+      if (onMapCenterChange) {
+        const center = map.getCenter();
+        onMapCenterChange({ latitude: center.lat, longitude: center.lng });
+      }
     });
 
     mapRef.current = map;
