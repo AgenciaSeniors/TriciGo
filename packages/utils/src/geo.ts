@@ -434,7 +434,7 @@ export async function fetchNavigationRoute(
 /* ─── Cross-Street Detection via Overpass API ─── */
 
 // In-memory cache for cross-street results (streets don't change)
-const crossStreetCache = new Map<string, { streets: string[]; ts: number }>();
+const crossStreetCache = new Map<string, { streets: string[]; main?: string; ts: number }>();
 const CROSS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const CROSS_CACHE_MAX = 200;
 
@@ -449,7 +449,7 @@ const OVERPASS_MIRRORS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string }; center?: { lat: number; lon: number }; lat?: number; lon?: number }> }> {
+async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string }; center?: { lat: number; lon: number }; lat?: number; lon?: number; geometry?: Array<{ lat: number; lon: number }> }> }> {
   const encoded = encodeURIComponent(query);
   const controller = new AbortController();
 
@@ -475,46 +475,125 @@ async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ ta
 }
 
 /**
- * Find cross streets near a coordinate using the Overpass API.
- * Uses in-memory cache + mirror racing for reliability and speed.
- * Returns up to 2 street names that are different from the main road.
+ * Distance from a point to a line segment (in approximate meters).
+ * Used to determine which street the user actually tapped on.
+ */
+function pointToSegmentDistanceM(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) {
+    const dlat = (px - ax) * 111000;
+    const dlng = (py - ay) * 111000 * Math.cos(px * Math.PI / 180);
+    return Math.sqrt(dlat * dlat + dlng * dlng);
+  }
+  let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  const dlat = (px - cx) * 111000;
+  const dlng = (py - cy) * 111000 * Math.cos(px * Math.PI / 180);
+  return Math.sqrt(dlat * dlat + dlng * dlng);
+}
+
+/**
+ * Minimum distance from a point to a way (polyline) in meters.
+ */
+function minDistToWay(lat: number, lng: number, geom: Array<{ lat: number; lon: number }>): number {
+  let min = Infinity;
+  for (let i = 0; i < geom.length - 1; i++) {
+    const d = pointToSegmentDistanceM(lat, lng, geom[i].lat, geom[i].lon, geom[i + 1].lat, geom[i + 1].lon);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+/**
+ * Find the nearest street + cross streets using Overpass geometry.
+ * Uses `out body geom` to get full way geometries, then calculates
+ * which way is geometrically closest to the tap point = main street.
+ * Other nearby ways with different names = cross streets.
+ */
+async function findNearestStreetAndCross(
+  lat: number,
+  lng: number,
+): Promise<{ mainStreet: string; crossStreets: string[] } | null> {
+  // Check cache
+  const key = crossCacheKey(lat, lng);
+  const cached = crossStreetCache.get(key);
+  if (cached && cached.main && Date.now() - cached.ts < CROSS_CACHE_TTL) {
+    return { mainStreet: cached.main, crossStreets: cached.streets };
+  }
+
+  const query = `[out:json][timeout:3];way(around:75,${lat},${lng})["highway"]["name"];out body geom;`;
+
+  try {
+    const data = await queryOverpassRace(query);
+    if (!data?.elements?.length) return null;
+
+    // Calculate distance from tap point to each way's geometry
+    const waysWithDist = data.elements
+      .filter(el => el.tags?.name && el.geometry && el.geometry.length >= 2)
+      .map(el => ({
+        name: el.tags!.name!,
+        dist: minDistToWay(lat, lng, el.geometry!),
+      }))
+      .sort((a, b) => a.dist - b.dist);
+
+    if (!waysWithDist.length) return null;
+
+    // Closest way = main street
+    const mainStreet = waysWithDist[0].name;
+
+    // Other ways with different names = cross streets (max 2, unique)
+    const crossStreets = waysWithDist
+      .filter(w => w.name.toLowerCase() !== mainStreet.toLowerCase())
+      .map(w => w.name)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .slice(0, 2);
+
+    // Cache
+    if (crossStreetCache.size >= CROSS_CACHE_MAX) {
+      const oldest = crossStreetCache.keys().next().value;
+      if (oldest) crossStreetCache.delete(oldest);
+    }
+    crossStreetCache.set(key, { main: mainStreet, streets: crossStreets, ts: Date.now() });
+
+    return { mainStreet, crossStreets };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Legacy: Find cross streets near a coordinate (used as fallback).
  */
 async function findCrossStreets(
   lat: number,
   lng: number,
   mainRoad: string,
 ): Promise<string[]> {
-  // 1. Check cache first (instant)
   const key = crossCacheKey(lat, lng);
   const cached = crossStreetCache.get(key);
   if (cached && Date.now() - cached.ts < CROSS_CACHE_TTL) {
     return cached.streets;
   }
-
-  // 2. Query Overpass — reduced radius (30m) + 3s server timeout for speed
-  // 75m radius covers typical Havana city blocks (80-100m wide)
   const query = `[out:json][timeout:3];way(around:75,${lat},${lng})["highway"]["name"];out tags;`;
-
   try {
     const data = await queryOverpassRace(query);
-
-    // Extract unique road names that aren't the main road
     const mainLower = mainRoad.toLowerCase();
     const roads = (data.elements || [])
       .map((el) => el.tags?.name)
-      .filter((name): name is string =>
-        !!name && name.toLowerCase() !== mainLower,
-      );
-
+      .filter((name): name is string => !!name && name.toLowerCase() !== mainLower);
     const streets = [...new Set(roads)].slice(0, 2);
-
-    // 3. Cache result (evict oldest if full)
     if (crossStreetCache.size >= CROSS_CACHE_MAX) {
       const oldest = crossStreetCache.keys().next().value;
       if (oldest) crossStreetCache.delete(oldest);
     }
     crossStreetCache.set(key, { streets, ts: Date.now() });
-
     return streets;
   } catch {
     return [];
@@ -525,14 +604,29 @@ async function findCrossStreets(
 
 /**
  * Reverse geocode coordinates to a Cuban-style street address.
- * Uses Nominatim for the main road, then Overpass API for cross streets.
- * Format: "Cruz del Padre e/ Velázquez y Carballo"
+ * PRIMARY: Uses Overpass with geometry to find the NEAREST street (not Nominatim).
+ * This fixes the bug where Nominatim returns a parallel street instead of the closest one.
+ * Format: "General Aguirre e/ General Suárez y Panchito Gómez"
  */
 export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
   try {
+    // 1. PRIMARY: Overpass geometry-based (most accurate)
+    const result = await findNearestStreetAndCross(lat, lng);
+    if (result) {
+      const { mainStreet, crossStreets } = result;
+      if (crossStreets.length >= 2) {
+        return `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+      }
+      if (crossStreets.length === 1) {
+        return `${mainStreet} y ${crossStreets[0]}`;
+      }
+      return mainStreet;
+    }
+
+    // 2. FALLBACK: Nominatim + old Overpass (less accurate but broader coverage)
     const url =
       `https://nominatim.openstreetmap.org/reverse` +
       `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es&zoom=18`;
@@ -544,33 +638,18 @@ export async function reverseGeocode(
     if (!data?.address) return null;
 
     const mainRoad = data.address.road;
-    const area = data.address.suburb || data.address.neighbourhood || data.address.city_district || '';
-
-    // If we have a main road, try to find cross streets
     if (mainRoad) {
       try {
         const crossStreets = await findCrossStreets(lat, lng, mainRoad);
         if (crossStreets.length >= 2) {
-          // Full Cuban format: "Cruz del Padre e/ Velázquez y Carballo"
-          const base = data.address.house_number
-            ? `${mainRoad} #${data.address.house_number}`
-            : mainRoad;
-          return `${base} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+          return `${mainRoad} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
         }
         if (crossStreets.length === 1) {
-          const base = data.address.house_number
-            ? `${mainRoad} #${data.address.house_number}`
-            : mainRoad;
-          return area
-            ? `${base} y ${crossStreets[0]}, ${area}`
-            : `${base} y ${crossStreets[0]}`;
+          return `${mainRoad} y ${crossStreets[0]}`;
         }
-      } catch {
-        // Both Overpass mirrors failed — use Nominatim address only
-      }
+      } catch { /* fallback below */ }
     }
 
-    // Fallback: basic format without cross streets
     const formatted = formatCubanAddress(data.address);
     return formatted || null;
   } catch {
