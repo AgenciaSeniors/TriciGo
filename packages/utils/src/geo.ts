@@ -725,7 +725,17 @@ export async function findIntersection(
   try {
     const lat = proximity?.latitude || 23.1136;
     const lng = proximity?.longitude || -82.3666;
-    const esc = (s: string) => s.replace(/[\\"/]/g, '');
+    // Make regex accent-tolerant for Overpass: replace vowels with '.' wildcard
+    // "Cadiz" → "C.d.z" matches "Cádiz"; "Suarez" → "S..r.z" matches "Suárez"
+    // Only replaces vowels (not consonants) to keep regex specific enough
+    const esc = (s: string) => s
+      .replace(/[\\"/]/g, '')
+      .replace(/[aáàâãä]/gi, '.')
+      .replace(/[eéèêë]/gi, '.')
+      .replace(/[iíìîï]/gi, '.')
+      .replace(/[oóòôõö]/gi, '.')
+      .replace(/[uúùûü]/gi, '.')
+      .replace(/ñ/gi, '.');
 
     // Helper: find the shared node between two named streets
     async function findSharedNode(street1: string, street2: string): Promise<{ lat: number; lon: number } | null> {
