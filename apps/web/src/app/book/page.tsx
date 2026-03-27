@@ -205,12 +205,15 @@ export default function BookPage() {
     setPickup(loc);
     setEstimate(null);
     setSelectionStep(dropoff ? 'done' : 'dropoff');
-    // Reverse geocode
-    setPickupAddress(null);
-    reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
-      if (addr) setPickupAddress(addr);
-    });
-    // Fetch route if dropoff already set
+    // If address already contains cross-streets (from Cuban search), use it directly
+    if (loc.address && loc.address.includes('e/')) {
+      setPickupAddress(loc.address);
+    } else {
+      setPickupAddress(null);
+      reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
+        if (addr) setPickupAddress(addr);
+      });
+    }
     if (dropoff) {
       loadRoute(loc, dropoff);
     }
@@ -220,11 +223,15 @@ export default function BookPage() {
     setDropoff(loc);
     setEstimate(null);
     setSelectionStep(pickup ? 'done' : 'pickup');
-    // Reverse geocode
-    setDropoffAddress(null);
-    reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
-      if (addr) setDropoffAddress(addr);
-    });
+    // If address already contains cross-streets (from Cuban search), use it directly
+    if (loc.address && loc.address.includes('e/')) {
+      setDropoffAddress(loc.address);
+    } else {
+      setDropoffAddress(null);
+      reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
+        if (addr) setDropoffAddress(addr);
+      });
+    }
     // Fetch route if pickup already set
     if (pickup) {
       loadRoute(pickup, loc);
