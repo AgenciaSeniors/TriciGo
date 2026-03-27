@@ -122,6 +122,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
   const [results, setResults] = useState<AddressResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const searchIdRef = useRef(0); // Race condition prevention
   const [activeIndex, setActiveIndex] = useState(-1);
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -220,13 +221,17 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
 
   const search = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); setIsOpen(false); return; }
+
+    const thisSearchId = ++searchIdRef.current; // Track this search
     setLoading(true);
+
     try {
       const cubanParsed = parseCubanAddress(q);
 
-      // PARTIAL CUBAN: user is typing "Lindero e/ Clavel y " → suggest cross streets
+      // ─── PATH 1: PARTIAL CUBAN (user typing "Lindero e/ Clavel y ") ───
       if (cubanParsed?.partial && proximity) {
         const crossStreets = await suggestCrossStreets(cubanParsed.main, proximity);
+        if (searchIdRef.current !== thisSearchId) return; // Stale — discard
         if (crossStreets.length > 0) {
           const suggestions: AddressResult[] = crossStreets.map(cs => {
             const addr = cubanParsed.partial === 'waiting_cross2'
@@ -242,43 +247,44 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
         }
       }
 
-      // COMPLETE CUBAN or NORMAL: Run Mapbox + Cuban intersection in parallel
-      const [mapboxSettled, cubanSettled] = await Promise.allSettled([
-        fetchMapbox(q),
-        cubanParsed && !cubanParsed.partial && cubanParsed.cross1
-          ? findIntersection(cubanParsed.main, cubanParsed.cross1, cubanParsed.cross2, proximity || undefined)
-          : Promise.resolve(null),
-      ]);
-
-      const mapboxItems = mapboxSettled.status === 'fulfilled' ? mapboxSettled.value : [];
-      const cubanResult = cubanSettled.status === 'fulfilled' && cubanSettled.value
-        ? {
-            address: cubanSettled.value.address,
-            latitude: cubanSettled.value.latitude,
-            longitude: cubanSettled.value.longitude,
-            place_name: cubanSettled.value.address,
-          }
-        : null;
-
-      // Build results: Cuban first, then Mapbox
-      let merged: AddressResult[] = [];
-      if (cubanResult) {
-        merged.push(cubanResult);
+      // ─── PATH 2: COMPLETE CUBAN ("Reina entre Campanario y Lealtad") ───
+      // ONLY run findIntersection — NO Mapbox (avoids irrelevant results)
+      if (cubanParsed && !cubanParsed.partial && cubanParsed.cross1) {
+        const intersection = await findIntersection(
+          cubanParsed.main, cubanParsed.cross1, cubanParsed.cross2, proximity || undefined,
+        );
+        if (searchIdRef.current !== thisSearchId) return; // Stale
+        if (intersection) {
+          setResults([{
+            address: intersection.address,
+            latitude: intersection.latitude,
+            longitude: intersection.longitude,
+            place_name: intersection.address,
+          }]);
+          setIsOpen(true);
+          setActiveIndex(-1);
+          setLoading(false);
+          return;
+        }
+        // Cuban search failed — fall through to Mapbox as backup
       }
-      merged.push(...mapboxItems);
 
-      // If no results at all from Mapbox, try Nominatim as fallback
-      if (mapboxItems.length === 0 && !cubanResult) {
+      // ─── PATH 3: NORMAL SEARCH (not Cuban format) ───
+      const mapboxItems = await fetchMapbox(q);
+      if (searchIdRef.current !== thisSearchId) return; // Stale
+
+      let merged = mapboxItems;
+
+      // If Mapbox returned nothing, try Nominatim as fallback
+      if (mapboxItems.length === 0) {
         const nominatimItems = await searchNominatim(q, proximity);
+        if (searchIdRef.current !== thisSearchId) return; // Stale
         merged = nominatimItems;
       }
 
-      // Sort by distance to proximity if available
+      // Sort by distance to proximity
       if (proximity && merged.length > 1) {
-        // Keep Cuban result first if present, sort the rest
-        const first = cubanResult ? merged.slice(0, 1) : [];
-        const rest = cubanResult ? merged.slice(1) : merged;
-        rest.sort((a, b) => {
+        merged.sort((a, b) => {
           const distA = haversineDistance(
             { latitude: a.latitude, longitude: a.longitude },
             { latitude: proximity.latitude, longitude: proximity.longitude },
@@ -289,16 +295,15 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
           );
           return distA - distB;
         });
-        merged = [...first, ...rest];
       }
 
       setResults(merged.slice(0, 5));
       setIsOpen(true);
       setActiveIndex(-1);
     } catch {
-      setResults([]);
+      if (searchIdRef.current === thisSearchId) setResults([]);
     } finally {
-      setLoading(false);
+      if (searchIdRef.current === thisSearchId) setLoading(false);
     }
   }, [mapboxToken, proximity, fetchMapbox]);
 
