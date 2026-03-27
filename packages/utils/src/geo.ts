@@ -651,7 +651,7 @@ export async function findIntersection(
     // Helper: find the shared node between two named streets
     async function findSharedNode(street1: string, street2: string): Promise<{ lat: number; lon: number } | null> {
       // Query: find nodes that belong to BOTH street1 ways AND street2 ways
-      const q = `[out:json][timeout:5];way["name"~"${esc(street1)}","i"]["highway"](around:3000,${lat},${lng})->.a;way["name"~"${esc(street2)}","i"]["highway"](around:3000,${lat},${lng})->.b;node(w.a)(w.b);out;`;
+      const q = `[out:json][timeout:5];way["name"~"${esc(street1)}",i]["highway"](around:3000,${lat},${lng})->.a;way["name"~"${esc(street2)}",i]["highway"](around:3000,${lat},${lng})->.b;node(w.a)(w.b);out;`;
 
       const data = await queryOverpassRace(q);
       if (!data?.elements?.length) return null;
