@@ -737,24 +737,30 @@ export async function findIntersection(
       .replace(/[uúùûü]/gi, '.')
       .replace(/ñ/gi, '.');
 
+    // For short street names (1-2 chars like "L", "M"), prefix with "Calle "
+    // because in OSM Cuba, single-letter streets are named "Calle L", "Calle M", etc.
+    const nameFilter = (s: string) => {
+      const clean = s.replace(/"/g, '');
+      if (clean.length <= 2) return `["name"~"(Calle |^)${clean}$",i]`;
+      return `["name"~"${esc(s)}",i]`;
+    };
+
     // Build ONE combined Overpass query that finds intersections with BOTH cross streets
-    // This avoids hitting Overpass twice (which causes rate limiting)
-    const mainEsc = esc(mainStreet);
-    const cross1Esc = esc(crossStreet1);
+    const mainF = nameFilter(mainStreet);
+    const cross1F = nameFilter(crossStreet1);
 
     let query: string;
     if (crossStreet2) {
-      const cross2Esc = esc(crossStreet2);
-      // Single query: find main ways, cross1 ways, cross2 ways, then shared nodes
+      const cross2F = nameFilter(crossStreet2);
       query = `[out:json][timeout:5];`
-        + `way["name"~"${mainEsc}",i]["highway"](around:3000,${lat},${lng})->.main;`
-        + `way["name"~"${cross1Esc}",i]["highway"](around:3000,${lat},${lng})->.c1;`
-        + `way["name"~"${cross2Esc}",i]["highway"](around:3000,${lat},${lng})->.c2;`
+        + `way${mainF}["highway"](around:3000,${lat},${lng})->.main;`
+        + `way${cross1F}["highway"](around:3000,${lat},${lng})->.c1;`
+        + `way${cross2F}["highway"](around:3000,${lat},${lng})->.c2;`
         + `(node(w.main)(w.c1);node(w.main)(w.c2););out;`;
     } else {
       query = `[out:json][timeout:5];`
-        + `way["name"~"${mainEsc}",i]["highway"](around:3000,${lat},${lng})->.main;`
-        + `way["name"~"${cross1Esc}",i]["highway"](around:3000,${lat},${lng})->.c1;`
+        + `way${mainF}["highway"](around:3000,${lat},${lng})->.main;`
+        + `way${cross1F}["highway"](around:3000,${lat},${lng})->.c1;`
         + `node(w.main)(w.c1);out;`;
     }
 
