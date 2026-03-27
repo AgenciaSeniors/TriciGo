@@ -260,6 +260,9 @@ export default function BookingMap({
     pickupMarkerRef.current = new mapboxgl.Marker({ element: createPickupMarkerEl(), anchor: 'center' })
       .setLngLat([pickup.longitude, pickup.latitude])
       .addTo(mapRef.current);
+
+    // Fly to pickup location when selected from autocomplete
+    mapRef.current.flyTo({ center: [pickup.longitude, pickup.latitude], zoom: 16, duration: 1000 });
   }, [pickup, mapReady]);
 
   /* ── Dropoff marker ── */
@@ -271,6 +274,9 @@ export default function BookingMap({
     dropoffMarkerRef.current = new mapboxgl.Marker({ element: createDropoffMarkerEl(), anchor: 'bottom' })
       .setLngLat([dropoff.longitude, dropoff.latitude])
       .addTo(mapRef.current);
+
+    // Fly to dropoff location when selected from autocomplete
+    mapRef.current.flyTo({ center: [dropoff.longitude, dropoff.latitude], zoom: 16, duration: 1000 });
   }, [dropoff, mapReady]);
 
   /* ── User location marker ── */

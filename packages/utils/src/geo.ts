@@ -737,45 +737,64 @@ export async function findIntersection(
       .replace(/[uúùûü]/gi, '.')
       .replace(/ñ/gi, '.');
 
-    // Helper: find the shared node between two named streets
-    async function findSharedNode(street1: string, street2: string): Promise<{ lat: number; lon: number } | null> {
-      // Query: find nodes that belong to BOTH street1 ways AND street2 ways
-      const q = `[out:json][timeout:5];way["name"~"${esc(street1)}",i]["highway"](around:3000,${lat},${lng})->.a;way["name"~"${esc(street2)}",i]["highway"](around:3000,${lat},${lng})->.b;node(w.a)(w.b);out;`;
+    // Build ONE combined Overpass query that finds intersections with BOTH cross streets
+    // This avoids hitting Overpass twice (which causes rate limiting)
+    const mainEsc = esc(mainStreet);
+    const cross1Esc = esc(crossStreet1);
 
-      const data = await queryOverpassRace(q);
-      if (!data?.elements?.length) return null;
-
-      // Pick the shared node closest to the user's map center
-      let best: { lat: number; lon: number } | null = null;
-      let bestDist = Infinity;
-      for (const node of data.elements) {
-        if (node.lat == null || node.lon == null) continue;
-        const d = haversineDistance(
-          { latitude: lat, longitude: lng },
-          { latitude: node.lat, longitude: node.lon },
-        );
-        if (d < bestDist) {
-          bestDist = d;
-          best = { lat: node.lat, lon: node.lon };
-        }
-      }
-      return best;
+    let query: string;
+    if (crossStreet2) {
+      const cross2Esc = esc(crossStreet2);
+      // Single query: find main ways, cross1 ways, cross2 ways, then shared nodes
+      query = `[out:json][timeout:5];`
+        + `way["name"~"${mainEsc}",i]["highway"](around:3000,${lat},${lng})->.main;`
+        + `way["name"~"${cross1Esc}",i]["highway"](around:3000,${lat},${lng})->.c1;`
+        + `way["name"~"${cross2Esc}",i]["highway"](around:3000,${lat},${lng})->.c2;`
+        + `(node(w.main)(w.c1);node(w.main)(w.c2););out;`;
+    } else {
+      query = `[out:json][timeout:5];`
+        + `way["name"~"${mainEsc}",i]["highway"](around:3000,${lat},${lng})->.main;`
+        + `way["name"~"${cross1Esc}",i]["highway"](around:3000,${lat},${lng})->.c1;`
+        + `node(w.main)(w.c1);out;`;
     }
 
-    // Find intersection: main × cross1
-    // If cross2 exists, run BOTH queries in parallel for speed
-    let point1: { lat: number; lon: number } | null;
+    const data = await queryOverpassRace(query);
+    if (!data?.elements?.length) return null;
+
+    // All returned nodes are intersections of main with either cross1 or cross2
+    // We need to figure out which node belongs to which intersection
+    // Strategy: find the node closest to the map center for each cross street
+    // Since we can't distinguish nodes from the combined output, we use position:
+    // - If we have 2+ nodes, the most separated ones are likely the two different intersections
+    const nodes = data.elements.filter(n => n.lat != null && n.lon != null);
+    if (!nodes.length) return null;
+
+    let point1: { lat: number; lon: number };
     let point2: { lat: number; lon: number } | null = null;
 
-    if (crossStreet2) {
-      const [p1, p2] = await Promise.all([
-        findSharedNode(mainStreet, crossStreet1),
-        findSharedNode(mainStreet, crossStreet2),
-      ]);
-      point1 = p1;
-      point2 = p2;
+    if (nodes.length === 1) {
+      point1 = { lat: nodes[0].lat!, lon: nodes[0].lon! };
+    } else if (crossStreet2 && nodes.length >= 2) {
+      // With 2 cross streets, we expect 2 intersection groups
+      // Sort by distance from map center, take the 2 most different positions
+      const sorted = nodes
+        .map(n => ({ lat: n.lat!, lon: n.lon! }))
+        .sort((a, b) => {
+          const da = haversineDistance({ latitude: lat, longitude: lng }, { latitude: a.lat, longitude: a.lon });
+          const db = haversineDistance({ latitude: lat, longitude: lng }, { latitude: b.lat, longitude: b.lon });
+          return da - db;
+        });
+      point1 = sorted[0];
+      // Find the node that is farthest from point1 (= the other intersection)
+      let maxDist = 0;
+      point2 = sorted[1];
+      for (const n of sorted.slice(1)) {
+        const d = haversineDistance({ latitude: point1.lat, longitude: point1.lon }, { latitude: n.lat, longitude: n.lon });
+        if (d > maxDist) { maxDist = d; point2 = n; }
+      }
     } else {
-      point1 = await findSharedNode(mainStreet, crossStreet1);
+      // Just take the closest node
+      point1 = { lat: nodes[0].lat!, lon: nodes[0].lon! };
     }
 
     if (!point1) return null;
