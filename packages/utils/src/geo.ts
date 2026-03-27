@@ -449,7 +449,7 @@ const OVERPASS_MIRRORS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string }; center?: { lat: number; lon: number } }> }> {
+async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ tags?: { name?: string }; center?: { lat: number; lon: number }; lat?: number; lon?: number }> }> {
   const encoded = encodeURIComponent(query);
   const controller = new AbortController();
 
@@ -633,8 +633,9 @@ export async function suggestPickupPoint(
 /* ─── Cuban Intersection Search ─── */
 
 /**
- * Find the intersection point of a main street with one or two cross streets.
- * Uses Overpass-only approach (no Nominatim) for speed.
+ * Find the EXACT intersection point of two streets using shared OSM nodes.
+ * In OpenStreetMap, when two streets cross, they share a NODE at the intersection.
+ * This queries for nodes that belong to BOTH ways = the real intersection point.
  */
 export async function findIntersection(
   mainStreet: string,
@@ -645,80 +646,54 @@ export async function findIntersection(
   try {
     const lat = proximity?.latitude || 23.1136;
     const lng = proximity?.longitude || -82.3666;
-
-    // Escape for Overpass regex
     const esc = (s: string) => s.replace(/[\\"/]/g, '');
 
-    // Build ONE Overpass query for ALL streets at once
-    const streets = [mainStreet, crossStreet1];
-    if (crossStreet2) streets.push(crossStreet2);
+    // Helper: find the shared node between two named streets
+    async function findSharedNode(street1: string, street2: string): Promise<{ lat: number; lon: number } | null> {
+      // Query: find nodes that belong to BOTH street1 ways AND street2 ways
+      const q = `[out:json][timeout:5];way["name"~"${esc(street1)}","i"]["highway"](around:3000,${lat},${lng})->.a;way["name"~"${esc(street2)}","i"]["highway"](around:3000,${lat},${lng})->.b;node(w.a)(w.b);out;`;
 
-    const wayQueries = streets.map(s =>
-      `way["name"~"${esc(s)}","i"]["highway"](around:2000,${lat},${lng});`
-    ).join('');
+      const data = await queryOverpassRace(q);
+      if (!data?.elements?.length) return null;
 
-    const query = `[out:json][timeout:5];(${wayQueries});out center;`;
-
-    // Use existing mirror-racing function
-    const data = await queryOverpassRace(query);
-    if (!data?.elements?.length) return null;
-
-    // Group elements by which street they match
-    const mainLower = mainStreet.toLowerCase();
-    const cross1Lower = crossStreet1.toLowerCase();
-    const cross2Lower = crossStreet2?.toLowerCase();
-
-    const mainWays: Array<{ lat: number; lon: number }> = [];
-    const cross1Ways: Array<{ lat: number; lon: number }> = [];
-    const cross2Ways: Array<{ lat: number; lon: number }> = [];
-
-    for (const el of data.elements) {
-      if (!el.center || !el.tags?.name) continue;
-      const name = el.tags.name.toLowerCase();
-      if (name.includes(mainLower)) mainWays.push(el.center);
-      if (name.includes(cross1Lower)) cross1Ways.push(el.center);
-      if (cross2Lower && name.includes(cross2Lower)) cross2Ways.push(el.center);
-    }
-
-    if (!mainWays.length || !cross1Ways.length) return null;
-
-    // Find closest pair between main street and cross street 1
-    let bestDist = Infinity;
-    let bestPoint = { lat: 0, lon: 0 };
-    for (const mw of mainWays) {
-      for (const cw of cross1Ways) {
+      // Pick the shared node closest to the user's map center
+      let best: { lat: number; lon: number } | null = null;
+      let bestDist = Infinity;
+      for (const node of data.elements) {
+        if (node.lat == null || node.lon == null) continue;
         const d = haversineDistance(
-          { latitude: mw.lat, longitude: mw.lon },
-          { latitude: cw.lat, longitude: cw.lon },
+          { latitude: lat, longitude: lng },
+          { latitude: node.lat, longitude: node.lon },
         );
         if (d < bestDist) {
           bestDist = d;
-          bestPoint = { lat: (mw.lat + cw.lat) / 2, lon: (mw.lon + cw.lon) / 2 };
+          best = { lat: node.lat, lon: node.lon };
         }
       }
+      return best;
     }
 
-    // If cross2 exists, find its intersection with main too
+    // Find intersection: main × cross1
+    // If cross2 exists, run BOTH queries in parallel for speed
+    let point1: { lat: number; lon: number } | null;
     let point2: { lat: number; lon: number } | null = null;
-    if (cross2Ways.length) {
-      let best2 = Infinity;
-      for (const mw of mainWays) {
-        for (const cw of cross2Ways) {
-          const d = haversineDistance(
-            { latitude: mw.lat, longitude: mw.lon },
-            { latitude: cw.lat, longitude: cw.lon },
-          );
-          if (d < best2) {
-            best2 = d;
-            point2 = { lat: (mw.lat + cw.lat) / 2, lon: (mw.lon + cw.lon) / 2 };
-          }
-        }
-      }
+
+    if (crossStreet2) {
+      const [p1, p2] = await Promise.all([
+        findSharedNode(mainStreet, crossStreet1),
+        findSharedNode(mainStreet, crossStreet2),
+      ]);
+      point1 = p1;
+      point2 = p2;
+    } else {
+      point1 = await findSharedNode(mainStreet, crossStreet1);
     }
 
-    // Final point: midpoint of both intersections or just the first
-    const finalLat = point2 ? (bestPoint.lat + point2.lat) / 2 : bestPoint.lat;
-    const finalLng = point2 ? (bestPoint.lon + point2.lon) / 2 : bestPoint.lon;
+    if (!point1) return null;
+
+    // Final coordinates: midpoint between two intersections, or the single intersection
+    const finalLat = point2 ? (point1.lat + point2.lat) / 2 : point1.lat;
+    const finalLng = point2 ? (point1.lon + point2.lon) / 2 : point1.lon;
 
     const address = crossStreet2
       ? `${mainStreet} e/ ${crossStreet1} y ${crossStreet2}`
