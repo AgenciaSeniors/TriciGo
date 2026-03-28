@@ -1124,8 +1124,8 @@ export async function searchAddressSearchBox(
 
 /** OSM tag mappings for POI category searches */
 const OVERPASS_POI_TAGS: Record<string, string> = {
-  hotel: '["tourism"~"hotel|motel|guest_house|hostel"]',
-  hostal: '["tourism"~"hotel|motel|guest_house|hostel"]',
+  hotel: '["tourism"="hotel"]',
+  hostal: '["tourism"~"guest_house|hostel"]',
   restaurante: '["amenity"~"restaurant|fast_food|cafe"]',
   restaurant: '["amenity"~"restaurant|fast_food|cafe"]',
   cafe: '["amenity"="cafe"]',
@@ -1185,27 +1185,29 @@ export async function searchOverpassPOI(
     }
 
     const { latitude: lat, longitude: lng } = proximity;
-    const radius = 15000; // 15km search radius
+    const radius = 20000; // 20km search radius
+
+    // Escape query for Overpass regex
+    const escaped = normalized
+      .replace(/[\\"/]/g, '')
+      .replace(/[aáàâãä]/gi, '.')
+      .replace(/[eéèêë]/gi, '.')
+      .replace(/[iíìîï]/gi, '.')
+      .replace(/[oóòôõö]/gi, '.')
+      .replace(/[uúùûü]/gi, '.')
+      .replace(/ñ/gi, '.');
 
     let overpassQuery: string;
     if (tagFilter) {
-      // Category search: find POIs by type with optional name filter
+      // UNION: tag-based search (POIs of this type) + name-based search (POIs with query in name)
       const nameWords = words.filter(w => !OVERPASS_POI_TAGS[w]);
       const nameFilter = nameWords.length > 0
         ? `["name"~"${nameWords.join('|')}",i]`
         : '["name"]';
-      overpassQuery = `[out:json][timeout:4];(node${tagFilter}${nameFilter}(around:${radius},${lat},${lng});way${tagFilter}${nameFilter}(around:${radius},${lat},${lng}););out center ${limit};`;
+      overpassQuery = `[out:json][timeout:5];(node${tagFilter}${nameFilter}(around:${radius},${lat},${lng});way${tagFilter}${nameFilter}(around:${radius},${lat},${lng});node["name"~"${escaped}",i](around:${radius},${lat},${lng});way["name"~"${escaped}",i](around:${radius},${lat},${lng}););out center ${limit};`;
     } else {
       // Generic name search: find any named POI matching query
-      const escaped = normalized
-        .replace(/[\\"/]/g, '')
-        .replace(/[aáàâãä]/gi, '.')
-        .replace(/[eéèêë]/gi, '.')
-        .replace(/[iíìîï]/gi, '.')
-        .replace(/[oóòôõö]/gi, '.')
-        .replace(/[uúùûü]/gi, '.')
-        .replace(/ñ/gi, '.');
-      overpassQuery = `[out:json][timeout:4];(node["name"~"${escaped}",i]["name"](around:${radius},${lat},${lng});way["name"~"${escaped}",i]["name"](around:${radius},${lat},${lng}););out center ${limit};`;
+      overpassQuery = `[out:json][timeout:5];(node["name"~"${escaped}",i](around:${radius},${lat},${lng});way["name"~"${escaped}",i](around:${radius},${lat},${lng}););out center ${limit};`;
     }
 
     const encoded = encodeURIComponent(overpassQuery);

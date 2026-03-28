@@ -213,8 +213,8 @@ function scoreResult(
     distScore = Math.max(0, 1 - dist / 20000);
   }
 
-  // Source priority (10% weight) — Search Box has better POI data
-  const sourceScore = result.source === 'searchbox' ? 1.0 : 0.5;
+  // Source priority (10% weight)
+  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'overpass' ? 0.8 : 0.5;
 
   return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
 }
