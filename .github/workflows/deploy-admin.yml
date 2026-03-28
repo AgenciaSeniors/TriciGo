@@ -73,7 +73,9 @@ jobs:
 
             # Restart with PM2
             cd $APP_DIR
-            pm2 restart tricigo-admin 2>/dev/null || pm2 start server.js --name tricigo-admin --env PORT=3000
+            export PORT=3000
+            pm2 delete tricigo-admin 2>/dev/null || true
+            PORT=3000 pm2 start server.js --name tricigo-admin --update-env
             pm2 save
 
             # Cleanup
