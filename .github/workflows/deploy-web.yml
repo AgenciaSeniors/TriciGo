@@ -81,9 +81,18 @@ jobs:
               echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/web/ 2>/dev/null && exit 1
             fi
 
+            # Write .env for runtime
+            cat > $APP_DIR/.env <<'ENVEOF'
+            PORT=3001
+            HOSTNAME=0.0.0.0
+            ENVEOF
+
             # Restart with PM2
             pm2 delete tricigo-web 2>/dev/null || true
-            PORT=3001 pm2 start $ENTRY --name tricigo-web --update-env
+            cd $APP_DIR
+            PORT=3001 HOSTNAME=0.0.0.0 pm2 start $ENTRY --name tricigo-web --update-env
+            sleep 3
+            pm2 logs tricigo-web --lines 20 --nostream || true
             pm2 save
 
             # Cleanup
