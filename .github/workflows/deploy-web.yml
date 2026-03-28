@@ -39,6 +39,29 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
+      - name: VPS diagnostics
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script: |
+            echo "=== nghttpx config ==="
+            cat /etc/nghttpx/nghttpx.conf 2>/dev/null || echo "no nghttpx.conf"
+            echo "=== all nghttpx files ==="
+            find /etc/nghttpx/ -type f 2>/dev/null | while read f; do echo "--- $f ---"; cat "$f"; done || true
+            echo "=== nginx config ==="
+            ls /etc/nginx/sites-enabled/ 2>/dev/null && cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx sites"
+            echo "=== caddy ==="
+            cat /etc/caddy/Caddyfile 2>/dev/null || true
+            echo "=== running proxies ==="
+            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'nginx|caddy|nghttpx|haproxy|traefik' || echo "none"
+            echo "=== Ports ==="
+            ss -tlnp | grep -E ':(80|443|300[0-9]|301[0-9])' || true
+            echo "=== PM2 ==="
+            pm2 list
+
       - name: Copy build to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -46,6 +69,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
+          timeout: 60s
           source: 'apps/web/.next/standalone/,apps/web/.next/static/,apps/web/public/'
           target: '/tmp/tricigo-web-deploy'
 
@@ -60,23 +84,6 @@ jobs:
             set -e
             APP_DIR=/var/www/tricigo-web
             DEPLOY_DIR=/tmp/tricigo-web-deploy/apps/web
-
-            # Diagnostics: show full reverse proxy config
-            echo "=== nghttpx config ==="
-            cat /etc/nghttpx/nghttpx.conf 2>/dev/null || echo "no nghttpx.conf"
-            echo "=== nghttpx includes ==="
-            for f in /etc/nghttpx/conf.d/*.conf /etc/nghttpx/*.conf; do
-              [ -f "$f" ] && echo "--- $f ---" && cat "$f"
-            done 2>/dev/null || true
-            echo "=== nginx config ==="
-            ls /etc/nginx/sites-enabled/ 2>/dev/null && cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx sites"
-            echo "=== caddy/other proxy ==="
-            cat /etc/caddy/Caddyfile 2>/dev/null || true
-            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'nginx|caddy|nghttpx|haproxy|traefik' || true
-            echo "=== Ports in use ==="
-            ss -tlnp | grep -E ':(80|443|300[0-9]|301[0-9])' || echo "no relevant ports"
-            echo "=== PM2 list ==="
-            pm2 list
 
             # Copy standalone build
             rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
