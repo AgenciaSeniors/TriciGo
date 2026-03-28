@@ -29,7 +29,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 /** Strip accents from a string for accent-insensitive comparison */
-function stripAccents(s: string): string {
+export function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 

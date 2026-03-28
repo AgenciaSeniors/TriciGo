@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, findIntersection } from '@tricigo/utils';
+import { haversineDistance, findIntersection, searchAddressSearchBox, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
+import type { SearchBoxResult } from '@tricigo/utils';
 
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
@@ -41,7 +42,7 @@ async function suggestCrossStreets(
     const names = res.elements
       .map((el: any) => el.tags?.name)
       .filter((n: string | undefined): n is string => !!n && !n.toLowerCase().includes(mainLower));
-    return [...new Set(names)].slice(0, 8);
+    return [...new Set(names as string[])].slice(0, 8);
   } catch {
     return [];
   }
@@ -52,6 +53,9 @@ interface AddressResult {
   latitude: number;
   longitude: number;
   place_name: string;
+  category?: string;
+  source?: 'searchbox' | 'nominatim';
+  specificity?: number;
 }
 
 interface SavedLocationItem {
@@ -134,7 +138,33 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
+/** Category-to-icon map for Search Box API categories */
+const CATEGORY_ICONS: Record<string, string> = {
+  hotel: '🏨', lodging: '🏨', hostel: '🏨',
+  hospital: '🏥', clinic: '🏥', doctor: '🏥', pharmacy: '💊',
+  university: '🎓', school: '🎓', college: '🎓', education: '🎓',
+  park: '🌳', garden: '🌳', playground: '🌳', plaza: '🌳',
+  restaurant: '🍽️', cafe: '🍽️', food: '🍽️', bar: '🍸',
+  airport: '✈️', bus_station: '🚉', train_station: '🚉', transit: '🚉',
+  museum: '🏛️', monument: '🏛️', historic: '🏛️',
+  church: '⛪', place_of_worship: '⛪',
+  supermarket: '🛒', shop: '🛒', market: '🛒', store: '🛒',
+  bank: '🏦', atm: '🏦',
+  gas_station: '⛽', fuel: '⛽',
+  cinema: '🎬', theater: '🎭', theatre: '🎭',
+  library: '📚', swimming_pool: '🏊', gym: '🏋️', sports: '⚽',
+  embassy: '🏛️', government: '🏛️',
+};
+
 function getResultIcon(result: AddressResult): string {
+  // First try category from API (most accurate)
+  if (result.category) {
+    const cat = result.category.toLowerCase();
+    for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
+      if (cat.includes(key)) return icon;
+    }
+  }
+  // Fallback to name-based matching
   const name = (result.place_name + ' ' + result.address).toLowerCase();
   if (name.includes('hotel') || name.includes('hostal') || name.includes('casa particular')) return '🏨';
   if (name.includes('hospital') || name.includes('clínica') || name.includes('policlínico')) return '🏥';
@@ -148,6 +178,57 @@ function getResultIcon(result: AddressResult): string {
   if (name.includes('mercado') || name.includes('tienda')) return '🛒';
   if (name.includes(' e/ ') || name.includes(' entre ')) return '🔀';
   return '📍';
+}
+
+/** Multi-factor relevance score for ranking search results */
+function scoreResult(
+  result: AddressResult,
+  normalizedQuery: string,
+  proximity?: { latitude: number; longitude: number } | null,
+): number {
+  const normalizedName = stripAccents(result.place_name.toLowerCase().trim());
+
+  // Text match quality (40% weight)
+  let textScore = 0.2;
+  if (normalizedName === normalizedQuery) textScore = 1.0;
+  else if (normalizedName.startsWith(normalizedQuery)) textScore = 0.85;
+  else if (normalizedName.includes(normalizedQuery)) textScore = 0.65;
+  else {
+    // Check if query words are in the name
+    const queryWords = normalizedQuery.split(/\s+/);
+    const matchCount = queryWords.filter(w => normalizedName.includes(w)).length;
+    textScore = 0.2 + (matchCount / queryWords.length) * 0.4;
+  }
+
+  // Specificity (30% weight) — named POIs rank higher than generic categories
+  const specScore = result.specificity ?? computeSpecificity(result.place_name);
+
+  // Distance (20% weight) — closer is better, normalized to 20km range
+  let distScore = 0.5;
+  if (proximity) {
+    const dist = haversineDistance(
+      { latitude: result.latitude, longitude: result.longitude },
+      { latitude: proximity.latitude, longitude: proximity.longitude },
+    );
+    distScore = Math.max(0, 1 - dist / 20000);
+  }
+
+  // Source priority (10% weight) — Search Box has better POI data
+  const sourceScore = result.source === 'searchbox' ? 1.0 : 0.5;
+
+  return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
+}
+
+/** Remove place_name from full address to avoid duplication in secondary line */
+function formatSecondaryAddress(result: AddressResult): string {
+  const full = result.address || '';
+  const name = result.place_name || '';
+  if (full.toLowerCase().startsWith(name.toLowerCase())) {
+    const rest = full.slice(name.length).replace(/^[,\s]+/, '');
+    return rest || full;
+  }
+  if (full === name) return '';
+  return full;
 }
 
 export function AddressAutocomplete({ label, placeholder, value, onSelect, onClear, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
@@ -210,66 +291,62 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     }
   }, [activeIndex]);
 
-  async function searchNominatim(q: string, prox?: { latitude: number; longitude: number }): Promise<AddressResult[]> {
+  async function searchNominatimEnhanced(q: string, prox?: { latitude: number; longitude: number }): Promise<AddressResult[]> {
     try {
       const viewbox = prox
         ? `${prox.longitude - 0.15},${prox.latitude - 0.15},${prox.longitude + 0.15},${prox.latitude + 0.15}`
         : '-82.6,22.9,-82.1,23.3'; // Havana metro area
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=5&viewbox=${viewbox}&bounded=1&addressdetails=1`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=8&viewbox=${viewbox}&bounded=1&addressdetails=1&namedetails=1&extratags=1`;
       const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
       if (!res.ok) return [];
       const data = await res.json();
-      return data.map((item: any) => ({
-        address: ((item.display_name || '').split(', ').slice(0, 3).join(', ')),
-        latitude: parseFloat(item.lat),
-        longitude: parseFloat(item.lon),
-        place_name: item.name || item.display_name?.split(',')[0] || '',
-      }));
+      return data.map((item: any) => {
+        // Use namedetails for specific POI names when available
+        const nameFromDetails = item.namedetails?.name || item.namedetails?.['name:es'] || '';
+        const genericName = item.name || item.display_name?.split(',')[0] || '';
+        // Prefer the more specific name
+        const placeName = nameFromDetails.length > genericName.length ? nameFromDetails : genericName;
+        // Build category from OSM class/type
+        const category = item.type || item.class || '';
+        const fullAddress = ((item.display_name || '').split(', ').slice(0, 3).join(', '));
+
+        return {
+          address: fullAddress,
+          latitude: parseFloat(item.lat),
+          longitude: parseFloat(item.lon),
+          place_name: placeName,
+          category,
+          source: 'nominatim' as const,
+          specificity: computeSpecificity(placeName),
+        };
+      });
     } catch {
       return [];
     }
   }
 
-  // Extract Mapbox fetch into a named function for reuse
-  const fetchMapbox = useCallback(async (q: string, signal?: AbortSignal): Promise<AddressResult[]> => {
-    // Check cache
+  // Search Box API fetch with caching
+  const fetchSearchBox = useCallback(async (q: string, signal?: AbortSignal): Promise<AddressResult[]> => {
     const cached = mapboxCacheRef.current.get(q);
     if (cached) return cached;
-
     try {
-      let mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${mapboxToken}&country=cu&language=es&limit=5&types=address,poi,place,neighborhood,locality`;
-      if (proximity) {
-        mapboxUrl += `&proximity=${proximity.longitude},${proximity.latitude}`;
-      }
-      const res = await fetch(mapboxUrl, signal ? { signal } : undefined);
-      if (!res.ok) return [];
-      const data = await res.json();
-      const items: AddressResult[] = [];
-      for (const f of (data.features || [])) {
-        const context = f.context || [];
-        const neighborhood = context.find((c: any) => c.id?.startsWith('neighborhood'))?.text;
-        const locality = context.find((c: any) => c.id?.startsWith('locality'))?.text;
-        const place = context.find((c: any) => c.id?.startsWith('place'))?.text;
-        const area = neighborhood || locality || place || '';
-        const streetPart = f.text || '';
-        const displayAddress = area && area !== streetPart
-          ? `${streetPart}, ${area}`
-          : f.place_name;
-        items.push({
-          address: f.place_name,
-          latitude: f.center[1],
-          longitude: f.center[0],
-          place_name: displayAddress,
-        });
-      }
-      // Cache result
+      const results = await searchAddressSearchBox(q, proximity ?? null, signal, 10);
+      const items: AddressResult[] = results.map(r => ({
+        address: r.full_address || r.address,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        place_name: r.place_name,
+        category: r.category,
+        source: r.source,
+        specificity: r.specificity,
+      }));
       mapboxCacheRef.current.set(q, items);
       return items;
     } catch (err: any) {
       if (err?.name === 'AbortError') return [];
       return [];
     }
-  }, [mapboxToken, proximity]);
+  }, [proximity]);
 
   const search = useCallback(async (q: string) => {
     if (q.length < 1) { setResults([]); setIsOpen(false); return; }
@@ -321,32 +398,57 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         // Cuban search failed — fall through to Mapbox as backup
       }
 
-      // ─── PATH 3: NORMAL SEARCH — Mapbox + Nominatim in parallel ───
+      // ─── PATH 3: NORMAL SEARCH — Search Box + Nominatim in parallel ───
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Run BOTH in parallel — Nominatim has better Cuba POI coverage
-      const [mapboxSettled, nominatimSettled] = await Promise.allSettled([
-        fetchMapbox(q, controller.signal),
-        searchNominatim(q, proximity),
+      const [searchBoxSettled, nominatimSettled] = await Promise.allSettled([
+        fetchSearchBox(q, controller.signal),
+        searchNominatimEnhanced(q, proximity),
       ]);
       if (searchIdRef.current !== thisSearchId) return;
 
-      const mapboxItems = mapboxSettled.status === 'fulfilled' ? mapboxSettled.value : [];
+      const searchBoxItems = searchBoxSettled.status === 'fulfilled' ? searchBoxSettled.value : [];
       const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
 
-      // Merge: Nominatim first (better for Cuba POIs), then Mapbox (dedup by proximity)
-      let merged = [...nominatimItems];
-      for (const m of mapboxItems) {
-        const isDuplicate = merged.some(existing =>
-          haversineDistance(
-            { latitude: existing.latitude, longitude: existing.longitude },
-            { latitude: m.latitude, longitude: m.longitude },
-          ) < 100
-        );
-        if (!isDuplicate) merged.push(m);
+      // ─── SMART DEDUPLICATION ───
+      // Combine all results, then deduplicate by name similarity + proximity
+      const allItems: AddressResult[] = [
+        ...searchBoxItems.map(r => ({ ...r, source: 'searchbox' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...nominatimItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+      ];
+
+      // Deduplicate: group by name similarity + spatial proximity
+      const deduped: AddressResult[] = [];
+      const used = new Set<number>();
+      for (let i = 0; i < allItems.length; i++) {
+        if (used.has(i)) continue;
+        let best = allItems[i]!;
+        used.add(i);
+        for (let j = i + 1; j < allItems.length; j++) {
+          if (used.has(j)) continue;
+          const other = allItems[j]!;
+          const dist = haversineDistance(
+            { latitude: best.latitude, longitude: best.longitude },
+            { latitude: other.latitude, longitude: other.longitude },
+          );
+          const namesSimilar = fuzzyMatch(best.place_name, other.place_name, 0.25)
+            || fuzzyMatch(other.place_name, best.place_name, 0.25);
+          // Same name within 500m, or exact coordinates within 100m
+          if ((namesSimilar && dist < 500) || dist < 100) {
+            used.add(j);
+            // Keep the one with higher specificity; prefer searchbox on tie
+            if ((other.specificity ?? 0) > (best.specificity ?? 0)
+              || ((other.specificity ?? 0) === (best.specificity ?? 0) && other.source === 'searchbox')) {
+              best = other;
+            }
+          }
+        }
+        deduped.push(best);
       }
+
+      let merged = deduped;
 
       // Fallback: if both empty and query has " y ", try as intersection
       if (merged.length === 0) {
@@ -362,18 +464,13 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         }
       }
 
-      // Sort by distance to proximity
-      if (proximity && merged.length > 1) {
+      // ─── MULTI-FACTOR RANKING ───
+      if (merged.length > 1) {
+        const normalizedQuery = stripAccents(q.toLowerCase().trim());
         merged.sort((a, b) => {
-          const distA = haversineDistance(
-            { latitude: a.latitude, longitude: a.longitude },
-            { latitude: proximity.latitude, longitude: proximity.longitude },
-          );
-          const distB = haversineDistance(
-            { latitude: b.latitude, longitude: b.longitude },
-            { latitude: proximity.latitude, longitude: proximity.longitude },
-          );
-          return distA - distB;
+          const scoreA = scoreResult(a, normalizedQuery, proximity);
+          const scoreB = scoreResult(b, normalizedQuery, proximity);
+          return scoreB - scoreA; // Higher score first
         });
       }
 
@@ -414,7 +511,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     } finally {
       if (searchIdRef.current === thisSearchId) setLoading(false);
     }
-  }, [mapboxToken, proximity, fetchMapbox, enrichAddress]);
+  }, [proximity, fetchSearchBox, enrichAddress]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
@@ -818,7 +915,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {r.address}
+                    {formatSecondaryAddress(r)}
                   </div>
                 </div>
               </li>

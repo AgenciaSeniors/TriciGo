@@ -1015,3 +1015,106 @@ export async function searchAddress(
     return [];
   }
 }
+
+/* ─── Mapbox Search Box API (Best POI Names) ─── */
+
+export interface SearchBoxResult {
+  address: string;
+  latitude: number;
+  longitude: number;
+  place_name: string;
+  full_address: string;
+  category?: string;
+  source: 'searchbox' | 'nominatim';
+  specificity: number; // 0-1: 1 = unique named POI, 0 = generic
+}
+
+/** Known generic category words — results matching ONLY these get low specificity */
+const GENERIC_POI_WORDS = new Set([
+  'universidad', 'hospital', 'parque', 'hotel', 'restaurante', 'iglesia',
+  'museo', 'mercado', 'estacion', 'terminal', 'escuela', 'farmacia',
+  'clinica', 'policlinico', 'tienda', 'cafeteria', 'bar', 'banco',
+  'gasolinera', 'parada', 'cementerio', 'biblioteca', 'teatro', 'cine',
+]);
+
+/**
+ * Compute specificity score for a POI result.
+ * 1.0 = has a unique proper name, 0.2 = generic category only.
+ */
+export function computeSpecificity(placeName: string): number {
+  const normalized = placeName.toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (GENERIC_POI_WORDS.has(normalized)) return 0.2;
+  const firstWord = normalized.split(/[\s,]+/)[0] ?? '';
+  if (GENERIC_POI_WORDS.has(firstWord) && normalized.length > firstWord.length + 2) return 0.8;
+  return 1.0;
+}
+
+/**
+ * Search using Mapbox Search Box API — returns real POI names.
+ * e.g., "Hospital Hermanos Ameijeiras" instead of just "Hospital".
+ */
+export async function searchAddressSearchBox(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null = null,
+  signal?: AbortSignal,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return [];
+
+    const params = new URLSearchParams({
+      q: query,
+      country: 'cu',
+      language: 'es',
+      limit: String(limit),
+      access_token: token,
+      types: 'poi,address,street,place,neighborhood',
+    });
+    if (proximity) {
+      params.set('proximity', `${proximity.longitude},${proximity.latitude}`);
+    }
+
+    const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`;
+    const controller = signal ? undefined : new AbortController();
+    const effectiveSignal = signal ?? controller?.signal;
+    const timeout = controller ? setTimeout(() => controller.abort(), 5000) : undefined;
+    const res = await fetch(url, effectiveSignal ? { signal: effectiveSignal } : undefined);
+    if (timeout) clearTimeout(timeout);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const features = data?.features;
+    if (!Array.isArray(features)) return [];
+
+    return features.map((f: Record<string, unknown>) => {
+      const props = f.properties as Record<string, unknown> | undefined;
+      const geom = f.geometry as { coordinates: [number, number] } | undefined;
+      const name = (props?.name as string) || '';
+      const fullAddr = (props?.full_address as string) || (props?.place_formatted as string) || '';
+      const poiCategory = (props?.poi_category as string[])
+        ?? ((props?.poi_category_ids as string[]) || []);
+      const category = Array.isArray(poiCategory) && poiCategory.length > 0
+        ? poiCategory[0] : (props?.feature_type as string) || '';
+      const [lng, lat] = geom?.coordinates ?? [0, 0];
+
+      return {
+        address: fullAddr || name,
+        latitude: lat,
+        longitude: lng,
+        place_name: name,
+        full_address: fullAddr,
+        category: typeof category === 'string' ? category : '',
+        source: 'searchbox' as const,
+        specificity: computeSpecificity(name),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
