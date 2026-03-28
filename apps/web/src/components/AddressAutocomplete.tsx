@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, findIntersection, searchAddressSearchBox, searchOverpassPOI, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
+import { haversineDistance, findIntersection, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
 import type { SearchBoxResult } from '@tricigo/utils';
 
 const OVERPASS_MIRRORS = [
@@ -54,7 +54,7 @@ interface AddressResult {
   longitude: number;
   place_name: string;
   category?: string;
-  source?: 'searchbox' | 'nominatim' | 'overpass';
+  source?: 'searchbox' | 'nominatim' | 'overpass' | 'supabase';
   specificity?: number;
 }
 
@@ -214,7 +214,7 @@ function scoreResult(
   }
 
   // Source priority (10% weight)
-  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'overpass' ? 0.8 : 0.5;
+  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'supabase' ? 0.9 : result.source === 'overpass' ? 0.8 : 0.5;
 
   return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
 }
@@ -398,42 +398,38 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         // Cuban search failed — fall through to Mapbox as backup
       }
 
-      // ─── PATH 3: NORMAL SEARCH — Search Box + Nominatim in parallel ───
+      // ─── PATH 3: NORMAL SEARCH — Search Box + Supabase + Nominatim in parallel ───
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Fast sources first: Search Box + Nominatim
-      const [searchBoxSettled, nominatimSettled] = await Promise.allSettled([
+      // All 3 sources in parallel (Supabase replaces Overpass — instant, any query)
+      const [searchBoxSettled, supabaseSettled, nominatimSettled] = await Promise.allSettled([
         fetchSearchBox(q, controller.signal),
+        searchPoisSupabase(q, proximity ?? null, 10).then(items =>
+          items.map(r => ({
+            address: r.full_address || r.address,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            place_name: r.place_name,
+            category: r.category,
+            source: 'supabase' as const,
+            specificity: r.specificity,
+          }))
+        ),
         searchNominatimEnhanced(q, proximity),
       ]);
       if (searchIdRef.current !== thisSearchId) return;
 
       const searchBoxItems = searchBoxSettled.status === 'fulfilled' ? searchBoxSettled.value : [];
+      const supabaseItems = supabaseSettled.status === 'fulfilled' ? supabaseSettled.value : [];
       const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
-
-      // Start Overpass search in background (slower, but better Cuba coverage)
-      let overpassItems: AddressResult[] = [];
-      const overpassPromise = proximity
-        ? searchOverpassPOI(q, proximity, 10).then(items =>
-            items.map(r => ({
-              address: r.full_address || r.address,
-              latitude: r.latitude,
-              longitude: r.longitude,
-              place_name: r.place_name,
-              category: r.category,
-              source: r.source as 'searchbox' | 'nominatim' | 'overpass',
-              specificity: r.specificity,
-            }))
-          ).catch(() => [] as AddressResult[])
-        : Promise.resolve([] as AddressResult[]);
 
       // ─── SMART DEDUPLICATION ───
       // Combine all results, then deduplicate by name similarity + proximity
       const allItems: AddressResult[] = [
         ...searchBoxItems.map(r => ({ ...r, source: 'searchbox' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
-        ...overpassItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...supabaseItems.map(r => ({ ...r, source: 'supabase' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
         ...nominatimItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
       ];
 
@@ -519,31 +515,6 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       setResults(initial);
       setIsOpen(true);
       setActiveIndex(-1);
-
-      // BACKGROUND: Merge Overpass results when they arrive (better Cuba POI coverage)
-      overpassPromise.then((opItems) => {
-        if (searchIdRef.current !== thisSearchId || opItems.length === 0) return;
-        const newItems = opItems
-          .filter(r => {
-            const d = haversineDistance(
-              { latitude: r.latitude, longitude: r.longitude },
-              { latitude: prox.latitude, longitude: prox.longitude },
-            );
-            return d <= 30000;
-          })
-          .map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) }));
-        if (newItems.length === 0) return;
-        setResults(prev => {
-          const existingNames = new Set(prev.map(r => r.place_name.toLowerCase()));
-          const unique = newItems.filter(r => !existingNames.has(r.place_name.toLowerCase()));
-          if (unique.length === 0 && prev.length > 0) return prev;
-          const combined = [...prev, ...unique];
-          const nq = stripAccents(q.toLowerCase().trim());
-          combined.sort((a, b) => scoreResult(b, nq, proximity) - scoreResult(a, nq, proximity));
-          return combined.slice(0, 7);
-        });
-        setIsOpen(true); // Re-open dropdown if it was showing "no results"
-      });
 
       // BACKGROUND: Enrich top 3 results with cross-streets
       if (enrichAddress && initial.length > 0) {

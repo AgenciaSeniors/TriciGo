@@ -1025,7 +1025,7 @@ export interface SearchBoxResult {
   place_name: string;
   full_address: string;
   category?: string;
-  source: 'searchbox' | 'nominatim' | 'overpass';
+  source: 'searchbox' | 'nominatim' | 'overpass' | 'supabase';
   specificity: number; // 0-1: 1 = unique named POI, 0 = generic
 }
 
@@ -1248,6 +1248,65 @@ export async function searchOverpassPOI(
           specificity: computeSpecificity(name),
         };
       });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Search Cuba POIs from Supabase database.
+ * Uses PostGIS spatial search + pg_trgm trigram similarity.
+ * Much faster than Overpass (~50ms vs 2-10s) and handles ANY query.
+ */
+export async function searchPoisSupabase(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null = null,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return [];
+
+    const lat = proximity?.latitude ?? 23.1136;
+    const lng = proximity?.longitude ?? -82.3666;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_pois`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ query, lat, lng, radius_m: 30000, max_results: limit }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((r: Record<string, unknown>) => ({
+      address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', ') || (r.name as string),
+      latitude: r.latitude as number,
+      longitude: r.longitude as number,
+      place_name: r.name as string,
+      full_address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', '),
+      category: (r.subcategory as string) || (r.category as string) || '',
+      source: 'supabase' as const,
+      specificity: computeSpecificity(r.name as string),
+    }));
   } catch {
     return [];
   }
