@@ -150,5 +150,18 @@ jobs:
             pm2 list
             ss -tlnp | grep ":${WEBPORT} " || echo "WARNING: nothing listening on $WEBPORT"
 
+            # Smoke test: check if the app responds
+            echo "=== Smoke test ==="
+            curl -sI http://localhost:${WEBPORT}/ 2>&1 | head -10 || echo "curl failed"
+            echo "=== Page body (first 500 chars) ==="
+            curl -s http://localhost:${WEBPORT}/ 2>&1 | head -c 500 || echo "curl failed"
+            echo ""
+            echo "=== Check .env content ==="
+            cat $APP_DIR/.env 2>/dev/null || echo "no .env"
+            echo "=== Check ecosystem ==="
+            cat $APP_DIR/ecosystem.config.js 2>/dev/null || echo "no ecosystem"
+            echo "=== Check NEXT_PUBLIC env in process ==="
+            cat /proc/$(pm2 pid tricigo-web)/environ 2>/dev/null | tr '\0' '\n' | grep -i "NEXT_PUBLIC\|SUPABASE\|PORT\|NODE_ENV" || echo "could not read env"
+
             # Cleanup
             rm -rf /tmp/tricigo-web-deploy
