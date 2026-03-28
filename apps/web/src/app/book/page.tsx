@@ -85,6 +85,10 @@ export default function BookPage() {
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
+  const [allEstimates, setAllEstimates] = useState<Record<string, FareEstimate | null>>({});
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const selectedEstimate = allEstimates[serviceType] || null;
+  const [showOptions, setShowOptions] = useState(false);
   const [isEstimating, setIsEstimating] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,6 +231,7 @@ export default function BookPage() {
   function handleSetPickup(loc: LocationPreset) {
     setPickup(loc);
     setEstimate(null);
+    setAllEstimates({});
     setSelectionStep(dropoff ? 'done' : 'dropoff');
     // If address already contains cross-streets (from Cuban search), use it directly
     if (loc.address && loc.address.includes('e/')) {
@@ -245,6 +250,7 @@ export default function BookPage() {
   function handleSetDropoff(loc: LocationPreset) {
     setDropoff(loc);
     setEstimate(null);
+    setAllEstimates({});
     setSelectionStep(pickup ? 'done' : 'pickup');
     // If address already contains cross-streets (from Cuban search), use it directly
     if (loc.address && loc.address.includes('e/')) {
@@ -265,6 +271,7 @@ export default function BookPage() {
     setPickup(null);
     setDropoff(null);
     setEstimate(null);
+    setAllEstimates({});
     setPickupAddress(null);
     setDropoffAddress(null);
     setRouteCoords(null);
@@ -285,6 +292,7 @@ export default function BookPage() {
     setDropoff(tempPickup);
     setDropoffAddress(tempPickupAddr);
     setEstimate(null);
+    setAllEstimates({});
     setRouteCoords(null);
     setRouteInfo(null);
   }
@@ -338,8 +346,48 @@ export default function BookPage() {
     }
   }
 
+  const handleEstimateAll = useCallback(async () => {
+    if (!pickup || !dropoff || estimateLoading) return;
+    setEstimateLoading(true);
+    setAllEstimates({});
+
+    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard'];
+
+    try {
+      const results = await Promise.allSettled(
+        serviceTypes.map(st =>
+          rideService.getLocalFareEstimate({
+            pickup_lat: pickup.latitude,
+            pickup_lng: pickup.longitude,
+            dropoff_lat: dropoff.latitude,
+            dropoff_lng: dropoff.longitude,
+            service_type: st,
+          })
+        )
+      );
+
+      const estimates: Record<string, FareEstimate | null> = {};
+      serviceTypes.forEach((st, i) => {
+        const r = results[i];
+        estimates[st] = r.status === 'fulfilled' ? r.value : null;
+      });
+      setAllEstimates(estimates);
+    } catch {
+      // Silently fail — user can retry
+    } finally {
+      setEstimateLoading(false);
+    }
+  }, [pickup, dropoff, estimateLoading]);
+
+  /* ─── Auto-fetch estimates when both locations set ─── */
+  useEffect(() => {
+    if (pickup && dropoff && Object.keys(allEstimates).length === 0 && !estimateLoading) {
+      handleEstimateAll();
+    }
+  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
+
   async function handleRequest() {
-    if (!pickup || !dropoff || !estimate) return;
+    if (!pickup || !dropoff || !selectedEstimate) return;
     setIsRequesting(true);
     setError(null);
     try {
@@ -352,9 +400,9 @@ export default function BookPage() {
         dropoff_latitude: dropoff.latitude,
         dropoff_longitude: dropoff.longitude,
         dropoff_address: `${dropoff.label} — ${dropoff.address}`,
-        estimated_fare_cup: estimate.estimated_fare_cup,
-        estimated_distance_m: estimate.estimated_distance_m,
-        estimated_duration_s: estimate.estimated_duration_s,
+        estimated_fare_cup: selectedEstimate.estimated_fare_cup,
+        estimated_distance_m: selectedEstimate.estimated_distance_m,
+        estimated_duration_s: selectedEstimate.estimated_duration_s,
         // W1.1: Waypoints
         ...(waypoints.length > 0 && {
           waypoints: waypoints.map((wp, i) => ({
@@ -753,86 +801,72 @@ export default function BookPage() {
         <div
           style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}
         >
-          {/* ═══ Service type selector ═══ */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                marginBottom: '0.5rem',
-              }}
-            >
-              {t('book.service_type')}
-            </label>
-            <div className="booking-service-types">
-              {SERVICE_TYPE_KEYS.map((svc) => (
-                <button
-                  key={svc.slug}
-                  type="button"
-                  className="booking-service-btn"
-                  onClick={() => {
-                    setServiceType(svc.slug);
-                    setEstimate(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    borderRadius: '0.75rem',
-                    border:
-                      serviceType === svc.slug
-                        ? '2px solid var(--primary)'
-                        : '1px solid var(--border)',
-                    background: serviceType === svc.slug ? '#FFF5F0' : 'white',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    fontSize: '0.875rem',
-                    fontWeight: serviceType === svc.slug ? 700 : 400,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '2rem',
-                      height: '2rem',
-                      borderRadius: '50%',
-                      background: serviceType === svc.slug ? 'var(--primary)' : 'var(--border)',
-                      color: serviceType === svc.slug ? 'white' : '#666',
-                      fontWeight: 700,
-                      fontSize: '0.7rem',
-                      marginBottom: '0.25rem',
-                    }}
-                  >
-                    {svc.abbr}
-                  </span>
-                  {t(svc.labelKey)}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* ═══ Service cards with prices ═══ */}
+          {pickup && dropoff && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                {t('book.choose_service', { defaultValue: 'Elige tu servicio' })}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {SERVICE_TYPE_KEYS.map((svc) => {
+                  const est = allEstimates[svc.slug];
+                  const isSelected = serviceType === svc.slug;
+                  const isLoading = estimateLoading && !est;
 
-          {/* ═══ Estimate button ═══ */}
-          <button
-            disabled={!canEstimate || isEstimating}
-            onClick={handleEstimate}
-            aria-label="Calcular tarifa estimada"
-            style={{
-              width: '100%',
-              padding: '1rem',
-              borderRadius: '0.75rem',
-              border: 'none',
-              background: canEstimate && !isEstimating ? 'var(--primary)' : '#ccc',
-              color: 'white',
-              fontSize: '1rem',
-              fontWeight: 600,
-              cursor: canEstimate && !isEstimating ? 'pointer' : 'not-allowed',
-              marginTop: '0.5rem',
-            }}
-          >
-            {isEstimating ? t('book.estimating') : t('book.get_estimate')}
-          </button>
+                  return (
+                    <button
+                      key={svc.slug}
+                      type="button"
+                      onClick={() => setServiceType(svc.slug)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.85rem 1rem',
+                        borderRadius: 12,
+                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        background: isSelected ? 'rgba(var(--primary-rgb, 255,77,0), 0.06)' : 'var(--card-bg)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <span style={{ fontSize: '1.5rem' }}>
+                          {svc.slug.includes('triciclo') ? '\u{1F6FA}' : svc.slug.includes('moto') ? '\u{1F3CD}\uFE0F' : '\u{1F697}'}
+                        </span>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                            {t(svc.labelKey)}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            {svc.slug.includes('triciclo') ? 'Econ\u00f3mico' : svc.slug.includes('moto') ? 'R\u00e1pido' : 'C\u00f3modo'}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        {isLoading ? (
+                          <div style={{ width: 60, height: 14, borderRadius: 4, background: 'var(--border-light)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        ) : est ? (
+                          <>
+                            <div style={{ fontWeight: 700, fontSize: '1rem', color: isSelected ? 'var(--primary)' : 'var(--text-primary)' }}>
+                              {formatTRC(est.estimated_fare_cup)}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                              ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{'\u2014'}</div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
 
           {/* ═══ Error message ═══ */}
           {error && (
@@ -848,7 +882,7 @@ export default function BookPage() {
           )}
 
           {/* ═══ Fare estimate card ═══ */}
-          {estimate && (
+          {selectedEstimate && (
             <div
               className="booking-estimate-card"
               style={{
@@ -872,22 +906,22 @@ export default function BookPage() {
                 <span
                   style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}
                 >
-                  {formatTRC(estimate.estimated_fare_trc)}
+                  {formatTRC(selectedEstimate.estimated_fare_trc)}
                 </span>
               </div>
               <div
                 className="booking-fare-details"
                 style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}
               >
-                <span>{(estimate.estimated_distance_m / 1000).toFixed(1)} km</span>
-                <span>{Math.round(estimate.estimated_duration_s / 60)} min</span>
+                <span>{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</span>
+                <span>{Math.round(selectedEstimate.estimated_duration_s / 60)} min</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  ~{formatTRCasUSD(estimate.estimated_fare_trc)}
+                  ~{formatTRCasUSD(selectedEstimate.estimated_fare_trc)}
                 </span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  ≈ {formatCUP(estimate.estimated_fare_cup)}
+                  {'\u2248'} {formatCUP(selectedEstimate.estimated_fare_cup)}
                 </span>
-                {estimate.surge_multiplier > 1 && (
+                {selectedEstimate.surge_multiplier > 1 && (
                   <span
                     style={{
                       color: 'white',
@@ -898,19 +932,19 @@ export default function BookPage() {
                       fontSize: '0.7rem',
                     }}
                   >
-                    {estimate.surge_multiplier.toFixed(1)}x {t('book.surge_active')}
+                    {selectedEstimate.surge_multiplier.toFixed(1)}x {t('book.surge_active')}
                   </span>
                 )}
               </div>
-              {estimate.per_km_rate_cup > 0 && (
+              {selectedEstimate.per_km_rate_cup > 0 && (
                 <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                   {t('book.per_km_rate', {
-                    rate: formatCUP(estimate.per_km_rate_cup),
+                    rate: formatCUP(selectedEstimate.per_km_rate_cup),
                   })}
                 </p>
               )}
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#bbb' }}>
-                1 USD = {estimate.exchange_rate_usd_cup} CUP
+                1 USD = {selectedEstimate.exchange_rate_usd_cup} CUP
               </p>
 
               {/* Payment method */}
@@ -970,139 +1004,158 @@ export default function BookPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* ═══ Promo code (W1.3) ═══ */}
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Código promocional
-                </label>
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="Ingresa un código"
-                  aria-label="Codigo promocional"
-                  style={{
-                    width: '100%',
-                    marginTop: '0.25rem',
-                    padding: '0.5rem',
-                    borderRadius: '0.5rem',
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-card)',
-                    fontSize: '0.85rem',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              {/* ═══ Insurance toggle (W1.4) ═══ */}
-              <label
+          {/* ═══ More options (collapsible) ═══ */}
+          {selectedEstimate && (
+            <div style={{ marginBottom: '1rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowOptions(!showOptions)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  marginTop: '0.75rem',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={insuranceSelected}
-                  onChange={(e) => setInsuranceSelected(e.target.checked)}
-                  aria-label="Agregar seguro de viaje"
-                />
-                <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
-              </label>
-
-              {/* ═══ Scheduled ride (W1.2) ═══ */}
-              <div style={{ marginTop: '0.75rem' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isScheduled}
-                    aria-label="Programar viaje para despues"
-                    onChange={(e) => {
-                      setIsScheduled(e.target.checked);
-                      if (!e.target.checked) setScheduleDate('');
-                    }}
-                  />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
-                </label>
-                {isScheduled && (
-                  <input
-                    type="datetime-local"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
-                    aria-label="Fecha y hora del viaje programado"
-                    style={{
-                      width: '100%',
-                      marginTop: '0.5rem',
-                      padding: '0.5rem',
-                      borderRadius: '0.5rem',
-                      border: '1px solid var(--border)',
-                      fontSize: '0.85rem',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Request button */}
-              <button
-                onClick={handleRequest}
-                disabled={isRequesting}
-                aria-label="Solicitar viaje ahora"
-                style={{
-                  width: '100%',
-                  padding: '1rem',
-                  borderRadius: '0.75rem',
+                  background: 'none',
                   border: 'none',
-                  background: isRequesting ? '#ccc' : 'var(--primary)',
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  cursor: isRequesting ? 'not-allowed' : 'pointer',
-                  marginTop: '1rem',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.85rem',
+                  padding: '0.5rem 0',
                 }}
               >
-                {isRequesting ? t('book.requesting') : t('book.request_ride')}
+                <span style={{ transform: showOptions ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'\u25B6'}</span>
+                {t('book.more_options', { defaultValue: 'M\u00e1s opciones' })}
               </button>
+              {showOptions && (
+                <div style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
+                  {/* ═══ Promo code (W1.3) ═══ */}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      C{'\u00f3'}digo promocional
+                    </label>
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      placeholder="Ingresa un c\u00f3digo"
+                      aria-label="Codigo promocional"
+                      style={{
+                        width: '100%',
+                        marginTop: '0.25rem',
+                        padding: '0.5rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-card)',
+                        fontSize: '0.85rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* ═══ Insurance toggle (W1.4) ═══ */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginTop: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={insuranceSelected}
+                      onChange={(e) => setInsuranceSelected(e.target.checked)}
+                      aria-label="Agregar seguro de viaje"
+                    />
+                    <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
+                  </label>
+
+                  {/* ═══ Scheduled ride (W1.2) ═══ */}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isScheduled}
+                        aria-label="Programar viaje para despues"
+                        onChange={(e) => {
+                          setIsScheduled(e.target.checked);
+                          if (!e.target.checked) setScheduleDate('');
+                        }}
+                      />
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
+                    </label>
+                    {isScheduled && (
+                      <input
+                        type="datetime-local"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        aria-label="Fecha y hora del viaje programado"
+                        style={{
+                          width: '100%',
+                          marginTop: '0.5rem',
+                          padding: '0.5rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid var(--border)',
+                          fontSize: '0.85rem',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Request button with price */}
+          {selectedEstimate && (
+            <button
+              onClick={handleRequest}
+              disabled={isRequesting || !selectedEstimate}
+              aria-label="Solicitar viaje ahora"
+              style={{
+                width: '100%',
+                padding: '1rem',
+                borderRadius: '0.75rem',
+                border: 'none',
+                background: isRequesting ? '#ccc' : 'var(--primary)',
+                color: 'white',
+                fontSize: '1rem',
+                fontWeight: 700,
+                cursor: isRequesting ? 'not-allowed' : 'pointer',
+                marginTop: '0.5rem',
+              }}
+            >
+              {isRequesting
+                ? t('book.requesting')
+                : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatTRC(selectedEstimate.estimated_fare_cup)}`
+              }
+            </button>
           )}
         </div>
 
-        <p
-          style={{
-            marginTop: '2rem',
-            padding: '1rem',
-            background: 'var(--bg-page)',
-            borderRadius: '0.75rem',
-            fontSize: '0.875rem',
-            color: 'var(--text-tertiary)',
-            textAlign: 'center',
-          }}
-        >
-          {t('book.download_cta')}
-        </p>
 
         {/* Spacer for fixed bottom CTA on mobile */}
-        {estimate && <div style={{ height: '5rem' }} className="booking-cta-spacer" />}
+        {selectedEstimate && <div style={{ height: '5rem' }} className="booking-cta-spacer" />}
       </div>
 
       {/* Fixed bottom CTA on mobile */}
-      {estimate && (
+      {selectedEstimate && (
         <div className="booking-cta-fixed">
           <button
             onClick={handleRequest}
-            disabled={isRequesting}
+            disabled={isRequesting || !selectedEstimate}
             style={{
               width: '100%',
               padding: '1rem',
@@ -1115,7 +1168,10 @@ export default function BookPage() {
               cursor: isRequesting ? 'not-allowed' : 'pointer',
             }}
           >
-            {isRequesting ? t('book.requesting') : t('book.request_ride')}
+            {isRequesting
+              ? t('book.requesting')
+              : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatTRC(selectedEstimate.estimated_fare_cup)}`
+            }
           </button>
         </div>
       )}
