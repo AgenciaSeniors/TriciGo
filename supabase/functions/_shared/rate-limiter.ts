@@ -1,5 +1,12 @@
 // In-memory rate limiter for Deno Edge Functions
 // Uses Map with IP/key -> { count, resetAt }
+//
+// LIMITATION: This rate limiter is per-isolate (in-memory). Supabase Edge Functions
+// may run across multiple isolates, so rate limits are NOT shared between them.
+// For production at scale, consider using a distributed store (e.g., Supabase table
+// with TTL, or an external Redis instance) to enforce global rate limits.
+
+const MAX_STORE_SIZE = 10_000;
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 // Clean expired entries periodically
@@ -19,6 +26,18 @@ export function rateLimit(
   const entry = rateLimitStore.get(key);
 
   if (!entry || entry.resetAt <= now) {
+    // Prevent unbounded memory growth from key-flooding attacks
+    if (rateLimitStore.size >= MAX_STORE_SIZE) {
+      // Evict expired entries first
+      for (const [k, v] of rateLimitStore) {
+        if (v.resetAt <= now) rateLimitStore.delete(k);
+      }
+      // If still at capacity, reject to protect memory
+      if (rateLimitStore.size >= MAX_STORE_SIZE) {
+        console.warn(`Rate limiter store at capacity (${MAX_STORE_SIZE}), rejecting new key`);
+        return { allowed: false, remaining: 0, retryAfterMs: windowMs };
+      }
+    }
     rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: maxRequests - 1, retryAfterMs: 0 };
   }

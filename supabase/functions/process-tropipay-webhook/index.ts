@@ -146,33 +146,37 @@ Deno.serve(async (req) => {
     const rawBody = await req.text();
     let payload: Record<string, unknown>;
 
-    if (webhookSecret) {
-      const signature = req.headers.get('x-tropipay-signature')
-        ?? req.headers.get('x-webhook-signature')
-        ?? '';
-
-      const encoder = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(webhookSecret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
+    if (!webhookSecret) {
+      console.error('TROPIPAY_WEBHOOK_SECRET is not configured — rejecting webhook');
+      return new Response(
+        JSON.stringify({ error: 'Webhook signature verification not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
-      const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
-      const expectedSig = Array.from(new Uint8Array(sig))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+    }
 
-      if (signature !== expectedSig) {
-        console.error('Invalid webhook signature');
-        return new Response(
-          JSON.stringify({ error: 'Invalid signature' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
-      }
-    } else {
-      console.warn('TROPIPAY_WEBHOOK_SECRET not set — skipping signature verification');
+    const signature = req.headers.get('x-tropipay-signature')
+      ?? req.headers.get('x-webhook-signature')
+      ?? '';
+
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(webhookSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
+    const expectedSig = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    if (signature !== expectedSig) {
+      console.error('Invalid webhook signature');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     payload = JSON.parse(rawBody);
