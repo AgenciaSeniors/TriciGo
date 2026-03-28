@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { haversineDistance, findIntersection } from '@tricigo/utils';
 
@@ -121,6 +121,35 @@ function parseCubanAddress(query: string): CubanParsed | null {
   return null;
 }
 
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query || query.length < 1) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <strong style={{ color: 'var(--primary)', fontWeight: 700 }}>{text.slice(idx, idx + query.length)}</strong>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function getResultIcon(result: AddressResult): string {
+  const name = (result.place_name + ' ' + result.address).toLowerCase();
+  if (name.includes('hotel') || name.includes('hostal') || name.includes('casa particular')) return '🏨';
+  if (name.includes('hospital') || name.includes('clínica') || name.includes('policlínico')) return '🏥';
+  if (name.includes('universidad') || name.includes('escuela') || name.includes('instituto')) return '🎓';
+  if (name.includes('parque') || name.includes('plaza')) return '🌳';
+  if (name.includes('restaurante') || name.includes('paladar') || name.includes('cafetería')) return '🍽️';
+  if (name.includes('aeropuerto') || name.includes('terminal')) return '✈️';
+  if (name.includes('estación') || name.includes('terminal de')) return '🚉';
+  if (name.includes('museo')) return '🏛️';
+  if (name.includes('iglesia') || name.includes('catedral')) return '⛪';
+  if (name.includes('mercado') || name.includes('tienda')) return '🛒';
+  if (name.includes(' e/ ') || name.includes(' entre ')) return '🔀';
+  return '📍';
+}
+
 export function AddressAutocomplete({ label, placeholder, value, onSelect, onClear, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
   const { t } = useTranslation('web');
   const [query, setQuery] = useState(value || '');
@@ -137,6 +166,15 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   const listId = useRef(`address-listbox-${Math.random().toString(36).slice(2, 9)}`).current;
   const mapboxCacheRef = useRef<Map<string, AddressResult[]>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
+  const [recentAddresses, setRecentAddresses] = useState<AddressResult[]>([]);
+
+  // Load recent addresses from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('tricigo_recent_addresses');
+      if (stored) setRecentAddresses(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
 
   // Update query when value prop changes
   useEffect(() => {
@@ -182,7 +220,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       if (!res.ok) return [];
       const data = await res.json();
       return data.map((item: any) => ({
-        address: item.display_name || '',
+        address: ((item.display_name || '').split(', ').slice(0, 3).join(', ')),
         latitude: parseFloat(item.lat),
         longitude: parseFloat(item.lon),
         place_name: item.name || item.display_name?.split(',')[0] || '',
@@ -391,6 +429,21 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     debounceRef.current = setTimeout(() => search(val), 200);
   }
 
+  function saveToRecent(result: AddressResult) {
+    try {
+      const stored = localStorage.getItem('tricigo_recent_addresses');
+      const recents: AddressResult[] = stored ? JSON.parse(stored) : [];
+      // Remove duplicate if exists
+      const filtered = recents.filter(r =>
+        Math.abs(r.latitude - result.latitude) > 0.0001 || Math.abs(r.longitude - result.longitude) > 0.0001
+      );
+      // Add to front, keep max 5
+      const updated = [result, ...filtered].slice(0, 5);
+      localStorage.setItem('tricigo_recent_addresses', JSON.stringify(updated));
+      setRecentAddresses(updated);
+    } catch { /* ignore */ }
+  }
+
   async function handleSelect(result: AddressResult) {
     setQuery(result.place_name); // Show immediately
     setIsOpen(false);
@@ -403,12 +456,14 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         const intersection = await findIntersection(parsed.main, parsed.cross1, parsed.cross2, proximity);
         if (intersection) {
           setQuery(intersection.address);
-          onSelect({
+          const intersectionResult = {
             address: intersection.address,
             latitude: intersection.latitude,
             longitude: intersection.longitude,
             place_name: intersection.address,
-          });
+          };
+          saveToRecent(intersectionResult);
+          onSelect(intersectionResult);
           return;
         }
       } catch { /* fallback below */ }
@@ -420,12 +475,15 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         const enriched = await enrichAddress(result.latitude, result.longitude);
         if (enriched) {
           setQuery(enriched);
-          onSelect({ ...result, address: enriched, place_name: enriched });
+          const enrichedResult = { ...result, address: enriched, place_name: enriched };
+          saveToRecent(enrichedResult);
+          onSelect(enrichedResult);
           return;
         }
       } catch { /* fallback to original */ }
     }
 
+    saveToRecent(result);
     onSelect(result);
   }
 
@@ -452,8 +510,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         break;
       case 'Enter':
         e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < results.length) {
+        if (activeIndex >= 0) {
           handleSelect(results[activeIndex]);
+        } else if (results.length > 0) {
+          handleSelect(results[0]);
         }
         break;
       case 'Escape':
@@ -465,7 +525,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }
 
   const showNoResults = query.length >= 8 && !loading && results.length === 0 && isOpen;
-  const hasSavedToShow = query.length === 0 && savedLocations && savedLocations.length > 0;
+  const hasSavedToShow = query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0);
   const showDropdown = isOpen && (results.length > 0 || showNoResults || hasSavedToShow);
   const activeDescendant = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
 
@@ -520,7 +580,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           onChange={handleChange}
           onFocus={() => {
             // Show saved locations when empty, or search results when typing
-            if (query.length === 0 && savedLocations && savedLocations.length > 0) {
+            if (query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0)) {
               setIsOpen(true);
             } else if (results.length > 0 || (query.length >= 2 && !loading && results.length === 0)) {
               setIsOpen(true);
@@ -636,7 +696,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           }}
         >
           {/* Saved locations when query is empty */}
-          {query.length === 0 && savedLocations && savedLocations.length > 0 ? (
+          {query.length === 0 && savedLocations && savedLocations.length > 0 && (
             <>
               <li style={{ padding: '0.5rem 0.75rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {t('web.saved_locations_header', { defaultValue: 'Ubicaciones guardadas' })}
@@ -668,7 +728,41 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                 </li>
               ))}
             </>
-          ) : results.length > 0 ? (
+          )}
+          {/* Recent addresses when query is empty */}
+          {query.length === 0 && recentAddresses.length > 0 && (
+            <>
+              <li style={{ padding: '0.5rem 0.75rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Recientes
+              </li>
+              {recentAddresses.map((r, i) => (
+                <li
+                  key={`recent-${i}`}
+                  role="option"
+                  onClick={() => handleSelect(r)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    padding: '0.65rem 0.75rem',
+                    minHeight: 48,
+                    cursor: 'pointer',
+                    transition: 'background 0.1s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(var(--primary-rgb, 255,140,0), 0.08)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ flexShrink: 0, fontSize: '1.1rem' }} aria-hidden="true">🕐</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: '0.88rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.place_name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.address}</div>
+                  </div>
+                </li>
+              ))}
+            </>
+          )}
+          {/* Search results */}
+          {query.length > 0 && results.length > 0 ? (
             results.map((r, i) => (
               <li
                 key={i}
@@ -699,7 +793,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                   }}
                   aria-hidden="true"
                 >
-                  📍
+                  {getResultIcon(r)}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
@@ -712,7 +806,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {r.place_name}
+                    {highlightMatch(r.place_name, query)}
                   </div>
                   <div
                     style={{
@@ -729,7 +823,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                 </div>
               </li>
             ))
-          ) : (
+          ) : showNoResults ? (
             <li
               style={{
                 padding: '1rem 0.75rem',
@@ -740,7 +834,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             >
               {t('web.address_no_results', { defaultValue: 'No se encontraron direcciones' })}
             </li>
-          )}
+          ) : null}
         </ul>
       )}
 
