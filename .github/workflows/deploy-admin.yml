@@ -60,12 +60,12 @@ jobs:
             set -e
             APP_DIR=/var/www/tricigo-admin
             DEPLOY_DIR=/tmp/tricigo-admin-deploy/apps/admin
-            mkdir -p $APP_DIR/.next/static
 
             # Copy standalone build
             rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
 
             # Copy static assets (not included in standalone)
+            mkdir -p $APP_DIR/.next/static
             cp -r $DEPLOY_DIR/.next/static/* $APP_DIR/.next/static/
 
             # Copy public folder
