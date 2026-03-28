@@ -850,7 +850,7 @@ export default function BookPage() {
                         ) : est ? (
                           <>
                             <div style={{ fontWeight: 700, fontSize: '1rem', color: isSelected ? 'var(--primary)' : 'var(--text-primary)' }}>
-                              {formatTRC(est.estimated_fare_cup)}
+                              {formatCUP(est.estimated_fare_cup)}
                             </div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
                               ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
@@ -906,7 +906,7 @@ export default function BookPage() {
                 <span
                   style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}
                 >
-                  {formatTRC(selectedEstimate.estimated_fare_trc)}
+                  {formatCUP(selectedEstimate.estimated_fare_cup)}
                 </span>
               </div>
               <div
@@ -916,7 +916,7 @@ export default function BookPage() {
                 <span>{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</span>
                 <span>{Math.round(selectedEstimate.estimated_duration_s / 60)} min</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  ~{formatTRCasUSD(selectedEstimate.estimated_fare_trc)}
+                  ~${(selectedEstimate.estimated_fare_cup / 300).toFixed(2)} USD
                 </span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
                   {'\u2248'} {formatCUP(selectedEstimate.estimated_fare_cup)}
@@ -1139,7 +1139,7 @@ export default function BookPage() {
             >
               {isRequesting
                 ? t('book.requesting')
-                : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatTRC(selectedEstimate.estimated_fare_cup)}`
+                : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
               }
             </button>
           )}
@@ -1170,7 +1170,7 @@ export default function BookPage() {
           >
             {isRequesting
               ? t('book.requesting')
-              : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatTRC(selectedEstimate.estimated_fare_cup)}`
+              : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
             }
           </button>
         </div>

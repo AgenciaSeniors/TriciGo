@@ -79,7 +79,8 @@ export function formatTRC(centavos: number): string {
 
 /**
  * Convert TRC centavos to USD equivalent.
- * 1 TRC = 1 USD.  100 centavos = 1 TRC = $1.00 USD.
+ * Legacy: kept for backward compatibility.
+ * Note: 1 TRC = 1 CUP. USD conversion uses exchange rate.
  */
 export function trcToUSD(centavos: number): number {
   return centavos / 100;
