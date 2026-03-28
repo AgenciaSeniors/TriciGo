@@ -113,6 +113,12 @@ function parseCubanAddress(query: string): CubanParsed | null {
   m = query.match(/^(.+?)\s+e\/\s*$/i);
   if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
 
+  // SIMPLE INTERSECTION: "Calle 23 y L", "Prado y Neptuno"
+  m = query.match(/^(.+?)\s+y\s+(.+)$/i);
+  if (m && m[1].trim().length >= 2 && m[2].trim().length >= 1) {
+    return { main: m[1].trim(), cross1: m[2].trim() };
+  }
+
   return null;
 }
 
@@ -130,6 +136,8 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
   const listboxRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useRef(`address-listbox-${Math.random().toString(36).slice(2, 9)}`).current;
+  const mapboxCacheRef = useRef<Map<string, AddressResult[]>>(new Map());
+  const abortRef = useRef<AbortController | null>(null);
 
   // Update query when value prop changes
   useEffect(() => {
@@ -186,13 +194,17 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
   }
 
   // Extract Mapbox fetch into a named function for reuse
-  const fetchMapbox = useCallback(async (q: string): Promise<AddressResult[]> => {
+  const fetchMapbox = useCallback(async (q: string, signal?: AbortSignal): Promise<AddressResult[]> => {
+    // Check cache
+    const cached = mapboxCacheRef.current.get(q);
+    if (cached) return cached;
+
     try {
       let mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${mapboxToken}&country=cu&language=es&limit=5&types=address,poi,place,neighborhood,locality`;
       if (proximity) {
         mapboxUrl += `&proximity=${proximity.longitude},${proximity.latitude}`;
       }
-      const res = await fetch(mapboxUrl);
+      const res = await fetch(mapboxUrl, signal ? { signal } : undefined);
       if (!res.ok) return [];
       const data = await res.json();
       const items: AddressResult[] = [];
@@ -213,8 +225,11 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
           place_name: displayAddress,
         });
       }
+      // Cache result
+      mapboxCacheRef.current.set(q, items);
       return items;
-    } catch {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return [];
       return [];
     }
   }, [mapboxToken, proximity]);
@@ -270,19 +285,24 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
       }
 
       // ─── PATH 3: NORMAL SEARCH (not Cuban format) ───
-      const mapboxItems = await fetchMapbox(q);
-      if (searchIdRef.current !== thisSearchId) return; // Stale
+      // Cancel previous fetch
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const mapboxItems = await fetchMapbox(q, controller.signal);
+      if (searchIdRef.current !== thisSearchId) return;
 
       let merged = mapboxItems;
 
-      // If Mapbox returned nothing, try Nominatim as fallback
+      // If Mapbox returned nothing, try Nominatim
       if (mapboxItems.length === 0) {
         const nominatimItems = await searchNominatim(q, proximity);
-        if (searchIdRef.current !== thisSearchId) return; // Stale
+        if (searchIdRef.current !== thisSearchId) return;
         merged = nominatimItems;
       }
 
-      // Sort by distance to proximity
+      // Sort by distance
       if (proximity && merged.length > 1) {
         merged.sort((a, b) => {
           const distA = haversineDistance(
@@ -297,26 +317,58 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
         });
       }
 
-      setResults(merged.slice(0, 5));
+      const initial = merged.slice(0, 5);
+      setResults(initial);
       setIsOpen(true);
       setActiveIndex(-1);
+
+      // BACKGROUND: Enrich top 3 results with cross-streets
+      if (enrichAddress && initial.length > 0) {
+        const enrichPromises = initial.slice(0, 3).map(async (r, idx) => {
+          try {
+            const enriched = await enrichAddress(r.latitude, r.longitude);
+            if (enriched && searchIdRef.current === thisSearchId) {
+              return { idx, place_name: enriched, address: r.address, latitude: r.latitude, longitude: r.longitude };
+            }
+          } catch { /* ignore enrichment failure */ }
+          return null;
+        });
+
+        // Update results as enrichments arrive
+        Promise.allSettled(enrichPromises).then((settled) => {
+          if (searchIdRef.current !== thisSearchId) return;
+          setResults(prev => {
+            const updated = [...prev];
+            for (const s of settled) {
+              if (s.status === 'fulfilled' && s.value) {
+                const { idx, place_name, address } = s.value;
+                if (updated[idx]) {
+                  updated[idx] = { ...updated[idx], place_name, address };
+                }
+              }
+            }
+            return updated;
+          });
+        });
+      }
     } catch {
       if (searchIdRef.current === thisSearchId) setResults([]);
     } finally {
       if (searchIdRef.current === thisSearchId) setLoading(false);
     }
-  }, [mapboxToken, proximity, fetchMapbox]);
+  }, [mapboxToken, proximity, fetchMapbox, enrichAddress]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     setQuery(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
     if (val.length === 0) {
       setResults([]);
       setIsOpen(false);
       return;
     }
-    debounceRef.current = setTimeout(() => search(val), 300);
+    debounceRef.current = setTimeout(() => search(val), 200);
   }
 
   async function handleSelect(result: AddressResult) {
