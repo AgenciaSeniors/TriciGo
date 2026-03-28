@@ -179,6 +179,29 @@ export default function BookPage() {
   } = useGeolocation();
   const userLocation = userLat && userLng ? { latitude: userLat, longitude: userLng } : null;
 
+  /* ─── Auto-set pickup from user location (like Uber) ─── */
+  const autoSetPickupRef = useRef(false);
+
+  useEffect(() => {
+    if (autoSetPickupRef.current) return; // Only once
+    if (!userLat || !userLng || pickup) return; // Need coords + no pickup yet
+
+    autoSetPickupRef.current = true;
+
+    (async () => {
+      try {
+        const address = await reverseGeocode(userLat, userLng);
+        if (!address) return;
+        handleSetPickup({
+          label: address,
+          address: address,
+          latitude: userLat,
+          longitude: userLng,
+        });
+      } catch { /* ignore — user can set manually */ }
+    })();
+  }, [userLat, userLng, pickup]);
+
   /* ─── Route helper ─── */
   async function loadRoute(from: LocationPreset, to: LocationPreset) {
     setRouteLoading(true);
