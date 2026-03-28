@@ -1199,26 +1199,29 @@ export async function searchOverpassPOI(
 
     let overpassQuery: string;
     if (tagFilter) {
-      // UNION: tag-based search (POIs of this type) + name-based search (POIs with query in name)
+      // Category search: find named POIs by OSM tag near proximity
       const nameWords = words.filter(w => !OVERPASS_POI_TAGS[w]);
       const nameFilter = nameWords.length > 0
         ? `["name"~"${nameWords.join('|')}",i]`
         : '["name"]';
-      overpassQuery = `[out:json][timeout:5];(node${tagFilter}${nameFilter}(around:${radius},${lat},${lng});way${tagFilter}${nameFilter}(around:${radius},${lat},${lng});node["name"~"${escaped}",i](around:${radius},${lat},${lng});way["name"~"${escaped}",i](around:${radius},${lat},${lng}););out center ${limit};`;
+      overpassQuery = `[out:json][timeout:4];(node${tagFilter}${nameFilter}(around:${radius},${lat},${lng});way${tagFilter}${nameFilter}(around:${radius},${lat},${lng}););out center ${limit};`;
     } else {
       // Generic name search: find any named POI matching query
-      overpassQuery = `[out:json][timeout:5];(node["name"~"${escaped}",i](around:${radius},${lat},${lng});way["name"~"${escaped}",i](around:${radius},${lat},${lng}););out center ${limit};`;
+      overpassQuery = `[out:json][timeout:4];(node["name"~"${escaped}",i](around:${radius},${lat},${lng});way["name"~"${escaped}",i](around:${radius},${lat},${lng}););out center ${limit};`;
     }
 
     const encoded = encodeURIComponent(overpassQuery);
+    const abortCtrl = new AbortController();
+    const fetchTimeout = setTimeout(() => abortCtrl.abort(), 6000);
     const res = await Promise.any(
       OVERPASS_MIRRORS_GEO.map(m =>
-        fetch(`${m}?data=${encoded}`).then(r => {
+        fetch(`${m}?data=${encoded}`, { signal: abortCtrl.signal }).then(r => {
           if (!r.ok) throw new Error('fail');
           return r.json();
         })
       ),
     );
+    clearTimeout(fetchTimeout);
 
     if (!res?.elements?.length) return [];
 

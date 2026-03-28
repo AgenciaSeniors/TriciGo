@@ -403,34 +403,31 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // 3 parallel sources: Search Box + Nominatim + Overpass POI
-      const searchPromises: Promise<AddressResult[]>[] = [
+      // Fast sources first: Search Box + Nominatim
+      const [searchBoxSettled, nominatimSettled] = await Promise.allSettled([
         fetchSearchBox(q, controller.signal),
         searchNominatimEnhanced(q, proximity),
-      ];
-      // Add Overpass POI search when proximity is available (best for Cuba coverage)
-      if (proximity) {
-        searchPromises.push(
-          searchOverpassPOI(q, proximity, 8).then(items =>
+      ]);
+      if (searchIdRef.current !== thisSearchId) return;
+
+      const searchBoxItems = searchBoxSettled.status === 'fulfilled' ? searchBoxSettled.value : [];
+      const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
+
+      // Start Overpass search in background (slower, but better Cuba coverage)
+      let overpassItems: AddressResult[] = [];
+      const overpassPromise = proximity
+        ? searchOverpassPOI(q, proximity, 10).then(items =>
             items.map(r => ({
               address: r.full_address || r.address,
               latitude: r.latitude,
               longitude: r.longitude,
               place_name: r.place_name,
               category: r.category,
-              source: r.source as 'searchbox' | 'nominatim',
+              source: r.source as 'searchbox' | 'nominatim' | 'overpass',
               specificity: r.specificity,
             }))
           ).catch(() => [] as AddressResult[])
-        );
-      }
-
-      const settled = await Promise.allSettled(searchPromises);
-      if (searchIdRef.current !== thisSearchId) return;
-
-      const searchBoxItems = settled[0]?.status === 'fulfilled' ? settled[0].value : [];
-      const nominatimItems = settled[1]?.status === 'fulfilled' ? settled[1].value : [];
-      const overpassItems = settled[2]?.status === 'fulfilled' ? settled[2].value : [];
+        : Promise.resolve([] as AddressResult[]);
 
       // ─── SMART DEDUPLICATION ───
       // Combine all results, then deduplicate by name similarity + proximity
@@ -522,6 +519,31 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       setResults(initial);
       setIsOpen(true);
       setActiveIndex(-1);
+
+      // BACKGROUND: Merge Overpass results when they arrive (better Cuba POI coverage)
+      overpassPromise.then((opItems) => {
+        if (searchIdRef.current !== thisSearchId || opItems.length === 0) return;
+        setResults(prev => {
+          // Merge Overpass results with existing results
+          const existingNames = new Set(prev.map(r => r.place_name.toLowerCase()));
+          const newItems = opItems
+            .filter(r => {
+              // Distance filter
+              const d = haversineDistance(
+                { latitude: r.latitude, longitude: r.longitude },
+                { latitude: prox.latitude, longitude: prox.longitude },
+              );
+              return d <= 30000 && !existingNames.has(r.place_name.toLowerCase());
+            })
+            .map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) }));
+          if (newItems.length === 0) return prev;
+          const combined = [...prev, ...newItems];
+          // Re-rank
+          const nq = stripAccents(q.toLowerCase().trim());
+          combined.sort((a, b) => scoreResult(b, nq, proximity) - scoreResult(a, nq, proximity));
+          return combined.slice(0, 7);
+        });
+      });
 
       // BACKGROUND: Enrich top 3 results with cross-streets
       if (enrichAddress && initial.length > 0) {
