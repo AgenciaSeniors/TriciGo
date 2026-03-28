@@ -10,31 +10,32 @@ import { Button } from '@tricigo/ui/Button';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
-import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 
 const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
   const { t: td } = useTranslation('driver');
   const { isPhone } = useResponsive();
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSendCode = async () => {
     setError('');
-    if (!isValidCubanPhone(phone)) {
-      setError(t('auth.invalid_phone'));
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(trimmed)) {
+      setError(t('auth.invalid_email', { defaultValue: 'Ingresa un correo válido' }));
       return;
     }
 
     setLoading(true);
     try {
-      const normalized = normalizeCubanPhone(phone);
-      await authService.sendOTP(normalized);
-      router.push({ pathname: '/(auth)/verify-otp', params: { phone: normalized } });
+      await authService.sendOTP(trimmed);
+      router.push({ pathname: '/(auth)/verify-otp', params: { email: trimmed } });
     } catch {
       setError(t('errors.generic'));
     } finally {
@@ -117,25 +118,21 @@ export default function LoginScreen() {
               {t('auth.welcome', { defaultValue: 'Bienvenido' })}
             </Text>
             <Text variant="bodySmall" color="inverse" className="mb-6 opacity-50">
-              {t('auth.enter_phone_description', { defaultValue: 'Ingresa tu número para comenzar' })}
+              {t('auth.enter_email_description', { defaultValue: 'Ingresa tu correo para comenzar' })}
             </Text>
 
-            {/* Phone input with country prefix */}
-            <View className="flex-row items-center gap-2 mb-1">
-              <View className="bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center border border-neutral-700">
-                <Text variant="body" color="inverse" className="font-semibold">🇨🇺 +53</Text>
-              </View>
-              <View className="flex-1">
-                <Input
-                  placeholder="5XXXXXXX"
-                  keyboardType="phone-pad"
-                  value={phone}
-                  onChangeText={setPhone}
-                  variant="dark"
-                  autoFocus
-                />
-              </View>
-            </View>
+            {/* Email input */}
+            <Input
+              placeholder={t('auth.email_placeholder', { defaultValue: 'tucorreo@ejemplo.com' })}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              value={email}
+              onChangeText={setEmail}
+              variant="dark"
+              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.neutral[400]} />}
+              autoFocus
+            />
 
             {error ? (
               <Text variant="bodySmall" color="error" className="mb-2">
@@ -147,7 +144,7 @@ export default function LoginScreen() {
               title={t('auth.send_code')}
               onPress={handleSendCode}
               loading={loading}
-              disabled={phone.length < 7 || loading}
+              disabled={!EMAIL_REGEX.test(email.trim()) || loading}
               fullWidth
               size="lg"
               className="mt-2"

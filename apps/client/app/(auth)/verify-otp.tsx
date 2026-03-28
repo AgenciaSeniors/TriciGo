@@ -15,15 +15,15 @@ import { useAuthStore } from '@/stores/auth.store';
 
 export default function VerifyOTPScreen() {
   const { t } = useTranslation('common');
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const { email } = useLocalSearchParams<{ email: string }>();
   const setUser = useAuthStore((s) => s.setUser);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
 
-  // Guard: phone param is required
-  if (!phone) {
+  // Guard: email param is required
+  if (!email) {
     return (
       <Screen bg="white" padded>
         <View className="flex-1 justify-center items-center">
@@ -59,7 +59,7 @@ export default function VerifyOTPScreen() {
 
     setLoading(true);
     try {
-      await authService.verifyOTP(phone, code);
+      await authService.verifyOTP(email, code);
       const user = await authService.getCurrentUser();
       setUser(user);
       // Navigation is automatic via auth guard
@@ -72,7 +72,7 @@ export default function VerifyOTPScreen() {
 
   const handleResend = async () => {
     try {
-      await authService.sendOTP(phone);
+      await authService.sendOTP(email);
       setResendTimer(60);
     } catch {
       setError(t('errors.generic'));
@@ -116,13 +116,13 @@ export default function VerifyOTPScreen() {
           {t('auth.otp_title')}
         </Text>
         <Text variant="body" color="secondary" className="mb-2">
-          {t('auth.otp_subtitle', { phone })}
+          {t('auth.otp_email_subtitle', { email, defaultValue: `Enviamos un código a ${email}` })}
         </Text>
 
-        {/* Phone number display */}
+        {/* Email display */}
         <View className="bg-neutral-50 rounded-xl px-4 py-2.5 flex-row items-center mb-8 self-start">
-          <Ionicons name="call-outline" size={16} color={colors.brand.orange} />
-          <Text variant="body" className="ml-2 font-semibold">{phone}</Text>
+          <Ionicons name="mail-outline" size={16} color={colors.brand.orange} />
+          <Text variant="body" className="ml-2 font-semibold">{email}</Text>
         </View>
 
         <Input

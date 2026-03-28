@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the Supabase client
+const mockFunctionsInvoke = vi.fn();
 const mockAuth = {
-  signInWithOtp: vi.fn(),
-  verifyOtp: vi.fn(),
   getSession: vi.fn(),
   getUser: vi.fn(),
+  setSession: vi.fn(),
   signOut: vi.fn(),
   onAuthStateChange: vi.fn(),
   signInWithOAuth: vi.fn(),
-  updateUser: vi.fn(),
+  signInWithPassword: vi.fn(),
 };
 const mockFrom = vi.fn();
 const mockStorageUpload = vi.fn();
@@ -20,7 +20,12 @@ const mockStorage = {
     getPublicUrl: mockStorageGetPublicUrl,
   })),
 };
-const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage };
+const mockSupabase = {
+  auth: mockAuth,
+  from: mockFrom,
+  storage: mockStorage,
+  functions: { invoke: mockFunctionsInvoke },
+};
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -36,43 +41,63 @@ describe('authService', () => {
 
   // ==================== sendOTP ====================
   describe('sendOTP', () => {
-    it('calls supabase auth.signInWithOtp with the phone number', async () => {
-      mockAuth.signInWithOtp.mockResolvedValue({ error: null });
+    it('calls send-email-otp edge function with email', async () => {
+      mockFunctionsInvoke.mockResolvedValue({ data: { success: true }, error: null });
 
-      await authService.sendOTP('+573001234567');
+      await authService.sendOTP('user@example.com');
 
-      expect(mockAuth.signInWithOtp).toHaveBeenCalledWith({ phone: '+573001234567' });
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith('send-email-otp', {
+        body: { email: 'user@example.com' },
+      });
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Rate limit exceeded', code: '429' };
-      mockAuth.signInWithOtp.mockResolvedValue({ error: err });
+    it('throws on edge function error', async () => {
+      const err = new Error('Function invocation failed');
+      mockFunctionsInvoke.mockResolvedValue({ data: null, error: err });
 
-      await expect(authService.sendOTP('+573001234567')).rejects.toEqual(err);
+      await expect(authService.sendOTP('user@example.com')).rejects.toEqual(err);
+    });
+
+    it('throws on data error', async () => {
+      mockFunctionsInvoke.mockResolvedValue({ data: { error: 'Rate limited' }, error: null });
+
+      await expect(authService.sendOTP('user@example.com')).rejects.toThrow('Rate limited');
     });
   });
 
   // ==================== verifyOTP ====================
   describe('verifyOTP', () => {
-    it('calls supabase auth.verifyOtp with phone, token, and type sms', async () => {
-      const mockData = { session: { access_token: 'tok-123' }, user: { id: 'u-1' } };
-      mockAuth.verifyOtp.mockResolvedValue({ data: mockData, error: null });
-
-      const result = await authService.verifyOTP('+573001234567', '123456');
-
-      expect(mockAuth.verifyOtp).toHaveBeenCalledWith({
-        phone: '+573001234567',
-        token: '123456',
-        type: 'sms',
+    it('calls verify-whatsapp-otp edge function with email and code', async () => {
+      const mockSession = { access_token: 'tok-123', refresh_token: 'ref-123' };
+      mockFunctionsInvoke.mockResolvedValue({
+        data: { success: true, session: mockSession },
+        error: null,
       });
-      expect(result).toEqual(mockData);
+      mockAuth.setSession.mockResolvedValue({ data: {}, error: null });
+
+      const result = await authService.verifyOTP('user@example.com', '123456');
+
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith('verify-whatsapp-otp', {
+        body: { email: 'user@example.com', code: '123456' },
+      });
+      expect(mockAuth.setSession).toHaveBeenCalledWith({
+        access_token: 'tok-123',
+        refresh_token: 'ref-123',
+      });
+      expect(result.session).toEqual(mockSession);
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Invalid OTP', code: 'otp_expired' };
-      mockAuth.verifyOtp.mockResolvedValue({ data: null, error: err });
+    it('throws on edge function error', async () => {
+      const err = new Error('Invocation failed');
+      mockFunctionsInvoke.mockResolvedValue({ data: null, error: err });
 
-      await expect(authService.verifyOTP('+573001234567', '000000')).rejects.toEqual(err);
+      await expect(authService.verifyOTP('user@example.com', '000000')).rejects.toEqual(err);
+    });
+
+    it('throws on data error', async () => {
+      mockFunctionsInvoke.mockResolvedValue({ data: { error: 'Invalid or expired code' }, error: null });
+
+      await expect(authService.verifyOTP('user@example.com', '000000')).rejects.toThrow('Invalid or expired code');
     });
   });
 
@@ -107,7 +132,7 @@ describe('authService', () => {
         data: { user: authUser },
       });
 
-      const mockProfile = { id: 'u-1', full_name: 'Test User', phone: '+573001234567' };
+      const mockProfile = { id: 'u-1', full_name: 'Test User', email: 'test@example.com' };
       const mockSingle = vi.fn().mockResolvedValue({ data: mockProfile, error: null });
       const mockEq = vi.fn(() => ({ single: mockSingle }));
       const mockSelect = vi.fn(() => ({ eq: mockEq }));
@@ -148,6 +173,28 @@ describe('authService', () => {
       mockFrom.mockReturnValueOnce({ select: mockSelect });
 
       await expect(authService.getCurrentUser()).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== getAuthUserMetadata ====================
+  describe('getAuthUserMetadata', () => {
+    it('returns user metadata from auth user', async () => {
+      const metadata = { name: 'John', picture: 'https://example.com/photo.jpg' };
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: { id: 'u-1', user_metadata: metadata } },
+      });
+
+      const result = await authService.getAuthUserMetadata();
+      expect(result).toEqual(metadata);
+    });
+
+    it('returns null when no auth user', async () => {
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: null },
+      });
+
+      const result = await authService.getAuthUserMetadata();
+      expect(result).toBeNull();
     });
   });
 
@@ -269,48 +316,6 @@ describe('authService', () => {
       mockAuth.signInWithOAuth.mockResolvedValue({ data: null, error: err });
 
       await expect(authService.signInWithApple()).rejects.toEqual(err);
-    });
-  });
-
-  // ==================== linkPhone ====================
-  describe('linkPhone', () => {
-    it('calls supabase auth.updateUser with the phone number', async () => {
-      mockAuth.updateUser.mockResolvedValue({ error: null });
-
-      await authService.linkPhone('+573009876543');
-
-      expect(mockAuth.updateUser).toHaveBeenCalledWith({ phone: '+573009876543' });
-    });
-
-    it('throws on supabase error', async () => {
-      const err = { message: 'Phone already linked', code: 'phone_exists' };
-      mockAuth.updateUser.mockResolvedValue({ error: err });
-
-      await expect(authService.linkPhone('+573009876543')).rejects.toEqual(err);
-    });
-  });
-
-  // ==================== verifyPhoneLink ====================
-  describe('verifyPhoneLink', () => {
-    it('calls supabase auth.verifyOtp with phone_change type', async () => {
-      const mockData = { session: { access_token: 'tok-456' }, user: { id: 'u-1' } };
-      mockAuth.verifyOtp.mockResolvedValue({ data: mockData, error: null });
-
-      const result = await authService.verifyPhoneLink('+573009876543', '654321');
-
-      expect(mockAuth.verifyOtp).toHaveBeenCalledWith({
-        phone: '+573009876543',
-        token: '654321',
-        type: 'phone_change',
-      });
-      expect(result).toEqual(mockData);
-    });
-
-    it('throws on supabase error', async () => {
-      const err = { message: 'Verify failed', code: 'otp_expired' };
-      mockAuth.verifyOtp.mockResolvedValue({ data: null, error: err });
-
-      await expect(authService.verifyPhoneLink('+573009876543', '000000')).rejects.toEqual(err);
     });
   });
 

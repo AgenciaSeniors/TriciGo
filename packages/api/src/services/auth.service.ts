@@ -1,6 +1,6 @@
 // ============================================================
 // TriciGo — Auth Service
-// Phone-based OTP authentication via Supabase Auth
+// Email-based OTP authentication + Social Login via Supabase Auth
 // ============================================================
 
 import type { User } from '@tricigo/types';
@@ -10,9 +10,9 @@ declare const __DEV__: boolean | undefined;
 
 export const authService = {
   /**
-   * Send OTP to a phone number via SMSPM Edge Function.
+   * Send OTP to an email address via the send-email-otp Edge Function.
    */
-  async sendOTP(phone: string) {
+  async sendOTP(email: string) {
     const supabase = getSupabaseClient();
     // Dev bypass: ONLY in React Native __DEV__ mode (never process.env which can leak to production)
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -20,9 +20,9 @@ export const authService = {
       return;
     }
 
-    // Send OTP via Edge Function (SMSPM)
-    const { data, error } = await supabase.functions.invoke('send-sms-otp', {
-      body: { phone },
+    // Send OTP via Edge Function (Resend email)
+    const { data, error } = await supabase.functions.invoke('send-email-otp', {
+      body: { email },
     });
 
     if (error) throw error;
@@ -32,11 +32,11 @@ export const authService = {
   /**
    * Verify OTP code and establish a session.
    */
-  async verifyOTP(phone: string, token: string) {
+  async verifyOTP(email: string, token: string) {
     const supabase = getSupabaseClient();
     // Dev bypass: ONLY in React Native __DEV__ mode
     if (typeof __DEV__ !== 'undefined' && __DEV__ && token === '000000') {
-      const devEmail = `dev_${phone.replace(/\+/g, '')}@tricigo.test`;
+      const devEmail = `dev_${email.replace(/[@.]/g, '_')}@tricigo.test`;
       const { data: pwData, error: pwError } = await supabase.auth.signInWithPassword({
         email: devEmail,
         password: 'dev000000',
@@ -47,7 +47,7 @@ export const authService = {
 
     // Verify OTP via Edge Function (validates against otp_codes table, creates session)
     const { data, error } = await supabase.functions.invoke('verify-whatsapp-otp', {
-      body: { phone, code: token },
+      body: { email, code: token },
     });
 
     if (error) throw error;
@@ -91,6 +91,17 @@ export const authService = {
       .single();
     if (error) throw error;
     return data as User;
+  },
+
+  /**
+   * Get the current auth user metadata (for pre-filling profile from OAuth).
+   */
+  async getAuthUserMetadata(): Promise<Record<string, unknown> | null> {
+    const supabase = getSupabaseClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    return authUser?.user_metadata ?? null;
   },
 
   /**
@@ -199,30 +210,6 @@ export const authService = {
       options: {
         redirectTo,
       },
-    });
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Link a phone number to the current OAuth account.
-   * Used after social login when user needs to verify their phone.
-   */
-  async linkPhone(phone: string) {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.auth.updateUser({ phone });
-    if (error) throw error;
-  },
-
-  /**
-   * Verify phone link OTP.
-   */
-  async verifyPhoneLink(phone: string, token: string) {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token,
-      type: 'phone_change',
     });
     if (error) throw error;
     return data;

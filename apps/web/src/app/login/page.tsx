@@ -6,13 +6,15 @@ import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
 import { useAuth } from '../providers';
 
-type Step = 'phone' | 'otp';
+type Step = 'email' | 'otp';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('+53');
+  const [step, setStep] = useState<Step>('email');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,18 +35,19 @@ export default function LoginPage() {
   }
 
   async function handleSendOtp() {
-    if (phone.length < 8) return;
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(trimmed)) return;
     setLoading(true);
     setError(null);
     try {
       const supabase = getSupabaseClient();
-      const { error: otpError } = await supabase.functions.invoke('send-sms-otp', {
-        body: { phone },
+      const { error: otpError } = await supabase.functions.invoke('send-email-otp', {
+        body: { email: trimmed },
       });
       if (otpError) throw otpError;
       setStep('otp');
     } catch (err) {
-      setError('No se pudo enviar el código. Verifica el número.');
+      setError('No se pudo enviar el código. Verifica el correo.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -58,7 +61,7 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseClient();
       const { data, error: verifyError } = await supabase.functions.invoke('verify-whatsapp-otp', {
-        body: { phone, code: otp },
+        body: { email: email.trim().toLowerCase(), code: otp },
       });
       if (verifyError) throw verifyError;
       if (data?.error) throw new Error(data.error);
@@ -190,36 +193,36 @@ export default function LoginPage() {
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>o con teléfono</span>
+          <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>o con correo</span>
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         </div>
 
-        {step === 'phone' ? (
+        {step === 'email' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-                Número de teléfono
+                Correo electrónico
               </label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+53 5XXXXXXX"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tucorreo@ejemplo.com"
+                autoComplete="email"
                 style={{
                   width: '100%',
                   padding: '0.75rem 1rem',
                   borderRadius: '0.75rem',
                   border: '1px solid var(--border)',
-                  fontSize: '1.125rem',
+                  fontSize: '1rem',
                   outline: 'none',
-                  letterSpacing: '0.05em',
                 }}
               />
             </div>
             <button
               onClick={handleSendOtp}
-              disabled={phone.length < 8 || loading}
-              style={btnStyle(phone.length >= 8 && !loading)}
+              disabled={!EMAIL_REGEX.test(email.trim()) || loading}
+              style={btnStyle(EMAIL_REGEX.test(email.trim()) && !loading)}
             >
               {loading ? 'Enviando...' : 'Enviar código'}
             </button>
@@ -227,7 +230,7 @@ export default function LoginPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>
-              Enviamos un código a <strong>{phone}</strong>
+              Enviamos un código a <strong>{email.trim().toLowerCase()}</strong>
             </p>
             <input
               type="text"
@@ -255,7 +258,7 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setStep('phone'); setOtp(''); setError(null); }}
+              onClick={() => { setStep('email'); setOtp(''); setError(null); }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -265,7 +268,7 @@ export default function LoginPage() {
                 textAlign: 'center',
               }}
             >
-              ← Cambiar número
+              ← Cambiar correo
             </button>
           </div>
         )}

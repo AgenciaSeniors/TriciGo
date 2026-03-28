@@ -75,24 +75,15 @@ function RootNavigator() {
       // Check if profile is incomplete (new user needs to complete profile)
       if (!user?.full_name) {
         const currentRoute = segments.join('/');
-        if (!currentRoute.includes('complete-profile') && !currentRoute.includes('verify-phone')) {
+        if (!currentRoute.includes('complete-profile')) {
           router.replace('/(auth)/complete-profile');
-          return;
-        }
-        return;
-      }
-      // Check if phone is missing (social login user)
-      if (!user?.phone) {
-        const currentRoute = segments.join('/');
-        if (!currentRoute.includes('verify-phone')) {
-          router.replace('/(auth)/verify-phone');
           return;
         }
         return;
       }
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments, user?.full_name, user?.phone]);
+  }, [isAuthenticated, isLoading, segments, user?.full_name]);
 
   if (isLoading) {
     const bgColor = resolvedScheme === 'dark' ? colors.background.dark : colors.background.primary;

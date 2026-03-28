@@ -17,33 +17,46 @@ Deno.serve(async (req) => {
     const rl = rateLimit(`verify-whatsapp-otp:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
-    const { phone, code } = await req.json();
+    const { phone, email, code } = await req.json();
 
-    if (!phone || !code) {
+    // Accept either phone or email as identifier
+    const identifier = email?.trim().toLowerCase() || phone;
+    const isEmailAuth = Boolean(email);
+
+    if (!identifier || !code) {
       return new Response(
-        JSON.stringify({ error: 'Phone and code are required' }),
+        JSON.stringify({ error: 'Email (or phone) and code are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    const normalizedPhone = !isEmailAuth && phone
+      ? (phone.startsWith('+') ? phone : `+${phone}`)
+      : null;
+    const normalizedEmail = isEmailAuth ? identifier : null;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Find the most recent non-expired, non-verified OTP for this phone
-    const { data: otpRecord, error: findError } = await supabase
+    // Find the most recent non-expired, non-verified OTP
+    let otpQuery = supabase
       .from('otp_codes')
       .select('*')
-      .eq('phone', normalizedPhone)
       .eq('code', code)
       .is('verified_at', null)
       .gte('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
+
+    if (isEmailAuth) {
+      otpQuery = otpQuery.eq('email', normalizedEmail!);
+    } else {
+      otpQuery = otpQuery.eq('phone', normalizedPhone!);
+    }
+
+    const { data: otpRecord, error: findError } = await otpQuery.single();
 
     if (findError || !otpRecord) {
       return new Response(
@@ -73,20 +86,25 @@ Deno.serve(async (req) => {
       .eq('id', otpRecord.id);
 
     // Find or create user in auth.users
-    const devEmail = `phone_${normalizedPhone.replace(/\+/g, '')}@tricigo.app`;
+    // For email auth: use real email. For phone auth: use synthetic email.
+    const userEmail = isEmailAuth
+      ? normalizedEmail!
+      : `phone_${normalizedPhone!.replace(/\+/g, '')}@tricigo.app`;
 
-    // Try to find existing user by email
+    // Try to find existing user by email or phone
     const { data: existingUsers } = await supabase.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
-      (u) => u.email === devEmail || u.phone === normalizedPhone,
+      (u) => u.email === userEmail
+        || (normalizedPhone && u.phone === normalizedPhone)
+        || (normalizedEmail && u.email === normalizedEmail),
     );
 
     let userId: string;
 
     if (existingUser) {
       userId = existingUser.id;
-      // Update phone if needed
-      if (!existingUser.phone || existingUser.phone !== normalizedPhone) {
+      // Update phone/email if needed
+      if (normalizedPhone && (!existingUser.phone || existingUser.phone !== normalizedPhone)) {
         await supabase.auth.admin.updateUserById(userId, {
           phone: normalizedPhone,
           phone_confirm: true,
@@ -95,12 +113,13 @@ Deno.serve(async (req) => {
     } else {
       // Create new user
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-        email: devEmail,
-        phone: normalizedPhone,
-        phone_confirm: true,
+        email: userEmail,
+        ...(normalizedPhone ? { phone: normalizedPhone, phone_confirm: true } : {}),
         email_confirm: true,
-        password: `whatsapp_${Date.now()}_${crypto.randomUUID()}`,
-        user_metadata: { phone: normalizedPhone },
+        password: `otp_${Date.now()}_${crypto.randomUUID()}`,
+        user_metadata: isEmailAuth
+          ? { email: normalizedEmail }
+          : { phone: normalizedPhone },
       });
 
       if (createError || !newUser.user) {
@@ -134,7 +153,7 @@ Deno.serve(async (req) => {
     // Generate a magic link to create a session
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'magiclink',
-      email: devEmail,
+      email: userEmail,
     });
 
     if (linkError || !linkData) {
@@ -144,7 +163,7 @@ Deno.serve(async (req) => {
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
 
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: devEmail,
+        email: userEmail,
         password: tempPassword,
       });
 
@@ -178,7 +197,7 @@ Deno.serve(async (req) => {
       const tempPassword = `otp_${crypto.randomUUID()}`;
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
       const { data: fbData } = await supabase.auth.signInWithPassword({
-        email: devEmail,
+        email: userEmail,
         password: tempPassword,
       });
 

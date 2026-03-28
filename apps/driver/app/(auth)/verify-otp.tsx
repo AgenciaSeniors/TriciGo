@@ -13,7 +13,7 @@ import { useDriverStore } from '@/stores/driver.store';
 
 export default function VerifyOTPScreen() {
   const { t } = useTranslation('common');
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const { email } = useLocalSearchParams<{ email: string }>();
   const setUser = useAuthStore((s) => s.setUser);
   const setProfile = useDriverStore((s) => s.setProfile);
   const [code, setCode] = useState('');
@@ -38,7 +38,7 @@ export default function VerifyOTPScreen() {
 
     setLoading(true);
     try {
-      await authService.verifyOTP(phone!, code);
+      await authService.verifyOTP(email!, code);
       const user = await authService.getCurrentUser();
       setUser(user);
       if (user) {
@@ -58,7 +58,7 @@ export default function VerifyOTPScreen() {
 
   const handleResend = async () => {
     try {
-      await authService.sendOTP(phone!);
+      await authService.sendOTP(email!);
       setResendTimer(60);
     } catch {
       setError(t('errors.generic'));
@@ -72,7 +72,7 @@ export default function VerifyOTPScreen() {
           {t('auth.otp_title')}
         </Text>
         <Text variant="body" color="inverse" className="mb-8 opacity-60">
-          {t('auth.otp_subtitle', { phone })}
+          {t('auth.otp_email_subtitle', { email, defaultValue: `Enviamos un código a ${email}` })}
         </Text>
 
         <Input
