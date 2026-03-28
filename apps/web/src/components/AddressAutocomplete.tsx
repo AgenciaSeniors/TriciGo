@@ -66,6 +66,7 @@ interface AddressAutocompleteProps {
   placeholder?: string;
   value?: string;
   onSelect: (result: AddressResult) => void;
+  onClear?: () => void;
   mapboxToken: string;
   savedLocations?: SavedLocationItem[];
   proximity?: { latitude: number; longitude: number };
@@ -122,7 +123,7 @@ function parseCubanAddress(query: string): CubanParsed | null {
   return null;
 }
 
-export function AddressAutocomplete({ label, placeholder, value, onSelect, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
+export function AddressAutocomplete({ label, placeholder, value, onSelect, onClear, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
   const { t } = useTranslation('web');
   const [query, setQuery] = useState(value || '');
   const [results, setResults] = useState<AddressResult[]>([]);
@@ -415,6 +416,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, mapbo
     setIsOpen(false);
     setActiveIndex(-1);
     inputRef.current?.focus();
+    onClear?.();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {

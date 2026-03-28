@@ -254,6 +254,18 @@ export default function BookPage() {
     setInsuranceSelected(false);
   }
 
+  function handleSwapLocations() {
+    const tempPickup = pickup;
+    const tempPickupAddr = pickupAddress;
+    setPickup(dropoff);
+    setPickupAddress(dropoffAddress);
+    setDropoff(tempPickup);
+    setDropoffAddress(tempPickupAddr);
+    setEstimate(null);
+    setRouteCoords(null);
+    setRouteInfo(null);
+  }
+
   async function handleUseMyLocation() {
     try {
       const coords = await requestLocation();
@@ -411,7 +423,46 @@ export default function BookPage() {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetPickup(loc);
             }}
+            onClear={() => {
+              setPickup(null);
+              setPickupAddress(null);
+              setSelectionStep('pickup');
+              setEstimate(null);
+              setRouteCoords(null);
+              setRouteInfo(null);
+            }}
           />
+
+          {/* Swap button */}
+          {pickup && dropoff && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '-0.25rem 0' }}>
+              <button
+                type="button"
+                onClick={handleSwapLocations}
+                aria-label="Intercambiar origen y destino"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  border: '1px solid var(--border)',
+                  background: 'var(--card-bg)',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  fontSize: '1rem',
+                  transition: 'all 0.15s',
+                  zIndex: 1,
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+              >
+                ↕
+              </button>
+            </div>
+          )}
+
           <AddressAutocomplete
             label={t('web.address_destination', { defaultValue: 'Destino' })}
             placeholder="¿A dónde vas?"
@@ -423,6 +474,14 @@ export default function BookPage() {
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetDropoff(loc);
+            }}
+            onClear={() => {
+              setDropoff(null);
+              setDropoffAddress(null);
+              setSelectionStep('dropoff');
+              setEstimate(null);
+              setRouteCoords(null);
+              setRouteInfo(null);
             }}
           />
         </div>
