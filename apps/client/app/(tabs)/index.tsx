@@ -27,6 +27,7 @@ import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
+import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { Skeleton, SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -228,6 +229,7 @@ function IdleView() {
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setPickup = useRideStore((s) => s.setPickup);
+  const setPrefetchedPickup = useRideStore((s) => s.setPrefetchedPickup);
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -241,17 +243,30 @@ function IdleView() {
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
   const incrementUnread = useNotificationStore((s) => s.incrementUnread);
 
-  // Check location permission on mount
+  // Check location permission + pre-fetch pickup address on mount
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const { status } = await Location.getForegroundPermissionsAsync();
-        if (status !== 'granted') setLocationDenied(true);
+        if (status !== 'granted') {
+          setLocationDenied(true);
+          return;
+        }
+        // Pre-fetch: get last known position + reverse geocode in background
+        const pos = await Location.getLastKnownPositionAsync();
+        if (!pos || cancelled) return;
+        const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        const address = await reverseGeocode(loc.latitude, loc.longitude);
+        if (!cancelled && address) {
+          setPrefetchedPickup({ address, location: loc });
+        }
       } catch {
         // Silently ignore — don't crash
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [setPrefetchedPickup]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -556,8 +571,10 @@ function SelectingView() {
   const user = useAuthStore((s) => s.user);
   const {
     draft,
+    prefetchedPickup,
     setPickup,
     setDropoff,
+    swapPickupDropoff,
     setServiceType,
     setPaymentMethod,
     setScheduledAt,
@@ -584,6 +601,26 @@ function SelectingView() {
   } | null>(null);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
+
+  // Nearest driver ETA
+  const nearbyVehicles = useNearbyVehicles(
+    draft.pickup?.location?.latitude,
+    draft.pickup?.location?.longitude,
+  );
+  const nearestDriverETA = useMemo(() => {
+    if (!draft.pickup?.location || !nearbyVehicles || nearbyVehicles.length === 0) return null;
+    const distances = nearbyVehicles.map((v) => ({
+      distance: haversineDistance(draft.pickup!.location, { latitude: v.latitude, longitude: v.longitude }),
+    }));
+    distances.sort((a, b) => a.distance - b.distance);
+    const nearest = distances[0];
+    if (!nearest) return null;
+    // Estimate: 20 km/h average city speed, 1.3x road factor
+    const roadDistanceM = nearest.distance * 1.3;
+    const etaMinutes = Math.max(1, Math.round((roadDistanceM / 1000) / 20 * 60));
+    return etaMinutes;
+  }, [draft.pickup?.location, nearbyVehicles]);
 
   // UBER-4.4: Load saved payment method on mount
   useEffect(() => {
@@ -631,6 +668,13 @@ function SelectingView() {
     }).catch(() => {});
   }, [user?.id]);
 
+  // Auto-populate pickup from pre-fetched location (if empty)
+  useEffect(() => {
+    if (!draft.pickup && prefetchedPickup) {
+      setPickup(prefetchedPickup.address, prefetchedPickup.location);
+    }
+  }, []);
+
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
     draft.delivery.packageDescription.trim() &&
@@ -662,6 +706,7 @@ function SelectingView() {
         savedLocations={savedLocations}
         recentAddresses={recentAddresses}
         showUseMyLocation
+        onPickOnMap={() => setMapPickerMode('pickup')}
       />
 
       {/* Predictive pickup suggestion banner */}
@@ -707,7 +752,34 @@ function SelectingView() {
         </View>
       )}
 
-      <View className="h-2" />
+      {/* Nearest driver ETA indicator */}
+      {nearestDriverETA != null && draft.pickup && (
+        <View className="flex-row items-center px-3 py-2 mt-1 rounded-lg bg-green-50 border border-green-200">
+          <Ionicons name="car-outline" size={16} color="#16a34a" />
+          <Text variant="caption" style={{ color: '#16a34a', marginLeft: 6 }}>
+            {t('ride.nearest_driver_eta', {
+              defaultValue: 'Conductor más cercano a ~{{minutes}} min',
+              minutes: nearestDriverETA,
+            })}
+          </Text>
+        </View>
+      )}
+
+      {/* Swap button — only visible when both pickup and dropoff are set */}
+      {draft.pickup && draft.dropoff ? (
+        <View className="items-center py-1">
+          <Pressable
+            onPress={() => { swapPickupDropoff(); triggerSelection(); }}
+            className="bg-neutral-100 rounded-full p-2"
+            hitSlop={8}
+            accessibilityLabel={t('ride.swap_locations', { defaultValue: 'Intercambiar origen y destino' })}
+          >
+            <Ionicons name="swap-vertical" size={20} color={colors.brand.orange} />
+          </Pressable>
+        </View>
+      ) : (
+        <View className="h-2" />
+      )}
 
       {/* Dropoff — address search with presets */}
       <Text variant="label" className="mb-1">
@@ -726,6 +798,7 @@ function SelectingView() {
         savedLocations={savedLocations}
         recentAddresses={recentAddresses}
         predictions={predictions}
+        onPickOnMap={() => setMapPickerMode('dropoff')}
       />
 
       <View className="h-4" />
@@ -1145,6 +1218,34 @@ function SelectingView() {
         loading={isFareEstimating}
         disabled={!canEstimate}
       />
+
+      {/* Confirm Location on Map — full-screen overlay */}
+      {mapPickerMode && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+          <ConfirmLocationScreen
+            mode={mapPickerMode}
+            initialLocation={
+              mapPickerMode === 'pickup'
+                ? draft.pickup?.location ?? null
+                : draft.dropoff?.location ?? null
+            }
+            onConfirm={(address, location) => {
+              if (!isValidCoordinate(location.latitude, location.longitude)) {
+                Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
+                setMapPickerMode(null);
+                return;
+              }
+              if (mapPickerMode === 'pickup') {
+                setPickup(address, location);
+              } else {
+                setDropoff(address, location);
+              }
+              setMapPickerMode(null);
+            }}
+            onClose={() => setMapPickerMode(null)}
+          />
+        </View>
+      )}
     </View>
   );
 }

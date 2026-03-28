@@ -1,15 +1,48 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { RecentAddress } from '@/services/recentAddresses';
 import type { PredictedDestination } from '@tricigo/utils';
+import { getCachedResults, setCachedResults } from '@/services/geocodeCache';
+
+/** Skeleton placeholder rows shown while searching */
+function SkeletonRows() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <Animated.View
+          key={`skel-${i}`}
+          style={{ opacity: anim, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }}
+        >
+          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#e5e5e5' }} />
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <View style={{ height: 12, backgroundColor: '#e5e5e5', borderRadius: 4, width: `${85 - i * 15}%` as any }} />
+            <View style={{ height: 10, backgroundColor: '#f0f0f0', borderRadius: 4, width: `${60 - i * 10}%` as any, marginTop: 6 }} />
+          </View>
+        </Animated.View>
+      ))}
+    </>
+  );
+}
 
 interface AddressSearchInputProps {
   placeholder?: string;
@@ -23,6 +56,8 @@ interface AddressSearchInputProps {
   predictions?: PredictedDestination[];
   /** Show "Use my location" option (for pickup only) */
   showUseMyLocation?: boolean;
+  /** Callback to open the "pick on map" screen */
+  onPickOnMap?: () => void;
 }
 
 function AddressSearchInputInner({
@@ -33,6 +68,7 @@ function AddressSearchInputInner({
   recentAddresses = [],
   predictions = [],
   showUseMyLocation = false,
+  onPickOnMap,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
   const [query, setQuery] = useState('');
@@ -41,7 +77,9 @@ function AddressSearchInputInner({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastQueryRef = useRef<string>('');
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
 
   // Fetch user location once for distance display
@@ -60,9 +98,10 @@ function AddressSearchInputInner({
     return () => { cancelled = true; };
   }, []);
 
-  // Debounced search
+  // Debounced search with cache + offline fallback
   const handleTextChange = useCallback((text: string) => {
     setQuery(text);
+    lastQueryRef.current = text;
 
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -71,16 +110,34 @@ function AddressSearchInputInner({
     if (text.trim().length < 2) {
       setResults([]);
       setIsSearching(false);
+      setIsOffline(false);
       return;
     }
 
     setIsSearching(true);
+    setIsOffline(false);
     debounceRef.current = setTimeout(async () => {
       try {
         const searchResults = await searchAddress(text, 5);
         setResults(searchResults);
+        setIsOffline(false);
+        // Cache successful results
+        setCachedResults(text, searchResults).catch(() => {});
       } catch {
-        setResults([]);
+        // Network error — try cache fallback
+        try {
+          const cached = await getCachedResults(text);
+          if (cached && cached.length > 0) {
+            setResults(cached);
+            setIsOffline(true);
+          } else {
+            setResults([]);
+            setIsOffline(true);
+          }
+        } catch {
+          setResults([]);
+          setIsOffline(true);
+        }
       } finally {
         setIsSearching(false);
       }
@@ -193,15 +250,15 @@ function AddressSearchInputInner({
     if (!hasActiveQuery) return [];
 
     const matchedPreds = predictions
-      .filter((p) => p.address.toLowerCase().includes(queryLower))
+      .filter((p) => fuzzyMatch(queryLower, p.address))
       .map((p) => ({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 1, source: 'prediction', icon: 'navigate-outline' as const }));
 
     const matchedSvd = savedLocations
-      .filter((s) => s.address.toLowerCase().includes(queryLower) || s.label.toLowerCase().includes(queryLower))
+      .filter((s) => fuzzyMatch(queryLower, s.address) || fuzzyMatch(queryLower, s.label))
       .map((s) => ({ address: s.address, latitude: s.latitude, longitude: s.longitude, priority: 2, source: 'saved', icon: 'star' as const }));
 
     const matchedRec = recentAddresses
-      .filter((r) => r.address.toLowerCase().includes(queryLower))
+      .filter((r) => fuzzyMatch(queryLower, r.address))
       .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 3, source: 'recent', icon: 'time-outline' as const }));
 
     const matchedApi = results
@@ -226,13 +283,26 @@ function AddressSearchInputInner({
     deduped.sort((a, b) => a.priority - b.priority);
 
     // Add distance from user
-    return deduped.slice(0, 3).map((item) => ({
+    return deduped.slice(0, 5).map((item) => ({
       ...item,
       distanceKm: userLocation
         ? haversineDistance(userLocation, { latitude: item.latitude, longitude: item.longitude }) / 1000
         : null,
     }));
   })();
+
+  // "Did you mean?" — fuzzy match against presets when no results
+  const didYouMean = useMemo(() => {
+    if (!hasActiveQuery || mergedResults.length > 0 || isSearching) return null;
+    const q = query.trim();
+    if (q.length < 3) return null;
+    for (const preset of HAVANA_PRESETS) {
+      if (fuzzyMatch(q, preset.label, 0.4) || fuzzyMatch(q, preset.address, 0.4)) {
+        return preset;
+      }
+    }
+    return null;
+  }, [hasActiveQuery, mergedResults.length, isSearching, query]);
 
   // If address is selected and not searching, show compact view
   if (selectedAddress && !isExpanded) {
@@ -274,6 +344,16 @@ function AddressSearchInputInner({
         )}
       </View>
 
+      {/* Offline banner */}
+      {isOffline && isExpanded && (
+        <View className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-1 flex-row items-center">
+          <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
+          <Text variant="caption" style={{ color: '#b45309', marginLeft: 6, flex: 1 }}>
+            {t('home.offline_results', { defaultValue: 'Sin conexión — mostrando resultados guardados' })}
+          </Text>
+        </View>
+      )}
+
       {/* Geocoding error inline */}
       {geocodeError && (
         <View className="px-3 py-2 mt-1">
@@ -283,7 +363,7 @@ function AddressSearchInputInner({
         </View>
       )}
 
-      {/* UBER-1.3: Merged ranked results (query >= 2 chars) — max 3 */}
+      {/* Merged ranked results (query >= 2 chars) — max 5 */}
       {isExpanded && hasActiveQuery && (
         <View className="bg-white rounded-xl mt-1 border border-neutral-200 overflow-hidden">
           <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
@@ -318,6 +398,21 @@ function AddressSearchInputInner({
               </Pressable>
             ))}
 
+            {/* Skeleton loading while API is searching and no local results */}
+            {isSearching && mergedResults.length === 0 && (
+              <SkeletonRows />
+            )}
+
+            {/* Searching indicator when local results exist but API still loading */}
+            {isSearching && mergedResults.length > 0 && (
+              <View className="px-4 py-2 flex-row items-center justify-center">
+                <ActivityIndicator size="small" color={colors.neutral[300]} />
+                <Text variant="caption" color="tertiary" className="ml-2">
+                  {t('home.searching_more', { defaultValue: 'Buscando más resultados...' })}
+                </Text>
+              </View>
+            )}
+
             {/* No results */}
             {!isSearching && mergedResults.length === 0 && (
               <View className="px-4 py-3">
@@ -327,6 +422,29 @@ function AddressSearchInputInner({
                 <Text variant="caption" color="tertiary" className="mt-1">
                   {t('home.try_another_address', { defaultValue: 'Intenta con otra dirección' })}
                 </Text>
+                {didYouMean && (
+                  <Pressable
+                    className="flex-row items-center mt-2 py-2"
+                    onPress={() => handleSelectPreset(didYouMean)}
+                  >
+                    <Ionicons name="help-circle-outline" size={16} color={colors.brand.orange} />
+                    <Text variant="bodySmall" color="accent" className="ml-2">
+                      {t('home.did_you_mean', { defaultValue: '¿Quisiste decir' })}{' '}
+                      <Text variant="bodySmall" className="font-semibold">{didYouMean.label}</Text>?
+                    </Text>
+                  </Pressable>
+                )}
+                {onPickOnMap && (
+                  <Pressable
+                    className="flex-row items-center mt-3 py-2"
+                    onPress={() => { setIsExpanded(false); onPickOnMap(); }}
+                  >
+                    <Ionicons name="map-outline" size={16} color={colors.brand.orange} />
+                    <Text variant="bodySmall" color="accent" className="ml-2 font-medium">
+                      {t('ride.pick_on_map', { defaultValue: 'Elegir en el mapa' })}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </ScrollView>
@@ -336,6 +454,20 @@ function AddressSearchInputInner({
       {/* UBER-1.3: Suggestions panel (no active query) — merged ranked list */}
       {isExpanded && !hasActiveQuery && (
         <View className="mt-2">
+          {/* Pick on map */}
+          {onPickOnMap && (
+            <Pressable
+              className="flex-row items-center px-3 py-3 mb-1 rounded-lg bg-neutral-50"
+              onPress={() => { setIsExpanded(false); onPickOnMap(); }}
+            >
+              <Ionicons name="map-outline" size={18} color={colors.brand.orange} />
+              <Text variant="body" color="accent" className="flex-1 ml-3">
+                {t('ride.pick_on_map', { defaultValue: 'Elegir en el mapa' })}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+            </Pressable>
+          )}
+
           {/* Use my location */}
           {showUseMyLocation && (
             <Pressable
@@ -386,10 +518,10 @@ function AddressSearchInputInner({
               if (!isDup) deduped.push(item);
             }
             deduped.sort((a, b) => a.priority - b.priority);
-            const top3 = deduped.slice(0, 3);
+            const topItems = deduped.slice(0, 5);
 
-            if (top3.length === 0) return null;
-            return top3.map((item, index) => (
+            if (topItems.length === 0) return null;
+            return topItems.map((item, index) => (
               <Pressable
                 key={`sug-${item.source}-${item.latitude}-${item.longitude}`}
                 className={`flex-row items-center px-3 rounded-lg ${index === 0 ? 'py-3' : 'py-2.5'}`}

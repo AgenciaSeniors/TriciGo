@@ -23,3 +23,5 @@ export type { QuickReply } from './chatQuickReplies';
 export { getErrorMessage } from './errors';
 export { logger, setLogContext, clearLogContext } from './logger';
 export { offlineQueue } from './offlineQueue';
+export { fuzzyMatch } from './fuzzyMatch';
+export { CUBAN_CITY_PACKS } from './mapboxOffline';

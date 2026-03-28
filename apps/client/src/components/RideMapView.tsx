@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { View, Text, Animated, Platform } from 'react-native';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -41,6 +41,10 @@ interface RideMapViewProps {
   nearbyVehicles?: NearbyVehicleMarker[];
   /** Opacity for the driver marker (0-1). Use < 1 when showing cached position. */
   driverMarkerOpacity?: number;
+  /** Callback when pickup pin is dragged to a new location */
+  onPickupDrag?: (location: GeoPoint) => void;
+  /** Callback when dropoff pin is dragged to a new location */
+  onDropoffDrag?: (location: GeoPoint) => void;
   height?: number;
 }
 
@@ -78,6 +82,8 @@ function RideMapViewInner({
   waypointLocations,
   nearbyVehicles,
   driverMarkerOpacity = 1,
+  onPickupDrag,
+  onDropoffDrag,
   height = 200,
 }: RideMapViewProps) {
   const { t } = useTranslation('rider');
@@ -99,18 +105,48 @@ function RideMapViewInner({
     return () => animation.stop();
   }, [driverLocation, pulseAnim]);
 
-  // Build route GeoJSON
+  // Animated route drawing — progressively reveal route coordinates
+  const [animatedRouteCoords, setAnimatedRouteCoords] = useState<GeoPoint[] | null>(null);
+  const prevRouteKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!routeCoordinates || routeCoordinates.length < 2) {
+      setAnimatedRouteCoords(null);
+      prevRouteKeyRef.current = '';
+      return;
+    }
+
+    const routeKey = `${routeCoordinates[0]?.latitude},${routeCoordinates[routeCoordinates.length - 1]?.latitude}`;
+    if (routeKey === prevRouteKeyRef.current) return;
+    prevRouteKeyRef.current = routeKey;
+
+    const total = routeCoordinates.length;
+    const batchSize = Math.max(1, Math.ceil(total / 15));
+    let currentIndex = 0;
+
+    const animate = () => {
+      currentIndex = Math.min(currentIndex + batchSize, total);
+      setAnimatedRouteCoords(routeCoordinates.slice(0, currentIndex));
+      if (currentIndex < total) {
+        requestAnimationFrame(animate);
+      }
+    };
+    requestAnimationFrame(animate);
+  }, [routeCoordinates]);
+
+  // Build route GeoJSON from animated coordinates
   const routeGeoJSON = useMemo(() => {
-    if (!routeCoordinates || routeCoordinates.length < 2) return null;
+    const coords = animatedRouteCoords;
+    if (!coords || coords.length < 2) return null;
     return {
       type: 'Feature' as const,
       geometry: {
         type: 'LineString' as const,
-        coordinates: routeCoordinates.map(toCoord),
+        coordinates: coords.map(toCoord),
       },
       properties: {},
     };
-  }, [routeCoordinates]);
+  }, [animatedRouteCoords]);
 
   // Build nearby vehicles GeoJSON FeatureCollection
   const nearbyGeoJSON = useMemo(() => {
@@ -222,6 +258,13 @@ function RideMapViewInner({
           <MapboxGL.PointAnnotation
             id="pickup"
             coordinate={toCoord(pickupLocation)}
+            draggable={!!onPickupDrag}
+            onDragEnd={(e: any) => {
+              if (onPickupDrag && e?.geometry?.coordinates) {
+                const [lng, lat] = e.geometry.coordinates;
+                onPickupDrag({ latitude: lat, longitude: lng });
+              }
+            }}
           >
             <View
               style={{
@@ -245,6 +288,13 @@ function RideMapViewInner({
           <MapboxGL.PointAnnotation
             id="dropoff"
             coordinate={toCoord(dropoffLocation)}
+            draggable={!!onDropoffDrag}
+            onDragEnd={(e: any) => {
+              if (onDropoffDrag && e?.geometry?.coordinates) {
+                const [lng, lat] = e.geometry.coordinates;
+                onDropoffDrag({ latitude: lat, longitude: lng });
+              }
+            }}
           >
             <View
               style={{

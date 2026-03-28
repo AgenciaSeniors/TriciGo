@@ -855,19 +855,131 @@ export async function findIntersection(
   }
 }
 
-/* ─── Nominatim Forward Geocoding (Address Search) ─── */
+/* ─── Address Validation ─── */
 
 /**
- * Search for addresses in Havana using Nominatim forward geocoding.
- * Results are bounded to the Havana area via viewbox.
- * Returns up to `limit` results, or empty array on failure.
+ * Validate that a pickup location is near a drivable road.
+ * Returns { valid: true } if within 200m of a road, or { valid: false, suggested } with a snapped point.
+ */
+export async function validatePickupLocation(
+  lat: number,
+  lng: number,
+): Promise<{ valid: boolean; suggestedAddress?: string; suggestedLocation?: GeoPoint }> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return { valid: true };
+
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${lng},${lat};${lng + 0.0001},${lat + 0.0001}?access_token=${token}&geometries=geojson&overview=false`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!resp.ok) return { valid: true };
+    const data = await resp.json();
+    const waypoint = data?.waypoints?.[0];
+    if (!waypoint) return { valid: true };
+
+    const [snappedLng, snappedLat] = waypoint.location;
+    const distanceToRoad = haversineDistance(
+      { latitude: lat, longitude: lng },
+      { latitude: snappedLat, longitude: snappedLng },
+    );
+
+    if (distanceToRoad <= 200) return { valid: true };
+
+    const address = await reverseGeocode(snappedLat, snappedLng);
+    return {
+      valid: false,
+      suggestedAddress: address ?? `${snappedLat.toFixed(5)}, ${snappedLng.toFixed(5)}`,
+      suggestedLocation: { latitude: snappedLat, longitude: snappedLng },
+    };
+  } catch {
+    return { valid: true };
+  }
+}
+
+/* ─── Mapbox Geocoding v6 (Primary Forward Search) ─── */
+
+/**
+ * Search for addresses using Mapbox Geocoding v6 API.
+ * Faster (~200ms) and better POI coverage than Nominatim. No rate limit.
+ */
+export async function searchAddressMapbox(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null = null,
+  limit = 5,
+): Promise<AddressSearchResult[]> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return [];
+
+    const params = new URLSearchParams({
+      q: query,
+      country: 'cu',
+      language: 'es',
+      limit: String(limit),
+      access_token: token,
+    });
+    if (proximity) {
+      params.set('proximity', `${proximity.longitude},${proximity.latitude}`);
+    }
+
+    const url = `https://api.mapbox.com/search/geocode/v6/forward?${params}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const features = data?.features;
+    if (!Array.isArray(features)) return [];
+
+    return features.map((f: Record<string, unknown>) => {
+      const props = f.properties as Record<string, unknown> | undefined;
+      const geom = f.geometry as { coordinates: [number, number] } | undefined;
+      const address = (props?.full_address as string) || (props?.name as string) || '';
+      const [lng, lat] = geom?.coordinates ?? [0, 0];
+      return {
+        address,
+        latitude: lat,
+        longitude: lng,
+        displayName: address,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/* ─── Forward Geocoding (Mapbox primary → Nominatim fallback) ─── */
+
+/**
+ * Search for addresses in Cuba. Tries Mapbox Geocoding v6 first (faster, better POI),
+ * falls back to Nominatim if Mapbox fails or returns no results.
  */
 export async function searchAddress(
   query: string,
   limit = 5,
+  proximity: { latitude: number; longitude: number } | null = null,
 ): Promise<AddressSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
 
+  // Try Mapbox first (faster, no rate limit)
+  const mapboxResults = await searchAddressMapbox(query, proximity, limit);
+  if (mapboxResults.length > 0) return mapboxResults;
+
+  // Fallback to Nominatim
   try {
     const params = new URLSearchParams({
       q: query,

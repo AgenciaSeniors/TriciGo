@@ -24,6 +24,8 @@ export interface DestinationCluster {
   frequency: number;
   /** Count of rides per hour of day (0-23) */
   hourBuckets: number[];
+  /** Count of rides per day of week (0=Sunday to 6=Saturday) */
+  dayBuckets: number[];
   /** ISO timestamp of most recent ride */
   lastVisited: string;
   /** Computed relevance score */
@@ -61,7 +63,9 @@ export function clusterDestinations(
       latitude: ride.dropoff_latitude,
       longitude: ride.dropoff_longitude,
     };
-    const hour = new Date(ride.created_at).getHours();
+    const rideDate = new Date(ride.created_at);
+    const hour = rideDate.getHours();
+    const day = rideDate.getDay();
 
     // Find nearest existing cluster within radius
     let bestCluster: DestinationCluster | null = null;
@@ -86,6 +90,7 @@ export function clusterDestinations(
       };
       bestCluster.frequency = total;
       bestCluster.hourBuckets[hour] = (bestCluster.hourBuckets[hour] ?? 0) + 1;
+      bestCluster.dayBuckets[day] = (bestCluster.dayBuckets[day] ?? 0) + 1;
 
       // Keep most recent address and timestamp
       if (ride.created_at > bestCluster.lastVisited) {
@@ -96,11 +101,14 @@ export function clusterDestinations(
       // Create new cluster
       const hourBuckets = new Array(24).fill(0) as number[];
       hourBuckets[hour] = 1;
+      const dayBuckets = new Array(7).fill(0) as number[];
+      dayBuckets[day] = 1;
       clusters.push({
         centroid: { ...point },
         address: ride.dropoff_address,
         frequency: 1,
         hourBuckets,
+        dayBuckets,
         lastVisited: ride.created_at,
         score: 0,
       });
@@ -119,7 +127,7 @@ export function clusterDestinations(
  * Returns up to `limit` top predictions with score >= minScore.
  *
  * Scoring formula:
- *   score = (frequency × 2) + (hourBuckets[currentHour] × 5) + recencyBonus
+ *   score = (frequency × 2) + (hourCount × 5) + (dayCount × 3) + recencyBonus
  *
  * recencyBonus:
  *   - Last 7 days: +3
@@ -151,16 +159,20 @@ export function scorePredictions(
       recencyBonus = 1;
     }
 
-    // Time-of-day weight
+    // Time-of-day and day-of-week weight
     const hourCount = cluster.hourBuckets[currentHour] ?? 0;
+    const currentDay = now.getDay();
+    const dayCount = cluster.dayBuckets?.[currentDay] ?? 0;
 
-    const score = cluster.frequency * 2 + hourCount * 5 + recencyBonus;
+    const score = cluster.frequency * 2 + hourCount * 5 + dayCount * 3 + recencyBonus;
 
     if (score < minScore) continue;
 
     // Determine reason
     let reason: PredictionReason;
-    if (hourCount >= 2) {
+    if (dayCount >= 2 && hourCount >= 2) {
+      reason = 'time_pattern';
+    } else if (hourCount >= 2) {
       reason = 'time_pattern';
     } else if (cluster.frequency >= 3) {
       reason = 'frequent';

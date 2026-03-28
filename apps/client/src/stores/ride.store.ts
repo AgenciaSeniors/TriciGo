@@ -105,6 +105,9 @@ interface RideState {
   isFareEstimating: boolean;
   error: string | null;
 
+  // Pre-fetched pickup from GPS on app launch
+  prefetchedPickup: LocationDraft | null;
+
   // Promo state
   promoCode: string;
   promoResult: PromoResult | null;
@@ -135,6 +138,8 @@ interface RideState {
   setInsurance: (selected: boolean) => void;
   setPassengerCount: (count: number) => void;
   setRidePreferences: (prefs: RidePreferences) => void;
+  setPrefetchedPickup: (pickup: LocationDraft | null) => void;
+  swapPickupDropoff: () => void;
   setSplits: (splits: RideSplit[]) => void;
   addSplit: (split: RideSplit) => void;
   removeSplit: (splitId: string) => void;
@@ -153,6 +158,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   isLoading: false,
   isFareEstimating: false,
   error: null,
+  prefetchedPickup: null,
   promoCode: '',
   promoResult: null,
   splits: [],
@@ -270,6 +276,15 @@ export const useRideStore = create<RideState>((set, get) => ({
     set((s) => ({ draft: { ...s.draft, passengerCount } })),
   setRidePreferences: (ridePreferences) =>
     set((s) => ({ draft: { ...s.draft, ridePreferences } })),
+  setPrefetchedPickup: (prefetchedPickup) => set({ prefetchedPickup }),
+
+  swapPickupDropoff: () =>
+    set((s) => ({
+      draft: { ...s.draft, pickup: s.draft.dropoff, dropoff: s.draft.pickup },
+      fareEstimate: null,
+      fareEstimatedAt: null,
+    })),
+
   setSplits: (splits) => set({ splits }),
   addSplit: (split) => set((s) => ({ splits: [...s.splits, split] })),
   removeSplit: (splitId) => set((s) => ({ splits: s.splits.filter((sp) => sp.id !== splitId) })),

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import Toast from 'react-native-toast-message';
 import { referralService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -21,6 +22,8 @@ export function useDeepLinkHandler() {
   const userId = useAuthStore((s) => s.user?.id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const setPromoCode = useRideStore((s) => s.setPromoCode);
+  const setDropoff = useRideStore((s) => s.setDropoff);
+  const setFlowStep = useRideStore((s) => s.setFlowStep);
   const processed = useRef(false);
 
   useEffect(() => {
@@ -68,4 +71,32 @@ export function useDeepLinkHandler() {
 
     processPendingLinks();
   }, [isAuthenticated, userId, setPromoCode]);
+
+  // Handle tricigo://book?lat=X&lng=Y&address=Z deep links
+  useEffect(() => {
+    function handleBookingUrl(event: { url: string }) {
+      try {
+        const parsed = Linking.parse(event.url);
+        if (parsed.path === 'book' && parsed.queryParams) {
+          const lat = parseFloat(parsed.queryParams.lat as string);
+          const lng = parseFloat(parsed.queryParams.lng as string);
+          const address = (parsed.queryParams.address as string) || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+          if (!isNaN(lat) && !isNaN(lng)) {
+            setDropoff(address, { latitude: lat, longitude: lng });
+            setFlowStep('selecting');
+          }
+        }
+      } catch { /* silent */ }
+    }
+
+    const subscription = Linking.addEventListener('url', handleBookingUrl);
+
+    // Handle cold start URL
+    Linking.getInitialURL().then((url) => {
+      if (url) handleBookingUrl({ url });
+    }).catch(() => {});
+
+    return () => subscription.remove();
+  }, [setDropoff, setFlowStep]);
 }
