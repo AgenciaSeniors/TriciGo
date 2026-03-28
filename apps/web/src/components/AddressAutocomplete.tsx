@@ -507,6 +507,17 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         });
       }
 
+      // Hard distance filter: remove anything > 30km from proximity (safety net)
+      const prox = proximity || { latitude: 23.1136, longitude: -82.3666 }; // Default: Havana
+      merged = merged.filter(r => {
+        if (!r.latitude || !r.longitude) return false;
+        const d = haversineDistance(
+          { latitude: r.latitude, longitude: r.longitude },
+          { latitude: prox.latitude, longitude: prox.longitude },
+        );
+        return d <= 30000;
+      });
+
       const initial = merged.slice(0, 7);
       setResults(initial);
       setIsOpen(true);
