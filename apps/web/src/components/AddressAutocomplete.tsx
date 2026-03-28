@@ -523,26 +523,26 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       // BACKGROUND: Merge Overpass results when they arrive (better Cuba POI coverage)
       overpassPromise.then((opItems) => {
         if (searchIdRef.current !== thisSearchId || opItems.length === 0) return;
+        const newItems = opItems
+          .filter(r => {
+            const d = haversineDistance(
+              { latitude: r.latitude, longitude: r.longitude },
+              { latitude: prox.latitude, longitude: prox.longitude },
+            );
+            return d <= 30000;
+          })
+          .map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) }));
+        if (newItems.length === 0) return;
         setResults(prev => {
-          // Merge Overpass results with existing results
           const existingNames = new Set(prev.map(r => r.place_name.toLowerCase()));
-          const newItems = opItems
-            .filter(r => {
-              // Distance filter
-              const d = haversineDistance(
-                { latitude: r.latitude, longitude: r.longitude },
-                { latitude: prox.latitude, longitude: prox.longitude },
-              );
-              return d <= 30000 && !existingNames.has(r.place_name.toLowerCase());
-            })
-            .map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) }));
-          if (newItems.length === 0) return prev;
-          const combined = [...prev, ...newItems];
-          // Re-rank
+          const unique = newItems.filter(r => !existingNames.has(r.place_name.toLowerCase()));
+          if (unique.length === 0 && prev.length > 0) return prev;
+          const combined = [...prev, ...unique];
           const nq = stripAccents(q.toLowerCase().trim());
           combined.sort((a, b) => scoreResult(b, nq, proximity) - scoreResult(a, nq, proximity));
           return combined.slice(0, 7);
         });
+        setIsOpen(true); // Re-open dropdown if it was showing "no results"
       });
 
       // BACKGROUND: Enrich top 3 results with cross-streets

@@ -1078,9 +1078,6 @@ export async function searchAddressSearchBox(
     });
     if (proximity) {
       params.set('proximity', `${proximity.longitude},${proximity.latitude}`);
-      // Restrict results to ~30km box around proximity to avoid distant results
-      const delta = 0.27; // ~30km
-      params.set('bbox', `${proximity.longitude - delta},${proximity.latitude - delta},${proximity.longitude + delta},${proximity.latitude + delta}`);
     }
 
     const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`;
