@@ -11,6 +11,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
+import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -136,7 +137,7 @@ export default function CompleteProfileScreen() {
         full_name: trimmed,
       };
       if (avatarUrl) updates.avatar_url = avatarUrl;
-      if (phone.trim()) updates.phone = phone.trim();
+      updates.phone = normalizeCubanPhone(phone.trim());
 
       const updated = await authService.updateProfile(user.id, updates);
       // Update store — the auth guard in _layout.tsx will redirect to (tabs)
@@ -214,15 +215,15 @@ export default function CompleteProfileScreen() {
             {/* Phone input (optional) */}
             <View className="mt-4">
               <Input
-                label={t('profile.phone_label', { defaultValue: 'Teléfono (opcional)' })}
-                placeholder={t('profile.phone_placeholder', { defaultValue: '+53 5XXXXXXX' })}
+                label={t('profile.phone_label', { defaultValue: 'Teléfono' })}
+                placeholder={t('profile.phone_placeholder', { defaultValue: '5XXXXXXX' })}
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 leftIcon={<Ionicons name="call-outline" size={20} color={colors.neutral[400]} />}
               />
               <Text variant="caption" color="tertiary" className="mt-1 ml-1">
-                {t('profile.phone_hint', { defaultValue: 'Para que el conductor te contacte durante el viaje' })}
+                {t('profile.phone_hint', { defaultValue: 'Necesario para que el conductor te contacte durante el viaje' })}
               </Text>
             </View>
 
@@ -230,7 +231,7 @@ export default function CompleteProfileScreen() {
               title={t('continue', { defaultValue: 'Continuar' })}
               onPress={handleContinue}
               loading={saving}
-              disabled={fullName.trim().length < 2 || saving}
+              disabled={fullName.trim().length < 2 || !isValidCubanPhone(phone.trim()) || saving}
               fullWidth
               size="lg"
               className="mt-6 mb-8"

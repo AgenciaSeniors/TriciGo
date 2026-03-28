@@ -73,7 +73,7 @@ function RootNavigator() {
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
       // Check if profile is incomplete (new user needs to complete profile)
-      if (!user?.full_name) {
+      if (!user?.full_name || !user?.phone) {
         const currentRoute = segments.join('/');
         if (!currentRoute.includes('complete-profile')) {
           router.replace('/(auth)/complete-profile');
@@ -83,7 +83,7 @@ function RootNavigator() {
       }
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments, user?.full_name]);
+  }, [isAuthenticated, isLoading, segments, user?.full_name, user?.phone]);
 
   if (isLoading) {
     const bgColor = resolvedScheme === 'dark' ? colors.background.dark : colors.background.primary;
