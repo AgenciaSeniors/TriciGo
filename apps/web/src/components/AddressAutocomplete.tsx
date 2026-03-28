@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, findIntersection, searchAddressSearchBox, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
+import { haversineDistance, findIntersection, searchAddressSearchBox, searchOverpassPOI, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
 import type { SearchBoxResult } from '@tricigo/utils';
 
 const OVERPASS_MIRRORS = [
@@ -54,7 +54,7 @@ interface AddressResult {
   longitude: number;
   place_name: string;
   category?: string;
-  source?: 'searchbox' | 'nominatim';
+  source?: 'searchbox' | 'nominatim' | 'overpass';
   specificity?: number;
 }
 
@@ -403,32 +403,65 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const [searchBoxSettled, nominatimSettled] = await Promise.allSettled([
+      // 3 parallel sources: Search Box + Nominatim + Overpass POI
+      const searchPromises: Promise<AddressResult[]>[] = [
         fetchSearchBox(q, controller.signal),
         searchNominatimEnhanced(q, proximity),
-      ]);
+      ];
+      // Add Overpass POI search when proximity is available (best for Cuba coverage)
+      if (proximity) {
+        searchPromises.push(
+          searchOverpassPOI(q, proximity, 8).then(items =>
+            items.map(r => ({
+              address: r.full_address || r.address,
+              latitude: r.latitude,
+              longitude: r.longitude,
+              place_name: r.place_name,
+              category: r.category,
+              source: r.source as 'searchbox' | 'nominatim',
+              specificity: r.specificity,
+            }))
+          ).catch(() => [] as AddressResult[])
+        );
+      }
+
+      const settled = await Promise.allSettled(searchPromises);
       if (searchIdRef.current !== thisSearchId) return;
 
-      const searchBoxItems = searchBoxSettled.status === 'fulfilled' ? searchBoxSettled.value : [];
-      const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
+      const searchBoxItems = settled[0]?.status === 'fulfilled' ? settled[0].value : [];
+      const nominatimItems = settled[1]?.status === 'fulfilled' ? settled[1].value : [];
+      const overpassItems = settled[2]?.status === 'fulfilled' ? settled[2].value : [];
 
       // ─── SMART DEDUPLICATION ───
       // Combine all results, then deduplicate by name similarity + proximity
       const allItems: AddressResult[] = [
         ...searchBoxItems.map(r => ({ ...r, source: 'searchbox' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...overpassItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
         ...nominatimItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
       ];
+
+      // Filter out results too far from proximity (max 30km)
+      const MAX_DISTANCE = 30000;
+      const filtered = proximity
+        ? allItems.filter(r => {
+            const dist = haversineDistance(
+              { latitude: r.latitude, longitude: r.longitude },
+              { latitude: proximity.latitude, longitude: proximity.longitude },
+            );
+            return dist <= MAX_DISTANCE;
+          })
+        : allItems;
 
       // Deduplicate: group by name similarity + spatial proximity
       const deduped: AddressResult[] = [];
       const used = new Set<number>();
-      for (let i = 0; i < allItems.length; i++) {
+      for (let i = 0; i < filtered.length; i++) {
         if (used.has(i)) continue;
-        let best = allItems[i]!;
+        let best = filtered[i]!;
         used.add(i);
-        for (let j = i + 1; j < allItems.length; j++) {
+        for (let j = i + 1; j < filtered.length; j++) {
           if (used.has(j)) continue;
-          const other = allItems[j]!;
+          const other = filtered[j]!;
           const dist = haversineDistance(
             { latitude: best.latitude, longitude: best.longitude },
             { latitude: other.latitude, longitude: other.longitude },
@@ -474,7 +507,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         });
       }
 
-      const initial = merged.slice(0, 5);
+      const initial = merged.slice(0, 7);
       setResults(initial);
       setIsOpen(true);
       setActiveIndex(-1);

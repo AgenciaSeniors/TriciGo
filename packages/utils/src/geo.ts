@@ -1025,7 +1025,7 @@ export interface SearchBoxResult {
   place_name: string;
   full_address: string;
   category?: string;
-  source: 'searchbox' | 'nominatim';
+  source: 'searchbox' | 'nominatim' | 'overpass';
   specificity: number; // 0-1: 1 = unique named POI, 0 = generic
 }
 
@@ -1078,6 +1078,9 @@ export async function searchAddressSearchBox(
     });
     if (proximity) {
       params.set('proximity', `${proximity.longitude},${proximity.latitude}`);
+      // Restrict results to ~30km box around proximity to avoid distant results
+      const delta = 0.27; // ~30km
+      params.set('bbox', `${proximity.longitude - delta},${proximity.latitude - delta},${proximity.longitude + delta},${proximity.latitude + delta}`);
     }
 
     const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`;
@@ -1114,6 +1117,134 @@ export async function searchAddressSearchBox(
         specificity: computeSpecificity(name),
       };
     });
+  } catch {
+    return [];
+  }
+}
+
+/** OSM tag mappings for POI category searches */
+const OVERPASS_POI_TAGS: Record<string, string> = {
+  hotel: '["tourism"~"hotel|motel|guest_house|hostel"]',
+  hostal: '["tourism"~"hotel|motel|guest_house|hostel"]',
+  restaurante: '["amenity"~"restaurant|fast_food|cafe"]',
+  restaurant: '["amenity"~"restaurant|fast_food|cafe"]',
+  cafe: '["amenity"="cafe"]',
+  cafeteria: '["amenity"~"cafe|fast_food"]',
+  bar: '["amenity"="bar"]',
+  universidad: '["amenity"~"university|college"]',
+  escuela: '["amenity"="school"]',
+  hospital: '["amenity"~"hospital|clinic"]',
+  clinica: '["amenity"~"clinic|hospital"]',
+  policlinico: '["amenity"~"clinic|hospital"]',
+  farmacia: '["amenity"="pharmacy"]',
+  museo: '["tourism"="museum"]',
+  iglesia: '["amenity"="place_of_worship"]',
+  parque: '["leisure"="park"]',
+  mercado: '["shop"~"supermarket|convenience|mall"]',
+  tienda: '["shop"~"supermarket|convenience|department_store"]',
+  banco: '["amenity"="bank"]',
+  gasolinera: '["amenity"="fuel"]',
+  teatro: '["amenity"="theatre"]',
+  cine: '["amenity"="cinema"]',
+  biblioteca: '["amenity"="library"]',
+  terminal: '["amenity"="bus_station"]',
+  estacion: '["amenity"~"bus_station|ferry_terminal"]',
+  embajada: '["amenity"="embassy"]',
+  aeropuerto: '["aeroway"="aerodrome"]',
+  gimnasio: '["leisure"~"fitness_centre|sports_centre"]',
+  piscina: '["leisure"="swimming_pool"]',
+  playa: '["natural"="beach"]',
+};
+
+const OVERPASS_MIRRORS_GEO = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+/**
+ * Search OpenStreetMap POIs via Overpass API.
+ * Returns named POIs matching the query within radius of proximity.
+ */
+export async function searchOverpassPOI(
+  query: string,
+  proximity: { latitude: number; longitude: number },
+  limit = 8,
+): Promise<SearchBoxResult[]> {
+  try {
+    const normalized = query.toLowerCase().trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const words = normalized.split(/\s+/);
+
+    // Find matching OSM tag filter from query words
+    let tagFilter = '';
+    for (const word of words) {
+      if (OVERPASS_POI_TAGS[word]) {
+        tagFilter = OVERPASS_POI_TAGS[word]!;
+        break;
+      }
+    }
+
+    const { latitude: lat, longitude: lng } = proximity;
+    const radius = 15000; // 15km search radius
+
+    let overpassQuery: string;
+    if (tagFilter) {
+      // Category search: find POIs by type with optional name filter
+      const nameWords = words.filter(w => !OVERPASS_POI_TAGS[w]);
+      const nameFilter = nameWords.length > 0
+        ? `["name"~"${nameWords.join('|')}",i]`
+        : '["name"]';
+      overpassQuery = `[out:json][timeout:4];(node${tagFilter}${nameFilter}(around:${radius},${lat},${lng});way${tagFilter}${nameFilter}(around:${radius},${lat},${lng}););out center ${limit};`;
+    } else {
+      // Generic name search: find any named POI matching query
+      const escaped = normalized
+        .replace(/[\\"/]/g, '')
+        .replace(/[aáàâãä]/gi, '.')
+        .replace(/[eéèêë]/gi, '.')
+        .replace(/[iíìîï]/gi, '.')
+        .replace(/[oóòôõö]/gi, '.')
+        .replace(/[uúùûü]/gi, '.')
+        .replace(/ñ/gi, '.');
+      overpassQuery = `[out:json][timeout:4];(node["name"~"${escaped}",i]["name"](around:${radius},${lat},${lng});way["name"~"${escaped}",i]["name"](around:${radius},${lat},${lng}););out center ${limit};`;
+    }
+
+    const encoded = encodeURIComponent(overpassQuery);
+    const res = await Promise.any(
+      OVERPASS_MIRRORS_GEO.map(m =>
+        fetch(`${m}?data=${encoded}`).then(r => {
+          if (!r.ok) throw new Error('fail');
+          return r.json();
+        })
+      ),
+    );
+
+    if (!res?.elements?.length) return [];
+
+    return res.elements
+      .filter((el: any) => el.tags?.name)
+      .map((el: any) => {
+        const elLat = el.lat ?? el.center?.lat ?? 0;
+        const elLng = el.lon ?? el.center?.lon ?? 0;
+        const name = el.tags.name;
+        const street = el.tags['addr:street'] || '';
+        const housenumber = el.tags['addr:housenumber'] || '';
+        const suburb = el.tags['addr:suburb'] || el.tags['addr:neighbourhood'] || '';
+        const addr = [street, housenumber, suburb].filter(Boolean).join(', ') || '';
+
+        // Build category from OSM tags
+        const category = el.tags.amenity || el.tags.tourism || el.tags.shop || el.tags.leisure || '';
+
+        return {
+          address: addr || name,
+          latitude: elLat,
+          longitude: elLng,
+          place_name: name,
+          full_address: addr,
+          category,
+          source: 'overpass' as const,
+          specificity: computeSpecificity(name),
+        };
+      });
   } catch {
     return [];
   }
