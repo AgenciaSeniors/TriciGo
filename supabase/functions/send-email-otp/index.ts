@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: 'TriciGo <noreply@tricigo.app>',
+        from: 'TriciGo <noreply@tricigo.com>',
         to: normalizedEmail,
         subject: `${code} — Tu código de verificación TriciGo`,
         html: renderOtpEmail(code),
