@@ -89,47 +89,43 @@ jobs:
               echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/web/ 2>/dev/null && exit 1
             fi
 
-            # Detect port from Nginx config (fallback to 3001)
-            WEBPORT=$(grep -r proxy_pass /etc/nginx/sites-enabled/ 2>/dev/null | grep -oP 'tricigo\.com.*?localhost:\K[0-9]+' || echo "")
-            if [ -z "$WEBPORT" ]; then
-              # Try broader search for any proxy to tricigo-web
-              WEBPORT=$(grep -B5 -A5 'tricigo' /etc/nginx/sites-enabled/* 2>/dev/null | grep -oP 'proxy_pass\s+http://.*?:(\K[0-9]+)' | head -1 || echo "")
-            fi
-            if [ -z "$WEBPORT" ]; then
-              WEBPORT=3001
-            fi
+            # Find a free port (3001 is used by gst, 3002 by admin)
+            WEBPORT=3003
+            # Check nghttpx/nginx config for expected backend port
+            CFGPORT=$(grep -rhoP 'localhost:\K[0-9]+' /etc/nghttpx/ 2>/dev/null | sort -u | tr '\n' ' ' || echo "")
+            echo "=== Reverse proxy backend ports: $CFGPORT ==="
             echo "=== Using port: $WEBPORT ==="
 
             # Stop and delete tricigo-web from PM2
             pm2 stop tricigo-web 2>/dev/null || true
             pm2 delete tricigo-web 2>/dev/null || true
-            # Kill any orphan process on our port (but NOT other PM2 apps)
-            PIDS=$(ss -tlnp | grep ":${WEBPORT} " | grep -oP 'pid=\K[0-9]+' || echo "")
-            for PID in $PIDS; do
-              # Only kill if it's a node process in our app dir
-              CMDLINE=$(cat /proc/$PID/cmdline 2>/dev/null | tr '\0' ' ' || echo "")
-              if echo "$CMDLINE" | grep -q "tricigo-web\|/var/www/tricigo-web"; then
-                echo "Killing orphan tricigo-web process $PID"
-                kill -9 $PID 2>/dev/null || true
-              else
-                echo "WARNING: Port $WEBPORT held by non-tricigo process $PID: $CMDLINE"
-              fi
-            done
+            # Kill anything on our port
+            fuser -k ${WEBPORT}/tcp 2>/dev/null || true
             sleep 1
 
-            # Verify port is free
-            if ss -tlnp | grep -q ":${WEBPORT} "; then
-              echo "ERROR: Port $WEBPORT still in use after cleanup:"
-              ss -tlnp | grep ":${WEBPORT} "
-              echo "Trying alternative port 3003..."
-              WEBPORT=3003
-              fuser -k 3003/tcp 2>/dev/null || true
-              sleep 1
-            fi
+            # Write .env with the correct port
+            cat > $APP_DIR/.env << ENVEOF
+            PORT=${WEBPORT}
+            HOSTNAME=0.0.0.0
+            ENVEOF
 
-            # Start with PM2
+            # Start with PM2 using ecosystem file for reliable env passing
+            cat > $APP_DIR/ecosystem.config.js << ECOEOF
+            module.exports = {
+              apps: [{
+                name: 'tricigo-web',
+                script: '${ENTRY}',
+                cwd: '${APP_DIR}',
+                env: {
+                  PORT: ${WEBPORT},
+                  HOSTNAME: '0.0.0.0',
+                  NODE_ENV: 'production'
+                }
+              }]
+            };
+            ECOEOF
             cd $APP_DIR
-            PORT=$WEBPORT HOSTNAME=0.0.0.0 pm2 start $ENTRY --name tricigo-web --update-env
+            pm2 start ecosystem.config.js
             sleep 3
             pm2 logs tricigo-web --lines 20 --nostream || true
             pm2 save
