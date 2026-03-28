@@ -673,7 +673,7 @@ function SelectingView() {
     if (!draft.pickup && prefetchedPickup) {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
-  }, []);
+  }, [prefetchedPickup]);
 
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (

@@ -58,17 +58,21 @@ export function ConfirmLocationScreen({
   });
 
   // Reverse geocode the center point
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+
   const geocodeCenter = useCallback((lat: number, lng: number) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    setIsGeocoding(true);
     debounceRef.current = setTimeout(async () => {
+      if (!mountedRef.current) return;
+      setIsGeocoding(true);
       try {
         const result = await reverseGeocode(lat, lng);
-        setAddress(result ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        if (mountedRef.current) setAddress(result ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       } catch {
-        setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        if (mountedRef.current) setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       } finally {
-        setIsGeocoding(false);
+        if (mountedRef.current) setIsGeocoding(false);
       }
     }, 300);
   }, []);

@@ -117,6 +117,7 @@ function AddressSearchInputInner({
     setIsSearching(true);
     setIsOffline(false);
     debounceRef.current = setTimeout(async () => {
+      if (lastQueryRef.current !== text) return;
       try {
         const searchResults = await searchAddress(text, 5);
         setResults(searchResults);

@@ -291,7 +291,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, error: null, promoCode: '', promoResult: null, splits: [] }),
+    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
 
   resetAll: () =>
     set({
@@ -307,5 +307,6 @@ export const useRideStore = create<RideState>((set, get) => ({
       promoCode: '',
       promoResult: null,
       splits: [],
+      prefetchedPickup: null,
     }),
 }));
