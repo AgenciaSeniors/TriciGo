@@ -89,6 +89,9 @@ jobs:
 
             # Restart with PM2
             pm2 delete tricigo-web 2>/dev/null || true
+            # Kill any process still holding port 3001
+            fuser -k 3001/tcp 2>/dev/null || true
+            sleep 1
             cd $APP_DIR
             PORT=3001 HOSTNAME=0.0.0.0 pm2 start $ENTRY --name tricigo-web --update-env
             sleep 3
