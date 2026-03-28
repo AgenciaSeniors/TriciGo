@@ -175,9 +175,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   async function searchNominatim(q: string, prox?: { latitude: number; longitude: number }): Promise<AddressResult[]> {
     try {
       const viewbox = prox
-        ? `${prox.longitude - 0.1},${prox.latitude - 0.1},${prox.longitude + 0.1},${prox.latitude + 0.1}`
-        : '-85.0,19.5,-74.0,23.5'; // Cuba bounding box
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=5&viewbox=${viewbox}&bounded=0&addressdetails=1`;
+        ? `${prox.longitude - 0.15},${prox.latitude - 0.15},${prox.longitude + 0.15},${prox.latitude + 0.15}`
+        : '-82.6,22.9,-82.1,23.3'; // Havana metro area
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=5&viewbox=${viewbox}&bounded=1&addressdetails=1`;
       const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
       if (!res.ok) return [];
       const data = await res.json();
@@ -234,7 +234,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }, [mapboxToken, proximity]);
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); setIsOpen(false); return; }
+    if (q.length < 3) { setResults([]); setIsOpen(false); return; }
 
     const thisSearchId = ++searchIdRef.current; // Track this search
     setLoading(true);
@@ -464,7 +464,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     }
   }
 
-  const showNoResults = query.length >= 2 && !loading && results.length === 0 && isOpen;
+  const showNoResults = query.length >= 5 && !loading && results.length === 0 && isOpen;
   const hasSavedToShow = query.length === 0 && savedLocations && savedLocations.length > 0;
   const showDropdown = isOpen && (results.length > 0 || showNoResults || hasSavedToShow);
   const activeDescendant = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
