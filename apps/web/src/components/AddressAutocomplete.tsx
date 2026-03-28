@@ -234,7 +234,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }, [mapboxToken, proximity]);
 
   const search = useCallback(async (q: string) => {
-    if (q.length < 3) { setResults([]); setIsOpen(false); return; }
+    if (q.length < 1) { setResults([]); setIsOpen(false); return; }
 
     const thisSearchId = ++searchIdRef.current; // Track this search
     setLoading(true);
@@ -464,7 +464,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     }
   }
 
-  const showNoResults = query.length >= 5 && !loading && results.length === 0 && isOpen;
+  const showNoResults = query.length >= 8 && !loading && results.length === 0 && isOpen;
   const hasSavedToShow = query.length === 0 && savedLocations && savedLocations.length > 0;
   const showDropdown = isOpen && (results.length > 0 || showNoResults || hasSavedToShow);
   const activeDescendant = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
