@@ -88,22 +88,29 @@ jobs:
             # Copy standalone build
             rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
 
-            # Copy static assets (not included in standalone)
-            mkdir -p $APP_DIR/.next/static
-            cp -r $DEPLOY_DIR/.next/static/* $APP_DIR/.next/static/
-
-            # Copy public folder
-            cp -r $DEPLOY_DIR/public $APP_DIR/public 2>/dev/null || true
-
             # Find the server.js entry point (monorepo standalone nests it)
             cd $APP_DIR
             if [ -f server.js ]; then
               ENTRY=server.js
+              STATIC_DIR=$APP_DIR/.next/static
+              PUBLIC_DIR=$APP_DIR/public
             elif [ -f apps/web/server.js ]; then
               ENTRY=apps/web/server.js
+              STATIC_DIR=$APP_DIR/apps/web/.next/static
+              PUBLIC_DIR=$APP_DIR/apps/web/public
             else
               echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/web/ 2>/dev/null && exit 1
             fi
+
+            # Copy static assets to the correct path relative to server.js
+            mkdir -p $STATIC_DIR
+            cp -r $DEPLOY_DIR/.next/static/* $STATIC_DIR/
+            echo "Static files copied to: $STATIC_DIR"
+            ls $STATIC_DIR/ | head -5
+
+            # Copy public folder to the correct path
+            mkdir -p $PUBLIC_DIR
+            cp -r $DEPLOY_DIR/public/* $PUBLIC_DIR/ 2>/dev/null || true
 
             # Find a free port (3001 is used by gst, 3002 by admin)
             WEBPORT=3003
