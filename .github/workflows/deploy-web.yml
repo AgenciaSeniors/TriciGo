@@ -71,11 +71,19 @@ jobs:
             # Copy public folder
             cp -r $DEPLOY_DIR/public $APP_DIR/public 2>/dev/null || true
 
-            # Restart with PM2
+            # Find the server.js entry point (monorepo standalone nests it)
             cd $APP_DIR
-            export PORT=3001
+            if [ -f server.js ]; then
+              ENTRY=server.js
+            elif [ -f apps/web/server.js ]; then
+              ENTRY=apps/web/server.js
+            else
+              echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/web/ 2>/dev/null && exit 1
+            fi
+
+            # Restart with PM2
             pm2 delete tricigo-web 2>/dev/null || true
-            PORT=3001 pm2 start server.js --name tricigo-web --update-env
+            PORT=3001 pm2 start $ENTRY --name tricigo-web --update-env
             pm2 save
 
             # Cleanup
