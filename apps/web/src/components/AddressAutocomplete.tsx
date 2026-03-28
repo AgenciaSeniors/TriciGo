@@ -114,11 +114,9 @@ function parseCubanAddress(query: string): CubanParsed | null {
   m = query.match(/^(.+?)\s+e\/\s*$/i);
   if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
 
-  // SIMPLE INTERSECTION: "Calle 23 y L", "Prado y Neptuno"
-  m = query.match(/^(.+?)\s+y\s+(.+)$/i);
-  if (m && m[1].trim().length >= 2 && m[2].trim().length >= 1) {
-    return { main: m[1].trim(), cross1: m[2].trim() };
-  }
+  // NOTE: "X y Z" pattern removed — too many false positives
+  // ("Capitolio Nacional" was detected as intersection)
+  // For "23 y L", user should write "23 entre L" or use fallback
 
   return null;
 }
@@ -285,25 +283,48 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         // Cuban search failed — fall through to Mapbox as backup
       }
 
-      // ─── PATH 3: NORMAL SEARCH (not Cuban format) ───
-      // Cancel previous fetch
+      // ─── PATH 3: NORMAL SEARCH — Mapbox + Nominatim in parallel ───
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const mapboxItems = await fetchMapbox(q, controller.signal);
+      // Run BOTH in parallel — Nominatim has better Cuba POI coverage
+      const [mapboxSettled, nominatimSettled] = await Promise.allSettled([
+        fetchMapbox(q, controller.signal),
+        searchNominatim(q, proximity),
+      ]);
       if (searchIdRef.current !== thisSearchId) return;
 
-      let merged = mapboxItems;
+      const mapboxItems = mapboxSettled.status === 'fulfilled' ? mapboxSettled.value : [];
+      const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
 
-      // If Mapbox returned nothing, try Nominatim
-      if (mapboxItems.length === 0) {
-        const nominatimItems = await searchNominatim(q, proximity);
-        if (searchIdRef.current !== thisSearchId) return;
-        merged = nominatimItems;
+      // Merge: Nominatim first (better for Cuba POIs), then Mapbox (dedup by proximity)
+      let merged = [...nominatimItems];
+      for (const m of mapboxItems) {
+        const isDuplicate = merged.some(existing =>
+          haversineDistance(
+            { latitude: existing.latitude, longitude: existing.longitude },
+            { latitude: m.latitude, longitude: m.longitude },
+          ) < 100
+        );
+        if (!isDuplicate) merged.push(m);
       }
 
-      // Sort by distance
+      // Fallback: if both empty and query has " y ", try as intersection
+      if (merged.length === 0) {
+        const yMatch = q.match(/^(.+?)\s+y\s+(.+)$/i);
+        if (yMatch && yMatch[1].trim().length >= 2 && yMatch[2].trim().length >= 1) {
+          try {
+            const intersection = await findIntersection(yMatch[1].trim(), yMatch[2].trim(), undefined, proximity || undefined);
+            if (searchIdRef.current !== thisSearchId) return;
+            if (intersection) {
+              merged = [{ address: intersection.address, latitude: intersection.latitude, longitude: intersection.longitude, place_name: intersection.address }];
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
+      // Sort by distance to proximity
       if (proximity && merged.length > 1) {
         merged.sort((a, b) => {
           const distA = haversineDistance(
@@ -331,11 +352,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             if (enriched && searchIdRef.current === thisSearchId) {
               return { idx, place_name: enriched, address: r.address, latitude: r.latitude, longitude: r.longitude };
             }
-          } catch { /* ignore enrichment failure */ }
+          } catch { /* ignore */ }
           return null;
         });
-
-        // Update results as enrichments arrive
         Promise.allSettled(enrichPromises).then((settled) => {
           if (searchIdRef.current !== thisSearchId) return;
           setResults(prev => {
