@@ -287,7 +287,7 @@ export default function NotificationsPage() {
                   gap: '0.75rem',
                   padding: '1rem 1.25rem',
                   width: '100%',
-                  background: notif.read ? 'transparent' : '#fffbf0',
+                  background: notif.read ? 'transparent' : 'var(--bg-accent, rgba(255,77,0,0.05))',
                   border: 'none',
                   borderBottom: index < items.length - 1 ? '1px solid var(--border-light)' : 'none',
                   cursor: 'pointer',

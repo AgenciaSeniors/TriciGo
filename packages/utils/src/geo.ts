@@ -603,55 +603,91 @@ async function findCrossStreets(
 /* ─── Nominatim Reverse Geocoding ─── */
 
 /**
+ * Build a full enriched address string with optional POI, municipality, and province.
+ * Pattern: "POI, street, municipality, province" — deduplicates and strips trailing commas.
+ */
+function buildEnrichedAddress(
+  streetPart: string,
+  poiName: string,
+  municipality: string,
+  province: string,
+): string {
+  const parts: string[] = [];
+
+  // Add POI if it differs from the street part (avoid "Calle X, Calle X")
+  if (poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
+    parts.push(poiName);
+  }
+
+  parts.push(streetPart);
+
+  if (municipality) parts.push(municipality);
+  if (province) parts.push(province);
+
+  return parts.join(', ');
+}
+
+/**
  * Reverse geocode coordinates to a Cuban-style street address.
  * PRIMARY: Uses Overpass with geometry to find the NEAREST street (not Nominatim).
  * This fixes the bug where Nominatim returns a parallel street instead of the closest one.
- * Format: "General Aguirre e/ General Suárez y Panchito Gómez"
+ * Enriched with POI name, municipality, and province from Nominatim.
+ * Format: "Hotel Inglaterra, Paseo de Martí, La Habana Vieja, La Habana"
  */
 export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
   try {
-    // 1. PRIMARY: Overpass geometry-based (most accurate)
-    const result = await findNearestStreetAndCross(lat, lng);
-    if (result) {
-      const { mainStreet, crossStreets } = result;
-      if (crossStreets.length >= 2) {
-        return `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
-      }
-      if (crossStreets.length === 1) {
-        return `${mainStreet} y ${crossStreets[0]}`;
-      }
-      return mainStreet;
-    }
-
-    // 2. FALLBACK: Nominatim + old Overpass (less accurate but broader coverage)
-    const url =
+    // 1. Kick off Nominatim reverse in parallel (we need POI + municipality + province regardless)
+    const nomUrl =
       `https://nominatim.openstreetmap.org/reverse` +
       `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es&zoom=18`;
+    const nomPromise = throttledFetch(nomUrl, NOMINATIM_HEADERS)
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
 
-    const res = await throttledFetch(url, NOMINATIM_HEADERS);
-    if (!res.ok) return null;
+    // 2. PRIMARY: Overpass geometry-based (most accurate for street + cross-streets)
+    const result = await findNearestStreetAndCross(lat, lng);
+    const nomData = await nomPromise;
 
-    const data = await res.json();
-    if (!data?.address) return null;
+    // Extract POI, municipality, province from Nominatim data
+    const address = nomData?.address || {};
+    const municipality = address.city_district || address.suburb || address.neighbourhood || '';
+    const province = address.state || '';
+    const poiName = nomData?.name || address.amenity || address.building || address.tourism || address.leisure || '';
 
-    const mainRoad = data.address.road;
+    if (result) {
+      const { mainStreet, crossStreets } = result;
+      let streetPart = mainStreet;
+      if (crossStreets.length >= 2) {
+        streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+      } else if (crossStreets.length === 1) {
+        streetPart = `${mainStreet} y ${crossStreets[0]}`;
+      }
+      return buildEnrichedAddress(streetPart, poiName, municipality, province);
+    }
+
+    // 3. FALLBACK: Nominatim + old Overpass (less accurate but broader coverage)
+    if (!nomData?.address) return null;
+
+    const mainRoad = address.road || address.pedestrian || address.footway || '';
     if (mainRoad) {
       try {
         const crossStreets = await findCrossStreets(lat, lng, mainRoad);
+        let streetPart = mainRoad;
         if (crossStreets.length >= 2) {
-          return `${mainRoad} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+          streetPart = `${mainRoad} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+        } else if (crossStreets.length === 1) {
+          streetPart = `${mainRoad} y ${crossStreets[0]}`;
         }
-        if (crossStreets.length === 1) {
-          return `${mainRoad} y ${crossStreets[0]}`;
-        }
+        return buildEnrichedAddress(streetPart, poiName, municipality, province);
       } catch { /* fallback below */ }
     }
 
-    const formatted = formatCubanAddress(data.address);
-    return formatted || null;
+    const formatted = formatCubanAddress(nomData.address);
+    if (!formatted) return null;
+    return buildEnrichedAddress(formatted, poiName, municipality, province);
   } catch {
     return null;
   }

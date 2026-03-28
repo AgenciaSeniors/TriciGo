@@ -781,7 +781,7 @@ export default function BookPage() {
                 style={{
                   padding: '0.5rem 0.75rem',
                   borderRadius: '0.5rem',
-                  background: '#FFF5F0',
+                  background: 'var(--bg-accent, rgba(255,77,0,0.05))',
                   border: '1px solid var(--primary)',
                   fontSize: '0.8rem',
                   color: 'var(--primary)',
@@ -889,7 +889,7 @@ export default function BookPage() {
                 padding: '1.25rem',
                 borderRadius: '0.75rem',
                 border: '2px solid var(--primary)',
-                background: '#FFF5F0',
+                background: 'var(--bg-accent, rgba(255,77,0,0.05))',
               }}
             >
               <div

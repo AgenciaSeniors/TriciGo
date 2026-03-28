@@ -507,7 +507,7 @@ export default function WalletPage() {
                   aria-label="Cargar mas transacciones"
                   style={{
                     width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                    border: '1px solid var(--border)', background: 'white',
+                    border: '1px solid var(--border)', background: 'var(--bg-primary)',
                     cursor: txLoadingMore ? 'not-allowed' : 'pointer',
                     fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
                   }}

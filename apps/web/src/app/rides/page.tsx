@@ -189,7 +189,7 @@ export default function RidesPage() {
                 aria-label="Cargar mas viajes"
                 style={{
                   width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                  border: '1px solid var(--border)', background: 'white', cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--border)', background: 'var(--bg-primary)', cursor: loadingMore ? 'not-allowed' : 'pointer',
                   fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
                 }}
               >

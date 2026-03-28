@@ -116,7 +116,7 @@ export default function LostItemPage() {
         toast.textContent = 'Reporte enviado correctamente';
         Object.assign(toast.style, {
           position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
-          background: '#16a34a', color: 'white', padding: '0.75rem 1.5rem',
+          background: 'var(--success, #16a34a)', color: 'white', padding: '0.75rem 1.5rem',
           borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: '600',
           zIndex: '9999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         });
