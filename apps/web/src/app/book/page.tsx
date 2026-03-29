@@ -42,12 +42,12 @@ const BookingMap = dynamic(() => import('./BookingMap'), {
   loading: () => <MapLoadingFallback />,
 });
 
-const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; labelKey: string; descKey: string; icon: string }[] = [
-  { slug: 'triciclo_basico', abbr: 'TC', labelKey: 'book.service_triciclo', descKey: 'book.service_triciclo_desc', icon: '/images/vehicles/triciclo.png' },
-  { slug: 'moto_standard', abbr: 'MT', labelKey: 'book.service_moto', descKey: 'book.service_moto_desc', icon: '/images/vehicles/moto.png' },
-  { slug: 'auto_standard', abbr: 'AT', labelKey: 'book.service_auto', descKey: 'book.service_auto_desc', icon: '/images/vehicles/auto.png' },
-  { slug: 'auto_confort', abbr: 'CF', labelKey: 'book.service_confort', descKey: 'book.service_confort_desc', icon: '/images/vehicles/confort.png' },
-  { slug: 'mensajeria', abbr: 'DL', labelKey: 'book.service_mensajeria', descKey: 'book.service_mensajeria_desc', icon: '/images/vehicles/mensajeria.png' },
+const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; label: string; desc: string; icon: string }[] = [
+  { slug: 'triciclo_basico', abbr: 'TC', label: 'Triciclo', desc: 'Econ\u00f3mico', icon: '/images/vehicles/triciclo.png' },
+  { slug: 'moto_standard', abbr: 'MT', label: 'Moto', desc: 'R\u00e1pido', icon: '/images/vehicles/moto.png' },
+  { slug: 'auto_standard', abbr: 'AT', label: 'Auto', desc: 'C\u00f3modo', icon: '/images/vehicles/auto.png' },
+  { slug: 'auto_confort', abbr: 'CF', label: 'Confort', desc: 'Premium', icon: '/images/vehicles/confort.png' },
+  { slug: 'mensajeria', abbr: 'DL', label: 'Env\u00edo', desc: 'Delivery', icon: '/images/vehicles/mensajeria.png' },
 ];
 
 type SelectionStep = 'pickup' | 'dropoff' | 'done';
@@ -917,15 +917,15 @@ export default function BookPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <img
                           src={svc.icon}
-                          alt={t(svc.labelKey)}
+                          alt={svc.label}
                           style={{ width: 40, height: 40, objectFit: 'contain' }}
                         />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                            {t(svc.labelKey)}
+                            {svc.label}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            {t(svc.descKey)}
+                            {svc.desc}
                             {pickupEta != null && (
                               <span style={{ color: '#16a34a', fontWeight: 600, marginLeft: 6 }}>
                                 · {pickupEta} min
@@ -1191,7 +1191,7 @@ export default function BookPage() {
               {isRequesting
                 ? t('book.requesting')
                 : selectedEstimate
-                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
                   : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>
@@ -1222,7 +1222,7 @@ export default function BookPage() {
             {isRequesting
               ? t('book.requesting')
               : selectedEstimate
-                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
                 : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
             }
           </button>
