@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
-import { HAVANA_CENTER, HAVANA_PRESETS, findNearestPreset, reverseGeocode } from '@tricigo/utils';
-import type { LocationPreset } from '@tricigo/utils';
+import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport } from '@tricigo/utils';
+import type { LocationPreset, ViewportPoi } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
@@ -19,15 +19,20 @@ export interface BookingMapProps {
   onSetPickup: (loc: LocationPreset) => void;
   onSetDropoff: (loc: LocationPreset) => void;
   onRequestLocation: () => void;
+  onConfirmLocation: (loc: LocationPreset) => void;
   locationLoading: boolean;
   locationError: string | null;
   selectionStep: SelectionStep;
   pickupAddress: string | null;
   dropoffAddress: string | null;
+  centerAddress: string | null;
+  centerAddressLoading: boolean;
+  flyToTarget: { latitude: number; longitude: number } | null;
   routeCoords: [number, number][] | null;
   routeLoading: boolean;
   nearbyVehicles?: NearbyVehicle[];
   selectedServiceType?: ServiceTypeSlug;
+  initialCenter?: { latitude: number; longitude: number };
   onMapCenterChange?: (center: { latitude: number; longitude: number }) => void;
 }
 
@@ -97,20 +102,92 @@ const VEHICLE_IMAGES: Record<string, string> = {
   confort: '/images/vehicles/markers/confort@2x.png',
 };
 
-function createVehicleMarkerEl(vehicleType: string, heading: number | null): HTMLDivElement {
+function createVehicleMarkerEl(vehicleType: string, heading: number | null, etaSeconds?: number | null): HTMLDivElement {
   const el = document.createElement('div');
+  Object.assign(el.style, {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    cursor: 'pointer',
+    position: 'relative',
+  });
+
   const imgSrc = VEHICLE_IMAGES[vehicleType] ?? VEHICLE_IMAGES.auto;
   const rotation = heading ?? 0;
-  el.innerHTML = `
-    <div style="
-      width:40px;height:40px;
-      filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));
-      transform:rotate(${rotation}deg);
-      transition:transform 0.5s ease-out;
-    ">
-      <img src="${imgSrc}" alt="${vehicleType}" width="40" height="40" style="width:40px;height:40px;object-fit:contain;" />
-    </div>`;
+
+  // Vehicle icon
+  const icon = document.createElement('div');
+  Object.assign(icon.style, {
+    width: '40px',
+    height: '40px',
+    backgroundImage: `url(${imgSrc})`,
+    backgroundSize: 'contain',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center',
+    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+    transform: `rotate(${rotation}deg)`,
+    transition: 'transform 0.5s ease-out',
+  });
+  el.appendChild(icon);
+
+  // ETA badge below icon
+  if (etaSeconds != null && etaSeconds > 0) {
+    const mins = Math.ceil(etaSeconds / 60);
+    const badge = document.createElement('div');
+    Object.assign(badge.style, {
+      marginTop: '2px',
+      padding: '1px 5px',
+      borderRadius: '8px',
+      background: '#1a1a2e',
+      color: '#fff',
+      fontSize: '10px',
+      fontWeight: '700',
+      whiteSpace: 'nowrap',
+      textAlign: 'center',
+      lineHeight: '14px',
+      border: '1px solid rgba(255,255,255,0.3)',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+    });
+    badge.textContent = `${mins} min`;
+    el.appendChild(badge);
+  }
+
   return el;
+}
+
+/* ── POI category colors ── */
+const POI_COLORS: Record<string, string> = {
+  restaurant: '#E53935', cafe: '#E53935', bar: '#E53935', fast_food: '#E53935', bakery: '#E53935', nightclub: '#E53935',
+  hotel: '#1E88E5', guest_house: '#1E88E5', hostel: '#1E88E5', apartment: '#1E88E5', chalet: '#1E88E5', motel: '#1E88E5',
+  hospital: '#43A047', clinic: '#43A047', pharmacy: '#43A047', doctors: '#43A047', dentist: '#43A047',
+  supermarket: '#FB8C00', convenience: '#FB8C00', marketplace: '#FB8C00', mobile_phone: '#FB8C00', hairdresser: '#FB8C00', car_repair: '#FB8C00',
+  school: '#8E24AA', university: '#8E24AA', college: '#8E24AA', kindergarten: '#8E24AA',
+  bank: '#546E7A', post_office: '#546E7A', police: '#546E7A', embassy: '#546E7A', townhall: '#546E7A', fire_station: '#546E7A', courthouse: '#546E7A',
+  park: '#2E7D32', beach: '#2E7D32', attraction: '#2E7D32', museum: '#2E7D32', monument: '#2E7D32', theatre: '#2E7D32', cinema: '#2E7D32', library: '#2E7D32',
+  fuel: '#FF6F00', bus_station: '#FF6F00', ferry_terminal: '#FF6F00', aerodrome: '#FF6F00',
+};
+
+function getPoiColor(subcategory: string): string {
+  return POI_COLORS[subcategory] || '#78909C';
+}
+
+function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: pois.map(p => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+      properties: {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        subcategory: p.subcategory,
+        address: p.address || '',
+        importance: p.importance,
+        color: getPoiColor(p.subcategory),
+      },
+    })),
+  };
 }
 
 /* ── CSS animations ── */
@@ -125,6 +202,20 @@ const PULSE_STYLES = `
     70% { transform: scale(3); opacity: 0; }
     100% { transform: scale(1); opacity: 0; }
   }
+  @keyframes pin-bounce {
+    0% { transform: translate(-50%, -100%); }
+    40% { transform: translate(-50%, -115%); }
+    60% { transform: translate(-50%, -100%); }
+    80% { transform: translate(-50%, -105%); }
+    100% { transform: translate(-50%, -100%); }
+  }
+  @keyframes pin-shadow-bounce {
+    0% { transform: translateX(-50%) scale(1); opacity: 0.3; }
+    40% { transform: translateX(-50%) scale(0.6); opacity: 0.15; }
+    60% { transform: translateX(-50%) scale(1); opacity: 0.3; }
+    80% { transform: translateX(-50%) scale(0.85); opacity: 0.25; }
+    100% { transform: translateX(-50%) scale(1); opacity: 0.3; }
+  }
 `;
 
 /* ── Main component ── */
@@ -135,15 +226,20 @@ export default function BookingMap({
   onSetPickup,
   onSetDropoff,
   onRequestLocation,
+  onConfirmLocation,
   locationLoading,
   locationError,
   selectionStep,
   pickupAddress,
   dropoffAddress,
+  centerAddress,
+  centerAddressLoading,
+  flyToTarget,
   routeCoords,
   routeLoading,
   nearbyVehicles = [],
   selectedServiceType,
+  initialCenter,
   onMapCenterChange,
 }: BookingMapProps) {
   const { t } = useTranslation('web');
@@ -154,19 +250,29 @@ export default function BookingMap({
   const userLocMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const presetMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const poiAbortRef = useRef<AbortController | null>(null);
+  const lastBoundsRef = useRef<{ minLng: number; minLat: number; maxLng: number; maxLat: number } | null>(null);
+  const poiPopupRef = useRef<mapboxgl.Popup | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [bounceKey, setBounceKey] = useState(0);
+  const [isMapMoving, setIsMapMoving] = useState(false);
 
   /* ── Initialize map ── */
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    const center = initialCenter
+      ? [initialCenter.longitude, initialCenter.latitude] as [number, number]
+      : [CUBA_CENTER.longitude, CUBA_CENTER.latitude] as [number, number];
+    const zoom = initialCenter ? 13 : CUBA_DEFAULT_ZOOM;
+
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: [HAVANA_CENTER.longitude, HAVANA_CENTER.latitude],
-      zoom: 13,
+      center,
+      zoom,
       attributionControl: false,
-      maxBounds: [[-83.5, 22.0], [-81.0, 23.8]], // Cuba bounds
+      maxBounds: [[-85.5, 19.5], [-73.5, 23.8]], // All Cuba + padding
     });
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
@@ -174,6 +280,81 @@ export default function BookingMap({
 
     map.on('load', () => {
       setMapReady(true);
+
+      // ── POI source with clustering ──
+      map.addSource('pois', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      });
+
+      // Cluster circles
+      map.addLayer({
+        id: 'poi-clusters',
+        type: 'circle',
+        source: 'pois',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': ['step', ['get', 'point_count'], '#51bbd6', 50, '#f1f075', 200, '#f28cb1'],
+          'circle-radius': ['step', ['get', 'point_count'], 18, 50, 22, 200, 28],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'rgba(255,255,255,0.6)',
+        },
+      });
+
+      // Cluster count labels
+      map.addLayer({
+        id: 'poi-cluster-count',
+        type: 'symbol',
+        source: 'pois',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-size': 12,
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Bold'],
+        },
+        paint: { 'text-color': '#333' },
+      });
+
+      // Unclustered POI dots + labels
+      map.addLayer({
+        id: 'poi-unclustered',
+        type: 'circle',
+        source: 'pois',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 7, 18, 10],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': 'rgba(255,255,255,0.9)',
+        },
+      });
+
+      // POI name labels
+      map.addLayer({
+        id: 'poi-labels',
+        type: 'symbol',
+        source: 'pois',
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 13, 10, 16, 13],
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-max-width': 8,
+          'text-optional': true,
+          'text-allow-overlap': false,
+        },
+        paint: {
+          'text-color': '#333',
+          'text-halo-color': 'rgba(255,255,255,0.95)',
+          'text-halo-width': 1.5,
+        },
+        minzoom: 13,
+      });
 
       // Add route source (empty initially)
       map.addSource('route', {
@@ -226,30 +407,45 @@ export default function BookingMap({
     };
   }, []);
 
-  /* ── Map click handler ── */
+  /* ── Map move tracking for pin bounce ── */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const handleClick = async (e: mapboxgl.MapMouseEvent) => {
-      if (selectionStep === 'done') return;
-      const { lat, lng } = e.lngLat;
-      // Always use reverse geocoding for accurate street addresses
-      const address = await reverseGeocode(lat, lng);
-      const label = address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      const preset: LocationPreset = {
-        label,
-        address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-        latitude: lat,
-        longitude: lng,
-      };
-      if (selectionStep === 'pickup') onSetPickup(preset);
-      else onSetDropoff(preset);
+    const onMoveStart = () => setIsMapMoving(true);
+    const onMoveEndBounce = () => {
+      setIsMapMoving(false);
+      setBounceKey(k => k + 1);
     };
 
-    map.on('click', handleClick);
-    return () => { map.off('click', handleClick); };
-  }, [mapReady, selectionStep, onSetPickup, onSetDropoff, t]);
+    map.on('movestart', onMoveStart);
+    map.on('moveend', onMoveEndBounce);
+    return () => {
+      map.off('movestart', onMoveStart);
+      map.off('moveend', onMoveEndBounce);
+    };
+  }, [mapReady]);
+
+  /* ── Fly to target (for "Use my location" button) ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !flyToTarget) return;
+    map.flyTo({ center: [flyToTarget.longitude, flyToTarget.latitude], zoom: 16, duration: 1000 });
+  }, [flyToTarget, mapReady]);
+
+  /* ── Confirm location from center pin ── */
+  const handleConfirmCenter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || selectionStep === 'done') return;
+    const center = map.getCenter();
+    const loc: LocationPreset = {
+      label: centerAddress || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`,
+      address: centerAddress || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`,
+      latitude: center.lat,
+      longitude: center.lng,
+    };
+    onConfirmLocation(loc);
+  }, [selectionStep, centerAddress, onConfirmLocation]);
 
   /* ── Pickup marker ── */
   useEffect(() => {
@@ -343,7 +539,7 @@ export default function BookingMap({
 
     nearbyVehicles.forEach((v) => {
       const marker = new mapboxgl.Marker({
-        element: createVehicleMarkerEl(v.vehicle_type, v.heading),
+        element: createVehicleMarkerEl(v.vehicle_type, v.heading, v.eta_seconds),
         anchor: 'center',
       })
         .setLngLat([v.longitude, v.latitude])
@@ -351,6 +547,139 @@ export default function BookingMap({
       vehicleMarkersRef.current.push(marker);
     });
   }, [nearbyVehicles, mapReady]);
+
+  /* ── POI viewport fetch ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout>;
+
+    const loadPois = () => {
+      const zoom = map.getZoom();
+      if (zoom < 10) {
+        // Too zoomed out — clear POIs
+        const src = map.getSource('pois') as mapboxgl.GeoJSONSource | undefined;
+        if (src) src.setData({ type: 'FeatureCollection', features: [] });
+        lastBoundsRef.current = null;
+        return;
+      }
+
+      const mapBounds = map.getBounds();
+      if (!mapBounds) return;
+      const sw = mapBounds.getSouthWest();
+      const ne = mapBounds.getNorthEast();
+
+      // Pad bounds by 20% to avoid refetch on small pans
+      const lngPad = (ne.lng - sw.lng) * 0.2;
+      const latPad = (ne.lat - sw.lat) * 0.2;
+      const bounds = {
+        minLng: sw.lng - lngPad,
+        minLat: sw.lat - latPad,
+        maxLng: ne.lng + lngPad,
+        maxLat: ne.lat + latPad,
+      };
+
+      // Skip if still within last fetched bounds at same zoom tier
+      const last = lastBoundsRef.current;
+      if (last && bounds.minLng >= last.minLng && bounds.minLat >= last.minLat
+        && bounds.maxLng <= last.maxLng && bounds.maxLat <= last.maxLat) {
+        return;
+      }
+
+      // Cancel previous request
+      if (poiAbortRef.current) poiAbortRef.current.abort();
+      const controller = new AbortController();
+      poiAbortRef.current = controller;
+
+      fetchPoisInViewport(bounds, zoom, controller.signal).then(pois => {
+        if (controller.signal.aborted) return;
+        const src = map.getSource('pois') as mapboxgl.GeoJSONSource | undefined;
+        if (src) {
+          src.setData(poisToGeoJSON(pois));
+          lastBoundsRef.current = bounds;
+        }
+      });
+    };
+
+    const onMoveEnd = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadPois, 300);
+    };
+
+    map.on('moveend', onMoveEnd);
+    // Initial load
+    loadPois();
+
+    return () => {
+      map.off('moveend', onMoveEnd);
+      clearTimeout(debounceTimer);
+      if (poiAbortRef.current) poiAbortRef.current.abort();
+    };
+  }, [mapReady]);
+
+  /* ── POI click handlers ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Click unclustered POI — show popup
+    const onPoiClick = (e: mapboxgl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['poi-unclustered'] });
+      if (!features.length) return;
+      e.originalEvent.stopPropagation();
+      const f = features[0];
+      const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+      const props = f.properties!;
+      const subcategory = (props.subcategory || '').replace(/_/g, ' ');
+
+      if (poiPopupRef.current) poiPopupRef.current.remove();
+      poiPopupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true, maxWidth: '220px' })
+        .setLngLat(coords)
+        .setHTML(`
+          <div style="font-family:system-ui;font-size:13px;">
+            <strong style="display:block;margin-bottom:2px;">${props.name}</strong>
+            ${subcategory ? `<span style="color:#888;font-size:11px;text-transform:capitalize;">${subcategory}</span><br/>` : ''}
+            ${props.address ? `<span style="color:#666;font-size:11px;">${props.address}</span>` : ''}
+          </div>
+        `)
+        .addTo(map);
+    };
+
+    // Click cluster — zoom in
+    const onClusterClick = (e: mapboxgl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['poi-clusters'] });
+      if (!features.length) return;
+      e.originalEvent.stopPropagation();
+      const clusterId = features[0].properties!.cluster_id;
+      (map.getSource('pois') as mapboxgl.GeoJSONSource).getClusterExpansionZoom(clusterId, (err, zoom) => {
+        if (err || zoom == null) return;
+        const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
+        map.easeTo({ center: coords, zoom: zoom + 0.5 });
+      });
+    };
+
+    // Cursor changes
+    const onPoiEnter = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const onPoiLeave = () => { map.getCanvas().style.cursor = ''; };
+
+    map.on('click', 'poi-unclustered', onPoiClick);
+    map.on('click', 'poi-clusters', onClusterClick);
+    map.on('mouseenter', 'poi-unclustered', onPoiEnter);
+    map.on('mouseleave', 'poi-unclustered', onPoiLeave);
+    map.on('mouseenter', 'poi-clusters', onPoiEnter);
+    map.on('mouseleave', 'poi-clusters', onPoiLeave);
+
+    return () => {
+      map.off('click', 'poi-unclustered', onPoiClick);
+      map.off('click', 'poi-clusters', onClusterClick);
+      map.off('mouseenter', 'poi-unclustered', onPoiEnter);
+      map.off('mouseleave', 'poi-unclustered', onPoiLeave);
+      map.off('mouseenter', 'poi-clusters', onPoiEnter);
+      map.off('mouseleave', 'poi-clusters', onPoiLeave);
+      if (poiPopupRef.current) { poiPopupRef.current.remove(); poiPopupRef.current = null; }
+    };
+  }, [mapReady]);
 
   /* ── Preset click handler ── */
   const handlePresetClick = useCallback(
@@ -402,6 +731,126 @@ export default function BookingMap({
             overflow: 'hidden',
           }}
         />
+
+        {/* Center pin — fixed CSS element, not a Mapbox marker */}
+        {selectionStep !== 'done' && (
+          <>
+            <div
+              key={bounceKey}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -100%)',
+                zIndex: 5,
+                pointerEvents: 'none',
+                animation: !isMapMoving ? 'pin-bounce 0.5s ease-out' : undefined,
+              }}
+            >
+              <div style={{
+                width: 32,
+                height: 44,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}>
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: selectionStep === 'pickup' ? '#22c55e' : '#FF4D00',
+                  border: '3px solid white',
+                  boxShadow: `0 3px 10px ${selectionStep === 'pickup' ? 'rgba(34,197,94,0.5)' : 'rgba(255,77,0,0.5)'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />
+                </div>
+                <div style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '8px solid transparent',
+                  borderRight: '8px solid transparent',
+                  borderTop: `10px solid ${selectionStep === 'pickup' ? '#22c55e' : '#FF4D00'}`,
+                  marginTop: -2,
+                }} />
+              </div>
+            </div>
+            {/* Pin shadow */}
+            <div
+              key={`shadow-${bounceKey}`}
+              style={{
+                position: 'absolute',
+                top: 'calc(50% + 2px)',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: 14,
+                height: 5,
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.3)',
+                zIndex: 4,
+                pointerEvents: 'none',
+                animation: !isMapMoving ? 'pin-shadow-bounce 0.5s ease-out' : undefined,
+              }}
+            />
+          </>
+        )}
+
+        {/* Bottom address bar + confirm button */}
+        {selectionStep !== 'done' && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: 'rgba(26,26,46,0.95)',
+              backdropFilter: 'blur(8px)',
+              padding: '0.75rem 1rem',
+              borderRadius: '0 0 0.75rem 0.75rem',
+              zIndex: 15,
+            }}
+          >
+            <div style={{
+              fontSize: '0.8rem',
+              color: '#e5e5e5',
+              marginBottom: '0.5rem',
+              minHeight: '1.2em',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {centerAddressLoading ? (
+                <span style={{ color: '#888' }}>{t('book.detecting_address')}</span>
+              ) : centerAddress ? (
+                centerAddress
+              ) : (
+                <span style={{ color: '#888' }}>{t('book.detecting_address')}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleConfirmCenter}
+              disabled={centerAddressLoading}
+              style={{
+                width: '100%',
+                padding: '0.7rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                background: selectionStep === 'pickup' ? '#22c55e' : '#FF4D00',
+                color: 'white',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                cursor: centerAddressLoading ? 'wait' : 'pointer',
+                opacity: centerAddressLoading ? 0.7 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {selectionStep === 'pickup' ? t('book.confirm_pickup') : t('book.confirm_dropoff')}
+            </button>
+          </div>
+        )}
 
         {/* Route loading overlay */}
         {routeLoading && (
