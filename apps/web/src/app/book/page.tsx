@@ -534,8 +534,35 @@ export default function BookPage() {
     setIsRequesting(true);
     setError(null);
     try {
+      // Re-estimate fare at request time to catch pricing changes (surge, time-based rules)
+      const activeSlug = serviceType === 'mensajeria' ? deliveryVehicle : serviceType;
+      let freshEstimate = selectedEstimate;
+      try {
+        const reEstimated = await rideService.getLocalFareEstimate({
+          service_type: activeSlug,
+          pickup_lat: pickup.latitude,
+          pickup_lng: pickup.longitude,
+          dropoff_lat: dropoff.latitude,
+          dropoff_lng: dropoff.longitude,
+        });
+        // Update stored estimate with fresh price
+        setAllEstimates(prev => ({ ...prev, [activeSlug]: reEstimated }));
+        freshEstimate = reEstimated;
+
+        // If price changed significantly (>5%), warn the user and abort
+        const oldFare = selectedEstimate.estimated_fare_cup;
+        const newFare = reEstimated.estimated_fare_cup;
+        if (oldFare > 0 && Math.abs(newFare - oldFare) / oldFare > 0.05) {
+          setError(`El precio se actualizo de ${oldFare.toLocaleString()} a ${newFare.toLocaleString()} CUP. Revisa y confirma de nuevo.`);
+          setIsRequesting(false);
+          return;
+        }
+      } catch {
+        // If re-estimation fails, proceed with original estimate
+      }
+
       const ride = await rideService.createRide({
-        service_type: serviceType === 'mensajeria' ? deliveryVehicle : serviceType,
+        service_type: activeSlug,
         payment_method: paymentMethod,
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
@@ -543,9 +570,9 @@ export default function BookPage() {
         dropoff_latitude: dropoff.latitude,
         dropoff_longitude: dropoff.longitude,
         dropoff_address: `${dropoff.label} — ${dropoff.address}`,
-        estimated_fare_cup: selectedEstimate.estimated_fare_cup,
-        estimated_distance_m: selectedEstimate.estimated_distance_m,
-        estimated_duration_s: selectedEstimate.estimated_duration_s,
+        estimated_fare_cup: freshEstimate.estimated_fare_cup,
+        estimated_distance_m: freshEstimate.estimated_distance_m,
+        estimated_duration_s: freshEstimate.estimated_duration_s,
         // W1.1: Waypoints
         ...(waypoints.length > 0 && {
           waypoints: waypoints.map((wp, i) => ({
