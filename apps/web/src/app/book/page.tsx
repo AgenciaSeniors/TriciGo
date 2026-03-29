@@ -55,7 +55,7 @@ type SelectionStep = 'pickup' | 'dropoff' | 'done';
 export default function BookPage() {
   const router = useRouter();
   const { t } = useTranslation('web');
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
   /* ─── Saved locations ─── */
@@ -117,6 +117,8 @@ export default function BookPage() {
 
   /* ─── Promo code state (W1.3) ─── */
   const [promoCode, setPromoCode] = useState('');
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
 
   /* ─── Insurance state (W1.4) ─── */
   const [insuranceSelected, setInsuranceSelected] = useState(false);
@@ -363,6 +365,7 @@ export default function BookPage() {
     setIsScheduled(false);
     setScheduleDate('');
     setPromoCode('');
+    setPromoResult(null);
     setInsuranceSelected(false);
   }
 
@@ -433,7 +436,7 @@ export default function BookPage() {
     setEstimateLoading(true);
     setAllEstimates({});
 
-    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard'];
+    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'];
 
     try {
       const results = await Promise.allSettled(
@@ -468,6 +471,36 @@ export default function BookPage() {
     }
   }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
 
+  /* ─── Promo code validation ─── */
+  async function handleApplyPromo() {
+    const code = promoCode.trim();
+    if (!code || !selectedEstimate) return;
+    setPromoValidating(true);
+    setPromoResult(null);
+    try {
+      const result = await rideService.validatePromoCode({
+        code,
+        userId: user?.id || '',
+        fareAmount: selectedEstimate.estimated_fare_cup,
+      });
+      if (result.valid && result.promotion) {
+        setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
+      } else {
+        const msgs: Record<string, string> = {
+          invalid: 'Código no válido',
+          expired: 'Código expirado',
+          max_uses: 'Código agotado',
+          already_used: 'Ya usaste este código',
+        };
+        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || 'Código no válido' });
+      }
+    } catch {
+      setPromoResult({ valid: false, discount: 0, error: 'Error al validar código' });
+    } finally {
+      setPromoValidating(false);
+    }
+  }
+
   async function handleRequest() {
     if (!pickup || !dropoff || !selectedEstimate) return;
     setIsRequesting(true);
@@ -497,6 +530,11 @@ export default function BookPage() {
         // W1.2: Scheduled ride
         ...(isScheduled && scheduleDate && {
           scheduled_at: new Date(scheduleDate).toISOString(),
+        }),
+        // W1.3: Promo code
+        ...(promoResult?.valid && promoResult.promoId && {
+          promo_code_id: promoResult.promoId,
+          discount_amount_cup: promoResult.discount,
         }),
         // W1.4: Insurance
         insurance_selected: insuranceSelected,
@@ -1109,23 +1147,68 @@ export default function BookPage() {
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Código promocional
             </label>
-            <input
-              type="text"
-              value={promoCode}
-              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-              placeholder="Ingresa un código"
-              aria-label="Codigo promocional"
-              style={{
-                width: '100%',
-                marginTop: '0.25rem',
-                padding: '0.5rem',
-                borderRadius: '0.5rem',
-                border: '1px solid var(--border)',
-                background: 'var(--bg-card)',
-                fontSize: '0.85rem',
-                boxSizing: 'border-box',
-              }}
-            />
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
+                placeholder="Ingresa un código"
+                aria-label="Codigo promocional"
+                disabled={promoResult?.valid === true}
+                style={{
+                  flex: 1,
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  border: promoResult?.valid ? '2px solid #22c55e' : promoResult?.valid === false ? '2px solid #ef4444' : '1px solid var(--border)',
+                  background: promoResult?.valid ? 'rgba(34,197,94,0.05)' : 'var(--bg-card)',
+                  fontSize: '0.85rem',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {promoResult?.valid ? (
+                <button
+                  type="button"
+                  onClick={() => { setPromoCode(''); setPromoResult(null); }}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '0.5rem',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-card)',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  Quitar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleApplyPromo}
+                  disabled={!promoCode.trim() || !selectedEstimate || promoValidating}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '0.5rem',
+                    border: 'none',
+                    background: !promoCode.trim() || !selectedEstimate || promoValidating ? '#ccc' : 'var(--primary)',
+                    color: 'white',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: !promoCode.trim() || !selectedEstimate || promoValidating ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {promoValidating ? 'Validando...' : 'Aplicar'}
+                </button>
+              )}
+            </div>
+            {promoResult && (
+              <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
+                {promoResult.valid
+                  ? `Descuento aplicado: -${formatCUP(promoResult.discount)}`
+                  : promoResult.error}
+              </p>
+            )}
           </div>
 
 
@@ -1191,7 +1274,7 @@ export default function BookPage() {
               {isRequesting
                 ? t('book.requesting')
                 : selectedEstimate
-                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatCUP(promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup)}`
                   : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>

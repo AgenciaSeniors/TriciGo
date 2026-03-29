@@ -7,6 +7,7 @@ export {
   fetchRoute,
   reverseGeocode,
   searchAddress,
+  snapToNearestRoad,
   type RouteResult,
   type AddressSearchResult,
 } from '@tricigo/utils';

@@ -31,6 +31,34 @@ export const HAVANA_PRESETS: readonly LocationPreset[] = [
   { label: 'Plaza de la Revolución', address: 'Plaza de la Revolución', latitude: 23.1210, longitude: -82.3826 },
 ] as const;
 
+/**
+ * Location presets for major Cuban cities outside Havana.
+ */
+export const CUBA_CITY_PRESETS: readonly LocationPreset[] = [
+  // Santiago de Cuba
+  { label: 'Parque Céspedes', address: 'Parque Céspedes, Santiago de Cuba', latitude: 20.0217, longitude: -75.8295 },
+  { label: 'Hotel Casa Granda', address: 'Heredia 201, Santiago de Cuba', latitude: 20.0215, longitude: -75.8289 },
+  // Camagüey
+  { label: 'Plaza del Carmen', address: 'Plaza del Carmen, Camagüey', latitude: 21.3808, longitude: -77.9170 },
+  // Holguín
+  { label: 'Plaza de la Marqueta', address: 'Calle Frexes, Holguín', latitude: 20.8872, longitude: -76.2630 },
+  // Trinidad
+  { label: 'Plaza Mayor', address: 'Plaza Mayor, Trinidad', latitude: 21.8024, longitude: -79.9841 },
+  // Varadero
+  { label: 'Hotel Internacional', address: 'Avenida 1ra, Varadero', latitude: 23.1547, longitude: -81.2480 },
+  // Cienfuegos
+  { label: 'Parque Martí', address: 'Parque José Martí, Cienfuegos', latitude: 22.1461, longitude: -80.4530 },
+  // Santa Clara
+  { label: 'Monumento Che Guevara', address: 'Plaza de la Revolución, Santa Clara', latitude: 22.4025, longitude: -79.9720 },
+  // Pinar del Río
+  { label: 'Centro Histórico', address: 'Calle Martí, Pinar del Río', latitude: 22.4175, longitude: -83.6978 },
+  // Matanzas
+  { label: 'Parque de la Libertad', address: 'Parque de la Libertad, Matanzas', latitude: 23.0411, longitude: -81.5775 },
+] as const;
+
+/** All presets: Havana + rest of Cuba */
+export const ALL_PRESETS: readonly LocationPreset[] = [...HAVANA_PRESETS, ...CUBA_CITY_PRESETS];
+
 /** Center of Havana (used as default for Havana-specific features). */
 export const HAVANA_CENTER: GeoPoint = { latitude: 23.1136, longitude: -82.3666 };
 
@@ -145,7 +173,7 @@ export function findNearestPreset(
   let nearest: LocationPreset | null = null;
   let minDist = Infinity;
 
-  for (const preset of HAVANA_PRESETS) {
+  for (const preset of ALL_PRESETS) {
     const dist = haversineDistance(point, {
       latitude: preset.latitude,
       longitude: preset.longitude,
@@ -217,10 +245,11 @@ let lastNominatimCall = 0;
 async function throttledFetch(url: string, headers?: Record<string, string>): Promise<Response> {
   const now = Date.now();
   const wait = NOMINATIM_MIN_INTERVAL_MS - (now - lastNominatimCall);
+  // Set timestamp BEFORE awaiting to prevent concurrent calls from bypassing throttle
+  lastNominatimCall = now + Math.max(wait, 0);
   if (wait > 0) {
     await new Promise<void>((r) => setTimeout(r, wait));
   }
-  lastNominatimCall = Date.now();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
@@ -276,7 +305,7 @@ export async function fetchRouteMapbox(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson&access_token=${token}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -310,7 +339,7 @@ export async function fetchRouteOSRM(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -347,7 +376,7 @@ export async function fetchMultiStopRoute(
   const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data = (await res.json()) as {
       routes?: Array<{
@@ -368,6 +397,96 @@ export async function fetchMultiStopRoute(
     };
   } catch {
     return null;
+  }
+}
+
+/* ─── ETA Matrix: multiple origins → single destination ─── */
+
+/**
+ * Calculate ETAs from multiple vehicle positions to a single pickup point.
+ * Uses OSRM Table API (free, no auth) with Mapbox Matrix API as primary.
+ * Returns array of { duration_s, distance_m } in same order as origins.
+ */
+export async function fetchETAsToPickup(
+  origins: { lat: number; lng: number }[],
+  destination: { lat: number; lng: number },
+): Promise<Array<{ duration_s: number; distance_m: number } | null>> {
+  if (origins.length === 0) return [];
+
+  // Try Mapbox Matrix API first
+  const mapboxResult = await fetchETAsMapbox(origins, destination);
+  if (mapboxResult) return mapboxResult;
+
+  // Fallback to OSRM Table API
+  return fetchETAsOSRM(origins, destination);
+}
+
+async function fetchETAsMapbox(
+  origins: { lat: number; lng: number }[],
+  destination: { lat: number; lng: number },
+): Promise<Array<{ duration_s: number; distance_m: number } | null> | null> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return null;
+
+    // Coordinates: all origins + destination (last)
+    const coords = origins.map((o) => `${o.lng},${o.lat}`).join(';') + `;${destination.lng},${destination.lat}`;
+    const destIdx = origins.length; // index of destination
+    const sourceIdxs = origins.map((_, i) => i).join(';');
+
+    const url =
+      `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}` +
+      `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance&access_token=${token}`;
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (data.code !== 'Ok') return null;
+
+    return origins.map((_, i) => {
+      const dur = data.durations?.[i]?.[0];
+      const dist = data.distances?.[i]?.[0];
+      if (dur == null || dist == null) return null;
+      return { duration_s: Math.round(dur), distance_m: Math.round(dist) };
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function fetchETAsOSRM(
+  origins: { lat: number; lng: number }[],
+  destination: { lat: number; lng: number },
+): Promise<Array<{ duration_s: number; distance_m: number } | null>> {
+  try {
+    // OSRM Table API: all origins + destination
+    const coords = origins.map((o) => `${o.lng},${o.lat}`).join(';') + `;${destination.lng},${destination.lat}`;
+    const destIdx = origins.length;
+    const sourceIdxs = origins.map((_, i) => i).join(';');
+
+    const url =
+      `https://router.project-osrm.org/table/v1/driving/${coords}` +
+      `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance`;
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return origins.map(() => null);
+
+    const data = await res.json();
+    if (data.code !== 'Ok') return origins.map(() => null);
+
+    return origins.map((_, i) => {
+      const dur = data.durations?.[i]?.[0];
+      const dist = data.distances?.[i]?.[0];
+      if (dur == null || dist == null) return null;
+      return { duration_s: Math.round(dur), distance_m: Math.round(dist) };
+    });
+  } catch {
+    return origins.map(() => null);
   }
 }
 
@@ -593,7 +712,7 @@ async function findCrossStreets(
       const oldest = crossStreetCache.keys().next().value;
       if (oldest) crossStreetCache.delete(oldest);
     }
-    crossStreetCache.set(key, { streets, ts: Date.now() });
+    crossStreetCache.set(key, { main: mainRoad, streets, ts: Date.now() });
     return streets;
   } catch {
     return [];
@@ -639,7 +758,7 @@ export async function reverseGeocode(
   lng: number,
 ): Promise<string | null> {
   try {
-    // 1. Kick off Nominatim reverse in parallel (we need POI + municipality + province regardless)
+    // 1. Nominatim reverse (fast, ~200ms) — runs in parallel with Overpass
     const nomUrl =
       `https://nominatim.openstreetmap.org/reverse` +
       `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es&zoom=18`;
@@ -647,18 +766,29 @@ export async function reverseGeocode(
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
 
-    // 2. PRIMARY: Overpass geometry-based (most accurate for street + cross-streets)
-    const result = await findNearestStreetAndCross(lat, lng);
+    // 2. Overpass geometry-based cross-streets (slower, 1-5s) — race with a timeout
+    const overpassPromise = findNearestStreetAndCross(lat, lng).catch(() => null);
+    let overpassTimer: ReturnType<typeof setTimeout>;
+    const overpassWithTimeout = Promise.race([
+      overpassPromise.then(r => { clearTimeout(overpassTimer); return r; }),
+      new Promise<null>(resolve => { overpassTimer = setTimeout(() => resolve(null), 3000); }),
+    ]);
+
+    // Wait for Nominatim first (fast), then check if Overpass finished
     const nomData = await nomPromise;
 
-    // Extract POI, municipality, province from Nominatim data
+    // Extract metadata from Nominatim
     const address = nomData?.address || {};
     const municipality = address.city_district || address.suburb || address.neighbourhood || '';
     const province = address.state || '';
     const poiName = nomData?.name || address.amenity || address.building || address.tourism || address.leisure || '';
+    const mainRoad = address.road || address.pedestrian || address.footway || '';
 
-    if (result) {
-      const { mainStreet, crossStreets } = result;
+    // Try Overpass result (may already be done or will finish within timeout)
+    const overpassResult = await overpassWithTimeout;
+
+    if (overpassResult) {
+      const { mainStreet, crossStreets } = overpassResult;
       let streetPart = mainStreet;
       if (crossStreets.length >= 2) {
         streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
@@ -668,13 +798,16 @@ export async function reverseGeocode(
       return buildEnrichedAddress(streetPart, poiName, municipality, province);
     }
 
-    // 3. FALLBACK: Nominatim + old Overpass (less accurate but broader coverage)
+    // 3. FALLBACK: Nominatim road + Overpass cross-streets (legacy, also with timeout)
     if (!nomData?.address) return null;
 
-    const mainRoad = address.road || address.pedestrian || address.footway || '';
     if (mainRoad) {
       try {
-        const crossStreets = await findCrossStreets(lat, lng, mainRoad);
+        let crossTimer: ReturnType<typeof setTimeout>;
+        const crossStreets = await Promise.race([
+          findCrossStreets(lat, lng, mainRoad).then(r => { clearTimeout(crossTimer); return r; }),
+          new Promise<string[]>(resolve => { crossTimer = setTimeout(() => resolve([]), 2000); }),
+        ]);
         let streetPart = mainRoad;
         if (crossStreets.length >= 2) {
           streetPart = `${mainRoad} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
@@ -745,6 +878,48 @@ export async function suggestPickupPoint(
   }
 }
 
+/**
+ * Snap a point to the nearest drivable road using Mapbox Directions API.
+ * Always returns snapped coordinates (unlike suggestPickupPoint which has a 50m threshold).
+ */
+export async function snapToNearestRoad(
+  lat: number,
+  lng: number,
+): Promise<{ latitude: number; longitude: number; distanceMoved: number; address: string | null }> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
+
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${lng},${lat};${lng + 0.001},${lat + 0.001}?access_token=${token}&geometries=geojson`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
+    const data = await res.json();
+    const waypoint = data?.waypoints?.[0];
+    if (!waypoint) return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
+
+    const [snappedLng, snappedLat] = waypoint.location;
+    const distanceMoved = haversineDistance(
+      { latitude: lat, longitude: lng },
+      { latitude: snappedLat, longitude: snappedLng },
+    );
+
+    const address = distanceMoved > 10 ? await reverseGeocode(snappedLat, snappedLng) : null;
+
+    return {
+      latitude: snappedLat,
+      longitude: snappedLng,
+      distanceMoved,
+      address,
+    };
+  } catch {
+    return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
+  }
+}
+
 /* ─── Cuban Intersection Search ─── */
 
 /**
@@ -766,6 +941,7 @@ export async function findIntersection(
     // Only replaces vowels (not consonants) to keep regex specific enough
     const esc = (s: string) => s
       .replace(/[\\"/]/g, '')
+      .replace(/[();\[\]~^$*+?{}|]/g, '') // Strip Overpass QL / regex metacharacters
       .replace(/[aáàâãä]/gi, '.')
       .replace(/[eéèêë]/gi, '.')
       .replace(/[iíìîï]/gi, '.')
@@ -1010,7 +1186,7 @@ export async function searchAddress(
         longitude: parseFloat(item.lon as string),
         displayName,
       };
-    });
+    }).filter(r => isFinite(r.latitude) && isFinite(r.longitude));
   } catch {
     return [];
   }
@@ -1184,20 +1360,22 @@ export async function searchOverpassPOI(
     const { latitude: lat, longitude: lng } = proximity;
     const radius = 20000; // 20km search radius
 
-    // Escape query for Overpass regex
-    const escaped = normalized
+    // Escape query for Overpass regex — strip QL metacharacters to prevent injection
+    const escOverpass = (s: string) => s
       .replace(/[\\"/]/g, '')
+      .replace(/[();\[\]~^$*+?{}|]/g, '')
       .replace(/[aáàâãä]/gi, '.')
       .replace(/[eéèêë]/gi, '.')
       .replace(/[iíìîï]/gi, '.')
       .replace(/[oóòôõö]/gi, '.')
       .replace(/[uúùûü]/gi, '.')
       .replace(/ñ/gi, '.');
+    const escaped = escOverpass(normalized);
 
     let overpassQuery: string;
     if (tagFilter) {
       // Tag search + name search union: covers both tagged POIs and name matches
-      const nameWords = words.filter(w => !OVERPASS_POI_TAGS[w]);
+      const nameWords = words.filter(w => !OVERPASS_POI_TAGS[w]).map(escOverpass);
       const nameFilter = nameWords.length > 0
         ? `["name"~"${nameWords.join('|')}",i]`
         : '["name"]';
@@ -1211,15 +1389,19 @@ export async function searchOverpassPOI(
     const encoded = encodeURIComponent(overpassQuery);
     const abortCtrl = new AbortController();
     const fetchTimeout = setTimeout(() => abortCtrl.abort(), 10000);
-    const res = await Promise.any(
-      OVERPASS_MIRRORS_GEO.map(m =>
-        fetch(`${m}?data=${encoded}`, { signal: abortCtrl.signal }).then(r => {
-          if (!r.ok) throw new Error('fail');
-          return r.json();
-        })
-      ),
-    );
-    clearTimeout(fetchTimeout);
+    let res: any;
+    try {
+      res = await Promise.any(
+        OVERPASS_MIRRORS_GEO.map(m =>
+          fetch(`${m}?data=${encoded}`, { signal: abortCtrl.signal }).then(r => {
+            if (!r.ok) throw new Error('fail');
+            return r.json();
+          })
+        ),
+      );
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
 
     if (!res?.elements?.length) return [];
 
@@ -1262,6 +1444,7 @@ export async function searchPoisSupabase(
   query: string,
   proximity: { latitude: number; longitude: number } | null = null,
   limit = 10,
+  externalSignal?: AbortSignal,
 ): Promise<SearchBoxResult[]> {
   try {
     const supabaseUrl =
@@ -1281,6 +1464,11 @@ export async function searchPoisSupabase(
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
+    // Abort internal controller when external signal fires
+    if (externalSignal) {
+      if (externalSignal.aborted) { clearTimeout(timeout); return []; }
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
     const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_pois`, {
       method: 'POST',
       headers: {
@@ -1307,6 +1495,72 @@ export async function searchPoisSupabase(
       source: 'supabase' as const,
       specificity: computeSpecificity(r.name as string),
     }));
+  } catch {
+    return [];
+  }
+}
+
+/* ─── Viewport-Based POI Fetching ─── */
+
+export interface ViewportPoi {
+  id: number;
+  name: string;
+  category: string;
+  subcategory: string;
+  lat: number;
+  lng: number;
+  address: string | null;
+  importance: number;
+}
+
+export async function fetchPoisInViewport(
+  bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number },
+  zoom: number,
+  signal?: AbortSignal,
+): Promise<ViewportPoi[]> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return [];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    if (signal) {
+      if (signal.aborted) { clearTimeout(timeout); return []; }
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/pois_in_viewport`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        min_lng: bounds.minLng,
+        min_lat: bounds.minLat,
+        max_lng: bounds.maxLng,
+        max_lat: bounds.maxLat,
+        zoom_level: Math.floor(zoom),
+        max_results: 1500,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data as ViewportPoi[];
   } catch {
     return [];
   }

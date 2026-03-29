@@ -17,6 +17,7 @@ async function suggestCrossStreets(
 ): Promise<string[]> {
   const esc = (s: string) => s
     .replace(/[\\"/]/g, '')
+    .replace(/[();\[\]~^$*+?{}|]/g, '') // Strip Overpass QL / regex metacharacters
     .replace(/[aáàâãä]/gi, '.')
     .replace(/[eéèêë]/gi, '.')
     .replace(/[iíìîï]/gi, '.')
@@ -26,17 +27,19 @@ async function suggestCrossStreets(
 
   const mainEsc = esc(mainStreet);
   const { latitude: lat, longitude: lng } = proximity;
-  // Find all highway ways near the main street, then get cross streets
   const query = `[out:json][timeout:3];way["name"~"${mainEsc}",i]["highway"](around:2000,${lat},${lng})->.main;way(around.main:5)["highway"]["name"];out tags;`;
 
   const encoded = encodeURIComponent(query);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const res = await Promise.any(
-      OVERPASS_MIRRORS.map(m => fetch(`${m}?data=${encoded}`).then(r => {
+      OVERPASS_MIRRORS.map(m => fetch(`${m}?data=${encoded}`, { signal: controller.signal }).then(r => {
         if (!r.ok) throw new Error('fail');
         return r.json();
       }))
     );
+    clearTimeout(timeout);
     if (!res?.elements?.length) return [];
     const mainLower = mainStreet.toLowerCase();
     const names = res.elements
@@ -54,7 +57,7 @@ interface AddressResult {
   longitude: number;
   place_name: string;
   category?: string;
-  source?: 'searchbox' | 'nominatim' | 'overpass' | 'supabase';
+  source?: 'searchbox' | 'nominatim' | 'supabase';
   specificity?: number;
 }
 
@@ -214,7 +217,7 @@ function scoreResult(
   }
 
   // Source priority (10% weight)
-  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'supabase' ? 0.9 : result.source === 'overpass' ? 0.8 : 0.5;
+  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'supabase' ? 0.9 : 0.5;
 
   return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
 }
@@ -247,13 +250,30 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   const listId = useRef(`address-listbox-${Math.random().toString(36).slice(2, 9)}`).current;
   const mapboxCacheRef = useRef<Map<string, AddressResult[]>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
+  const isSelectingRef = useRef(false);
   const [recentAddresses, setRecentAddresses] = useState<AddressResult[]>([]);
 
-  // Load recent addresses from localStorage on mount
+  // Clear Mapbox cache when proximity changes (results are location-dependent)
+  useEffect(() => {
+    mapboxCacheRef.current.clear();
+  }, [proximity?.latitude, proximity?.longitude]);
+
+  // Load recent addresses from localStorage on mount (with validation)
   useEffect(() => {
     try {
       const stored = localStorage.getItem('tricigo_recent_addresses');
-      if (stored) setRecentAddresses(JSON.parse(stored));
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentAddresses(parsed.filter((r: unknown): r is AddressResult => {
+            if (!r || typeof r !== 'object') return false;
+            const x = r as Record<string, unknown>;
+            return typeof x.latitude === 'number' && isFinite(x.latitude as number)
+              && typeof x.longitude === 'number' && isFinite(x.longitude as number)
+              && typeof x.place_name === 'string';
+          }));
+        }
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -291,13 +311,12 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     }
   }, [activeIndex]);
 
-  async function searchNominatimEnhanced(q: string, prox?: { latitude: number; longitude: number }): Promise<AddressResult[]> {
+  async function searchNominatimEnhanced(q: string, prox?: { latitude: number; longitude: number }, signal?: AbortSignal): Promise<AddressResult[]> {
     try {
-      const viewbox = prox
-        ? `${prox.longitude - 0.15},${prox.latitude - 0.15},${prox.longitude + 0.15},${prox.latitude + 0.15}`
-        : '-82.6,22.9,-82.1,23.3'; // Havana metro area
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=8&viewbox=${viewbox}&bounded=1&addressdetails=1&namedetails=1&extratags=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      // Use all-Cuba viewbox — Nominatim still filters by countrycodes=cu
+      const viewbox = '-84.95,19.8,-74.13,23.3'; // All Cuba
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=8&viewbox=${viewbox}&bounded=0&addressdetails=1&namedetails=1&extratags=1`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es' }, signal });
       if (!res.ok) return [];
       const data = await res.json();
       return data.map((item: any) => {
@@ -337,7 +356,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         longitude: r.longitude,
         place_name: r.place_name,
         category: r.category,
-        source: r.source,
+        source: (r.source === 'overpass' ? 'nominatim' : r.source) as AddressResult['source'],
         specificity: r.specificity,
       }));
       mapboxCacheRef.current.set(q, items);
@@ -406,7 +425,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       // All 3 sources in parallel (Supabase replaces Overpass — instant, any query)
       const [searchBoxSettled, supabaseSettled, nominatimSettled] = await Promise.allSettled([
         fetchSearchBox(q, controller.signal),
-        searchPoisSupabase(q, proximity ?? null, 10).then(items =>
+        searchPoisSupabase(q, proximity ?? null, 10, controller.signal).then(items =>
           items.map(r => ({
             address: r.full_address || r.address,
             latitude: r.latitude,
@@ -417,7 +436,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             specificity: r.specificity,
           }))
         ),
-        searchNominatimEnhanced(q, proximity),
+        searchNominatimEnhanced(q, proximity, controller.signal),
       ]);
       if (searchIdRef.current !== thisSearchId) return;
 
@@ -433,17 +452,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         ...nominatimItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
       ];
 
-      // Filter out results too far from proximity (max 30km)
-      const MAX_DISTANCE = 30000;
-      const filtered = proximity
-        ? allItems.filter(r => {
-            const dist = haversineDistance(
-              { latitude: r.latitude, longitude: r.longitude },
-              { latitude: proximity.latitude, longitude: proximity.longitude },
-            );
-            return dist <= MAX_DISTANCE;
-          })
-        : allItems;
+      // No distance filter here — Mapbox already filters by country=cu
+      // Ranking by proximity is handled later in scoreResult()
+      const filtered = allItems;
 
       // Deduplicate: group by name similarity + spatial proximity
       const deduped: AddressResult[] = [];
@@ -500,16 +511,8 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         });
       }
 
-      // Hard distance filter: remove anything > 30km from proximity (safety net)
-      const prox = proximity || { latitude: 23.1136, longitude: -82.3666 }; // Default: Havana
-      merged = merged.filter(r => {
-        if (!r.latitude || !r.longitude) return false;
-        const d = haversineDistance(
-          { latitude: r.latitude, longitude: r.longitude },
-          { latitude: prox.latitude, longitude: prox.longitude },
-        );
-        return d <= 30000;
-      });
+      // Filter out invalid coordinates only — no distance limit (Cuba-wide app)
+      merged = merged.filter(r => r.latitude && r.longitude && isFinite(r.latitude) && isFinite(r.longitude));
 
       const initial = merged.slice(0, 7);
       setResults(initial);
@@ -579,11 +582,13 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }
 
   async function handleSelect(result: AddressResult) {
+    if (isSelectingRef.current) return;
+    isSelectingRef.current = true;
     setQuery(result.place_name); // Show immediately
     setIsOpen(false);
     setActiveIndex(-1);
 
-    // If this is a Cuban address suggestion, try to resolve exact intersection coords
+    // If this is a Cuban address suggestion with "e/" pattern, resolve exact intersection coords
     const parsed = parseCubanAddress(result.place_name);
     if (parsed && !parsed.partial && parsed.cross1 && proximity) {
       try {
@@ -598,27 +603,18 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           };
           saveToRecent(intersectionResult);
           onSelect(intersectionResult);
+          isSelectingRef.current = false;
           return;
         }
       } catch { /* fallback below */ }
     }
 
-    // Enrich with cross-streets for non-Cuban addresses
-    if (enrichAddress) {
-      try {
-        const enriched = await enrichAddress(result.latitude, result.longitude);
-        if (enriched) {
-          setQuery(enriched);
-          const enrichedResult = { ...result, address: enriched, place_name: enriched };
-          saveToRecent(enrichedResult);
-          onSelect(enrichedResult);
-          return;
-        }
-      } catch { /* fallback to original */ }
-    }
-
+    // For non-Cuban addresses: pass through immediately (no blocking enrichment).
+    // The booking page will do background reverseGeocode to add cross-streets.
+    // This prevents the bug where enriched address text didn't match pin coordinates.
     saveToRecent(result);
     onSelect(result);
+    isSelectingRef.current = false;
   }
 
   function handleClear() {
@@ -644,7 +640,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         break;
       case 'Enter':
         e.preventDefault();
-        if (activeIndex >= 0) {
+        if (activeIndex >= 0 && results[activeIndex]) {
           handleSelect(results[activeIndex]);
         } else if (results.length > 0) {
           handleSelect(results[0]);
