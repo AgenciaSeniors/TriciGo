@@ -1202,15 +1202,15 @@ export default function BookPage() {
                   {promoResult?.valid && promoResult.discount > 0 ? (
                     <>
                       <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-tertiary)', textDecoration: 'line-through', marginRight: '0.5rem' }}>
-                        {formatCUP(selectedEstimate.estimated_fare_cup)}
+                        {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
                       </span>
                       <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#22c55e' }}>
-                        {formatCUP(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                        {formatCUP(Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoResult.discount, 0))}
                       </span>
                     </>
                   ) : (
                     <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>
-                      {formatCUP(selectedEstimate.estimated_fare_cup)}
+                      {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
                     </span>
                   )}
                 </div>
@@ -1219,15 +1219,15 @@ export default function BookPage() {
                 className="booking-fare-details"
                 style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}
               >
-                <span>{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</span>
-                <span>{Math.round(selectedEstimate.estimated_duration_s / 60)} min</span>
+                <span>{((selectedEstimate?.estimated_distance_m ?? 0) / 1000).toFixed(1)} km</span>
+                <span>{Math.round((selectedEstimate?.estimated_duration_s ?? 0) / 60)} min</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  ~${(selectedEstimate.estimated_fare_cup / 300).toFixed(2)} USD
+                  ~${((selectedEstimate?.estimated_fare_cup ?? 0) / 300).toFixed(2)} USD
                 </span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  {'\u2248'} {formatCUP(selectedEstimate.estimated_fare_cup)}
+                  {'\u2248'} {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
                 </span>
-                {selectedEstimate.surge_multiplier > 1 && (
+                {(selectedEstimate?.surge_multiplier ?? 0) > 1 && (
                   <span
                     style={{
                       color: 'white',
@@ -1238,19 +1238,19 @@ export default function BookPage() {
                       fontSize: '0.7rem',
                     }}
                   >
-                    {selectedEstimate.surge_multiplier.toFixed(1)}x {t('book.surge_active')}
+                    {(selectedEstimate?.surge_multiplier ?? 0).toFixed(1)}x {t('book.surge_active')}
                   </span>
                 )}
               </div>
-              {selectedEstimate.per_km_rate_cup > 0 && (
+              {(selectedEstimate?.per_km_rate_cup ?? 0) > 0 && (
                 <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                   {t('book.per_km_rate', {
-                    rate: formatCUP(selectedEstimate.per_km_rate_cup),
+                    rate: formatCUP(selectedEstimate?.per_km_rate_cup ?? 0),
                   })}
                 </p>
               )}
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#bbb' }}>
-                1 USD = {selectedEstimate.exchange_rate_usd_cup} CUP
+                1 USD = {selectedEstimate?.exchange_rate_usd_cup ?? 0} CUP
               </p>
 
               {/* Payment method */}
@@ -1446,7 +1446,7 @@ export default function BookPage() {
               {isRequesting
                 ? t('book.requesting')
                 : selectedEstimate
-                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatCUP(promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup)}`
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatCUP(promoResult?.valid ? Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - (promoResult.discount || 0), 0) : (selectedEstimate?.estimated_fare_cup ?? 0))}`
                   : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>
@@ -1477,7 +1477,7 @@ export default function BookPage() {
             {isRequesting
               ? t('book.requesting')
               : selectedEstimate
-                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}`
                 : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
             }
           </button>

@@ -248,7 +248,7 @@ export default function BookingMap({
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const userLocMarkerRef = useRef<mapboxgl.Marker | null>(null);
-  const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const vehicleMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const presetMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const poiAbortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<{ minLng: number; minLat: number; maxLng: number; maxLat: number } | null>(null);
@@ -530,21 +530,43 @@ export default function BookingMap({
     map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 800 });
   }, [pickup, dropoff, mapReady]);
 
-  /* ── Nearby vehicle markers ── */
+  /* ── Nearby vehicle markers (in-place update to prevent drift on zoom) ── */
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
-    // Remove old vehicle markers
-    vehicleMarkersRef.current.forEach((m) => m.remove());
-    vehicleMarkersRef.current = [];
+    const map = mapRef.current;
+    const existing = vehicleMarkersRef.current;
+    const currentIds = new Set(nearbyVehicles.map(v => v.driver_profile_id));
 
+    // Remove markers for vehicles no longer nearby
+    existing.forEach((marker, id) => {
+      if (!currentIds.has(id)) {
+        marker.remove();
+        existing.delete(id);
+      }
+    });
+
+    // Update existing or create new markers
     nearbyVehicles.forEach((v) => {
-      const marker = new mapboxgl.Marker({
-        element: createVehicleMarkerEl(v.vehicle_type, v.heading, v.eta_seconds),
-        anchor: 'center',
-      })
-        .setLngLat([v.longitude, v.latitude])
-        .addTo(mapRef.current!);
-      vehicleMarkersRef.current.push(marker);
+      const id = v.driver_profile_id;
+      const prev = existing.get(id);
+      if (prev) {
+        // Update position in-place (no DOM destroy/recreate)
+        prev.setLngLat([v.longitude, v.latitude]);
+        // Update heading rotation on the icon div
+        const iconDiv = prev.getElement().firstElementChild as HTMLElement | null;
+        if (iconDiv) {
+          iconDiv.style.transform = `rotate(${v.heading ?? 0}deg)`;
+        }
+      } else {
+        // New vehicle — create marker
+        const marker = new mapboxgl.Marker({
+          element: createVehicleMarkerEl(v.vehicle_type, v.heading, v.eta_seconds),
+          anchor: 'center',
+        })
+          .setLngLat([v.longitude, v.latitude])
+          .addTo(map);
+        existing.set(id, marker);
+      }
     });
   }, [nearbyVehicles, mapReady]);
 
