@@ -89,6 +89,7 @@ export default function BookPage() {
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
   const [allEstimates, setAllEstimates] = useState<Record<string, FareEstimate | null>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
+  const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
   const selectedEstimate = serviceType === 'mensajeria'
     ? allEstimates[deliveryVehicle] || null
     : allEstimates[serviceType] || null;
@@ -126,7 +127,6 @@ export default function BookPage() {
   const [insuranceSelected, setInsuranceSelected] = useState(false);
 
   /* ─── Delivery state ─── */
-  const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
   const [deliveryDetails, setDeliveryDetails] = useState({
     recipient_name: '',
     recipient_phone: '',
