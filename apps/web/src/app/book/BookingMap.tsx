@@ -248,7 +248,7 @@ export default function BookingMap({
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const userLocMarkerRef = useRef<mapboxgl.Marker | null>(null);
-  const vehicleMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  // vehicleMarkersRef removed — vehicles now use GeoJSON source + symbol layer
   const presetMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const poiAbortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<{ minLng: number; minLat: number; maxLng: number; maxLat: number } | null>(null);
@@ -530,44 +530,68 @@ export default function BookingMap({
     map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 800 });
   }, [pickup, dropoff, mapReady]);
 
-  /* ── Nearby vehicle markers (in-place update to prevent drift on zoom) ── */
+  /* ── Nearby vehicle markers (GeoJSON source + symbol layer for rock-solid positioning) ── */
   useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
     const map = mapRef.current;
-    const existing = vehicleMarkersRef.current;
-    const currentIds = new Set(nearbyVehicles.map(v => v.driver_profile_id));
+    if (!map || !mapReady) return;
 
-    // Remove markers for vehicles no longer nearby
-    existing.forEach((marker, id) => {
-      if (!currentIds.has(id)) {
-        marker.remove();
-        existing.delete(id);
-      }
-    });
+    // Initialize source + layer on first run
+    if (!map.getSource('nearby-vehicles')) {
+      map.addSource('nearby-vehicles', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
 
-    // Update existing or create new markers
-    nearbyVehicles.forEach((v) => {
-      const id = v.driver_profile_id;
-      const prev = existing.get(id);
-      if (prev) {
-        // Update position in-place (no DOM destroy/recreate)
-        prev.setLngLat([v.longitude, v.latitude]);
-        // Update heading rotation on the icon div
-        const iconDiv = prev.getElement().firstElementChild as HTMLElement | null;
-        if (iconDiv) {
-          iconDiv.style.transform = `rotate(${v.heading ?? 0}deg)`;
+      // Load vehicle images if not loaded
+      const images: [string, string][] = [
+        ['vehicle-triciclo', '/images/vehicles/markers/triciclo@2x.png'],
+        ['vehicle-moto', '/images/vehicles/markers/moto@2x.png'],
+        ['vehicle-auto', '/images/vehicles/markers/auto@2x.png'],
+        ['vehicle-confort', '/images/vehicles/markers/confort@2x.png'],
+      ];
+      images.forEach(([name, url]) => {
+        if (!map.hasImage(name)) {
+          const img = new Image(80, 80);
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            if (!map.hasImage(name)) map.addImage(name, img);
+          };
+          img.src = url;
         }
-      } else {
-        // New vehicle — create marker
-        const marker = new mapboxgl.Marker({
-          element: createVehicleMarkerEl(v.vehicle_type, v.heading, v.eta_seconds),
-          anchor: 'center',
-        })
-          .setLngLat([v.longitude, v.latitude])
-          .addTo(map);
-        existing.set(id, marker);
-      }
-    });
+      });
+
+      // Vehicle icon layer
+      map.addLayer({
+        id: 'nearby-vehicles-layer',
+        type: 'symbol',
+        source: 'nearby-vehicles',
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.3, 14, 0.45, 18, 0.55],
+          'icon-rotate': ['get', 'heading'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      });
+    }
+
+    // Update data
+    const features = nearbyVehicles.map((v) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [v.longitude, v.latitude] },
+      properties: {
+        id: v.driver_profile_id,
+        icon: `vehicle-${v.vehicle_type === 'auto' ? 'auto' : v.vehicle_type}`,
+        heading: v.heading ?? 0,
+        vehicle_type: v.vehicle_type,
+      },
+    }));
+
+    const src = map.getSource('nearby-vehicles') as mapboxgl.GeoJSONSource | undefined;
+    if (src) {
+      src.setData({ type: 'FeatureCollection', features });
+    }
   }, [nearbyVehicles, mapReady]);
 
   /* ── POI viewport fetch ── */
