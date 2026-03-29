@@ -71,7 +71,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!i18nInitialized) {
-      initI18n();
+      // Restore saved language from localStorage (set in profile/settings)
+      const savedLang = typeof window !== 'undefined'
+        ? localStorage.getItem('tricigo_language') ?? undefined
+        : undefined;
+      initI18n(savedLang);
+      if (savedLang) {
+        document.documentElement.lang = savedLang;
+      }
       i18nInitialized = true;
       setReady(true);
     }
