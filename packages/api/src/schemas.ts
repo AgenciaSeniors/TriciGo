@@ -7,7 +7,7 @@ export const cubaLatSchema = z.number().min(19.5).max(23.5);
 export const cubaLngSchema = z.number().min(-85.0).max(-74.0);
 
 // Enums
-export const serviceTypeSchema = z.enum(['triciclo_basico', 'triciclo_premium', 'moto_standard', 'auto_standard', 'mensajeria']);
+export const serviceTypeSchema = z.enum(['triciclo_basico', 'triciclo_premium', 'triciclo_cargo', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria']);
 export const paymentMethodSchema = z.enum(['cash', 'tricicoin', 'mixed', 'corporate']);
 
 // Ride schemas
@@ -37,6 +37,19 @@ export const createRideSchema = z.object({
   insurance_premium_cup: z.number().nonnegative().optional(),
   rider_preferences: z.record(z.unknown()).optional(),
   ride_mode: z.enum(['passenger', 'cargo']).optional(),
+  delivery_details: z.object({
+    package_description: z.string().min(1).max(1000),
+    recipient_name: z.string().min(1).max(200),
+    recipient_phone: z.string().min(4).max(30),
+    estimated_weight_kg: z.number().positive().max(1000).optional().nullable(),
+    special_instructions: z.string().max(1000).optional().nullable(),
+    package_category: z.string().max(50).optional().nullable(),
+    package_length_cm: z.number().positive().optional().nullable(),
+    package_width_cm: z.number().positive().optional().nullable(),
+    package_height_cm: z.number().positive().optional().nullable(),
+    client_accompanies: z.boolean().optional(),
+    delivery_vehicle_type: z.string().max(50).optional().nullable(),
+  }).optional(),
 });
 
 // Wallet schemas

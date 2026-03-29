@@ -109,9 +109,11 @@ export function DriverTripView() {
   const [nearWaypoint, setNearWaypoint] = useState(false);
   // DE-2.2: Pulsing button near dropoff
   const [nearDropoff, setNearDropoff] = useState(false);
-  // Delivery photo state
+  // Delivery photo state (2-photo flow: pickup + delivery)
+  const [pickupPhotoUploaded, setPickupPhotoUploaded] = useState(false);
   const [deliveryPhotoUploaded, setDeliveryPhotoUploaded] = useState(false);
   const isDeliveryRide = activeTrip?.ride_mode === 'cargo';
+  const needsPickupPhoto = isDeliveryRide && activeTrip?.status === 'arrived_at_pickup' && !pickupPhotoUploaded;
   const needsDeliveryPhoto = isDeliveryRide && activeTrip?.status === 'in_progress' && !deliveryPhotoUploaded;
   const lastAdvancePressRef = useRef(0);
   const nearDropoffTrackedRef = useRef(false);
@@ -785,10 +787,22 @@ export function DriverTripView() {
           />
         )}
 
+        {/* Pickup photo required when arriving at pickup for cargo ride */}
+        {needsPickupPhoto && (
+          <DeliveryPhotoSheet
+            rideId={activeTrip.id}
+            phase="pickup"
+            onPhotoUploaded={() => {
+              setPickupPhotoUploaded(true);
+            }}
+          />
+        )}
+
         {/* Delivery photo required before completing a cargo ride */}
         {needsDeliveryPhoto && !nextWaypoint && (
           <DeliveryPhotoSheet
             rideId={activeTrip.id}
+            phase="delivery"
             onPhotoUploaded={() => {
               setDeliveryPhotoUploaded(true);
               // Auto-advance to complete after photo upload
@@ -798,7 +812,7 @@ export function DriverTripView() {
         )}
 
         {/* Main action button — color-coded by phase (hide "Finalizar" while pending waypoints or needing delivery photo) */}
-        {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && !needsDeliveryPhoto && (
+        {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && !needsDeliveryPhoto && !needsPickupPhoto && (
           <Animated.View style={{ transform: [{ scale: nearDropoff ? pulseAnim : 1 }] }}>
             <Button
               title={actionLabel}

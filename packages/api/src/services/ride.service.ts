@@ -45,6 +45,7 @@ import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
 import { AuthError, ValidationError, ForbiddenError } from '../errors';
+import { deliveryService } from './delivery.service';
 
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
@@ -72,6 +73,19 @@ export interface CreateRideParams {
   insurance_premium_cup?: number;
   rider_preferences?: RidePreferences;
   ride_mode?: 'passenger' | 'cargo';
+  delivery_details?: {
+    package_description: string;
+    recipient_name: string;
+    recipient_phone: string;
+    estimated_weight_kg?: number | null;
+    special_instructions?: string | null;
+    package_category?: string | null;
+    package_length_cm?: number | null;
+    package_width_cm?: number | null;
+    package_height_cm?: number | null;
+    client_accompanies?: boolean;
+    delivery_vehicle_type?: string | null;
+  };
 }
 
 export const rideService = {
@@ -421,6 +435,28 @@ export const rideService = {
       await supabase.from('ride_waypoints').insert(waypointRows);
     }
 
+    // Create delivery details if cargo ride
+    if (validParams.ride_mode === 'cargo' && validParams.delivery_details) {
+      try {
+        await deliveryService.createDeliveryDetails({
+          ride_id: rideData.id,
+          package_description: validParams.delivery_details.package_description,
+          recipient_name: validParams.delivery_details.recipient_name,
+          recipient_phone: validParams.delivery_details.recipient_phone,
+          estimated_weight_kg: validParams.delivery_details.estimated_weight_kg ?? undefined,
+          special_instructions: validParams.delivery_details.special_instructions ?? undefined,
+          package_category: validParams.delivery_details.package_category as any,
+          package_length_cm: validParams.delivery_details.package_length_cm ?? undefined,
+          package_width_cm: validParams.delivery_details.package_width_cm ?? undefined,
+          package_height_cm: validParams.delivery_details.package_height_cm ?? undefined,
+          client_accompanies: validParams.delivery_details.client_accompanies,
+          delivery_vehicle_type: validParams.delivery_details.delivery_vehicle_type as any,
+        });
+      } catch (err) {
+        logger.error('delivery_details_creation_failed', { error: (err as Error).message, rideId: rideData.id });
+      }
+    }
+
     logger.info('ride_created', {
       rideId: rideData.id,
       serviceType: validParams.service_type,
@@ -431,7 +467,7 @@ export const rideService = {
     // Find best drivers and notify them via push. If no drivers found,
     // the ride stays in 'searching' status and cancel-stale-rides will
     // handle timeout after the configured window.
-    this._matchDriversForRide(rideData, validParams).catch((err) => {
+    this._matchDriversForRide(rideData, { ...validParams, ride_mode: validParams.ride_mode }).catch((err) => {
       logger.error('ride_creation_failed', { error: (err as Error).message, rideId: rideData.id });
     });
 
@@ -444,18 +480,20 @@ export const rideService = {
    */
   async _matchDriversForRide(
     ride: Ride,
-    params: { pickup_latitude: number; pickup_longitude: number; service_type: string; pickup_address: string; dropoff_address: string },
+    params: { pickup_latitude: number; pickup_longitude: number; service_type: string; pickup_address: string; dropoff_address: string; ride_mode?: string },
   ): Promise<void> {
     try {
+      const isDelivery = params.ride_mode === 'cargo';
       const drivers = await matchingService.findBestDrivers({
         pickup_lat: params.pickup_latitude,
         pickup_lng: params.pickup_longitude,
         service_type: params.service_type,
         limit: 10,
         radius_m: 5000,
+        is_delivery: isDelivery,
       });
 
-      logger.info('drivers_matched', { rideId: ride.id, driversFound: drivers.length });
+      logger.info('drivers_matched', { rideId: ride.id, driversFound: drivers.length, isDelivery });
 
       if (drivers.length === 0) {
         console.warn('[Ride] No drivers found for ride', ride.id);
@@ -465,17 +503,32 @@ export const rideService = {
       // Notify each matched driver via push notification
       const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
       if (driverUserIds.length > 0) {
+        const title = isDelivery ? 'Nuevo envio disponible' : 'Nuevo viaje disponible';
+        const body = isDelivery
+          ? `Envio de ${params.pickup_address} a ${params.dropoff_address}`
+          : `De ${params.pickup_address} a ${params.dropoff_address}`;
         await notificationService.sendToMultipleUsers(
           driverUserIds,
-          'new_ride',
+          isDelivery ? 'new_delivery' : 'new_ride',
           {
-            title: 'Nuevo viaje disponible',
-            body: `De ${params.pickup_address} a ${params.dropoff_address}`,
-            data: { ride_id: ride.id, type: 'new_ride' },
+            title,
+            body,
+            data: { ride_id: ride.id, type: isDelivery ? 'new_delivery' : 'new_ride' },
           },
         ).catch((err) => {
           console.warn('[Ride] Failed to notify drivers:', err);
         });
+      }
+
+      // Notify the customer that their delivery request is being matched
+      if (isDelivery) {
+        try {
+          await notificationService.notifyUser(ride.customer_id, 'delivery_searching', {
+            title: 'Buscando conductor para tu envio',
+            body: `Estamos buscando un conductor para recoger tu paquete`,
+            data: { ride_id: ride.id, type: 'delivery_searching' },
+          });
+        } catch { /* non-blocking */ }
       }
     } catch (err) {
       logger.error('ride_creation_failed', { error: (err as Error).message, rideId: ride.id });

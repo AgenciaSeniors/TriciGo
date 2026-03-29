@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService } from '@tricigo/api';
+import { getSupabaseClient, rideService, deliveryService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 
@@ -32,6 +32,11 @@ export default function TrackRidePage() {
   const [error, setError] = useState<string | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [deliveryDetails, setDeliveryDetails] = useState<{
+    recipient_name?: string; recipient_phone?: string; package_description?: string;
+    package_category?: string; estimated_weight_kg?: number; client_accompanies?: boolean;
+    pickup_photo_url?: string | null; delivery_photo_url?: string | null;
+  } | null>(null);
   const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
@@ -66,6 +71,14 @@ export default function TrackRidePage() {
       clearInterval(interval);
     };
   }, [rideId, fetchRide]);
+
+  // Fetch delivery details for cargo rides
+  useEffect(() => {
+    if (!ride || ride.ride_mode !== 'cargo') return;
+    deliveryService.getDeliveryDetails(rideId).then((d) => {
+      if (d) setDeliveryDetails(d);
+    }).catch(() => { /* ignore */ });
+  }, [ride?.ride_mode, rideId]);
 
   // Subscribe to driver location broadcasts
   useEffect(() => {
@@ -121,7 +134,7 @@ export default function TrackRidePage() {
         </Link>
 
         <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '1rem', marginBottom: '0.25rem' }}>
-          {t('track.title')}
+          {ride.ride_mode === 'cargo' ? 'Seguimiento de envio' : t('track.title')}
         </h1>
         <p style={{ color: '#888', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
           ID: {ride.id.slice(0, 8)}...
@@ -213,6 +226,79 @@ export default function TrackRidePage() {
             <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{ride.dropoff_address}</span>
           </div>
         </div>
+
+        {/* Delivery details card */}
+        {ride.ride_mode === 'cargo' && deliveryDetails && (
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: '0.75rem',
+              border: '2px solid var(--primary)',
+              background: 'linear-gradient(135deg, rgba(255,77,0,0.03) 0%, rgba(255,77,0,0.08) 100%)',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>📦</span>
+              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Detalles del envio</span>
+              {deliveryDetails.client_accompanies && (
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 600, background: 'var(--primary)', color: 'white',
+                  padding: '0.15rem 0.5rem', borderRadius: '2rem', marginLeft: 'auto',
+                }}>Acompanando</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+              {deliveryDetails.recipient_name && (
+                <div><span style={{ color: '#888' }}>Destinatario:</span> <strong>{deliveryDetails.recipient_name}</strong></div>
+              )}
+              {deliveryDetails.recipient_phone && (
+                <div><span style={{ color: '#888' }}>Telefono:</span> {deliveryDetails.recipient_phone}</div>
+              )}
+              {deliveryDetails.package_description && (
+                <div><span style={{ color: '#888' }}>Paquete:</span> {deliveryDetails.package_description}</div>
+              )}
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                {deliveryDetails.package_category && (
+                  <span style={{
+                    fontSize: '0.75rem', fontWeight: 600, background: 'rgba(255,77,0,0.1)',
+                    color: 'var(--primary)', padding: '0.2rem 0.6rem', borderRadius: '2rem',
+                  }}>
+                    {deliveryDetails.package_category.replace(/_/g, ' ')}
+                  </span>
+                )}
+                {deliveryDetails.estimated_weight_kg && (
+                  <span style={{ fontSize: '0.8rem', color: '#888' }}>{deliveryDetails.estimated_weight_kg} kg</span>
+                )}
+              </div>
+            </div>
+            {/* Delivery photos */}
+            {(deliveryDetails.pickup_photo_url || deliveryDetails.delivery_photo_url) && (
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem' }}>
+                {deliveryDetails.pickup_photo_url && (
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '0.25rem' }}>Foto recogida</div>
+                    <img
+                      src={deliveryDetails.pickup_photo_url}
+                      alt="Pickup"
+                      style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #eee' }}
+                    />
+                  </div>
+                )}
+                {deliveryDetails.delivery_photo_url && (
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '0.25rem' }}>Foto entrega</div>
+                    <img
+                      src={deliveryDetails.delivery_photo_url}
+                      alt="Delivery"
+                      style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #eee' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Fare info */}
         <div

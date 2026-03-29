@@ -134,6 +134,7 @@ export default function BookPage() {
     package_category: 'paquete_pequeno' as string,
     estimated_weight_kg: '',
     special_instructions: '',
+    client_accompanies: false,
   });
 
   /* ─── Nearby vehicles state ─── */
@@ -517,6 +518,19 @@ export default function BookPage() {
 
   async function handleRequest() {
     if (!pickup || !dropoff || !selectedEstimate) return;
+
+    // Validate delivery fields
+    if (serviceType === 'mensajeria') {
+      if (!deliveryDetails.recipient_name.trim()) {
+        setError('Ingresa el nombre del destinatario');
+        return;
+      }
+      if (!deliveryDetails.recipient_phone.trim() || !/^\+?[\d\s-]{6,}$/.test(deliveryDetails.recipient_phone.trim())) {
+        setError('Ingresa un numero de telefono valido para el destinatario');
+        return;
+      }
+    }
+
     setIsRequesting(true);
     setError(null);
     try {
@@ -554,14 +568,16 @@ export default function BookPage() {
         insurance_selected: insuranceSelected,
         // Delivery details
         ...(serviceType === 'mensajeria' && {
-          ride_mode: 'cargo',
+          ride_mode: 'cargo' as const,
           delivery_details: {
             recipient_name: deliveryDetails.recipient_name,
             recipient_phone: deliveryDetails.recipient_phone,
-            package_description: deliveryDetails.package_description,
+            package_description: deliveryDetails.package_description || 'Paquete',
             package_category: deliveryDetails.package_category,
             estimated_weight_kg: parseFloat(deliveryDetails.estimated_weight_kg) || null,
             special_instructions: deliveryDetails.special_instructions || null,
+            client_accompanies: deliveryDetails.client_accompanies,
+            delivery_vehicle_type: deliveryVehicle,
           },
         }),
       });
@@ -1151,6 +1167,38 @@ export default function BookPage() {
                     style={{ ...inputBase, border: '1px solid var(--border)' }}
                   />
                 </div>
+                {/* Client accompanies toggle */}
+                <button type="button"
+                  onClick={() => setDeliveryDetails(d => ({ ...d, client_accompanies: !d.client_accompanies }))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                    padding: '0.75rem', borderRadius: '0.75rem', width: '100%',
+                    border: deliveryDetails.client_accompanies ? '2px solid var(--primary)' : '1px solid var(--border)',
+                    background: deliveryDetails.client_accompanies ? 'rgba(255,77,0,0.06)' : 'white',
+                    cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
+                  }}
+                >
+                  <div style={{
+                    width: 40, height: 22, borderRadius: 11, position: 'relative',
+                    background: deliveryDetails.client_accompanies ? 'var(--primary)' : '#ccc',
+                    transition: 'background 0.2s', flexShrink: 0,
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%', background: 'white',
+                      position: 'absolute', top: 2,
+                      left: deliveryDetails.client_accompanies ? 20 : 2,
+                      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Voy con el envio
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
+                      Acompana tu paquete sin costo adicional
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
             );

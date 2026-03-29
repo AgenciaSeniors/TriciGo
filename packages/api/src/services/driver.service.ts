@@ -18,6 +18,7 @@ import type { DriverStatus, RideStatus } from '@tricigo/types';
 import { cupToTrcCentavos, logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
+import { notificationService } from './notification.service';
 
 export const driverService = {
   /**
@@ -290,7 +291,19 @@ export const driverService = {
       .eq('id', rideId)
       .single();
     if (fetchErr) throw fetchErr;
-    return updatedRide as Ride;
+
+    const acceptedRide = updatedRide as Ride;
+
+    // 8. Notify customer — delivery-specific message
+    if (acceptedRide.ride_mode === 'cargo') {
+      notificationService.notifyUser(acceptedRide.customer_id, 'delivery_accepted', {
+        title: 'Conductor asignado a tu envio',
+        body: 'Un conductor va en camino a recoger tu paquete',
+        data: { ride_id: rideId, type: 'delivery_accepted' },
+      }).catch(() => { /* non-blocking */ });
+    }
+
+    return acceptedRide;
   },
 
   /**
@@ -322,6 +335,27 @@ export const driverService = {
       .update(updates)
       .eq('id', rideId);
     if (error) throw error;
+
+    // Delivery-specific notifications
+    const { data: rideData } = await supabase
+      .from('rides')
+      .select('customer_id, ride_mode')
+      .eq('id', rideId)
+      .single();
+    if (rideData?.ride_mode === 'cargo') {
+      const msgs: Record<string, { title: string; body: string }> = {
+        arrived_at_pickup: { title: 'Conductor en punto de recogida', body: 'El conductor llego al punto de recogida de tu paquete' },
+        in_progress: { title: 'Tu paquete esta en camino', body: 'El conductor recogio tu paquete y va en camino al destino' },
+      };
+      const msg = msgs[status];
+      if (msg) {
+        notificationService.notifyUser(rideData.customer_id, `delivery_${status}`, {
+          title: msg.title,
+          body: msg.body,
+          data: { ride_id: rideId, type: `delivery_${status}` },
+        }).catch(() => { /* non-blocking */ });
+      }
+    }
   },
 
   /**

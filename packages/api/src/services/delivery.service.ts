@@ -20,6 +20,7 @@ export interface DeliveryDetails {
   package_height_cm: number | null;
   client_accompanies: boolean;
   delivery_vehicle_type: VehicleType | null;
+  pickup_photo_url: string | null;
   delivery_photo_url: string | null;
   created_at: string;
 }
@@ -100,13 +101,27 @@ export const deliveryService = {
   },
 
   /**
-   * Upload delivery photo to Supabase Storage and update delivery_details.
-   * Called by the driver when completing a delivery ride.
+   * Update pickup photo URL (called by driver at package pickup).
    */
-  async uploadDeliveryPhoto(rideId: string, localUri: string): Promise<string> {
+  async updatePickupPhoto(rideId: string, photoUrl: string): Promise<void> {
     const supabase = getSupabaseClient();
 
-    const fileName = `delivery-${rideId}-${Date.now()}.jpg`;
+    const { error } = await supabase
+      .from('delivery_details')
+      .update({ pickup_photo_url: photoUrl })
+      .eq('ride_id', rideId);
+
+    if (error) throw new Error(error.message);
+  },
+
+  /**
+   * Upload a delivery photo to Supabase Storage.
+   * @param phase 'pickup' or 'delivery' — determines which column is updated
+   */
+  async uploadDeliveryPhoto(rideId: string, localUri: string, phase: 'pickup' | 'delivery' = 'delivery'): Promise<string> {
+    const supabase = getSupabaseClient();
+
+    const fileName = `${phase}-${rideId}-${Date.now()}.jpg`;
     const storagePath = `delivery-photos/${rideId}/${fileName}`;
 
     // Fetch the local file as blob
@@ -126,10 +141,11 @@ export const deliveryService = {
 
     const publicUrl = urlData.publicUrl;
 
-    // Update delivery_details record
+    // Update the appropriate column in delivery_details
+    const column = phase === 'pickup' ? 'pickup_photo_url' : 'delivery_photo_url';
     const { error: updateError } = await supabase
       .from('delivery_details')
-      .update({ delivery_photo_url: publicUrl })
+      .update({ [column]: publicUrl })
       .eq('ride_id', rideId);
 
     if (updateError) throw new Error(updateError.message);
