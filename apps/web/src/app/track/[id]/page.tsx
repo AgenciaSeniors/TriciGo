@@ -51,7 +51,11 @@ export default function TrackRidePage() {
 
     // Subscribe to real-time updates
     const channel = rideService.subscribeToRide(rideId, (updated) => {
-      setRide((prev) => (prev ? { ...prev, ...updated } : null));
+      setRide((prev) => {
+        if (!prev) return null;
+        // Preserve parsed GeoPoint locations — realtime sends raw WKB hex
+        return { ...prev, ...updated, pickup_location: prev.pickup_location, dropoff_location: prev.dropoff_location };
+      });
     });
 
     // Fallback polling every 10s
@@ -126,10 +130,10 @@ export default function TrackRidePage() {
         {/* Map */}
         <div style={{ marginBottom: '1.5rem' }}>
           <TrackingMap
-            pickupLat={ride.pickup_location.latitude}
-            pickupLng={ride.pickup_location.longitude}
-            dropoffLat={ride.dropoff_location.latitude}
-            dropoffLng={ride.dropoff_location.longitude}
+            pickupLat={typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0}
+            pickupLng={typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0}
+            dropoffLat={typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0}
+            dropoffLng={typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0}
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
           />

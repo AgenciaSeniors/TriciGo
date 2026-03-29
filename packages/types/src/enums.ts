@@ -39,6 +39,12 @@ export type ServiceTypeSlug =
 
 export type RideMode = 'passenger' | 'cargo';
 
+export type PackageCategory = 'documentos' | 'comida' | 'paquete_pequeno' | 'paquete_grande' | 'fragil';
+
+export const PACKAGE_CATEGORIES: PackageCategory[] = [
+  'documentos', 'comida', 'paquete_pequeno', 'paquete_grande', 'fragil',
+];
+
 export type WalletAccountType =
   | 'customer_cash'
   | 'driver_cash'

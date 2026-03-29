@@ -3,7 +3,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
@@ -228,8 +228,17 @@ export function useRideActions() {
     setLoading(true);
     setError(null);
     try {
+      // For delivery, use the vehicle type's service slug for fare calculation
+      const effectiveServiceType =
+        d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
+          ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
+          : d.serviceType;
+
+      const isDelivery = d.serviceType === 'mensajeria' || !!d.delivery.deliveryVehicleType;
+
       const ride = await rideService.createRide({
-        service_type: d.serviceType,
+        service_type: effectiveServiceType,
+        ride_mode: isDelivery ? 'cargo' : 'passenger',
         payment_method: d.paymentMethod,
         pickup_latitude: d.pickup.location.latitude,
         pickup_longitude: d.pickup.location.longitude,
@@ -258,20 +267,32 @@ export function useRideActions() {
       });
 
       // Save delivery details if mensajeria
-      if (d.serviceType === 'mensajeria' && d.delivery.packageDescription.trim()) {
+      if (d.serviceType === 'mensajeria' || d.delivery.deliveryVehicleType) {
         try {
           await deliveryService.createDeliveryDetails({
             ride_id: ride.id,
-            package_description: d.delivery.packageDescription,
+            package_description: d.delivery.packageDescription || 'Delivery',
             recipient_name: d.delivery.recipientName,
             recipient_phone: d.delivery.recipientPhone,
             estimated_weight_kg: d.delivery.estimatedWeightKg
               ? parseFloat(d.delivery.estimatedWeightKg)
               : undefined,
             special_instructions: d.delivery.specialInstructions || undefined,
+            package_category: d.delivery.packageCategory ?? undefined,
+            package_length_cm: d.delivery.packageLengthCm
+              ? parseInt(d.delivery.packageLengthCm, 10)
+              : undefined,
+            package_width_cm: d.delivery.packageWidthCm
+              ? parseInt(d.delivery.packageWidthCm, 10)
+              : undefined,
+            package_height_cm: d.delivery.packageHeightCm
+              ? parseInt(d.delivery.packageHeightCm, 10)
+              : undefined,
+            client_accompanies: d.delivery.clientAccompanies,
+            delivery_vehicle_type: d.delivery.deliveryVehicleType ?? undefined,
           });
         } catch (err) {
-          logger.error('Delivery notification failed', { error: String(err) });
+          logger.error('Delivery details creation failed', { error: String(err) });
         }
       }
 

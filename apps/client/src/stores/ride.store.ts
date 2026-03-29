@@ -10,6 +10,8 @@ import type {
   PaymentMethod,
   RideStatus,
   RidePreferences,
+  PackageCategory,
+  VehicleType,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 import { logger } from '@tricigo/utils';
@@ -49,6 +51,12 @@ interface DeliveryDraft {
   recipientPhone: string;
   estimatedWeightKg: string;
   specialInstructions: string;
+  packageCategory: PackageCategory | null;
+  packageLengthCm: string;
+  packageWidthCm: string;
+  packageHeightCm: string;
+  clientAccompanies: boolean;
+  deliveryVehicleType: VehicleType | null;
 }
 
 const defaultDelivery: DeliveryDraft = {
@@ -57,6 +65,12 @@ const defaultDelivery: DeliveryDraft = {
   recipientPhone: '',
   estimatedWeightKg: '',
   specialInstructions: '',
+  packageCategory: null,
+  packageLengthCm: '',
+  packageWidthCm: '',
+  packageHeightCm: '',
+  clientAccompanies: false,
+  deliveryVehicleType: null,
 };
 
 interface RideRequestDraft {
@@ -131,7 +145,7 @@ interface RideState {
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
   setCorporateAccount: (id: string | null) => void;
-  setDeliveryField: (field: keyof DeliveryDraft, value: string) => void;
+  setDeliveryField: (field: keyof DeliveryDraft, value: DeliveryDraft[keyof DeliveryDraft]) => void;
   addWaypoint: () => void;
   removeWaypoint: (index: number) => void;
   updateWaypoint: (index: number, address: string, location: GeoPoint) => void;

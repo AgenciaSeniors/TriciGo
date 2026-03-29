@@ -26,6 +26,7 @@ import { useInAppNavigation } from '@/hooks/useInAppNavigation';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
 import { RiderRatingSheet } from './RiderRatingSheet';
+import { DeliveryPhotoSheet } from './DeliveryPhotoSheet';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import type { RideStatus, RideWithRider } from '@tricigo/types';
 
@@ -108,6 +109,10 @@ export function DriverTripView() {
   const [nearWaypoint, setNearWaypoint] = useState(false);
   // DE-2.2: Pulsing button near dropoff
   const [nearDropoff, setNearDropoff] = useState(false);
+  // Delivery photo state
+  const [deliveryPhotoUploaded, setDeliveryPhotoUploaded] = useState(false);
+  const isDeliveryRide = activeTrip?.ride_mode === 'cargo';
+  const needsDeliveryPhoto = isDeliveryRide && activeTrip?.status === 'in_progress' && !deliveryPhotoUploaded;
   const lastAdvancePressRef = useRef(0);
   const nearDropoffTrackedRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -780,8 +785,20 @@ export function DriverTripView() {
           />
         )}
 
-        {/* Main action button — color-coded by phase (hide "Finalizar" while pending waypoints) */}
-        {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && (
+        {/* Delivery photo required before completing a cargo ride */}
+        {needsDeliveryPhoto && !nextWaypoint && (
+          <DeliveryPhotoSheet
+            rideId={activeTrip.id}
+            onPhotoUploaded={() => {
+              setDeliveryPhotoUploaded(true);
+              // Auto-advance to complete after photo upload
+              debouncedAdvanceStatus();
+            }}
+          />
+        )}
+
+        {/* Main action button — color-coded by phase (hide "Finalizar" while pending waypoints or needing delivery photo) */}
+        {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && !needsDeliveryPhoto && (
           <Animated.View style={{ transform: [{ scale: nearDropoff ? pulseAnim : 1 }] }}>
             <Button
               title={actionLabel}

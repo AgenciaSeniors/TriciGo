@@ -36,6 +36,7 @@ export const createRideSchema = z.object({
   insurance_selected: z.boolean().optional(),
   insurance_premium_cup: z.number().nonnegative().optional(),
   rider_preferences: z.record(z.unknown()).optional(),
+  ride_mode: z.enum(['passenger', 'cargo']).optional(),
 });
 
 // Wallet schemas

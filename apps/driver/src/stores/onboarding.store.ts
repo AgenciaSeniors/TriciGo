@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { VehicleType, DocumentType } from '@tricigo/types';
+import type { VehicleType, DocumentType, PackageCategory } from '@tricigo/types';
 
 interface PersonalInfoDraft {
   full_name: string;
@@ -16,6 +16,10 @@ interface VehicleDraft {
   capacity: string;
   accepts_cargo: boolean;
   max_cargo_weight_kg: string;
+  max_cargo_length_cm: string;
+  max_cargo_width_cm: string;
+  max_cargo_height_cm: string;
+  accepted_cargo_categories: PackageCategory[];
 }
 
 export interface DocumentDraft {
@@ -53,7 +57,13 @@ const INITIAL_DOCUMENTS: DocumentDraft[] = [
 
 const INITIAL_STATE = {
   personalInfo: { full_name: '', email: '' },
-  vehicle: { type: null as VehicleType | null, make: '', model: '', year: '', color: '', plate_number: '', capacity: '', accepts_cargo: false, max_cargo_weight_kg: '' },
+  vehicle: {
+    type: null as VehicleType | null,
+    make: '', model: '', year: '', color: '', plate_number: '', capacity: '',
+    accepts_cargo: false, max_cargo_weight_kg: '',
+    max_cargo_length_cm: '', max_cargo_width_cm: '', max_cargo_height_cm: '',
+    accepted_cargo_categories: [] as PackageCategory[],
+  },
   documents: INITIAL_DOCUMENTS.map((d) => ({ ...d })),
   driverProfileId: null as string | null,
 };
@@ -100,7 +110,12 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   reset: () =>
     set({
       personalInfo: { full_name: '', email: '' },
-      vehicle: { type: null, make: '', model: '', year: '', color: '', plate_number: '', capacity: '' },
+      vehicle: {
+        type: null, make: '', model: '', year: '', color: '', plate_number: '', capacity: '',
+        accepts_cargo: false, max_cargo_weight_kg: '',
+        max_cargo_length_cm: '', max_cargo_width_cm: '', max_cargo_height_cm: '',
+        accepted_cargo_categories: [],
+      },
       documents: INITIAL_DOCUMENTS.map((d) => ({ ...d })),
       driverProfileId: null,
     }),

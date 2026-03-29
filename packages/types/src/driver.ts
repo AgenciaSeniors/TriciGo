@@ -126,4 +126,8 @@ export interface NearbyVehicle {
   heading: number | null;
   vehicle_type: VehicleType;
   custom_per_km_rate_cup: number | null;
+  /** ETA from vehicle position to pickup point (seconds) */
+  eta_seconds?: number | null;
+  /** Distance from vehicle to pickup point (meters) */
+  distance_to_pickup_m?: number | null;
 }

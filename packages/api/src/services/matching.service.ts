@@ -22,6 +22,7 @@ export const matchingService = {
     service_type: string;
     limit?: number;
     radius_m?: number;
+    is_delivery?: boolean;
   }): Promise<DriverMatchResult[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('find_best_drivers', {
@@ -30,6 +31,7 @@ export const matchingService = {
       p_service_type: params.service_type,
       p_limit: params.limit ?? 5,
       p_radius_m: params.radius_m ?? 5000,
+      p_is_delivery: params.is_delivery ?? false,
     });
     if (error) throw error;
     const rows = Array.isArray(data) ? data : data ? [data] : [];

@@ -71,6 +71,7 @@ export interface CreateRideParams {
   insurance_selected?: boolean;
   insurance_premium_cup?: number;
   rider_preferences?: RidePreferences;
+  ride_mode?: 'passenger' | 'cargo';
 }
 
 export const rideService = {
@@ -378,6 +379,7 @@ export const rideService = {
         insurance_selected: validParams.insurance_selected ?? false,
         insurance_premium_cup: validParams.insurance_premium_cup ?? 0,
         rider_preferences: validParams.rider_preferences ?? null,
+        ride_mode: validParams.ride_mode ?? 'passenger',
         status: 'searching' as RideStatus,
       })
       .select()
@@ -487,7 +489,8 @@ export const rideService = {
   async getRideWithDriver(rideId: string): Promise<RideWithDriver | null> {
     const supabase = getSupabaseClient();
 
-    // Fetch the ride
+    // Fetch ride — pickup_lat/lng and dropoff_lat/lng columns are auto-synced
+    // by a trigger from the geography columns, so we read them directly.
     const { data: ride, error: rideError } = await supabase
       .from('rides')
       .select('*')
@@ -496,7 +499,11 @@ export const rideService = {
     if (rideError) throw rideError;
     if (!ride) return null;
 
-    const rideData = ride as Ride;
+    const rideData: Ride = {
+      ...(ride as Ride),
+      pickup_location: { latitude: ride.pickup_lat ?? 0, longitude: ride.pickup_lng ?? 0 },
+      dropoff_location: { latitude: ride.dropoff_lat ?? 0, longitude: ride.dropoff_lng ?? 0 },
+    };
     const result: RideWithDriver = {
       ...rideData,
       driver_user_id: null,

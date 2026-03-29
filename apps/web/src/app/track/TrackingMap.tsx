@@ -110,17 +110,34 @@ export default function TrackingMap({
   const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // Validate coordinates to prevent Mapbox NaN crash
+  // Must be real numbers, not NaN, not 0, and within plausible lat/lng ranges
+  const isValidCoord = (v: number) => typeof v === 'number' && isFinite(v) && v !== 0;
+  const hasValidCoords = isValidCoord(pickupLat) && isValidCoord(pickupLng) &&
+    isValidCoord(dropoffLat) && isValidCoord(dropoffLng);
+
   /* ── Initialize map ── */
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    if (!mapContainerRef.current || mapRef.current || !hasValidCoords) return;
 
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [pickupLng, pickupLat],
-      zoom: 13,
-      attributionControl: false,
-    });
+    // Ensure container has dimensions before initializing Mapbox
+    const container = mapContainerRef.current;
+    const { clientWidth, clientHeight } = container;
+    if (clientWidth === 0 || clientHeight === 0) return;
+
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [pickupLng, pickupLat],
+        zoom: 13,
+        attributionControl: false,
+      });
+    } catch (err) {
+      console.error('[TrackingMap] Mapbox init failed:', err);
+      return;
+    }
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
@@ -162,6 +179,10 @@ export default function TrackingMap({
       });
     });
 
+    map.on('error', (e) => {
+      console.error('[TrackingMap] Mapbox runtime error:', e.error?.message ?? e);
+    });
+
     mapRef.current = map;
 
     return () => {
@@ -169,7 +190,7 @@ export default function TrackingMap({
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasValidCoords]);
 
   /* ── Pickup marker ── */
   useEffect(() => {
@@ -270,14 +291,29 @@ export default function TrackingMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const bounds = new mapboxgl.LngLatBounds();
-    bounds.extend([pickupLng, pickupLat]);
-    bounds.extend([dropoffLng, dropoffLat]);
-    if (driverLat != null && driverLng != null) {
-      bounds.extend([driverLng, driverLat]);
+    try {
+      const bounds = new mapboxgl.LngLatBounds();
+      bounds.extend([pickupLng, pickupLat]);
+      bounds.extend([dropoffLng, dropoffLat]);
+      if (driverLat != null && driverLng != null) {
+        bounds.extend([driverLng, driverLat]);
+      }
+      map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
+    } catch (err) {
+      console.error('[TrackingMap] fitBounds failed:', err);
     }
-    map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, driverLat, driverLng, mapReady]);
+
+  if (!hasValidCoords) {
+    return (
+      <div style={{
+        width: '100%', height: 300, borderRadius: '0.75rem', background: '#f0f0f0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888',
+      }}>
+        Cargando mapa...
+      </div>
+    );
+  }
 
   return (
     <>

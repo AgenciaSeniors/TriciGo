@@ -9,6 +9,7 @@ import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Vehicle } from '@tricigo/types';
+import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 
 export default function VehicleScreen() {
   const { t } = useTranslation('common');
@@ -41,6 +42,12 @@ export default function VehicleScreen() {
         { label: t('vehicle.plate', { defaultValue: 'Placa' }), value: vehicle.plate_number },
         { label: t('vehicle.capacity', { defaultValue: 'Capacidad' }), value: `${vehicle.capacity} ${t('vehicle.passengers', { defaultValue: 'pasajeros' })}` },
         { label: t('vehicle.accepts_cargo', { defaultValue: 'Acepta carga' }), value: vehicle.accepts_cargo ? `${t('common:yes', { defaultValue: 'Sí' })} — ${vehicle.max_cargo_weight_kg ?? '?'} kg max` : t('common:no', { defaultValue: 'No' }) },
+        ...(vehicle.accepts_cargo && (vehicle.max_cargo_length_cm || vehicle.max_cargo_width_cm || vehicle.max_cargo_height_cm)
+          ? [{ label: t('vehicle.cargo_dimensions', { defaultValue: 'Dimensiones máx.' }), value: `${vehicle.max_cargo_length_cm ?? '-'} × ${vehicle.max_cargo_width_cm ?? '-'} × ${vehicle.max_cargo_height_cm ?? '-'} cm` }]
+          : []),
+        ...(vehicle.accepts_cargo && vehicle.accepted_cargo_categories?.length
+          ? [{ label: t('vehicle.cargo_categories', { defaultValue: 'Categorías' }), value: vehicle.accepted_cargo_categories.map((c) => PACKAGE_CATEGORY_LABELS[c]?.es ?? c).join(', ') }]
+          : []),
       ]
     : [];
 
