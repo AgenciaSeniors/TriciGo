@@ -252,5 +252,27 @@
     "not_found": "Post not found",
     "back_to_blog": "Back to blog",
     "loading": "Loading..."
+  },
+  "profile": {
+    "loading": "Loading...",
+    "login_prompt": "Sign in to view your profile",
+    "login_link": "Sign in",
+    "level": "Level {{level}}",
+    "menu_edit": "Edit profile",
+    "menu_settings": "Settings",
+    "menu_saved_locations": "Saved locations",
+    "menu_safety": "Safety",
+    "menu_trusted_contacts": "Trusted contacts",
+    "menu_emergency_contact": "Emergency contact",
+    "menu_ride_preferences": "Ride preferences",
+    "menu_corporate": "Corporate accounts",
+    "menu_recurring_rides": "Recurring rides",
+    "menu_referral": "Referral program",
+    "menu_help": "Help",
+    "menu_about": "About",
+    "menu_blog": "Blog",
+    "logout": "Sign out",
+    "logging_out": "Signing out...",
+    "menu_aria": "Profile menu"
   }
 }

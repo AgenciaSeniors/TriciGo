@@ -252,5 +252,27 @@
     "not_found": "Publicação não encontrada",
     "back_to_blog": "Voltar ao blog",
     "loading": "Carregando..."
+  },
+  "profile": {
+    "loading": "Carregando...",
+    "login_prompt": "Faça login para ver seu perfil",
+    "login_link": "Entrar",
+    "level": "Nível {{level}}",
+    "menu_edit": "Editar perfil",
+    "menu_settings": "Configurações",
+    "menu_saved_locations": "Locais salvos",
+    "menu_safety": "Segurança",
+    "menu_trusted_contacts": "Contatos de confiança",
+    "menu_emergency_contact": "Contato de emergência",
+    "menu_ride_preferences": "Preferências de viagem",
+    "menu_corporate": "Contas corporativas",
+    "menu_recurring_rides": "Viagens recorrentes",
+    "menu_referral": "Programa de indicação",
+    "menu_help": "Ajuda",
+    "menu_about": "Sobre",
+    "menu_blog": "Blog",
+    "logout": "Sair",
+    "logging_out": "Saindo...",
+    "menu_aria": "Menu do perfil"
   }
 }
