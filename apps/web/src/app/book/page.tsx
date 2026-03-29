@@ -100,6 +100,11 @@ export default function BookPage() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeInfo, setRouteInfo] = useState<{ distance_m: number; duration_s: number } | null>(null);
 
+  /* ─── Center pin state (for BookingMap) ─── */
+  const [centerAddress, setCenterAddress] = useState<string | null>(null);
+  const [centerAddressLoading, setCenterAddressLoading] = useState(false);
+  const [flyToTarget, setFlyToTarget] = useState<{ latitude: number; longitude: number } | null>(null);
+
   /* ─── Waypoints state (W1.1) ─── */
   const [waypoints, setWaypoints] = useState<LocationPreset[]>([]);
   const [addingWaypoint, setAddingWaypoint] = useState(false);
@@ -218,6 +223,26 @@ export default function BookPage() {
     };
   }, []);
 
+  /* ─── Reverse geocode map center for center pin ─── */
+  useEffect(() => {
+    if (selectionStep === 'done') {
+      setCenterAddress(null);
+      return;
+    }
+    setCenterAddressLoading(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const addr = await reverseGeocode(mapCenter.latitude, mapCenter.longitude);
+        setCenterAddress(addr);
+      } catch {
+        setCenterAddress(null);
+      } finally {
+        setCenterAddressLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [mapCenter.latitude, mapCenter.longitude, selectionStep]);
+
   /* ─── Geolocation ─── */
   const {
     latitude: userLat,
@@ -290,6 +315,7 @@ export default function BookPage() {
     if (dropoff) {
       loadRoute(loc, dropoff);
     }
+    setFlyToTarget({ latitude: loc.latitude, longitude: loc.longitude });
   }
 
   function handleSetDropoff(loc: LocationPreset) {
@@ -309,6 +335,15 @@ export default function BookPage() {
     // Fetch route if pickup already set
     if (pickup) {
       loadRoute(pickup, loc);
+    }
+    setFlyToTarget({ latitude: loc.latitude, longitude: loc.longitude });
+  }
+
+  function handleConfirmLocation(loc: LocationPreset) {
+    if (selectionStep === 'pickup') {
+      handleSetPickup(loc);
+    } else if (selectionStep === 'dropoff') {
+      handleSetDropoff(loc);
     }
   }
 
@@ -550,8 +585,7 @@ export default function BookPage() {
           />
 
           {/* Swap button */}
-          {pickup && dropoff && (
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '-0.25rem 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '-0.25rem 0', opacity: pickup && dropoff ? 1 : 0.3, pointerEvents: pickup && dropoff ? 'auto' : 'none' }}>
               <button
                 type="button"
                 onClick={handleSwapLocations}
@@ -577,7 +611,6 @@ export default function BookPage() {
                 ↕
               </button>
             </div>
-          )}
 
           <AddressAutocomplete
             label={t('web.address_destination', { defaultValue: 'Destino' })}
@@ -620,13 +653,17 @@ export default function BookPage() {
           nearbyVehicles={nearbyVehicles}
           selectedServiceType={serviceType}
           onMapCenterChange={setMapCenter}
+          centerAddress={centerAddress}
+          centerAddressLoading={centerAddressLoading}
+          onConfirmLocation={handleConfirmLocation}
+          flyToTarget={flyToTarget}
         />
 
         {/* ═══ Reset button ═══ */}
-        {pickup && dropoff && (
           <button
             type="button"
             onClick={handleResetMap}
+            disabled={!pickup && !dropoff}
             aria-label="Reiniciar seleccion de mapa"
             style={{
               width: '100%',
@@ -635,14 +672,14 @@ export default function BookPage() {
               borderRadius: '0.5rem',
               border: '1px solid var(--border)',
               background: 'var(--bg-card)',
-              cursor: 'pointer',
+              cursor: pickup || dropoff ? 'pointer' : 'not-allowed',
               fontSize: '0.8rem',
               color: 'var(--text-secondary)',
+              opacity: pickup || dropoff ? 1 : 0.3,
             }}
           >
             {t('book.map_reset')}
           </button>
-        )}
 
         {/* ═══ Selected locations summary ═══ */}
         {(pickup || dropoff) && (
@@ -715,8 +752,7 @@ export default function BookPage() {
               </div>
             )}
             {/* ═══ Waypoints (W1.1) ═══ */}
-            {pickup && dropoff && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', opacity: pickup && dropoff ? 1 : 0.4, pointerEvents: pickup && dropoff ? 'auto' : 'none' }}>
                 {waypoints.map((wp, idx) => (
                   <div
                     key={idx}
@@ -819,7 +855,6 @@ export default function BookPage() {
                   </div>
                 )}
               </div>
-            )}
 
             {routeInfo && (
               <div
@@ -847,12 +882,11 @@ export default function BookPage() {
           style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}
         >
           {/* ═══ Service cards with prices ═══ */}
-          {pickup && dropoff && (
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                 {t('book.choose_service', { defaultValue: 'Elige tu servicio' })}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', opacity: pickup && dropoff ? 1 : 0.5, pointerEvents: pickup && dropoff ? 'auto' : 'none' }}>
                 {SERVICE_TYPE_KEYS.map((svc) => {
                   const est = allEstimates[svc.slug];
                   const isSelected = serviceType === svc.slug;
@@ -917,7 +951,6 @@ export default function BookPage() {
                 })}
               </div>
             </div>
-          )}
 
 
           {/* ═══ Error message ═══ */}
@@ -934,16 +967,23 @@ export default function BookPage() {
           )}
 
           {/* ═══ Fare estimate card ═══ */}
-          {selectedEstimate && (
             <div
               className="booking-estimate-card"
               style={{
                 padding: '1.25rem',
                 borderRadius: '0.75rem',
-                border: '2px solid var(--primary)',
-                background: 'var(--bg-accent, rgba(255,77,0,0.05))',
+                border: selectedEstimate ? '2px solid var(--primary)' : '1px solid var(--border)',
+                background: selectedEstimate ? 'var(--bg-accent, rgba(255,77,0,0.05))' : 'var(--card-bg)',
+                opacity: selectedEstimate ? 1 : 0.6,
               }}
             >
+              {!selectedEstimate && (
+                <div style={{ textAlign: 'center', padding: '0.5rem 0', fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>
+                  Selecciona origen y destino para ver el estimado
+                </div>
+              )}
+              {selectedEstimate && (
+              <>
               <div
                 style={{
                   display: 'flex',
@@ -1056,122 +1096,95 @@ export default function BookPage() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* ═══ More options (collapsible) ═══ */}
-          {selectedEstimate && (
-            <div style={{ marginBottom: '1rem' }}>
-              <button
-                type="button"
-                onClick={() => setShowOptions(!showOptions)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  fontSize: '0.85rem',
-                  padding: '0.5rem 0',
-                }}
-              >
-                <span style={{ transform: showOptions ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>{'\u25B6'}</span>
-                {t('book.more_options', { defaultValue: 'M\u00e1s opciones' })}
-              </button>
-              {showOptions && (
-                <div style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
-                  {/* ═══ Promo code (W1.3) ═══ */}
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      C{'\u00f3'}digo promocional
-                    </label>
-                    <input
-                      type="text"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                      placeholder="Ingresa un c\u00f3digo"
-                      aria-label="Codigo promocional"
-                      style={{
-                        width: '100%',
-                        marginTop: '0.25rem',
-                        padding: '0.5rem',
-                        borderRadius: '0.5rem',
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg-card)',
-                        fontSize: '0.85rem',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-
-                  {/* ═══ Insurance toggle (W1.4) ═══ */}
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      marginTop: '0.75rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={insuranceSelected}
-                      onChange={(e) => setInsuranceSelected(e.target.checked)}
-                      aria-label="Agregar seguro de viaje"
-                    />
-                    <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
-                  </label>
-
-                  {/* ═══ Scheduled ride (W1.2) ═══ */}
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isScheduled}
-                        aria-label="Programar viaje para despues"
-                        onChange={(e) => {
-                          setIsScheduled(e.target.checked);
-                          if (!e.target.checked) setScheduleDate('');
-                        }}
-                      />
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
-                    </label>
-                    {isScheduled && (
-                      <input
-                        type="datetime-local"
-                        value={scheduleDate}
-                        onChange={(e) => setScheduleDate(e.target.value)}
-                        min={new Date().toISOString().slice(0, 16)}
-                        aria-label="Fecha y hora del viaje programado"
-                        style={{
-                          width: '100%',
-                          marginTop: '0.5rem',
-                          padding: '0.5rem',
-                          borderRadius: '0.5rem',
-                          border: '1px solid var(--border)',
-                          fontSize: '0.85rem',
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
+              </>
               )}
             </div>
-          )}
+
+          {/* ═══ Promo code (W1.3) ═══ */}
+          <div style={{ marginTop: '0.75rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Código promocional
+            </label>
+            <input
+              type="text"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              placeholder="Ingresa un código"
+              aria-label="Codigo promocional"
+              style={{
+                width: '100%',
+                marginTop: '0.25rem',
+                padding: '0.5rem',
+                borderRadius: '0.5rem',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                fontSize: '0.85rem',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* ═══ Insurance toggle (W1.4) ═══ */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginTop: '0.75rem',
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={insuranceSelected}
+              onChange={(e) => setInsuranceSelected(e.target.checked)}
+              aria-label="Agregar seguro de viaje"
+            />
+            <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
+          </label>
+
+          {/* ═══ Scheduled ride (W1.2) ═══ */}
+          <div style={{ marginTop: '0.75rem' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                aria-label="Programar viaje para despues"
+                onChange={(e) => {
+                  setIsScheduled(e.target.checked);
+                  if (!e.target.checked) setScheduleDate('');
+                }}
+              />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
+            </label>
+            {isScheduled && (
+              <input
+                type="datetime-local"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                aria-label="Fecha y hora del viaje programado"
+                style={{
+                  width: '100%',
+                  marginTop: '0.5rem',
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid var(--border)',
+                  fontSize: '0.85rem',
+                  boxSizing: 'border-box',
+                }}
+              />
+            )}
+          </div>
 
           {/* Request button with price */}
-          {selectedEstimate && (
             <button
               onClick={handleRequest}
               disabled={isRequesting || !selectedEstimate}
@@ -1181,29 +1194,29 @@ export default function BookPage() {
                 padding: '1rem',
                 borderRadius: '0.75rem',
                 border: 'none',
-                background: isRequesting ? '#ccc' : 'var(--primary)',
+                background: !selectedEstimate ? '#ccc' : isRequesting ? '#ccc' : 'var(--primary)',
                 color: 'white',
                 fontSize: '1rem',
                 fontWeight: 700,
-                cursor: isRequesting ? 'not-allowed' : 'pointer',
-                marginTop: '0.5rem',
+                cursor: !selectedEstimate || isRequesting ? 'not-allowed' : 'pointer',
+                marginTop: '0.75rem',
               }}
             >
               {isRequesting
                 ? t('book.requesting')
-                : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                : selectedEstimate
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                  : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>
-          )}
         </div>
 
 
         {/* Spacer for fixed bottom CTA on mobile */}
-        {selectedEstimate && <div style={{ height: '5rem' }} className="booking-cta-spacer" />}
+        <div style={{ height: '5rem' }} className="booking-cta-spacer" />
       </div>
 
       {/* Fixed bottom CTA on mobile */}
-      {selectedEstimate && (
         <div className="booking-cta-fixed">
           <button
             onClick={handleRequest}
@@ -1213,20 +1226,21 @@ export default function BookPage() {
               padding: '1rem',
               borderRadius: '0.75rem',
               border: 'none',
-              background: isRequesting ? '#ccc' : 'var(--primary)',
+              background: !selectedEstimate ? '#ccc' : isRequesting ? '#ccc' : 'var(--primary)',
               color: 'white',
               fontSize: '1rem',
               fontWeight: 700,
-              cursor: isRequesting ? 'not-allowed' : 'pointer',
+              cursor: !selectedEstimate || isRequesting ? 'not-allowed' : 'pointer',
             }}
           >
             {isRequesting
               ? t('book.requesting')
-              : `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+              : selectedEstimate
+                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${t(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.labelKey || '')} \u00b7 ${formatCUP(selectedEstimate.estimated_fare_cup)}`
+                : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
             }
           </button>
         </div>
-      )}
     </main>
   );
 }
