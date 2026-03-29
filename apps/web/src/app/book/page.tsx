@@ -42,10 +42,12 @@ const BookingMap = dynamic(() => import('./BookingMap'), {
   loading: () => <MapLoadingFallback />,
 });
 
-const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; labelKey: string }[] = [
-  { slug: 'triciclo_basico', abbr: 'TC', labelKey: 'book.service_triciclo' },
-  { slug: 'moto_standard', abbr: 'MT', labelKey: 'book.service_moto' },
-  { slug: 'auto_standard', abbr: 'AT', labelKey: 'book.service_auto' },
+const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; labelKey: string; descKey: string; icon: string }[] = [
+  { slug: 'triciclo_basico', abbr: 'TC', labelKey: 'book.service_triciclo', descKey: 'book.service_triciclo_desc', icon: '/images/vehicles/triciclo.png' },
+  { slug: 'moto_standard', abbr: 'MT', labelKey: 'book.service_moto', descKey: 'book.service_moto_desc', icon: '/images/vehicles/moto.png' },
+  { slug: 'auto_standard', abbr: 'AT', labelKey: 'book.service_auto', descKey: 'book.service_auto_desc', icon: '/images/vehicles/auto.png' },
+  { slug: 'auto_confort', abbr: 'CF', labelKey: 'book.service_confort', descKey: 'book.service_confort_desc', icon: '/images/vehicles/confort.png' },
+  { slug: 'mensajeria', abbr: 'DL', labelKey: 'book.service_mensajeria', descKey: 'book.service_mensajeria_desc', icon: '/images/vehicles/mensajeria.png' },
 ];
 
 type SelectionStep = 'pickup' | 'dropoff' | 'done';
@@ -913,15 +915,17 @@ export default function BookPage() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ fontSize: '1.5rem' }}>
-                          {svc.slug.includes('triciclo') ? '\u{1F6FA}' : svc.slug.includes('moto') ? '\u{1F3CD}\uFE0F' : '\u{1F697}'}
-                        </span>
+                        <img
+                          src={svc.icon}
+                          alt={t(svc.labelKey)}
+                          style={{ width: 40, height: 40, objectFit: 'contain' }}
+                        />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
                             {t(svc.labelKey)}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            {svc.slug.includes('triciclo') ? 'Económico' : svc.slug.includes('moto') ? 'Rápido' : 'Cómodo'}
+                            {t(svc.descKey)}
                             {pickupEta != null && (
                               <span style={{ color: '#16a34a', fontWeight: 600, marginLeft: 6 }}>
                                 · {pickupEta} min
@@ -1124,24 +1128,6 @@ export default function BookPage() {
             />
           </div>
 
-          {/* ═══ Insurance toggle (W1.4) ═══ */}
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginTop: '0.75rem',
-              cursor: 'pointer',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={insuranceSelected}
-              onChange={(e) => setInsuranceSelected(e.target.checked)}
-              aria-label="Agregar seguro de viaje"
-            />
-            <span style={{ fontSize: '0.85rem' }}>Seguro de viaje (+$0.50 USD)</span>
-          </label>
 
           {/* ═══ Scheduled ride (W1.2) ═══ */}
           <div style={{ marginTop: '0.75rem' }}>
