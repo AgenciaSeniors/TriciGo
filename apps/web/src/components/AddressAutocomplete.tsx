@@ -414,7 +414,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           setLoading(false);
           return;
         }
-        // Cuban search failed — fall through to Mapbox as backup
+        // Cuban intersection lookup failed — try searching by main street name instead
+        // This gives contextual results rather than garbage from searching "X entre Y y Z"
+        q = cubanParsed.main;
       }
 
       // ─── PATH 3: NORMAL SEARCH — Search Box + Supabase + Nominatim in parallel ───

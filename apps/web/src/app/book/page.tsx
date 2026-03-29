@@ -123,6 +123,16 @@ export default function BookPage() {
   /* ─── Insurance state (W1.4) ─── */
   const [insuranceSelected, setInsuranceSelected] = useState(false);
 
+  /* ─── Delivery state ─── */
+  const [deliveryDetails, setDeliveryDetails] = useState({
+    recipient_name: '',
+    recipient_phone: '',
+    package_description: '',
+    package_category: 'paquete_pequeno' as string,
+    estimated_weight_kg: '',
+    special_instructions: '',
+  });
+
   /* ─── Nearby vehicles state ─── */
   const [nearbyVehicles, setNearbyVehicles] = useState<NearbyVehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
@@ -367,6 +377,7 @@ export default function BookPage() {
     setPromoCode('');
     setPromoResult(null);
     setInsuranceSelected(false);
+    setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '' });
   }
 
   function handleSwapLocations() {
@@ -538,6 +549,18 @@ export default function BookPage() {
         }),
         // W1.4: Insurance
         insurance_selected: insuranceSelected,
+        // Delivery details
+        ...(serviceType === 'mensajeria' && {
+          ride_mode: 'cargo',
+          delivery_details: {
+            recipient_name: deliveryDetails.recipient_name,
+            recipient_phone: deliveryDetails.recipient_phone,
+            package_description: deliveryDetails.package_description,
+            package_category: deliveryDetails.package_category,
+            estimated_weight_kg: parseFloat(deliveryDetails.estimated_weight_kg) || null,
+            special_instructions: deliveryDetails.special_instructions || null,
+          },
+        }),
       });
       router.push(`/track/${ride.id}`);
     } catch (err) {
@@ -995,6 +1018,91 @@ export default function BookPage() {
             </div>
 
 
+          {/* ═══ Delivery form (when mensajeria selected) ═══ */}
+          {serviceType === 'mensajeria' && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '1rem',
+              borderRadius: '0.75rem',
+              border: '1px solid var(--border)',
+              background: 'var(--card-bg)',
+            }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+                Datos del envío
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Nombre del destinatario *</label>
+                  <input
+                    type="text"
+                    value={deliveryDetails.recipient_name}
+                    onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_name: e.target.value }))}
+                    placeholder="Nombre completo"
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Teléfono del destinatario *</label>
+                  <input
+                    type="tel"
+                    value={deliveryDetails.recipient_phone}
+                    onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
+                    placeholder="+53 5XXXXXXX"
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Tipo de paquete</label>
+                  <select
+                    value={deliveryDetails.package_category}
+                    onChange={(e) => setDeliveryDetails(d => ({ ...d, package_category: e.target.value }))}
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem', background: 'var(--bg-card)' }}
+                  >
+                    <option value="documentos">Documentos</option>
+                    <option value="comida">Comida</option>
+                    <option value="paquete_pequeno">Paquete pequeño</option>
+                    <option value="paquete_grande">Paquete grande</option>
+                    <option value="fragil">Frágil</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Descripción del paquete</label>
+                  <input
+                    type="text"
+                    value={deliveryDetails.package_description}
+                    onChange={(e) => setDeliveryDetails(d => ({ ...d, package_description: e.target.value }))}
+                    placeholder="¿Qué envías?"
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Peso estimado (kg)</label>
+                    <input
+                      type="number"
+                      value={deliveryDetails.estimated_weight_kg}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, estimated_weight_kg: e.target.value }))}
+                      placeholder="0.5"
+                      min="0.1"
+                      step="0.1"
+                      style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Instrucciones especiales</label>
+                  <input
+                    type="text"
+                    value={deliveryDetails.special_instructions}
+                    onChange={(e) => setDeliveryDetails(d => ({ ...d, special_instructions: e.target.value }))}
+                    placeholder="Ej: Tocar timbre, preguntar por Juan..."
+                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ═══ Error message ═══ */}
           {error && (
             <p
@@ -1037,11 +1145,22 @@ export default function BookPage() {
                 <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                   {t('book.estimated_fare')}
                 </span>
-                <span
-                  style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}
-                >
-                  {formatCUP(selectedEstimate.estimated_fare_cup)}
-                </span>
+                <div style={{ textAlign: 'right' }}>
+                  {promoResult?.valid && promoResult.discount > 0 ? (
+                    <>
+                      <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-tertiary)', textDecoration: 'line-through', marginRight: '0.5rem' }}>
+                        {formatCUP(selectedEstimate.estimated_fare_cup)}
+                      </span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#22c55e' }}>
+                        {formatCUP(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>
+                      {formatCUP(selectedEstimate.estimated_fare_cup)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div
                 className="booking-fare-details"

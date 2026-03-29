@@ -976,8 +976,36 @@ export async function findIntersection(
         + `node(w.main)(w.c1);out;`;
     }
 
-    const data = await queryOverpassRace(query);
-    if (!data?.elements?.length) return null;
+    const data = await Promise.race([
+      queryOverpassRace(query).catch(() => null),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 5000)),
+    ]);
+
+    // Fallback: If Overpass fails to find shared nodes, try Nominatim forward geocoding
+    if (!data?.elements?.length) {
+      try {
+        const fullAddr = crossStreet2
+          ? `${mainStreet} y ${crossStreet1}, Cuba`
+          : `${mainStreet} y ${crossStreet1}, Cuba`;
+        const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(fullAddr)}&format=json&countrycodes=cu&limit=3&viewbox=${lng - 0.05},${lat - 0.05},${lng + 0.05},${lat + 0.05}&bounded=1`;
+        const nomRes = await throttledFetch(nomUrl, { 'Accept-Language': 'es' });
+        if (nomRes.ok) {
+          const nomData = await nomRes.json();
+          if (nomData?.length > 0) {
+            const best = nomData[0];
+            const bLat = parseFloat(best.lat);
+            const bLng = parseFloat(best.lon);
+            if (isFinite(bLat) && isFinite(bLng)) {
+              const address = crossStreet2
+                ? `${mainStreet} e/ ${crossStreet1} y ${crossStreet2}`
+                : `${mainStreet} y ${crossStreet1}`;
+              return { address, latitude: bLat, longitude: bLng };
+            }
+          }
+        }
+      } catch { /* continue to return null */ }
+      return null;
+    }
 
     // All returned nodes are intersections of main with either cross1 or cross2
     // We need to figure out which node belongs to which intersection
