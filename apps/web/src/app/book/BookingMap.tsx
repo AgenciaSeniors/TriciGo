@@ -822,11 +822,11 @@ export default function BookingMap({
               whiteSpace: 'nowrap',
             }}>
               {centerAddressLoading ? (
-                <span style={{ color: '#888' }}>{t('book.detecting_address')}</span>
+                <span style={{ color: '#888' }}>{t('book.detecting_address', { defaultValue: 'Detectando direcci\u00f3n...' })}</span>
               ) : centerAddress ? (
                 centerAddress
               ) : (
-                <span style={{ color: '#888' }}>{t('book.detecting_address')}</span>
+                <span style={{ color: '#888' }}>{t('book.detecting_address', { defaultValue: 'Detectando direcci\u00f3n...' })}</span>
               )}
             </div>
             <button
@@ -847,7 +847,7 @@ export default function BookingMap({
                 transition: 'opacity 0.2s',
               }}
             >
-              {selectionStep === 'pickup' ? t('book.confirm_pickup') : t('book.confirm_dropoff')}
+              {selectionStep === 'pickup' ? t('book.confirm_pickup', { defaultValue: 'Confirmar recogida' }) : t('book.confirm_dropoff', { defaultValue: 'Confirmar destino' })}
             </button>
           </div>
         )}
@@ -869,7 +869,7 @@ export default function BookingMap({
               color: '#FF4D00',
             }}
           >
-            {t('book.route_loading')}
+            {t('book.route_loading', { defaultValue: 'Calculando ruta...' })}
           </div>
         )}
       </div>
@@ -897,7 +897,7 @@ export default function BookingMap({
         }}
       >
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
-        {locationLoading ? t('book.map_locating') : t('book.map_use_my_location')}
+        {locationLoading ? t('book.map_locating', { defaultValue: 'Localizando...' }) : t('book.map_use_my_location', { defaultValue: 'Usar mi ubicaci\u00f3n' })}
       </button>
 
       {/* Nearby vehicles count */}
@@ -908,14 +908,14 @@ export default function BookingMap({
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
         }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-          {t('book.nearby_vehicles', { count: nearbyVehicles.length })}
+          {t('book.nearby_vehicles', { count: nearbyVehicles.length, defaultValue: '{{count}} veh\u00edculos disponibles cerca' })}
         </p>
       )}
 
       {/* Location error */}
       {locationError && (
         <p style={{ fontSize: '0.8rem', color: '#ef4444', textAlign: 'center', margin: 0 }}>
-          {locationError === 'denied' ? t('book.map_location_denied') : t('book.map_location_unavailable')}
+          {locationError === 'denied' ? t('book.map_location_denied', { defaultValue: 'Permiso de ubicaci\u00f3n denegado' }) : t('book.map_location_unavailable', { defaultValue: 'Ubicaci\u00f3n no disponible' })}
         </p>
       )}
 
