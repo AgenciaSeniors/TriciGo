@@ -1019,89 +1019,107 @@ export default function BookPage() {
 
 
           {/* ═══ Delivery form (when mensajeria selected) ═══ */}
-          {serviceType === 'mensajeria' && (
+          {serviceType === 'mensajeria' && (() => {
+            const nameEmpty = !deliveryDetails.recipient_name.trim();
+            const phoneEmpty = !deliveryDetails.recipient_phone.trim();
+            const phoneInvalid = deliveryDetails.recipient_phone.trim().length > 0 && !/^\+?[\d\s-]{6,}$/.test(deliveryDetails.recipient_phone.trim());
+            const inputBase = {
+              width: '100%', padding: '0.6rem 0.75rem', borderRadius: '0.6rem',
+              fontSize: '0.85rem', boxSizing: 'border-box' as const, marginTop: '0.25rem',
+              outline: 'none', transition: 'border-color 0.15s',
+            };
+            const labelStyle = { fontSize: '0.75rem', fontWeight: 600 as const, color: 'var(--text-secondary)', letterSpacing: '0.02em' };
+            const CATS = [
+              { value: 'documentos', icon: '📄', label: 'Documentos' },
+              { value: 'comida', icon: '🍔', label: 'Comida' },
+              { value: 'paquete_pequeno', icon: '📦', label: 'Pequeño' },
+              { value: 'paquete_grande', icon: '📫', label: 'Grande' },
+              { value: 'fragil', icon: '⚠️', label: 'Frágil' },
+            ];
+            return (
             <div style={{
-              marginBottom: '1rem',
-              padding: '1rem',
-              borderRadius: '0.75rem',
-              border: '1px solid var(--border)',
-              background: 'var(--card-bg)',
+              marginBottom: '1rem', padding: '1.25rem', borderRadius: '0.85rem',
+              border: '2px solid var(--primary)', background: 'linear-gradient(135deg, rgba(255,77,0,0.03) 0%, rgba(255,77,0,0.08) 100%)',
             }}>
-              <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-                Datos del envío
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>📦</span>
+                <div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>Datos del envío</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Completa los datos del destinatario</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Nombre del destinatario *</label>
-                  <input
-                    type="text"
-                    value={deliveryDetails.recipient_name}
-                    onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_name: e.target.value }))}
-                    placeholder="Nombre completo"
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Teléfono del destinatario *</label>
-                  <input
-                    type="tel"
-                    value={deliveryDetails.recipient_phone}
-                    onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
-                    placeholder="+53 5XXXXXXX"
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Tipo de paquete</label>
-                  <select
-                    value={deliveryDetails.package_category}
-                    onChange={(e) => setDeliveryDetails(d => ({ ...d, package_category: e.target.value }))}
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem', background: 'var(--bg-card)' }}
-                  >
-                    <option value="documentos">Documentos</option>
-                    <option value="comida">Comida</option>
-                    <option value="paquete_pequeno">Paquete pequeño</option>
-                    <option value="paquete_grande">Paquete grande</option>
-                    <option value="fragil">Frágil</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Descripción del paquete</label>
-                  <input
-                    type="text"
-                    value={deliveryDetails.package_description}
-                    onChange={(e) => setDeliveryDetails(d => ({ ...d, package_description: e.target.value }))}
-                    placeholder="¿Qué envías?"
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {/* Recipient row */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Peso estimado (kg)</label>
-                    <input
-                      type="number"
-                      value={deliveryDetails.estimated_weight_kg}
+                    <label style={labelStyle}>Destinatario *</label>
+                    <input type="text" value={deliveryDetails.recipient_name}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_name: e.target.value }))}
+                      placeholder="Nombre completo"
+                      style={{ ...inputBase, border: nameEmpty && deliveryDetails.recipient_phone ? '2px solid #ef4444' : '1px solid var(--border)' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Teléfono *</label>
+                    <input type="tel" value={deliveryDetails.recipient_phone}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
+                      placeholder="+53 5XXXXXXX"
+                      style={{ ...inputBase, border: phoneInvalid ? '2px solid #ef4444' : '1px solid var(--border)' }}
+                    />
+                    {phoneInvalid && <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>Número inválido</span>}
+                  </div>
+                </div>
+                {/* Package category chips */}
+                <div>
+                  <label style={labelStyle}>Tipo de paquete</label>
+                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                    {CATS.map(c => (
+                      <button key={c.value} type="button"
+                        onClick={() => setDeliveryDetails(d => ({ ...d, package_category: c.value }))}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.3rem',
+                          padding: '0.4rem 0.7rem', borderRadius: '2rem', fontSize: '0.75rem', fontWeight: 600,
+                          border: deliveryDetails.package_category === c.value ? '2px solid var(--primary)' : '1px solid var(--border)',
+                          background: deliveryDetails.package_category === c.value ? 'rgba(255,77,0,0.08)' : 'white',
+                          color: deliveryDetails.package_category === c.value ? 'var(--primary)' : 'var(--text-secondary)',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                      >{c.icon} {c.label}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Description + Weight row */}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ flex: 2 }}>
+                    <label style={labelStyle}>Descripción</label>
+                    <input type="text" value={deliveryDetails.package_description}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, package_description: e.target.value }))}
+                      placeholder="¿Qué envías?"
+                      style={{ ...inputBase, border: '1px solid var(--border)' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Peso (kg)</label>
+                    <input type="number" value={deliveryDetails.estimated_weight_kg}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, estimated_weight_kg: e.target.value }))}
-                      placeholder="0.5"
-                      min="0.1"
-                      step="0.1"
-                      style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                      placeholder="0.5" min="0.1" step="0.1"
+                      style={{ ...inputBase, border: '1px solid var(--border)' }}
                     />
                   </div>
                 </div>
+                {/* Instructions */}
                 <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Instrucciones especiales</label>
-                  <input
-                    type="text"
-                    value={deliveryDetails.special_instructions}
+                  <label style={labelStyle}>Instrucciones especiales</label>
+                  <input type="text" value={deliveryDetails.special_instructions}
                     onChange={(e) => setDeliveryDetails(d => ({ ...d, special_instructions: e.target.value }))}
                     placeholder="Ej: Tocar timbre, preguntar por Juan..."
-                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--border)', fontSize: '0.85rem', boxSizing: 'border-box', marginTop: '0.2rem' }}
+                    style={{ ...inputBase, border: '1px solid var(--border)' }}
                   />
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ═══ Error message ═══ */}
           {error && (
