@@ -89,7 +89,9 @@ export default function BookPage() {
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
   const [allEstimates, setAllEstimates] = useState<Record<string, FareEstimate | null>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
-  const selectedEstimate = allEstimates[serviceType] || null;
+  const selectedEstimate = serviceType === 'mensajeria'
+    ? allEstimates[deliveryVehicle] || null
+    : allEstimates[serviceType] || null;
   const [showOptions, setShowOptions] = useState(false);
   const [isEstimating, setIsEstimating] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
@@ -124,6 +126,7 @@ export default function BookPage() {
   const [insuranceSelected, setInsuranceSelected] = useState(false);
 
   /* ─── Delivery state ─── */
+  const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
   const [deliveryDetails, setDeliveryDetails] = useState({
     recipient_name: '',
     recipient_phone: '',
@@ -447,7 +450,7 @@ export default function BookPage() {
     setEstimateLoading(true);
     setAllEstimates({});
 
-    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'];
+    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'];
 
     try {
       const results = await Promise.allSettled(
@@ -518,7 +521,7 @@ export default function BookPage() {
     setError(null);
     try {
       const ride = await rideService.createRide({
-        service_type: serviceType,
+        service_type: serviceType === 'mensajeria' ? deliveryVehicle : serviceType,
         payment_method: paymentMethod,
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
@@ -951,7 +954,8 @@ export default function BookPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', opacity: pickup && dropoff ? 1 : 0.5, pointerEvents: pickup && dropoff ? 'auto' : 'none' }}>
                 {SERVICE_TYPE_KEYS.map((svc) => {
-                  const est = allEstimates[svc.slug];
+                  const isMensajeria = svc.slug === 'mensajeria';
+                  const est = isMensajeria ? allEstimates[deliveryVehicle] : allEstimates[svc.slug];
                   const isSelected = serviceType === svc.slug;
                   const isLoading = estimateLoading && !est;
                   const vt = serviceTypeToVehicleType(svc.slug) as VehicleType | null;
@@ -986,7 +990,7 @@ export default function BookPage() {
                             {svc.label}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            {svc.desc}
+                            {isMensajeria ? 'Según vehículo' : svc.desc}
                             {pickupEta != null && (
                               <span style={{ color: '#16a34a', fontWeight: 600, marginLeft: 6 }}>
                                 · {pickupEta} min
@@ -1046,6 +1050,37 @@ export default function BookPage() {
                 <div>
                   <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>Datos del envío</div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Completa los datos del destinatario</div>
+                </div>
+              </div>
+              {/* Vehicle selector for delivery */}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={labelStyle}>Vehículo para el envío *</label>
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+                  {([
+                    { slug: 'moto_standard' as ServiceTypeSlug, icon: '/images/vehicles/moto.png', label: 'Moto' },
+                    { slug: 'triciclo_basico' as ServiceTypeSlug, icon: '/images/vehicles/triciclo.png', label: 'Triciclo' },
+                    { slug: 'auto_standard' as ServiceTypeSlug, icon: '/images/vehicles/auto.png', label: 'Auto' },
+                    { slug: 'auto_confort' as ServiceTypeSlug, icon: '/images/vehicles/confort.png', label: 'Confort' },
+                  ]).map(v => {
+                    const vEst = allEstimates[v.slug];
+                    return (
+                    <button key={v.slug} type="button"
+                      onClick={() => setDeliveryVehicle(v.slug)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.35rem',
+                        padding: '0.45rem 0.7rem', borderRadius: '0.6rem', fontSize: '0.75rem', fontWeight: 600,
+                        border: deliveryVehicle === v.slug ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        background: deliveryVehicle === v.slug ? 'rgba(255,77,0,0.08)' : 'white',
+                        color: deliveryVehicle === v.slug ? 'var(--primary)' : 'var(--text-secondary)',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <img src={v.icon} alt={v.label} style={{ width: 22, height: 22, objectFit: 'contain' }} />
+                      {v.label}
+                      {vEst && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{formatCUP(vEst.estimated_fare_cup)}</span>}
+                    </button>
+                    );
+                  })}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
