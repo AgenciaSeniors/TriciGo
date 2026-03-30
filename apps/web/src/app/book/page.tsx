@@ -8,7 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType } from '@tricigo/types';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
@@ -58,8 +58,9 @@ export default function BookPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
-  /* ─── Saved locations ─── */
+  /* ─── Saved locations & ride preferences ─── */
   const [savedLocations, setSavedLocations] = useState<Array<{ label: string; address: string; latitude: number; longitude: number }>>([]);
+  const [ridePrefs, setRidePrefs] = useState<RidePreferences | null>(null);
 
   useEffect(() => {
     async function loadSaved() {
@@ -71,6 +72,9 @@ export default function BookPage() {
         const profile = await customerService.getProfile(user.id);
         if (profile?.saved_locations?.length) {
           setSavedLocations(profile.saved_locations.filter((l: any) => l.latitude && l.longitude));
+        }
+        if (profile?.ride_preferences) {
+          setRidePrefs(profile.ride_preferences);
         }
       } catch { /* ignore — saved locations are optional */ }
     }
@@ -593,6 +597,8 @@ export default function BookPage() {
         }),
         // W1.4: Insurance
         insurance_selected: insuranceSelected,
+        // Ride preferences from profile
+        ...(ridePrefs && { rider_preferences: ridePrefs }),
         // Delivery details
         ...(serviceType === 'mensajeria' && {
           ride_mode: 'cargo' as const,
