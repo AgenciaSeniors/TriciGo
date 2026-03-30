@@ -97,10 +97,10 @@ export function WebHeader() {
 
     if (isAuthenticated) {
       const links = [
-        { href: '/book', label: t('nav.book_ride', { defaultValue: 'Reservar' }) },
-        { href: '/rides', label: t('nav.rides', { defaultValue: 'Viajes' }) },
-        { href: '/wallet', label: t('nav.wallet', { defaultValue: 'Wallet' }) },
-        { href: '/profile', label: t('nav.profile', { defaultValue: 'Perfil' }) },
+        { href: '/book', label: t('nav.book_ride') },
+        { href: '/rides', label: t('nav.rides') },
+        { href: '/wallet', label: t('nav.wallet') },
+        { href: '/profile', label: t('nav.profile') },
       ];
 
       if (mobile) {
@@ -116,8 +116,8 @@ export function WebHeader() {
                 {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
               </div>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', flex: 1 }}>{user?.user_metadata?.full_name || user?.email}</span>
-              <button onClick={signOut} aria-label="Cerrar sesion" style={{ background: 'none', border: '1px solid var(--border)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>
-                {t('nav.logout', { defaultValue: 'Salir' })}
+              <button onClick={signOut} aria-label={t('nav.logout')} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>
+                {t('nav.logout')}
               </button>
             </div>
           </div>
@@ -134,8 +134,8 @@ export function WebHeader() {
           <div style={avatarStyle} aria-label="Avatar de usuario">
             {avatarUrl ? <img src={avatarUrl} alt="Foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
           </div>
-          <button onClick={signOut} aria-label="Cerrar sesion" style={{ background: 'none', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}>
-            {t('nav.logout', { defaultValue: 'Salir' })}
+          <button onClick={signOut} aria-label={t('nav.logout')} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}>
+            {t('nav.logout')}
           </button>
         </div>
       );
@@ -178,7 +178,7 @@ export function WebHeader() {
           >
             {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
           </button>
-          <button onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Cerrar menu' : 'Abrir menu'} aria-expanded={menuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', fontSize: '1.5rem', lineHeight: 1 }}>
+          <button onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? t('nav.close_menu') : t('nav.open_menu')} aria-expanded={menuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', fontSize: '1.5rem', lineHeight: 1 }}>
             {menuOpen ? '\u2715' : '\u2630'}
           </button>
         </div>

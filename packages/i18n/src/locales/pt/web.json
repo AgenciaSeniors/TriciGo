@@ -2,7 +2,13 @@
   "nav": {
     "book_ride": "Pedir viagem",
     "login": "Entrar",
-    "blog": "Blog"
+    "blog": "Blog",
+    "rides": "Viagens",
+    "wallet": "Carteira",
+    "profile": "Perfil",
+    "logout": "Sair",
+    "close_menu": "Fechar menu",
+    "open_menu": "Abrir menu"
   },
   "footer": {
     "location": "Havana, Cuba",

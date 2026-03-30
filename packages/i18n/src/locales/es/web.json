@@ -2,7 +2,13 @@
   "nav": {
     "book_ride": "Solicitar viaje",
     "login": "Iniciar sesión",
-    "blog": "Blog"
+    "blog": "Blog",
+    "rides": "Viajes",
+    "wallet": "Billetera",
+    "profile": "Perfil",
+    "logout": "Salir",
+    "close_menu": "Cerrar menú",
+    "open_menu": "Abrir menú"
   },
   "footer": {
     "location": "La Habana, Cuba",
