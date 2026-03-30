@@ -1,10 +1,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { getSupabaseClient, customerService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+
+const SavedLocationsMap = dynamic(() => import('./SavedLocationsMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ width: '100%', height: 280, borderRadius: '1rem', background: 'var(--bg-page)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>Cargando mapa...</p>
+    </div>
+  ),
+});
 
 interface SavedLocation {
   label: string;
@@ -29,6 +39,8 @@ export default function SavedLocationsPage() {
   const [formLat, setFormLat] = useState(0);
   const [formLng, setFormLng] = useState(0);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -75,6 +87,7 @@ export default function SavedLocationsPage() {
       await customerService.updateProfile(profileId, { saved_locations: updated });
       setLocations(updated);
       setShowForm(false);
+      setSelectMode(false);
       setEditingIndex(null);
       setFormLabel('');
       setFormAddress('');
@@ -93,6 +106,7 @@ export default function SavedLocationsPage() {
     try {
       await customerService.updateProfile(profileId, { saved_locations: updated });
       setLocations(updated);
+      if (selectedIndex === index) setSelectedIndex(null);
     } catch (err) {
       console.error('Error deleting location:', err);
       alert(t('web.delete_location_error', { defaultValue: 'Error al eliminar ubicacion.' }));
@@ -107,6 +121,7 @@ export default function SavedLocationsPage() {
     setFormLat(loc.latitude);
     setFormLng(loc.longitude);
     setShowForm(true);
+    setSelectMode(false);
   }
 
   function handleAddNew() {
@@ -116,6 +131,17 @@ export default function SavedLocationsPage() {
     setFormLat(0);
     setFormLng(0);
     setShowForm(true);
+    setSelectMode(false);
+  }
+
+  function handleMapClick(lat: number, lng: number, address: string) {
+    setFormLat(lat);
+    setFormLng(lng);
+    setFormAddress(address);
+  }
+
+  function handleLocationClick(index: number) {
+    setSelectedIndex(selectedIndex === index ? null : index);
   }
 
   if (authLoading) {
@@ -179,7 +205,7 @@ export default function SavedLocationsPage() {
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem' }}>
         <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -187,6 +213,23 @@ export default function SavedLocationsPage() {
         </Link>
         <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.saved_locations', { defaultValue: 'Ubicaciones guardadas' })}</h1>
       </div>
+
+      {/* Map */}
+      {!loading && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <SavedLocationsMap
+            locations={locations}
+            selectedIndex={selectedIndex}
+            selectMode={selectMode}
+            onMapClick={selectMode ? handleMapClick : undefined}
+          />
+          {selectMode && (
+            <p style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500, textAlign: 'center', margin: '0.5rem 0 0' }}>
+              {t('web.tap_map_to_select', { defaultValue: 'Toca el mapa para seleccionar la ubicacion' })}
+            </p>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>{t('web.loading_locations', { defaultValue: 'Cargando ubicaciones...' })}</p>
@@ -214,24 +257,29 @@ export default function SavedLocationsPage() {
           {locations.map((loc, index) => (
             <div
               key={index}
+              onClick={() => handleLocationClick(index)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 padding: '1rem 1.25rem',
                 borderBottom: index < locations.length - 1 ? '1px solid var(--border-light)' : 'none',
+                cursor: 'pointer',
+                background: selectedIndex === index ? 'rgba(255,77,0,0.05)' : 'transparent',
+                transition: 'background 0.15s ease',
               }}
             >
               <div style={{
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                background: 'var(--bg-page)',
+                background: selectedIndex === index ? 'rgba(255,77,0,0.1)' : 'var(--bg-page)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginRight: '1rem',
                 color: 'var(--primary)',
                 flexShrink: 0,
+                transition: 'background 0.15s ease',
               }}>
                 {getIcon(loc.label)}
               </div>
@@ -241,10 +289,10 @@ export default function SavedLocationsPage() {
                   {loc.address || t('web.no_address', { defaultValue: 'Sin direccion' })}
                 </p>
               </div>
-              <button onClick={() => handleEdit(index)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
+              <button onClick={(e) => { e.stopPropagation(); handleEdit(index); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
                 <EditIcon />
               </button>
-              <button onClick={() => handleDelete(index)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(index); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
                 <DeleteIcon />
               </button>
             </div>
@@ -277,23 +325,74 @@ export default function SavedLocationsPage() {
             />
           </div>
 
-          <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ marginBottom: '1rem' }}>
             <AddressAutocomplete
               label={t('web.address', { defaultValue: 'Direccion' })}
-              placeholder="Buscar dirección..."
+              placeholder="Buscar direccion..."
               value={formAddress}
               mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''}
               onSelect={(r) => {
                 setFormAddress(r.address);
                 setFormLat(r.latitude);
                 setFormLng(r.longitude);
+                setSelectMode(false);
               }}
             />
           </div>
 
+          {/* Pick from map button */}
+          <button
+            onClick={() => setSelectMode(!selectMode)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              width: '100%',
+              padding: '0.65rem',
+              background: selectMode ? 'rgba(255,77,0,0.08)' : 'transparent',
+              color: 'var(--primary)',
+              border: `1px solid ${selectMode ? 'var(--primary)' : 'var(--border)'}`,
+              borderRadius: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginBottom: '1rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            {selectMode
+              ? t('web.selecting_on_map', { defaultValue: 'Seleccionando en el mapa...' })
+              : t('web.pick_from_map', { defaultValue: 'Elegir en el mapa' })}
+          </button>
+
+          {/* Show selected coords if from map */}
+          {formLat !== 0 && formLng !== 0 && formAddress && (
+            <div style={{
+              padding: '0.65rem 0.75rem',
+              background: 'rgba(56,161,105,0.08)',
+              borderRadius: '0.5rem',
+              marginBottom: '1rem',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38a169" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {formAddress}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={() => { setShowForm(false); setEditingIndex(null); setFormLabel(''); setFormAddress(''); setFormLat(0); setFormLng(0); }}
+              onClick={() => { setShowForm(false); setSelectMode(false); setEditingIndex(null); setFormLabel(''); setFormAddress(''); setFormLat(0); setFormLng(0); }}
               style={{
                 flex: 1, padding: '0.75rem', background: 'transparent', color: 'var(--text-secondary)',
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
