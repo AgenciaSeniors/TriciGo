@@ -119,29 +119,33 @@ export default function LoginPage() {
   const btnStyle = (enabled: boolean) => ({
     width: '100%',
     padding: '0.875rem',
-    borderRadius: '0.75rem',
+    borderRadius: 'var(--radius-md)',
     border: 'none',
     background: enabled ? 'var(--primary)' : 'var(--border)',
     color: enabled ? 'white' : 'var(--text-tertiary)',
-    fontSize: '1rem',
+    fontSize: 'var(--text-lg)',
     fontWeight: 600 as const,
+    fontFamily: 'inherit' as const,
     cursor: enabled ? 'pointer' : ('not-allowed' as const),
+    transition: 'all var(--transition-fast)' as const,
   });
 
   const socialBtnStyle = {
     width: '100%',
     padding: '0.875rem',
-    borderRadius: '0.75rem',
+    borderRadius: 'var(--radius-md)',
     border: '1px solid var(--border)',
     background: 'var(--bg-card)',
     color: 'var(--text-primary)',
-    fontSize: '0.95rem',
+    fontSize: 'var(--text-md)',
     fontWeight: 500 as const,
+    fontFamily: 'inherit' as const,
     cursor: 'pointer' as const,
     display: 'flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: '0.5rem',
+    transition: 'all var(--transition-fast)' as const,
   };
 
   return (
@@ -205,15 +209,8 @@ export default function LoginPage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+53 5XXXXXXX"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '0.75rem',
-                  border: '1px solid var(--border)',
-                  fontSize: '1.125rem',
-                  outline: 'none',
-                  letterSpacing: '0.05em',
-                }}
+                className="input-base"
+                style={{ fontSize: '1.125rem', letterSpacing: '0.05em' }}
               />
             </div>
             <button
@@ -235,16 +232,8 @@ export default function LoginPage() {
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="000000"
               maxLength={6}
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                borderRadius: '0.75rem',
-                border: '1px solid var(--border)',
-                fontSize: '1.5rem',
-                outline: 'none',
-                textAlign: 'center',
-                letterSpacing: '0.3em',
-              }}
+              className="input-base"
+              style={{ fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.3em' }}
             />
             <button
               onClick={handleVerifyOtp}

@@ -313,7 +313,10 @@ export default function WalletPage() {
             </div>
           ) : (
             <>
-              <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: '0 0 0.25rem' }}>Saldo disponible</p>
+              <p style={{ fontSize: 'var(--text-sm)', opacity: 0.8, margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
+                Saldo disponible
+              </p>
               <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
                 {formatTRC(balance.available)}
               </p>
@@ -344,23 +347,21 @@ export default function WalletPage() {
               aria-label="Monto de recarga en CUP"
               value={rechargeCup}
               onChange={(e) => setRechargeCup(e.target.value)}
-              style={{
-                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
-                fontSize: '0.875rem', outline: 'none',
-              }}
+              className="input-base"
+              style={{ flex: 1 }}
             />
             <button
               onClick={handleRecharge}
               disabled={rechargeLoading || !rechargeCup}
               aria-label="Solicitar recarga"
+              className="btn-base btn-primary-solid"
               style={{
-                padding: '0.75rem 1rem', borderRadius: '0.5rem', border: 'none',
-                background: rechargeLoading || !rechargeCup ? '#ccc' : 'var(--primary)',
-                color: 'white', fontWeight: 600, fontSize: '0.875rem',
+                opacity: rechargeLoading || !rechargeCup ? 0.5 : 1,
                 cursor: rechargeLoading || !rechargeCup ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              {rechargeLoading ? '...' : 'Pagar con TropiPay'}
+              {rechargeLoading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : 'Pagar con TropiPay'}
             </button>
           </div>
           {rechargeCup && !isNaN(parseInt(rechargeCup)) && parseInt(rechargeCup) > 0 && (
@@ -384,23 +385,22 @@ export default function WalletPage() {
               aria-label="Telefono del destinatario"
               value={transferPhone}
               onChange={(e) => { setTransferPhone(e.target.value); setTransferRecipient(null); setTransferError(null); }}
-              style={{
-                flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
-                fontSize: '0.875rem', outline: 'none',
-              }}
+              className="input-base"
+              style={{ flex: 1 }}
             />
             <button
               onClick={handleFindRecipient}
               disabled={transferSearching || !transferPhone.trim()}
               aria-label="Buscar destinatario"
+              className="btn-base"
               style={{
-                padding: '0.75rem 1rem', borderRadius: '0.5rem', border: 'none',
-                background: transferSearching || !transferPhone.trim() ? '#ccc' : '#333',
-                color: 'white', fontWeight: 600, fontSize: '0.8rem',
+                background: transferSearching || !transferPhone.trim() ? 'var(--bg-hover)' : 'var(--text-primary)',
+                color: transferSearching || !transferPhone.trim() ? 'var(--text-tertiary)' : '#fff',
                 cursor: transferSearching || !transferPhone.trim() ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
-              {transferSearching ? '...' : 'Buscar'}
+              {transferSearching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Buscar'}
             </button>
           </div>
 
@@ -423,10 +423,8 @@ export default function WalletPage() {
                 aria-label="Monto de transferencia en centavos TRC"
                 value={transferAmount}
                 onChange={(e) => setTransferAmount(e.target.value)}
-                style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
-                  fontSize: '0.875rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box',
-                }}
+                className="input-base"
+                style={{ marginBottom: '0.5rem' }}
               />
               {transferAmount && !isNaN(parseInt(transferAmount)) && parseInt(transferAmount) > 0 && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
@@ -439,21 +437,15 @@ export default function WalletPage() {
                 aria-label="Nota para la transferencia"
                 value={transferNote}
                 onChange={(e) => setTransferNote(e.target.value)}
-                style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
-                  fontSize: '0.875rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box',
-                }}
+                className="input-base"
+                style={{ marginBottom: '0.5rem' }}
               />
               <button
                 onClick={handleTransfer}
                 disabled={transferSending || !transferAmount || parseInt(transferAmount) <= 0}
                 aria-label="Enviar transferencia"
-                style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: 'none',
-                  background: transferSending ? '#ccc' : 'var(--primary)',
-                  color: 'white', fontWeight: 600, fontSize: '0.875rem',
-                  cursor: transferSending ? 'not-allowed' : 'pointer',
-                }}
+                className="btn-base btn-primary-solid"
+                style={{ width: '100%' }}
               >
                 {transferSending ? 'Enviando...' : 'Enviar'}
               </button>
@@ -478,11 +470,18 @@ export default function WalletPage() {
                 aria-label={`Filtrar por ${tab.label}`}
                 onClick={() => setFilter(tab.key)}
                 style={{
-                  padding: '0.4rem 0.75rem', borderRadius: '1rem', border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-full)',
+                  border: 'none',
                   background: filter === tab.key ? 'var(--primary)' : 'var(--bg-hover)',
-                  color: filter === tab.key ? 'white' : '#666',
-                  fontWeight: filter === tab.key ? 600 : 400,
-                  fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                  color: filter === tab.key ? 'white' : 'var(--text-secondary)',
+                  fontWeight: filter === tab.key ? 600 : 500,
+                  fontSize: 'var(--text-sm)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all var(--transition-fast)',
+                  fontFamily: 'inherit',
+                  minHeight: '36px',
                 }}
               >
                 {tab.label}
@@ -510,8 +509,13 @@ export default function WalletPage() {
                 const amount = getTxAmount(tx);
                 return (
                   <div key={tx.id} className="wallet-tx-item">
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: isCredit ? 'var(--success)' : 'var(--error)',
+                      marginRight: '0.75rem',
+                    }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
+                      <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
                         {TYPE_LABELS[tx.type] ?? tx.type}
                       </p>
                       {tx.description && (
@@ -541,14 +545,10 @@ export default function WalletPage() {
                   onClick={handleLoadMoreTx}
                   disabled={txLoadingMore}
                   aria-label="Cargar mas transacciones"
-                  style={{
-                    width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                    border: '1px solid var(--border)', background: 'var(--bg-primary)',
-                    cursor: txLoadingMore ? 'not-allowed' : 'pointer',
-                    fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
-                  }}
+                  className="btn-base btn-secondary-outline"
+                  style={{ width: '100%', marginTop: '0.25rem' }}
                 >
-                  {txLoadingMore ? 'Cargando...' : 'Cargar mas transacciones'}
+                  {txLoadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Cargar mas transacciones'}
                 </button>
               )}
             </div>
@@ -559,43 +559,38 @@ export default function WalletPage() {
 
       {/* ═══ TropiPay iframe modal ═══ */}
       {tropipayUrl && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            background: 'rgba(0,0,0,0.6)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-          onClick={closeTropipayModal}
-        >
+        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={closeTropipayModal}>
           <div
+            className="modal-content"
             style={{
-              width: '100%', maxWidth: '500px', height: '90vh', maxHeight: '700px',
-              background: 'white', borderRadius: '1rem', overflow: 'hidden',
+              height: '90vh', maxHeight: '700px',
               display: 'flex', flexDirection: 'column',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '0.75rem 1rem', borderBottom: '1px solid #eee',
-            }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Pago con TropiPay</span>
-              {tropipayPolling && (
-                <span style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 500 }}>
-                  Esperando confirmacion...
-                </span>
-              )}
-              <button
-                onClick={closeTropipayModal}
-                style={{
-                  background: 'none', border: 'none', fontSize: '1.25rem',
-                  cursor: 'pointer', color: '#666', lineHeight: 1,
-                }}
-                aria-label="Cerrar"
-              >
-                ✕
-              </button>
+            <div className="modal-header">
+              <span style={{ fontWeight: 700, fontSize: 'var(--text-md)' }}>Pago con TropiPay</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {tropipayPolling && (
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span className="spinner" style={{ width: 12, height: 12, borderTopColor: 'var(--warning)' }} />
+                    Esperando...
+                  </span>
+                )}
+                <button
+                  onClick={closeTropipayModal}
+                  style={{
+                    background: 'var(--bg-hover)', border: 'none',
+                    width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer', color: 'var(--text-secondary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.1rem',
+                  }}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <iframe
               src={tropipayUrl}

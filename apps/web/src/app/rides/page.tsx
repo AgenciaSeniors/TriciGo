@@ -10,8 +10,16 @@ import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 
 const STATUS_LABELS: Record<string, { label: string; bg: string; color: string }> = {
-  completed: { label: 'Completado', bg: '#dcfce7', color: '#16a34a' },
-  canceled: { label: 'Cancelado', bg: '#fee2e2', color: '#dc2626' },
+  completed: { label: 'Completado', bg: 'rgba(34, 197, 94, 0.1)', color: 'var(--success)' },
+  canceled: { label: 'Cancelado', bg: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)' },
+};
+
+const VEHICLE_ICONS: Record<string, string> = {
+  triciclo: '/images/vehicles/triciclo.png',
+  moto: '/images/vehicles/moto.png',
+  auto: '/images/vehicles/auto.png',
+  confort: '/images/vehicles/confort.png',
+  mensajeria: '/images/vehicles/mensajeria.png',
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -141,39 +149,46 @@ export default function RidesPage() {
                 >
                   {/* Header: date + status */}
                   <div className="ride-card-header">
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                      {getRelativeDay(ride.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(ride.created_at)}
-                    </span>
-                    <span style={{
-                      fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem',
-                      borderRadius: '1rem', background: statusInfo.bg, color: statusInfo.color,
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {VEHICLE_ICONS[(ride as any).service_type] && (
+                        <img
+                          src={VEHICLE_ICONS[(ride as any).service_type]}
+                          alt={(ride as any).service_type}
+                          style={{ width: 28, height: 28, objectFit: 'contain' }}
+                        />
+                      )}
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                        {getRelativeDay(ride.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(ride.created_at)}
+                      </span>
+                    </div>
+                    <span className="ride-status-badge" style={{ background: statusInfo.bg, color: statusInfo.color }}>
                       {statusInfo.label}
                     </span>
                   </div>
 
-                  {/* Addresses */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {/* Addresses with route dots */}
+                  <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                    <div className="ride-route-dots">
+                      <span className="ride-route-dot ride-route-dot--pickup" />
+                      <span className="ride-route-line" />
+                      <span className="ride-route-dot ride-route-dot--dropoff" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {ride.pickup_address}
                       </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--error)', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {ride.dropoff_address}
                       </span>
                     </div>
                   </div>
 
                   {/* Footer: fare + payment */}
-                  <div className="ride-card-footer">
-                    <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary)' }}>
+                  <div className="ride-card-footer" style={{ paddingTop: '0.5rem', borderTop: '1px solid var(--border-light)' }}>
+                    <span style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--primary)' }}>
                       {ride.final_fare_trc != null ? formatTRC(ride.final_fare_trc) : formatTRC(ride.estimated_fare_trc ?? 0)}
                     </span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
                       {PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method}
                     </span>
                   </div>
@@ -187,13 +202,10 @@ export default function RidesPage() {
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 aria-label="Cargar mas viajes"
-                style={{
-                  width: '100%', padding: '0.75rem', borderRadius: '0.75rem',
-                  border: '1px solid var(--border)', background: 'var(--bg-primary)', cursor: loadingMore ? 'not-allowed' : 'pointer',
-                  fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)', marginTop: '0.25rem',
-                }}
+                className="btn-base btn-secondary-outline"
+                style={{ width: '100%', marginTop: '0.25rem' }}
               >
-                {loadingMore ? 'Cargando...' : 'Cargar mas viajes'}
+                {loadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Cargar mas viajes'}
               </button>
             )}
           </div>

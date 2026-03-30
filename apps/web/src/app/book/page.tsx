@@ -22,14 +22,15 @@ function MapLoadingFallback() {
       style={{
         height: 420,
         width: '100%',
-        borderRadius: '0.75rem',
+        borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: '#1a1a2e',
         color: 'var(--text-secondary)',
-        fontSize: '0.875rem',
+        fontSize: 'var(--text-base)',
+        boxShadow: 'var(--shadow-md)',
       }}
     >
       {t('web.loading_map', { defaultValue: 'Cargando mapa...' })}

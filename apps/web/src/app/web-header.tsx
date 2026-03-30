@@ -5,15 +5,6 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 
-const navLinkStyle = (active?: boolean) => ({
-  color: active ? 'var(--primary)' : 'var(--text-secondary)',
-  textDecoration: 'none' as const,
-  fontWeight: 600 as const,
-  fontSize: '0.9rem' as const,
-  borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
-  paddingBottom: '0.25rem',
-});
-
 export function WebHeader() {
   const { t } = useTranslation('web');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -27,7 +18,6 @@ export function WebHeader() {
     setPathname(window.location.pathname);
   }, []);
 
-  // Dark mode: load preference from localStorage or system preference
   useEffect(() => {
     const saved = localStorage.getItem('tricigo-theme');
     if (saved === 'dark') {
@@ -37,7 +27,6 @@ export function WebHeader() {
       document.documentElement.setAttribute('data-theme', 'light');
       setIsDark(false);
     } else {
-      // No preference saved — use system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       if (prefersDark) {
         setIsDark(true);
@@ -72,7 +61,6 @@ export function WebHeader() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch unread notification count
   useEffect(() => {
     if (!user) return;
     notificationService.getUnreadCount(user.id).then(setUnreadCount).catch(() => {});
@@ -96,12 +84,70 @@ export function WebHeader() {
     ?? '?';
   const avatarUrl = user?.user_metadata?.avatar_url;
 
-  const avatarStyle = {
-    width: 32, height: 32, borderRadius: '50%',
-    background: 'var(--primary)', color: 'white',
-    display: 'flex' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
-    fontSize: '0.85rem', fontWeight: 700 as const, overflow: 'hidden' as const,
-  };
+  const DarkToggle = () => (
+    <button
+      onClick={toggleDark}
+      aria-label="Toggle dark mode"
+      style={{
+        background: 'var(--bg-hover)',
+        border: 'none',
+        cursor: 'pointer',
+        width: 36,
+        height: 36,
+        borderRadius: 'var(--radius-sm)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'background var(--transition-fast)',
+      }}
+    >
+      {isDark ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
+    </button>
+  );
+
+  function NotificationBadge({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+    if (unreadCount <= 0) return null;
+    const isSm = size === 'sm';
+    return (
+      <span
+        className="badge-pulse"
+        style={{
+          position: isSm ? 'absolute' : 'static',
+          top: isSm ? -6 : undefined,
+          right: isSm ? -10 : undefined,
+          minWidth: isSm ? 16 : 18,
+          height: isSm ? 16 : 18,
+          borderRadius: 'var(--radius-full)',
+          background: 'var(--primary)',
+          color: '#fff',
+          fontSize: '0.6rem',
+          fontWeight: 700,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0 4px',
+        }}
+      >
+        {unreadCount > 9 ? '9+' : unreadCount}
+      </span>
+    );
+  }
 
   function AuthNav({ mobile }: { mobile?: boolean }) {
     if (isLoading) return null;
@@ -117,23 +163,63 @@ export function WebHeader() {
 
       if (mobile) {
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {links.map((l) => (
-              <a key={l.href} href={l.href} style={{ ...navLinkStyle(pathname.startsWith(l.href)), fontSize: '1rem', paddingBottom: 0, borderBottom: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <a
+                key={l.href}
+                href={l.href}
+                style={{
+                  color: pathname.startsWith(l.href) ? 'var(--primary)' : 'var(--text-primary)',
+                  textDecoration: 'none',
+                  fontWeight: pathname.startsWith(l.href) ? 600 : 500,
+                  fontSize: 'var(--text-md)',
+                  padding: '0.75rem 0.5rem',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'background var(--transition-fast)',
+                  background: pathname.startsWith(l.href) ? 'var(--primary-alpha-10)' : 'transparent',
+                }}
+              >
                 {l.label}
-                {l.href === '/notifications' && unreadCount > 0 && (
-                  <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: 'var(--primary)', color: '#fff', fontSize: '0.65rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
+                {l.href === '/notifications' && <NotificationBadge size="md" />}
               </a>
             ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-light)' }}>
-              <div style={avatarStyle}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              paddingTop: '0.75rem',
+              marginTop: '0.5rem',
+              borderTop: '1px solid var(--border-light)',
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'var(--gradient-primary)', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.85rem', fontWeight: 700, overflow: 'hidden',
+              }}>
                 {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
               </div>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', flex: 1 }}>{user?.user_metadata?.full_name || user?.email}</span>
-              <button onClick={signOut} aria-label={t('nav.logout')} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.4rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1, fontWeight: 500 }}>
+                {user?.user_metadata?.full_name || user?.email}
+              </span>
+              <button
+                onClick={signOut}
+                aria-label={t('nav.logout')}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  padding: '0.4rem 0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  fontFamily: 'inherit',
+                  fontWeight: 500,
+                }}
+              >
                 {t('nav.logout')}
               </button>
             </div>
@@ -142,36 +228,49 @@ export function WebHeader() {
       }
 
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
           {links.map((l) => (
-            <a key={l.href} href={l.href} style={{ ...navLinkStyle(pathname.startsWith(l.href)), position: 'relative' as const }} aria-label={l.label}>
+            <a
+              key={l.href}
+              href={l.href}
+              className="nav-link-animated"
+              style={{
+                color: pathname.startsWith(l.href) ? 'var(--primary)' : undefined,
+                position: 'relative',
+                fontWeight: pathname.startsWith(l.href) ? 600 : undefined,
+                fontSize: 'var(--text-base)',
+              }}
+              aria-label={l.label}
+            >
               {l.label}
-              {l.href === '/notifications' && unreadCount > 0 && (
-                <span style={{
-                  position: 'absolute',
-                  top: -6,
-                  right: -10,
-                  minWidth: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  background: 'var(--primary)',
-                  color: '#fff',
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 4px',
-                }}>
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
+              {l.href === '/notifications' && <NotificationBadge />}
             </a>
           ))}
-          <div style={avatarStyle} aria-label="Avatar de usuario">
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%',
+            background: 'var(--gradient-primary)', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.8rem', fontWeight: 700, overflow: 'hidden',
+            boxShadow: 'var(--shadow-sm)',
+          }} aria-label="Avatar de usuario">
             {avatarUrl ? <img src={avatarUrl} alt="Foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
           </div>
-          <button onClick={signOut} aria-label={t('nav.logout')} style={{ background: 'none', border: '1px solid var(--border)', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}>
+          <button
+            onClick={signOut}
+            aria-label={t('nav.logout')}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              padding: '0.35rem 0.75rem',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 500,
+              fontFamily: 'inherit',
+              transition: 'all var(--transition-fast)',
+            }}
+          >
             {t('nav.logout')}
           </button>
         </div>
@@ -180,9 +279,17 @@ export function WebHeader() {
 
     return (
       <>
-        <a href="/book" style={navLinkStyle()}>{t('nav.book_ride')}</a>
-        <a href="/blog" style={navLinkStyle()}>{t('nav.blog')}</a>
-        <a href="/login" style={{ background: 'var(--primary)', color: 'white', padding: mobile ? '0.75rem' : '0.5rem 1.25rem', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600, fontSize: '0.85rem', ...(mobile ? { display: 'block', textAlign: 'center' as const } : {}) }}>
+        <a href="/book" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.book_ride')}</a>
+        <a href="/blog" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.blog')}</a>
+        <a
+          href="/login"
+          className="btn-base btn-primary-solid"
+          style={{
+            padding: mobile ? '0.75rem' : '0.5rem 1.25rem',
+            fontSize: 'var(--text-sm)',
+            ...(mobile ? { display: 'block', textAlign: 'center' as const } : {}),
+          }}
+        >
           {t('nav.login')}
         </a>
       </>
@@ -190,38 +297,58 @@ export function WebHeader() {
   }
 
   return (
-    <header style={{ borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 50 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', maxWidth: 1200, margin: '0 auto' }}>
+    <header
+      className="header-glass"
+      style={{ position: 'sticky', top: 0, zIndex: 50 }}
+    >
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0.75rem 1.5rem',
+        maxWidth: 1200,
+        margin: '0 auto',
+      }}>
         <a href="/" style={{ textDecoration: 'none', color: 'inherit' }} aria-label="Ir a inicio de TriciGo">
-          <span style={{ fontSize: '1.5rem', fontWeight: 800 }}>
+          <span style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </span>
         </a>
+
         <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegacion principal">
           <AuthNav />
-          <button
-            onClick={toggleDark}
-            aria-label="Toggle dark mode"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0.25rem', lineHeight: 1 }}
-          >
-            {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
-          </button>
+          <DarkToggle />
         </nav>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="nav-mobile-toggle">
+          <DarkToggle />
           <button
-            onClick={toggleDark}
-            aria-label="Toggle dark mode"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0.25rem', lineHeight: 1 }}
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? t('nav.close_menu') : t('nav.open_menu')}
+            aria-expanded={menuOpen}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '0.5rem',
+              fontSize: '1.4rem',
+              lineHeight: 1,
+              color: 'var(--text-primary)',
+            }}
           >
-            {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
-          </button>
-          <button onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? t('nav.close_menu') : t('nav.open_menu')} aria-expanded={menuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem', fontSize: '1.5rem', lineHeight: 1 }}>
             {menuOpen ? '\u2715' : '\u2630'}
           </button>
         </div>
       </div>
+
       {menuOpen && (
-        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-light)', gap: '1rem' }} className="nav-mobile-menu">
+        <div
+          style={{
+            padding: '0.5rem 1.5rem 1rem',
+            borderTop: '1px solid var(--border-light)',
+          }}
+          className="nav-mobile-menu"
+        >
           <AuthNav mobile />
         </div>
       )}

@@ -6,39 +6,34 @@ export function WebFooter() {
   const { t } = useTranslation('web');
 
   return (
-    <footer
-      style={{
-        borderTop: '1px solid var(--border-light)',
-        padding: '2rem',
-        textAlign: 'center',
-        color: 'var(--text-tertiary)',
-        fontSize: '0.8rem',
-      }}
-    >
-      <div style={{ marginBottom: '0.75rem' }}>
-        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-          Trici<span style={{ color: 'var(--primary)' }}>Go</span>
-        </span>
-        {' · '}{t('footer.location')}
+    <footer className="footer-enhanced">
+      <div className="footer-grid">
+        <div>
+          <div className="footer-brand-name">
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p className="footer-brand-desc">
+            {t('footer.location')}
+          </p>
+        </div>
+
+        <div>
+          <div className="footer-section-title">{t('footer.quick_links', { defaultValue: 'Links' })}</div>
+          <a href="/book" className="footer-link">{t('footer.book_ride')}</a>
+          <a href="/login" className="footer-link">{t('footer.login')}</a>
+          <a href="/blog" className="footer-link">{t('footer.blog')}</a>
+        </div>
+
+        <div>
+          <div className="footer-section-title">{t('footer.legal', { defaultValue: 'Legal' })}</div>
+          <a href="/privacy" className="footer-link">{t('footer.privacy')}</a>
+          <a href="/terms" className="footer-link">{t('footer.terms')}</a>
+        </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        <a href="/book" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
-          {t('footer.book_ride')}
-        </a>
-        <a href="/login" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
-          {t('footer.login')}
-        </a>
-        <a href="/privacy" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
-          {t('footer.privacy')}
-        </a>
-        <a href="/terms" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
-          {t('footer.terms')}
-        </a>
-        <a href="/blog" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.8rem' }}>
-          {t('footer.blog')}
-        </a>
+
+      <div className="footer-copy">
+        TriciGo &copy; {new Date().getFullYear()} &middot; {t('footer.download')}
       </div>
-      <p>TriciGo &copy; {new Date().getFullYear()} &middot; {t('footer.download')}</p>
     </footer>
   );
 }

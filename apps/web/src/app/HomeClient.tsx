@@ -176,9 +176,9 @@ export default function HomeClient() {
                 <Image
                   src={svc.img}
                   alt={svc.title}
-                  width={64}
-                  height={64}
-                  style={{ width: 64, height: 64, objectFit: 'contain', margin: '0 auto 1rem', display: 'block' }}
+                  width={80}
+                  height={80}
+                  style={{ width: 80, height: 80, objectFit: 'contain', margin: '0 auto 1rem', display: 'block' }}
                 />
                 <h3>{svc.title}</h3>
                 <p>{svc.desc}</p>
@@ -210,45 +210,66 @@ export default function HomeClient() {
       <section className="section">
         <div className="container">
           <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'La Habana confía en TriciGo' })}</h2>
-          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', marginTop: '2rem', textAlign: 'center' }}>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>500+</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_drivers', { defaultValue: 'Conductores registrados' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>10,000+</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_rides', { defaultValue: 'Viajes completados' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>4.8★</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_rating', { defaultValue: 'Calificación promedio' })}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem' }}>24/7</p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('home.stat_available', { defaultValue: 'Disponible siempre' })}</p>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '2.5rem' }}>
+            {[
+              { value: '500+', label: t('home.stat_drivers', { defaultValue: 'Conductores registrados' }) },
+              { value: '10,000+', label: t('home.stat_rides', { defaultValue: 'Viajes completados' }) },
+              { value: '4.8★', label: t('home.stat_rating', { defaultValue: 'Calificación promedio' }) },
+              { value: '24/7', label: t('home.stat_available', { defaultValue: 'Disponible siempre' }) },
+            ].map((s) => (
+              <div key={s.value} style={{
+                textAlign: 'center',
+                padding: '1.5rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-light)',
+                background: 'var(--bg-card)',
+              }}>
+                <p style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem', lineHeight: 1.2 }}>{s.value}</p>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{s.label}</p>
+              </div>
+            ))}
           </div>
 
           {/* Testimonials */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '3rem' }}>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— María G., Vedado</p>
-            </div>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— Carlos R., Centro Habana</p>
-            </div>
-            <div style={{ background: 'var(--bg-page)', borderRadius: '1rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-              <p style={{ fontSize: '0.9rem', fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                {t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' })}
-              </p>
-              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>— Ana P., Miramar</p>
-            </div>
+            {[
+              { text: t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' }), name: 'María G.', loc: 'Vedado', initial: 'M' },
+              { text: t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' }), name: 'Carlos R.', loc: 'Centro Habana', initial: 'C' },
+              { text: t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' }), name: 'Ana P.', loc: 'Miramar', initial: 'A' },
+            ].map((review) => (
+              <div key={review.initial} style={{
+                background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '1.5rem',
+                border: '1px solid var(--border-light)',
+                transition: 'transform var(--transition-fast), box-shadow var(--transition-fast)',
+                cursor: 'default',
+              }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-lg)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--primary-alpha-20)" style={{ marginBottom: '0.75rem' }}>
+                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10H14.017zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10H0z" />
+                </svg>
+                <p style={{ fontSize: 'var(--text-md)', lineHeight: 1.6, marginBottom: '1rem', color: 'var(--text-primary)' }}>
+                  {review.text}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: 'var(--gradient-primary)', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 'var(--text-sm)', fontWeight: 700,
+                  }}>
+                    {review.initial}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{review.name}</p>
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{review.loc}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
