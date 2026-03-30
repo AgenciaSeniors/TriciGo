@@ -18,7 +18,6 @@ export default function ProfilePage() {
     { labelKey: 'profile.menu_saved_locations', href: '/profile/saved-locations', icon: '\uD83D\uDCCD' },
     { labelKey: 'profile.menu_safety', href: '/profile/safety', icon: '\uD83D\uDEE1\uFE0F' },
     { labelKey: 'profile.menu_trusted_contacts', href: '/profile/trusted-contacts', icon: '\uD83D\uDC65' },
-    { labelKey: 'profile.menu_emergency_contact', href: '/profile/emergency-contact', icon: '\uD83D\uDCDE' },
     { labelKey: 'profile.menu_ride_preferences', href: '/profile/ride-preferences', icon: '\uD83D\uDE97' },
     { labelKey: 'profile.menu_corporate', href: '/profile/corporate', icon: '\uD83C\uDFE2' },
     { labelKey: 'profile.menu_recurring_rides', href: '/profile/recurring-rides', icon: '\uD83D\uDD01' },

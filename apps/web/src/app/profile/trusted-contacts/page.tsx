@@ -25,6 +25,7 @@ export default function TrustedContactsPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRelationship, setNewRelationship] = useState('');
+  const [newIsEmergency, setNewIsEmergency] = useState(false);
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -65,6 +66,17 @@ export default function TrustedContactsPage() {
     }
   };
 
+  const handleToggleEmergency = async (contact: TrustedContact) => {
+    try {
+      const updated = await trustedContactService.updateContact(contact.id, {
+        is_emergency: !contact.is_emergency,
+      });
+      setContacts((prev) => prev.map((c) => (c.id === contact.id ? updated : c)));
+    } catch {
+      alert(t('web.update_contact_error', { defaultValue: 'No se pudo actualizar el contacto' }));
+    }
+  };
+
   const handleDelete = async (contact: TrustedContact) => {
     if (!confirm(t('web.delete_contact_confirm', { defaultValue: 'Eliminar a {{name}}?', name: contact.name }))) return;
     try {
@@ -86,10 +98,12 @@ export default function TrustedContactsPage() {
         phone: newPhone.trim(),
         relationship: newRelationship.trim(),
         auto_share: true,
+        is_emergency: newIsEmergency,
       });
       setNewName('');
       setNewPhone('');
       setNewRelationship('');
+      setNewIsEmergency(false);
       setShowForm(false);
       await loadContacts();
     } catch (err: any) {
@@ -185,30 +199,28 @@ export default function TrustedContactsPage() {
                 </button>
               </div>
 
-              {/* Auto-share toggle */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)',
-              }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })}</span>
-                <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                  <input
-                    type="checkbox"
-                    checked={contact.auto_share}
-                    onChange={() => handleToggleAutoShare(contact)}
-                    style={{ opacity: 0, width: 0, height: 0 }}
-                  />
-                  <span style={{
-                    position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24,
-                    background: contact.auto_share ? 'var(--primary)' : '#ccc',
-                    transition: 'background 0.2s',
-                  }}>
-                    <span style={{
-                      position: 'absolute', height: 18, width: 18, left: contact.auto_share ? 22 : 3, bottom: 3,
-                      background: '#fff', borderRadius: '50%', transition: 'left 0.2s',
-                    }} />
-                  </span>
-                </label>
+              {/* Toggles */}
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {/* Auto-share toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })}</span>
+                  <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                    <input type="checkbox" checked={contact.auto_share} onChange={() => handleToggleAutoShare(contact)} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.auto_share ? 'var(--primary)' : '#ccc', transition: 'background 0.2s' }}>
+                      <span style={{ position: 'absolute', height: 18, width: 18, left: contact.auto_share ? 22 : 3, bottom: 3, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+                    </span>
+                  </label>
+                </div>
+                {/* Emergency toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.mark_emergency', { defaultValue: 'Contacto de emergencia' })}</span>
+                  <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                    <input type="checkbox" checked={contact.is_emergency} onChange={() => handleToggleEmergency(contact)} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.is_emergency ? '#e53e3e' : '#ccc', transition: 'background 0.2s' }}>
+                      <span style={{ position: 'absolute', height: 18, width: 18, left: contact.is_emergency ? 22 : 3, bottom: 3, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
           ))}
@@ -278,9 +290,19 @@ export default function TrustedContactsPage() {
             />
           </div>
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={newIsEmergency}
+              onChange={(e) => setNewIsEmergency(e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: '#e53e3e' }}
+            />
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{t('web.mark_emergency', { defaultValue: 'Contacto de emergencia' })}</span>
+          </label>
+
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={() => { setShowForm(false); setNewName(''); setNewPhone(''); setNewRelationship(''); }}
+              onClick={() => { setShowForm(false); setNewName(''); setNewPhone(''); setNewRelationship(''); setNewIsEmergency(false); }}
               style={{
                 flex: 1, padding: '0.75rem', background: 'transparent', color: 'var(--text-secondary)',
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',

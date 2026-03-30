@@ -282,6 +282,17 @@
     "logging_out": "Saindo...",
     "menu_aria": "Menu do perfil"
   },
+  "trusted_contacts": {
+    "title": "Contatos de confiança",
+    "desc": "Seus contatos de confiança. Marque como emergência conforme necessário.",
+    "empty": "Você ainda não tem contatos de confiança",
+    "mark_emergency": "Contato de emergência",
+    "auto_share": "Compartilhar viagem automaticamente",
+    "add": "+ Adicionar contato",
+    "new": "Novo contato",
+    "adding": "Adicionando...",
+    "max_reached": "Você atingiu o máximo de {{max}} contatos."
+  },
   "notifications": {
     "title": "Notificações",
     "loading": "Carregando...",

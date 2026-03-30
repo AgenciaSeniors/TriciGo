@@ -282,6 +282,17 @@
     "logging_out": "Signing out...",
     "menu_aria": "Profile menu"
   },
+  "trusted_contacts": {
+    "title": "Trusted contacts",
+    "desc": "Your trusted contacts. Mark as emergency as needed.",
+    "empty": "You don't have any trusted contacts yet",
+    "mark_emergency": "Emergency contact",
+    "auto_share": "Auto-share trip",
+    "add": "+ Add contact",
+    "new": "New contact",
+    "adding": "Adding...",
+    "max_reached": "You've reached the maximum of {{max}} contacts."
+  },
   "notifications": {
     "title": "Notifications",
     "loading": "Loading...",

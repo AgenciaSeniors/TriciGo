@@ -303,6 +303,17 @@
     "logging_out": "Cerrando sesión...",
     "menu_aria": "Menú de perfil"
   },
+  "trusted_contacts": {
+    "title": "Contactos de confianza",
+    "desc": "Tus contactos de confianza. Marca como emergencia los que desees.",
+    "empty": "No tienes contactos de confianza aun",
+    "mark_emergency": "Contacto de emergencia",
+    "auto_share": "Compartir viaje automaticamente",
+    "add": "+ Agregar contacto",
+    "new": "Nuevo contacto",
+    "adding": "Agregando...",
+    "max_reached": "Has alcanzado el maximo de {{max}} contactos."
+  },
   "notifications": {
     "title": "Notificaciones",
     "loading": "Cargando...",

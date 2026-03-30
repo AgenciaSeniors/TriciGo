@@ -137,7 +137,7 @@ export default function SafetyPage() {
               </div>
             </div>
             <button
-              onClick={() => router.push('/profile/emergency-contact')}
+              onClick={() => router.push('/profile/trusted-contacts')}
               style={{
                 padding: '0.5rem 1rem',
                 background: 'var(--primary)',
