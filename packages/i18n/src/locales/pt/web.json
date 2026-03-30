@@ -8,7 +8,8 @@
     "profile": "Perfil",
     "logout": "Sair",
     "close_menu": "Fechar menu",
-    "open_menu": "Abrir menu"
+    "open_menu": "Abrir menu",
+    "notifications": "Notificações"
   },
   "footer": {
     "location": "Havana, Cuba",
@@ -280,5 +281,24 @@
     "logout": "Sair",
     "logging_out": "Saindo...",
     "menu_aria": "Menu do perfil"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "loading": "Carregando...",
+    "login_prompt": "Entre para ver suas notificações",
+    "login_link": "Entrar",
+    "back_home": "Voltar ao início",
+    "mark_all_read": "Marcar todas como lidas",
+    "mark_read_aria": "Marcar como lida: {{title}}",
+    "retry": "Tentar novamente",
+    "error_loading": "Erro ao carregar notificações",
+    "empty_title": "Sem notificações",
+    "empty_description": "Aqui você verá atualizações de viagens e promoções.",
+    "time_now": "Agora",
+    "time_mins_ago": "Há {{count}} min",
+    "time_hours_ago": "Há {{count}}h",
+    "time_days_ago": "Há {{count}}d",
+    "date_today": "Hoje",
+    "date_yesterday": "Ontem"
   }
 }

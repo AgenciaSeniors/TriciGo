@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, notificationService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 
 const languages = [
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
+  const [prefsLoading, setPrefsLoading] = useState(false);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -35,6 +36,50 @@ export default function SettingsPage() {
       setLanguage(saved);
     }
   }, []);
+
+  // Load notification preferences from DB
+  useEffect(() => {
+    if (!userId) return;
+    setPrefsLoading(true);
+    Promise.all([
+      notificationService.getPreferences(userId),
+      notificationService.getSmsPreference(userId),
+    ]).then(([prefs, sms]) => {
+      if (prefs) {
+        setPushNotifications(prefs.ride_updates);
+        setEmailNotifications(prefs.promotions);
+      }
+      setSmsNotifications(sms);
+    }).catch(() => {}).finally(() => setPrefsLoading(false));
+  }, [userId]);
+
+  async function handleTogglePush() {
+    const newVal = !pushNotifications;
+    setPushNotifications(newVal);
+    if (userId) {
+      notificationService.updatePreferences(userId, {
+        ride_updates: newVal,
+        chat_messages: newVal,
+        payment_updates: newVal,
+      }).catch(() => setPushNotifications(!newVal));
+    }
+  }
+
+  async function handleToggleEmail() {
+    const newVal = !emailNotifications;
+    setEmailNotifications(newVal);
+    if (userId) {
+      notificationService.updatePreferences(userId, { promotions: newVal }).catch(() => setEmailNotifications(!newVal));
+    }
+  }
+
+  async function handleToggleSms() {
+    const newVal = !smsNotifications;
+    setSmsNotifications(newVal);
+    if (userId) {
+      notificationService.updateSmsPreference(userId, newVal).catch(() => setSmsNotifications(!newVal));
+    }
+  }
 
   function handleLanguageChange(code: string) {
     setLanguage(code);
@@ -153,7 +198,7 @@ export default function SettingsPage() {
               <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.push_notifications', { defaultValue: 'Notificaciones push' })}</p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.realtime_alerts', { defaultValue: 'Alertas en tiempo real' })}</p>
             </div>
-            <button onClick={() => setPushNotifications(!pushNotifications)} style={toggleStyle(pushNotifications)}>
+            <button onClick={handleTogglePush} disabled={prefsLoading} style={toggleStyle(pushNotifications)}>
               <div style={toggleKnobStyle(pushNotifications)} />
             </button>
           </div>
@@ -170,7 +215,7 @@ export default function SettingsPage() {
               <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.email_notifications', { defaultValue: 'Correo electronico' })}</p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.receipts_promos', { defaultValue: 'Recibos y promociones' })}</p>
             </div>
-            <button onClick={() => setEmailNotifications(!emailNotifications)} style={toggleStyle(emailNotifications)}>
+            <button onClick={handleToggleEmail} disabled={prefsLoading} style={toggleStyle(emailNotifications)}>
               <div style={toggleKnobStyle(emailNotifications)} />
             </button>
           </div>
@@ -186,7 +231,7 @@ export default function SettingsPage() {
               <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.sms', { defaultValue: 'SMS' })}</p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.sms_updates', { defaultValue: 'Actualizaciones por mensaje de texto' })}</p>
             </div>
-            <button onClick={() => setSmsNotifications(!smsNotifications)} style={toggleStyle(smsNotifications)}>
+            <button onClick={handleToggleSms} disabled={prefsLoading} style={toggleStyle(smsNotifications)}>
               <div style={toggleKnobStyle(smsNotifications)} />
             </button>
           </div>

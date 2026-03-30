@@ -8,7 +8,8 @@
     "profile": "Profile",
     "logout": "Sign out",
     "close_menu": "Close menu",
-    "open_menu": "Open menu"
+    "open_menu": "Open menu",
+    "notifications": "Notifications"
   },
   "footer": {
     "location": "Havana, Cuba",
@@ -280,5 +281,24 @@
     "logout": "Sign out",
     "logging_out": "Signing out...",
     "menu_aria": "Profile menu"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "loading": "Loading...",
+    "login_prompt": "Sign in to see your notifications",
+    "login_link": "Sign in",
+    "back_home": "Back to home",
+    "mark_all_read": "Mark all read",
+    "mark_read_aria": "Mark as read: {{title}}",
+    "retry": "Retry",
+    "error_loading": "Error loading notifications",
+    "empty_title": "No notifications",
+    "empty_description": "You'll see ride updates and promotions here.",
+    "time_now": "Now",
+    "time_mins_ago": "{{count}}m ago",
+    "time_hours_ago": "{{count}}h ago",
+    "time_days_ago": "{{count}}d ago",
+    "date_today": "Today",
+    "date_yesterday": "Yesterday"
   }
 }

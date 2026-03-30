@@ -8,7 +8,8 @@
     "profile": "Perfil",
     "logout": "Salir",
     "close_menu": "Cerrar menú",
-    "open_menu": "Abrir menú"
+    "open_menu": "Abrir menú",
+    "notifications": "Notificaciones"
   },
   "footer": {
     "location": "La Habana, Cuba",
@@ -301,5 +302,24 @@
     "logout": "Cerrar sesión",
     "logging_out": "Cerrando sesión...",
     "menu_aria": "Menú de perfil"
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "loading": "Cargando...",
+    "login_prompt": "Inicia sesión para ver tus notificaciones",
+    "login_link": "Iniciar sesión",
+    "back_home": "Volver al inicio",
+    "mark_all_read": "Marcar todas leídas",
+    "mark_read_aria": "Marcar como leída: {{title}}",
+    "retry": "Reintentar",
+    "error_loading": "Error al cargar notificaciones",
+    "empty_title": "No tienes notificaciones",
+    "empty_description": "Aquí verás las actualizaciones de tus viajes y promociones.",
+    "time_now": "Ahora",
+    "time_mins_ago": "Hace {{count}} min",
+    "time_hours_ago": "Hace {{count}}h",
+    "time_days_ago": "Hace {{count}}d",
+    "date_today": "Hoy",
+    "date_yesterday": "Ayer"
   }
 }

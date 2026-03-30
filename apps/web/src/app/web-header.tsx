@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, notificationService } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 
 const navLinkStyle = (active?: boolean) => ({
@@ -21,6 +21,7 @@ export function WebHeader() {
   const [isLoading, setIsLoading] = useState(true);
   const [pathname, setPathname] = useState('/');
   const [isDark, setIsDark] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     setPathname(window.location.pathname);
@@ -71,6 +72,16 @@ export function WebHeader() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch unread notification count
+  useEffect(() => {
+    if (!user) return;
+    notificationService.getUnreadCount(user.id).then(setUnreadCount).catch(() => {});
+    const sub = notificationService.subscribeToNotifications(user.id, () => {
+      notificationService.getUnreadCount(user.id).then(setUnreadCount).catch(() => {});
+    });
+    return () => { sub?.unsubscribe?.(); };
+  }, [user]);
+
   const isAuthenticated = !!user;
 
   const signOut = async () => {
@@ -100,6 +111,7 @@ export function WebHeader() {
         { href: '/book', label: t('nav.book_ride') },
         { href: '/rides', label: t('nav.rides') },
         { href: '/wallet', label: t('nav.wallet') },
+        { href: '/notifications', label: t('nav.notifications') },
         { href: '/profile', label: t('nav.profile') },
       ];
 
@@ -107,8 +119,13 @@ export function WebHeader() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {links.map((l) => (
-              <a key={l.href} href={l.href} style={{ ...navLinkStyle(pathname.startsWith(l.href)), fontSize: '1rem', paddingBottom: 0, borderBottom: 'none' }}>
+              <a key={l.href} href={l.href} style={{ ...navLinkStyle(pathname.startsWith(l.href)), fontSize: '1rem', paddingBottom: 0, borderBottom: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 {l.label}
+                {l.href === '/notifications' && unreadCount > 0 && (
+                  <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: 'var(--primary)', color: '#fff', fontSize: '0.65rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </a>
             ))}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-light)' }}>
@@ -127,8 +144,28 @@ export function WebHeader() {
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
           {links.map((l) => (
-            <a key={l.href} href={l.href} style={navLinkStyle(pathname.startsWith(l.href))} aria-label={l.label}>
+            <a key={l.href} href={l.href} style={{ ...navLinkStyle(pathname.startsWith(l.href)), position: 'relative' as const }} aria-label={l.label}>
               {l.label}
+              {l.href === '/notifications' && unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -10,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px',
+                }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </a>
           ))}
           <div style={avatarStyle} aria-label="Avatar de usuario">

@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, notificationService } from '@tricigo/api';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -41,14 +41,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
   try {
     const token = (await Notifications.getExpoPushTokenAsync()).data;
-    // Save to Supabase profile
+    // Save to user_devices table via notificationService
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase
-        .from('profiles')
-        .update({ push_token: token })
-        .eq('id', user.id);
+      await notificationService.registerPushToken(user.id, token, Platform.OS);
     }
     return token;
   } catch (error) {

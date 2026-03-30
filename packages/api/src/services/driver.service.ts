@@ -296,11 +296,12 @@ export const driverService = {
 
     // 8. Notify customer — delivery-specific message
     if (acceptedRide.ride_mode === 'cargo') {
-      notificationService.notifyUser(acceptedRide.customer_id, 'delivery_accepted', {
-        title: 'Conductor asignado a tu envio',
-        body: 'Un conductor va en camino a recoger tu paquete',
-        data: { ride_id: rideId, type: 'delivery_accepted' },
-      }).catch(() => { /* non-blocking */ });
+      notificationService.notifyUser(
+        acceptedRide.customer_id,
+        'Conductor asignado a tu envío',
+        'Un conductor va en camino a recoger tu paquete',
+        { ride_id: rideId, type: 'delivery_accepted' },
+      ).catch(() => { /* non-blocking */ });
     }
 
     return acceptedRide;
@@ -349,11 +350,12 @@ export const driverService = {
       };
       const msg = msgs[status];
       if (msg) {
-        notificationService.notifyUser(rideData.customer_id, `delivery_${status}`, {
-          title: msg.title,
-          body: msg.body,
-          data: { ride_id: rideId, type: `delivery_${status}` },
-        }).catch(() => { /* non-blocking */ });
+        notificationService.notifyUser(
+          rideData.customer_id,
+          msg.title,
+          msg.body,
+          { ride_id: rideId, type: `delivery_${status}` },
+        ).catch(() => { /* non-blocking */ });
       }
     }
   },

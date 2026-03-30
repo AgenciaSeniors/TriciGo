@@ -523,11 +523,12 @@ export const rideService = {
       // Notify the customer that their delivery request is being matched
       if (isDelivery) {
         try {
-          await notificationService.notifyUser(ride.customer_id, 'delivery_searching', {
-            title: 'Buscando conductor para tu envio',
-            body: `Estamos buscando un conductor para recoger tu paquete`,
-            data: { ride_id: ride.id, type: 'delivery_searching' },
-          });
+          await notificationService.notifyUser(
+            ride.customer_id,
+            'Buscando conductor para tu envío',
+            'Estamos buscando un conductor para recoger tu paquete',
+            { ride_id: ride.id, type: 'delivery_searching' },
+          );
         } catch { /* non-blocking */ }
       }
     } catch (err) {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { AppNotification } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -55,36 +56,43 @@ function getNotificationIcon(type: string) {
   }
 }
 
-function formatTime(dateStr: string) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+function useFormatTime(t: (key: string, options?: Record<string, unknown>) => string) {
+  return (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Ahora';
-  if (diffMins < 60) return `Hace ${diffMins} min`;
-  if (diffHours < 24) return `Hace ${diffHours}h`;
-  if (diffDays < 7) return `Hace ${diffDays}d`;
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    if (diffMins < 1) return t('notifications.time_now');
+    if (diffMins < 60) return t('notifications.time_mins_ago', { count: diffMins });
+    if (diffHours < 24) return t('notifications.time_hours_ago', { count: diffHours });
+    if (diffDays < 7) return t('notifications.time_days_ago', { count: diffDays });
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  };
 }
 
-function formatDateGroup(dateStr: string) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const notifDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function useFormatDateGroup(t: (key: string) => string) {
+  return (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    const notifDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-  if (notifDate.getTime() === today.getTime()) return 'Hoy';
-  if (notifDate.getTime() === yesterday.getTime()) return 'Ayer';
-  return date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (notifDate.getTime() === today.getTime()) return t('notifications.date_today');
+    if (notifDate.getTime() === yesterday.getTime()) return t('notifications.date_yesterday');
+    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  };
 }
 
 export default function NotificationsPage() {
+  const { t } = useTranslation('web');
+  const formatTime = useFormatTime(t);
+  const formatDateGroup = useFormatDateGroup(t);
+
   const [userId, setUserId] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,7 +101,6 @@ export default function NotificationsPage() {
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
-      setUser(session?.user ?? null);
       setAuthLoading(false);
     });
   }, []);
@@ -107,17 +114,33 @@ export default function NotificationsPage() {
       setNotifications(data);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
-      setError('Error al cargar notificaciones');
+      setError(t('notifications.error_loading'));
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     if (userId) {
       fetchNotifications();
     }
   }, [userId, fetchNotifications]);
+
+  // Realtime subscription for new notifications
+  useEffect(() => {
+    if (!userId) return;
+
+    const subscription = notificationService.subscribeToNotifications(
+      userId,
+      (newNotification: AppNotification) => {
+        setNotifications((prev) => [newNotification, ...prev]);
+      },
+    );
+
+    return () => {
+      subscription?.unsubscribe?.();
+    };
+  }, [userId]);
 
   const handleMarkAllRead = async () => {
     if (!userId) return;
@@ -143,7 +166,7 @@ export default function NotificationsPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('notifications.loading')}</p>
       </div>
     );
   }
@@ -151,9 +174,9 @@ export default function NotificationsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para ver tus notificaciones</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('notifications.login_prompt')}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('notifications.login_link')}
         </Link>
       </div>
     );
@@ -174,13 +197,13 @@ export default function NotificationsPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <Link href="/" aria-label={t('notifications.back_home')} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </Link>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-            Notificaciones
+            {t('notifications.title')}
             {unreadCount > 0 && (
               <span style={{
                 display: 'inline-flex',
@@ -204,7 +227,6 @@ export default function NotificationsPage() {
         {unreadCount > 0 && (
           <button
             onClick={handleMarkAllRead}
-            aria-label="Marcar todas las notificaciones como leidas"
             style={{
               background: 'none',
               border: 'none',
@@ -214,7 +236,7 @@ export default function NotificationsPage() {
               cursor: 'pointer',
             }}
           >
-            Marcar todas leidas
+            {t('notifications.mark_all_read')}
           </button>
         )}
       </div>
@@ -244,7 +266,7 @@ export default function NotificationsPage() {
               cursor: 'pointer',
             }}
           >
-            Reintentar
+            {t('notifications.retry')}
           </button>
         </div>
       )}
@@ -253,8 +275,8 @@ export default function NotificationsPage() {
       {!loading && !error && notifications.length === 0 && (
         <WebEmptyState
           icon="🔔"
-          title="No tienes notificaciones"
-          description="Aqui veras las actualizaciones de tus viajes y promociones."
+          title={t('notifications.empty_title')}
+          description={t('notifications.empty_description')}
         />
       )}
 
@@ -280,7 +302,7 @@ export default function NotificationsPage() {
               <button
                 key={notif.id}
                 onClick={() => !notif.read && handleMarkRead(notif.id)}
-                aria-label={`${notif.read ? '' : 'Marcar como leida: '}${notif.title}`}
+                aria-label={notif.read ? notif.title : t('notifications.mark_read_aria', { title: notif.title })}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
