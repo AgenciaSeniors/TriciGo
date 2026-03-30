@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { walletService, exchangeRateService, getSupabaseClient } from '@tricigo/api';
+import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -68,6 +68,10 @@ export default function WalletPage() {
   const [rechargeSuccess, setRechargeSuccess] = useState<string | null>(null);
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number>(520);
+
+  // ── TropiPay iframe state ──
+  const [tropipayUrl, setTropipayUrl] = useState<string | null>(null);
+  const [tropipayPolling, setTropipayPolling] = useState(false);
 
   // ── P2P Transfer state ──
   const [transferPhone, setTransferPhone] = useState('');
@@ -191,14 +195,45 @@ export default function WalletPage() {
     setRechargeSuccess(null);
     setRechargeError(null);
     try {
-      await walletService.requestRecharge(userId, amountCup);
-      setRechargeSuccess(`Solicitud de recarga por ${formatCUP(amountCup)} enviada. Un agente la procesara pronto.`);
+      const result = await paymentService.createRechargeLink(userId, amountCup);
+      setTropipayUrl(result.paymentUrl);
       setRechargeCup('');
+      // Poll for balance change
+      setTropipayPolling(true);
+      const startBalance = balance.available;
+      const pollInterval = setInterval(async () => {
+        try {
+          const bal = await walletService.getBalance(userId);
+          if (bal.available !== startBalance) {
+            clearInterval(pollInterval);
+            setTropipayPolling(false);
+            setTropipayUrl(null);
+            setBalance(bal);
+            setRechargeSuccess('Recarga completada exitosamente.');
+            if (account) loadTransactions(account.id, 0).then(setTransactions);
+          }
+        } catch { /* ignore polling errors */ }
+      }, 5000);
+      // Stop polling after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setTropipayPolling(false);
+      }, 300000);
     } catch (err) {
       console.error('Recharge error:', err);
-      setRechargeError('Error al solicitar la recarga. Intenta de nuevo.');
+      setRechargeError('Error al generar el link de pago. Intenta de nuevo.');
     } finally {
       setRechargeLoading(false);
+    }
+  }
+
+  function closeTropipayModal() {
+    setTropipayUrl(null);
+    setTropipayPolling(false);
+    // Refresh balance in case payment completed
+    if (userId) {
+      walletService.getBalance(userId).then(setBalance).catch(() => {});
+      loadTransactions(userId, filter);
     }
   }
 
@@ -259,6 +294,7 @@ export default function WalletPage() {
   }
 
   return (
+    <>
     <main className="page-main">
       <div className="page-container">
         <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
@@ -324,7 +360,7 @@ export default function WalletPage() {
                 cursor: rechargeLoading || !rechargeCup ? 'not-allowed' : 'pointer',
               }}
             >
-              {rechargeLoading ? '...' : 'Recargar'}
+              {rechargeLoading ? '...' : 'Pagar con TropiPay'}
             </button>
           </div>
           {rechargeCup && !isNaN(parseInt(rechargeCup)) && parseInt(rechargeCup) > 0 && (
@@ -520,5 +556,56 @@ export default function WalletPage() {
         </div>
       </div>
     </main>
+
+      {/* ═══ TropiPay iframe modal ═══ */}
+      {tropipayUrl && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={closeTropipayModal}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: '500px', height: '90vh', maxHeight: '700px',
+              background: 'white', borderRadius: '1rem', overflow: 'hidden',
+              display: 'flex', flexDirection: 'column',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0.75rem 1rem', borderBottom: '1px solid #eee',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Pago con TropiPay</span>
+              {tropipayPolling && (
+                <span style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 500 }}>
+                  Esperando confirmacion...
+                </span>
+              )}
+              <button
+                onClick={closeTropipayModal}
+                style={{
+                  background: 'none', border: 'none', fontSize: '1.25rem',
+                  cursor: 'pointer', color: '#666', lineHeight: 1,
+                }}
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              src={tropipayUrl}
+              style={{ flex: 1, border: 'none', width: '100%' }}
+              title="TropiPay Payment"
+              allow="payment"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
