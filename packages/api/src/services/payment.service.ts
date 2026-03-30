@@ -26,6 +26,27 @@ export const paymentService = {
   },
 
   /**
+   * Create a TropiPay payment link for corporate wallet recharge.
+   * Same flow as personal recharge but targets the corporate wallet.
+   */
+  async createCorporateRechargeLink(
+    corporateAccountId: string,
+    amountCup: number,
+    userId: string,
+  ): Promise<{ paymentUrl: string; shortUrl: string; intentId: string }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('create-tropipay-link', {
+      body: {
+        user_id: userId,
+        amount_cup: amountCup,
+        corporate_account_id: corporateAccountId,
+      },
+    });
+    if (error) throw error;
+    return data as { paymentUrl: string; shortUrl: string; intentId: string };
+  },
+
+  /**
    * Get a single payment intent by ID (to check status after redirect).
    */
   async getPaymentIntent(intentId: string): Promise<PaymentIntent | null> {

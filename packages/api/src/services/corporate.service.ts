@@ -10,6 +10,7 @@ import type {
   CorporateEmployeeWithUser,
   CorporateRide,
   CorporateBillingSummary,
+  EmployeeReport,
   ServiceTypeSlug,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
@@ -386,6 +387,81 @@ export const corporateService = {
       total_spent_trc: totalSpent,
       budget_remaining_trc: budgetRemaining,
     };
+  },
+
+  // ─────────────────────────── Employee Reports ───────────────────────────
+
+  async getEmployeeReport(
+    accountId: string,
+    year?: number,
+    month?: number,
+  ): Promise<EmployeeReport[]> {
+    const supabase = getSupabaseClient();
+
+    // Determine date range
+    const now = new Date();
+    const y = year ?? now.getFullYear();
+    const m = month ?? now.getMonth() + 1;
+    const start = new Date(y, m - 1, 1).toISOString();
+    const end = new Date(y, m, 0, 23, 59, 59).toISOString();
+
+    // Fetch corporate rides for the period with employee info
+    const { data: rides, error } = await supabase
+      .from('corporate_rides')
+      .select('employee_user_id, fare_trc, created_at')
+      .eq('corporate_account_id', accountId)
+      .gte('created_at', start)
+      .lte('created_at', end);
+    if (error) throw error;
+
+    // Fetch employees for this account to get names
+    const { data: employees } = await supabase
+      .from('corporate_employees')
+      .select('user_id, users(full_name, phone)')
+      .eq('corporate_account_id', accountId);
+
+    const empMap = new Map<string, { name: string; phone: string }>();
+    for (const emp of employees ?? []) {
+      const u = emp.users as unknown as { full_name: string; phone: string } | null;
+      empMap.set(emp.user_id, {
+        name: u?.full_name || 'Sin nombre',
+        phone: u?.phone || '',
+      });
+    }
+
+    // Aggregate by employee
+    const grouped = new Map<string, { total: number; count: number; lastAt: string | null }>();
+    for (const ride of rides ?? []) {
+      const uid = ride.employee_user_id;
+      const existing = grouped.get(uid);
+      if (existing) {
+        existing.total += ride.fare_trc;
+        existing.count += 1;
+        if (!existing.lastAt || ride.created_at > existing.lastAt) {
+          existing.lastAt = ride.created_at;
+        }
+      } else {
+        grouped.set(uid, { total: ride.fare_trc, count: 1, lastAt: ride.created_at });
+      }
+    }
+
+    // Build report sorted by total spent descending
+    const report: EmployeeReport[] = [];
+    for (const [uid, agg] of grouped.entries()) {
+      const info = empMap.get(uid) ?? { name: uid, phone: '' };
+      report.push({
+        user_id: uid,
+        name: info.name,
+        phone: info.phone,
+        total_rides: agg.count,
+        total_spent_trc: agg.total,
+        avg_fare_trc: agg.count > 0 ? agg.total / agg.count : 0,
+        last_ride_at: agg.lastAt,
+      });
+    }
+
+    report.sort((a, b) => b.total_spent_trc - a.total_spent_trc);
+    return report;
   },
 
   // ─────────────────────────── Admin Listing ───────────────────────────

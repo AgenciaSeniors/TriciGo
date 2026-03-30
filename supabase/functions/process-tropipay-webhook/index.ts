@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
         // Find the payment intent by reference
         const { data: intent } = await supabase
           .from('payment_intents')
-          .select('id, status, user_id, amount_cup, intent_type, ride_id')
+          .select('id, status, user_id, amount_cup, intent_type, ride_id, corporate_account_id')
           .eq('tropipay_reference', refFromQuery)
           .single();
 
@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
 
         if (intent && intent.status === 'pending') {
           const isRidePayment = intent.intent_type === 'ride_payment';
+          const isCorporateRecharge = !!intent.corporate_account_id;
 
           if (isRidePayment) {
             // Process ride payment
@@ -69,8 +70,14 @@ Deno.serve(async (req) => {
               p_payment_intent_id: intent.id,
             });
             await sendRidePaymentNotification(supabase, intent.user_id, intent.amount_cup, intent.ride_id);
+          } else if (isCorporateRecharge) {
+            // Process corporate wallet recharge
+            await supabase.rpc('process_corporate_tropipay_payment', {
+              p_payment_intent_id: intent.id,
+            });
+            await sendPaymentNotification(supabase, intent.user_id, intent.amount_cup, true);
           } else {
-            // Process wallet recharge
+            // Process personal wallet recharge
             await supabase.rpc('process_tropipay_payment', {
               p_payment_intent_id: intent.id,
             });
@@ -231,8 +238,9 @@ Deno.serve(async (req) => {
       || webhookStatus === 'ok'
       || payload?.status === 'OK';
 
-    // Determine intent type: recharge (wallet) or ride_payment (direct)
+    // Determine intent type: recharge (wallet), ride_payment (direct), or corporate recharge
     const intentType = intent.intent_type ?? 'recharge';
+    const isCorporateRecharge = !!intent.corporate_account_id;
 
     if (!isSuccess) {
       // Payment was not successful — mark as failed
@@ -289,8 +297,30 @@ Deno.serve(async (req) => {
         JSON.stringify({ ok: true, transaction_id: txnId, type: 'ride_payment' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
+    } else if (isCorporateRecharge) {
+      // === CORPORATE WALLET RECHARGE ===
+      const { data: txnId, error: processError } = await supabase.rpc('process_corporate_tropipay_payment', {
+        p_payment_intent_id: intent.id,
+        p_webhook_payload: payload,
+      });
+
+      if (processError) {
+        console.error('Error processing corporate TropiPay payment:', processError);
+        return new Response(
+          JSON.stringify({ ok: false, error: 'process_error', detail: processError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      console.log(`TropiPay corporate recharge processed: ${reference} → txn ${txnId}`);
+      await sendPaymentNotification(supabase, intent.user_id, intent.amount_cup, true);
+
+      return new Response(
+        JSON.stringify({ ok: true, transaction_id: txnId, type: 'corporate_recharge' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     } else {
-      // === WALLET RECHARGE ===
+      // === PERSONAL WALLET RECHARGE ===
       const { data: txnId, error: processError } = await supabase.rpc('process_tropipay_payment', {
         p_payment_intent_id: intent.id,
         p_webhook_payload: payload,

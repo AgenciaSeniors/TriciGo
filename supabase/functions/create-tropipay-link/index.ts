@@ -28,6 +28,7 @@ function getCorsHeaders(req: Request) {
 interface CreateLinkRequest {
   user_id: string;
   amount_cup: number; // Amount in CUP centavos
+  corporate_account_id?: string; // Optional: if set, credits corporate wallet
 }
 
 /** Get TropiPay API base URL based on server mode */
@@ -82,7 +83,7 @@ Deno.serve(async (req) => {
 
     // 1. Parse request body
     const body: CreateLinkRequest = await req.json();
-    const { user_id, amount_cup } = body;
+    const { user_id, amount_cup, corporate_account_id } = body;
 
     if (!user_id || !amount_cup || amount_cup <= 0) {
       return new Response(
@@ -160,16 +161,21 @@ Deno.serve(async (req) => {
     // 4. Create payment intent record first (to get the ID for the reference)
     const reference = `tg-recharge-${crypto.randomUUID().slice(0, 12)}`;
 
+    const intentRow: Record<string, unknown> = {
+      user_id,
+      amount_cup,
+      amount_usd: amountUsd,
+      exchange_rate: exchangeRate,
+      status: 'created',
+      tropipay_reference: reference,
+    };
+    if (corporate_account_id) {
+      intentRow.corporate_account_id = corporate_account_id;
+    }
+
     const { data: intent, error: insertError } = await supabase
       .from('payment_intents')
-      .insert({
-        user_id,
-        amount_cup,
-        amount_usd: amountUsd,
-        exchange_rate: exchangeRate,
-        status: 'created',
-        tropipay_reference: reference,
-      })
+      .insert(intentRow)
       .select()
       .single();
 
@@ -210,8 +216,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         reference,
-        concept: 'Recarga TriciGo Wallet',
-        description: `Recarga de ${amount_cup} CUP (~$${amountUsd} USD)`,
+        concept: corporate_account_id ? 'Recarga Corporativa TriciGo' : 'Recarga TriciGo Wallet',
+        description: `Recarga${corporate_account_id ? ' corporativa' : ''} de ${amount_cup} CUP (~$${amountUsd} USD)`,
         amount: Math.round(amountUsd * 100), // TropiPay expects cents
         currency: 'USD',
         singleUse: true,

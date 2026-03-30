@@ -43,6 +43,7 @@ export { questService } from './services/quest.service';
 export { blogService, type BlogPost } from './services/blog.service';
 export { paymentService } from './services/payment.service';
 export { corporateService } from './services/corporate.service';
+export { invoiceService } from './services/invoice.service';
 export { trustedContactService } from './services/trusted-contact.service';
 export { disputeService } from './services/dispute.service';
 export { lostItemService } from './services/lost-item.service';

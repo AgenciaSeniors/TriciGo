@@ -14,6 +14,7 @@
     "@tricigo/types": "workspace:*",
     "@tricigo/utils": "workspace:*",
     "dompurify": "^3.3.3",
+    "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "mapbox-gl": "^3.20.0",
     "next": "15.5.12",

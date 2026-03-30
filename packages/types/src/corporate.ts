@@ -55,3 +55,13 @@ export interface CorporateBillingSummary {
   total_spent_trc: number;
   budget_remaining_trc: number;
 }
+
+export interface EmployeeReport {
+  user_id: string;
+  name: string;
+  phone: string;
+  total_rides: number;
+  total_spent_trc: number;
+  avg_fare_trc: number;
+  last_ride_at: string | null;
+}
