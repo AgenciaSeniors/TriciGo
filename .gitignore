@@ -49,6 +49,14 @@ google-service-account.json
 # Claude Code
 .claude/
 
+# Deploy artifacts
+*.zip
+deploy-stage/
+staging/
+
+# Superpowers
+.superpowers/
+
 # Misc
 *.log
 npm-debug.log*
