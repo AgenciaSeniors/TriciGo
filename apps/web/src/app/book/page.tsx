@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences } from '@tricigo/types';
+import { rideService, nearbyService, customerService, corporateService } from '@tricigo/api';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences, CorporateAccount } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
@@ -58,9 +58,11 @@ export default function BookPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
-  /* ─── Saved locations & ride preferences ─── */
+  /* ─── Saved locations, ride preferences & corporate accounts ─── */
   const [savedLocations, setSavedLocations] = useState<Array<{ label: string; address: string; latitude: number; longitude: number }>>([]);
   const [ridePrefs, setRidePrefs] = useState<RidePreferences | null>(null);
+  const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>([]);
+  const [selectedCorporateId, setSelectedCorporateId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadSaved() {
@@ -76,6 +78,7 @@ export default function BookPage() {
         if (profile?.ride_preferences) {
           setRidePrefs(profile.ride_preferences);
         }
+        corporateService.getMyAccounts(user.id).then(setCorporateAccounts).catch(() => {});
       } catch { /* ignore — saved locations are optional */ }
     }
     loadSaved();
@@ -599,6 +602,8 @@ export default function BookPage() {
         insurance_selected: insuranceSelected,
         // Ride preferences from profile
         ...(ridePrefs && { rider_preferences: ridePrefs }),
+        // Corporate account
+        ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
         // Delivery details
         ...(serviceType === 'mensajeria' && {
           ride_mode: 'cargo' as const,
@@ -1334,7 +1339,68 @@ export default function BookPage() {
                 1 USD = {selectedEstimate?.exchange_rate_usd_cup ?? 0} CUP
               </p>
 
-              {/* Payment method */}
+              {/* Corporate account selector */}
+              {corporateAccounts.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                    {t('book.charge_to', { defaultValue: 'Cobrar a' })}
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCorporateId(null); setPaymentMethod('cash'); }}
+                      aria-pressed={!selectedCorporateId}
+                      style={{
+                        flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+                        border: !selectedCorporateId ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        background: !selectedCorporateId ? '#FFF5F0' : 'white',
+                        cursor: 'pointer', fontSize: '0.8rem', fontWeight: !selectedCorporateId ? 700 : 400,
+                      }}
+                    >
+                      {t('book.personal', { defaultValue: 'Personal' })}
+                    </button>
+                    {corporateAccounts.map((acc) => {
+                      const isSelected = selectedCorporateId === acc.id;
+                      const remaining = acc.monthly_budget_trc > 0 ? acc.monthly_budget_trc - acc.current_month_spent : null;
+                      return (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => { setSelectedCorporateId(acc.id); setPaymentMethod('corporate' as PaymentMethod); }}
+                          aria-pressed={isSelected}
+                          style={{
+                            flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+                            border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+                            background: isSelected ? '#FFF5F0' : 'white',
+                            cursor: 'pointer', fontSize: '0.8rem', fontWeight: isSelected ? 700 : 400,
+                            textAlign: 'center',
+                          }}
+                        >
+                          <span style={{ display: 'block' }}>{acc.name}</span>
+                          {remaining !== null && (
+                            <span style={{ display: 'block', fontSize: '0.65rem', color: isSelected ? 'var(--primary)' : 'var(--text-tertiary)', marginTop: 2 }}>
+                              {formatTRC(remaining)} {t('book.remaining', { defaultValue: 'disp.' })}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedCorporateId && (
+                    <div style={{ marginTop: '0.5rem', background: '#FFF5F0', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 500 }}>
+                        {t('book.riding_as_corporate', {
+                          defaultValue: 'Viaje a cargo de {{company}}',
+                          company: corporateAccounts.find((a) => a.id === selectedCorporateId)?.name ?? '',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Payment method — hidden when corporate selected */}
+              {!selectedCorporateId && (
               <div style={{ marginTop: '1rem' }}>
                 <label
                   style={{
@@ -1391,6 +1457,7 @@ export default function BookPage() {
                   </button>
                 </div>
               </div>
+              )}
               </>
               )}
             </div>
