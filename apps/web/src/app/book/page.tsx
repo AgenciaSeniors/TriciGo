@@ -116,6 +116,7 @@ export default function BookPage() {
   /* ─── Center pin state (for BookingMap) ─── */
   const [centerAddress, setCenterAddress] = useState<string | null>(null);
   const [centerAddressLoading, setCenterAddressLoading] = useState(false);
+  const centerGeoIdRef = useRef(0); // Race condition guard for reverse geocode
   const [flyToTarget, setFlyToTarget] = useState<{ latitude: number; longitude: number } | null>(null);
 
   /* ─── Waypoints state (W1.1) ─── */
@@ -256,14 +257,18 @@ export default function BookPage() {
       return;
     }
     setCenterAddressLoading(true);
+    const geoId = ++centerGeoIdRef.current;
     const timeout = setTimeout(async () => {
       try {
         const addr = await reverseGeocode(mapCenter.latitude, mapCenter.longitude);
+        // Only update if this is still the latest request (race condition guard)
+        if (geoId !== centerGeoIdRef.current) return;
         setCenterAddress(addr);
       } catch {
+        if (geoId !== centerGeoIdRef.current) return;
         setCenterAddress(null);
       } finally {
-        setCenterAddressLoading(false);
+        if (geoId === centerGeoIdRef.current) setCenterAddressLoading(false);
       }
     }, 400);
     return () => clearTimeout(timeout);

@@ -266,6 +266,96 @@ const NOMINATIM_HEADERS: Record<string, string> = {
 /** Cuba bounding box for Nominatim search (SW lng, SW lat, NE lng, NE lat) */
 const CUBA_VIEWBOX = '-85.0,19.5,-74.0,23.5';
 
+/* ─── Shared Mapbox Token Helper ─── */
+
+function getMapboxToken(): string {
+  return (typeof process !== 'undefined' && (
+    process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+    process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+  )) || '';
+}
+
+/* ─── Geo Metadata (road, municipality, province, POI) ─── */
+
+interface GeoMetadata {
+  road: string;
+  municipality: string;
+  province: string;
+  poiName: string;
+}
+
+/**
+ * Strip common province prefixes: "provincia de La Habana" → "La Habana"
+ * "Provincia de Santiago de Cuba" → "Santiago de Cuba"
+ */
+function cleanProvinceName(name: string): string {
+  return name.replace(/^[Pp]rovincia\s+de\s+/i, '');
+}
+
+/**
+ * Fetch address metadata from Mapbox Geocoding v6 reverse.
+ * ~50-100ms, no throttle. Primary metadata source.
+ */
+async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadata | null> {
+  const token = getMapboxToken();
+  if (!token) return null;
+
+  const url =
+    `https://api.mapbox.com/search/geocode/v6/reverse` +
+    `?longitude=${lng}&latitude=${lat}&language=es&types=address,street&limit=1` +
+    `&access_token=${token}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const feature = data?.features?.[0];
+    if (!feature) return null;
+
+    const props = feature.properties || {};
+    const ctx = props.context || {};
+
+    // Road name: street context > address street_name > feature name
+    const road = ctx.street?.name || ctx.address?.street_name || '';
+    // Municipality: locality (barrio/municipio) > place (city)
+    const municipality = ctx.locality?.name || ctx.neighborhood?.name || ctx.place?.name || '';
+    // Province: region, strip "provincia de" prefix
+    const province = cleanProvinceName(ctx.region?.name || '');
+
+    return { road, municipality, province, poiName: '' };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Fetch address metadata from Nominatim reverse geocode.
+ * ~200ms + 1.1s throttle. Fallback when Mapbox is unavailable.
+ */
+async function fetchMetadataNominatim(lat: number, lng: number): Promise<GeoMetadata | null> {
+  const url =
+    `https://nominatim.openstreetmap.org/reverse` +
+    `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es&zoom=18`;
+  try {
+    const res = await throttledFetch(url, NOMINATIM_HEADERS);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data?.address || {};
+    return {
+      road: addr.road || addr.pedestrian || addr.footway || '',
+      municipality: addr.city_district || addr.suburb || addr.neighbourhood || '',
+      province: cleanProvinceName(addr.state || ''),
+      poiName: data?.name || addr.amenity || addr.building || addr.tourism || addr.leisure || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 /* ─── OSRM Routing ─── */
 
 /**
@@ -596,26 +686,39 @@ async function queryOverpassRace(query: string): Promise<{ elements?: Array<{ ta
 /**
  * Distance from a point to a line segment (in approximate meters).
  * Used to determine which street the user actually tapped on.
+ * All inputs are (lat, lng). We convert to approximate meters BEFORE
+ * computing the perpendicular projection so N-S and E-W distances
+ * are weighted equally.
  */
 function pointToSegmentDistanceM(
   px: number, py: number,
   ax: number, ay: number,
   bx: number, by: number,
 ): number {
-  const dx = bx - ax;
-  const dy = by - ay;
+  // Convert to meters relative to point P so the projection is isotropic
+  const cosLat = Math.cos(px * Math.PI / 180);
+  const mPerDegLat = 111000;
+  const mPerDegLng = 111000 * cosLat;
+
+  // P in meters (origin)
+  const pmx = 0, pmy = 0;
+  // A in meters relative to P
+  const amx = (ax - px) * mPerDegLat;
+  const amy = (ay - py) * mPerDegLng;
+  // B in meters relative to P
+  const bmx = (bx - px) * mPerDegLat;
+  const bmy = (by - py) * mPerDegLng;
+
+  const dx = bmx - amx;
+  const dy = bmy - amy;
   if (dx === 0 && dy === 0) {
-    const dlat = (px - ax) * 111000;
-    const dlng = (py - ay) * 111000 * Math.cos(px * Math.PI / 180);
-    return Math.sqrt(dlat * dlat + dlng * dlng);
+    return Math.sqrt(amx * amx + amy * amy);
   }
-  let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+  let t = ((pmx - amx) * dx + (pmy - amy) * dy) / (dx * dx + dy * dy);
   t = Math.max(0, Math.min(1, t));
-  const cx = ax + t * dx;
-  const cy = ay + t * dy;
-  const dlat = (px - cx) * 111000;
-  const dlng = (py - cy) * 111000 * Math.cos(px * Math.PI / 180);
-  return Math.sqrt(dlat * dlat + dlng * dlng);
+  const cx = amx + t * dx;
+  const cy = amy + t * dy;
+  return Math.sqrt(cx * cx + cy * cy);
 }
 
 /**
@@ -631,48 +734,174 @@ function minDistToWay(lat: number, lng: number, geom: Array<{ lat: number; lon: 
 }
 
 /**
+ * Lookup pre-computed cross-streets from Supabase (instant, ~5-10ms).
+ * Returns null if table is empty or no match within radius.
+ */
+async function lookupCrossStreetsSupabase(
+  lat: number,
+  lng: number,
+): Promise<{ mainStreet: string; crossStreets: string[]; municipality?: string; province?: string } | null> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/get_nearest_cross_streets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 150 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+    const row = data[0];
+    if (!row.main_street) return null;
+
+    return {
+      mainStreet: row.main_street,
+      crossStreets: row.cross_streets || [],
+      municipality: row.municipality || undefined,
+      province: row.province || undefined,
+    };
+  } catch {
+    return null; // Fallback to Overpass
+  }
+}
+
+/**
+ * Get the dominant bearing (angle in degrees) of a way's geometry near a point.
+ * Used to determine if two streets are crossing (perpendicular) vs parallel.
+ */
+function wayBearingNear(
+  lat: number,
+  lng: number,
+  geom: Array<{ lat: number; lon: number }>,
+): number {
+  // Find the segment closest to the point
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < geom.length - 1; i++) {
+    const d = pointToSegmentDistanceM(lat, lng, geom[i].lat, geom[i].lon, geom[i + 1].lat, geom[i + 1].lon);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  const cosLat = Math.cos(lat * Math.PI / 180);
+  const dlat = (geom[bestIdx + 1].lat - geom[bestIdx].lat);
+  const dlng = (geom[bestIdx + 1].lon - geom[bestIdx].lon) * cosLat;
+  return Math.atan2(dlng, dlat) * 180 / Math.PI;
+}
+
+/**
+ * Check if two bearings are "crossing" (angle difference > 25 degrees).
+ * Bearings can be 0-360 or -180-180; we normalize the difference.
+ */
+function isCrossingAngle(bearing1: number, bearing2: number): boolean {
+  let diff = Math.abs(bearing1 - bearing2) % 180;
+  if (diff > 90) diff = 180 - diff;
+  return diff > 25; // > 25° means they cross, not parallel
+}
+
+/**
  * Find the nearest street + cross streets using Overpass geometry.
  * Uses `out body geom` to get full way geometries, then calculates
  * which way is geometrically closest to the tap point = main street.
- * Other nearby ways with different names = cross streets.
+ * Cross streets must actually CROSS the main street (not be parallel).
  */
 async function findNearestStreetAndCross(
   lat: number,
   lng: number,
-): Promise<{ mainStreet: string; crossStreets: string[] } | null> {
-  // Check cache
+): Promise<{ mainStreet: string; crossStreets: string[]; municipality?: string; province?: string } | null> {
+  // 1. Check in-memory cache (0ms)
   const key = crossCacheKey(lat, lng);
   const cached = crossStreetCache.get(key);
   if (cached && cached.main && Date.now() - cached.ts < CROSS_CACHE_TTL) {
     return { mainStreet: cached.main, crossStreets: cached.streets };
   }
 
-  const query = `[out:json][timeout:3];way(around:75,${lat},${lng})["highway"]["name"];out body geom;`;
+  // 2. Check Supabase pre-computed table (5-10ms)
+  try {
+    const supabaseResult = await lookupCrossStreetsSupabase(lat, lng);
+    if (supabaseResult && supabaseResult.crossStreets.length > 0) {
+      // Cache the Supabase result locally
+      if (crossStreetCache.size >= CROSS_CACHE_MAX) {
+        const oldest = crossStreetCache.keys().next().value;
+        if (oldest) crossStreetCache.delete(oldest);
+      }
+      crossStreetCache.set(key, { main: supabaseResult.mainStreet, streets: supabaseResult.crossStreets, ts: Date.now() });
+      return supabaseResult;
+    }
+  } catch { /* fallback to Overpass */ }
+
+  // 3. Overpass fallback for areas not in pre-computed table (1-6s)
+  const query = `[out:json][timeout:5];way(around:120,${lat},${lng})["highway"]["name"];out body geom;`;
 
   try {
     const data = await queryOverpassRace(query);
     if (!data?.elements?.length) return null;
 
-    // Calculate distance from tap point to each way's geometry
-    const waysWithDist = data.elements
+    // Calculate distance and bearing from tap point to each way's geometry
+    const waysWithInfo = data.elements
       .filter(el => el.tags?.name && el.geometry && el.geometry.length >= 2)
       .map(el => ({
         name: el.tags!.name!,
         dist: minDistToWay(lat, lng, el.geometry!),
+        bearing: wayBearingNear(lat, lng, el.geometry!),
+        geom: el.geometry!,
       }))
       .sort((a, b) => a.dist - b.dist);
 
-    if (!waysWithDist.length) return null;
+    if (!waysWithInfo.length) return null;
 
     // Closest way = main street
-    const mainStreet = waysWithDist[0].name;
+    const mainWay = waysWithInfo[0];
+    const mainStreet = mainWay.name;
 
-    // Other ways with different names = cross streets (max 2, unique)
-    const crossStreets = waysWithDist
-      .filter(w => w.name.toLowerCase() !== mainStreet.toLowerCase())
-      .map(w => w.name)
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .slice(0, 2);
+    // Cross streets: different name AND crossing angle (not parallel)
+    // First try strict crossing angle, then fall back to any different name
+    const crossStreets: string[] = [];
+    const seen = new Set<string>([mainStreet.toLowerCase()]);
+
+    // Pass 1: Streets that truly cross (angle > 25°)
+    for (const w of waysWithInfo) {
+      if (crossStreets.length >= 2) break;
+      const nameLower = w.name.toLowerCase();
+      if (seen.has(nameLower)) continue;
+      if (isCrossingAngle(mainWay.bearing, w.bearing)) {
+        crossStreets.push(w.name);
+        seen.add(nameLower);
+      }
+    }
+
+    // Pass 2: If we still need more, accept any different name within 80m
+    if (crossStreets.length < 2) {
+      for (const w of waysWithInfo) {
+        if (crossStreets.length >= 2) break;
+        const nameLower = w.name.toLowerCase();
+        if (seen.has(nameLower)) continue;
+        if (w.dist <= 80) {
+          crossStreets.push(w.name);
+          seen.add(nameLower);
+        }
+      }
+    }
 
     // Cache
     if (crossStreetCache.size >= CROSS_CACHE_MAX) {
@@ -700,7 +929,7 @@ async function findCrossStreets(
   if (cached && Date.now() - cached.ts < CROSS_CACHE_TTL) {
     return cached.streets;
   }
-  const query = `[out:json][timeout:3];way(around:75,${lat},${lng})["highway"]["name"];out tags;`;
+  const query = `[out:json][timeout:5];way(around:120,${lat},${lng})["highway"]["name"];out tags;`;
   try {
     const data = await queryOverpassRace(query);
     const mainLower = mainRoad.toLowerCase();
@@ -723,7 +952,9 @@ async function findCrossStreets(
 
 /**
  * Build a full enriched address string with optional POI, municipality, and province.
- * Pattern: "POI, street, municipality, province" — deduplicates and strips trailing commas.
+ * Pattern: "street e/ cross1 y cross2, municipality, province"
+ * POI is only included when we DON'T have cross-streets (i.e. the address is on a POI, not a street).
+ * When cross-streets are present, the street address is specific enough — POI name is noise.
  */
 function buildEnrichedAddress(
   streetPart: string,
@@ -732,9 +963,10 @@ function buildEnrichedAddress(
   province: string,
 ): string {
   const parts: string[] = [];
+  const hasCrossStreets = streetPart.includes(' e/ ') || streetPart.includes(' entre ');
 
-  // Add POI if it differs from the street part (avoid "Calle X, Calle X")
-  if (poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
+  // Only add POI name when there are NO cross-streets (i.e. we're on a POI, not a street)
+  if (!hasCrossStreets && poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
     parts.push(poiName);
   }
 
@@ -748,79 +980,73 @@ function buildEnrichedAddress(
 
 /**
  * Reverse geocode coordinates to a Cuban-style street address.
- * PRIMARY: Uses Overpass with geometry to find the NEAREST street (not Nominatim).
- * This fixes the bug where Nominatim returns a parallel street instead of the closest one.
- * Enriched with POI name, municipality, and province from Nominatim.
- * Format: "Hotel Inglaterra, Paseo de Martí, La Habana Vieja, La Habana"
+ *
+ * Pipeline (parallel):
+ *   Supabase pre-computed cross-streets (~5-10ms)       ─┐
+ *   Mapbox metadata (~50-100ms, Nominatim fallback)     ─┤── merge → address
+ *   Overpass fallback (only if Supabase misses, 1-6s)   ─┘
+ *
+ * Format: "Calle Principal e/ Cruz1 y Cruz2, Municipio, Provincia"
  */
 export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
   try {
-    // 1. Nominatim reverse (fast, ~200ms) — runs in parallel with Overpass
-    const nomUrl =
-      `https://nominatim.openstreetmap.org/reverse` +
-      `?lat=${lat}&lon=${lng}&format=json&addressdetails=1&accept-language=es&zoom=18`;
-    const nomPromise = throttledFetch(nomUrl, NOMINATIM_HEADERS)
-      .then(r => r.ok ? r.json() : null)
-      .catch(() => null);
-
-    // 2. Overpass geometry-based cross-streets (slower, 1-5s) — race with a timeout
-    const overpassPromise = findNearestStreetAndCross(lat, lng).catch(() => null);
-    let overpassTimer: ReturnType<typeof setTimeout>;
-    const overpassWithTimeout = Promise.race([
-      overpassPromise.then(r => { clearTimeout(overpassTimer); return r; }),
-      new Promise<null>(resolve => { overpassTimer = setTimeout(() => resolve(null), 3000); }),
+    // 1. Run Supabase cross-streets + Mapbox metadata in parallel (both fast, no throttle)
+    //    Mapbox: ~50-100ms | Supabase: ~5-10ms | Nominatim fallback: ~200ms + throttle
+    const [supabaseResult, metadata] = await Promise.all([
+      lookupCrossStreetsSupabase(lat, lng).catch(() => null),
+      fetchMetadataMapbox(lat, lng)
+        .then(r => r || fetchMetadataNominatim(lat, lng))
+        .catch(() => null),
     ]);
 
-    // Wait for Nominatim first (fast), then check if Overpass finished
-    const nomData = await nomPromise;
+    const road = metadata?.road || '';
+    const municipality = metadata?.municipality || '';
+    const province = metadata?.province || '';
+    const poiName = metadata?.poiName || '';
 
-    // Extract metadata from Nominatim
-    const address = nomData?.address || {};
-    const municipality = address.city_district || address.suburb || address.neighbourhood || '';
-    const province = address.state || '';
-    const poiName = nomData?.name || address.amenity || address.building || address.tourism || address.leisure || '';
-    const mainRoad = address.road || address.pedestrian || address.footway || '';
+    // 2. If Supabase has cross-streets, use them (instant path, ~100ms total)
+    if (supabaseResult && supabaseResult.crossStreets.length > 0) {
+      const { mainStreet, crossStreets } = supabaseResult;
+      // Prefer Supabase admin data, fall back to Mapbox/Nominatim metadata
+      const muni = supabaseResult.municipality || municipality;
+      const prov = supabaseResult.province || province;
 
-    // Try Overpass result (may already be done or will finish within timeout)
-    const overpassResult = await overpassWithTimeout;
-
-    if (overpassResult) {
-      const { mainStreet, crossStreets } = overpassResult;
       let streetPart = mainStreet;
       if (crossStreets.length >= 2) {
         streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
       } else if (crossStreets.length === 1) {
         streetPart = `${mainStreet} y ${crossStreets[0]}`;
       }
-      return buildEnrichedAddress(streetPart, poiName, municipality, province);
+      return buildEnrichedAddress(streetPart, poiName, muni, prov);
     }
 
-    // 3. FALLBACK: Nominatim road + Overpass cross-streets (legacy, also with timeout)
-    if (!nomData?.address) return null;
+    // 3. Overpass fallback (for streets not in pre-computed table, 1-6s)
+    try {
+      let overpassTimer: ReturnType<typeof setTimeout>;
+      const overpassResult = await Promise.race([
+        findNearestStreetAndCross(lat, lng).then(r => { clearTimeout(overpassTimer); return r; }),
+        new Promise<null>(resolve => { overpassTimer = setTimeout(() => resolve(null), 6000); }),
+      ]);
 
-    if (mainRoad) {
-      try {
-        let crossTimer: ReturnType<typeof setTimeout>;
-        const crossStreets = await Promise.race([
-          findCrossStreets(lat, lng, mainRoad).then(r => { clearTimeout(crossTimer); return r; }),
-          new Promise<string[]>(resolve => { crossTimer = setTimeout(() => resolve([]), 2000); }),
-        ]);
-        let streetPart = mainRoad;
+      if (overpassResult) {
+        const { mainStreet, crossStreets } = overpassResult;
+        let streetPart = mainStreet;
         if (crossStreets.length >= 2) {
-          streetPart = `${mainRoad} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+          streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
         } else if (crossStreets.length === 1) {
-          streetPart = `${mainRoad} y ${crossStreets[0]}`;
+          streetPart = `${mainStreet} y ${crossStreets[0]}`;
         }
         return buildEnrichedAddress(streetPart, poiName, municipality, province);
-      } catch { /* fallback below */ }
-    }
+      }
+    } catch { /* fall through to metadata-only */ }
 
-    const formatted = formatCubanAddress(nomData.address);
-    if (!formatted) return null;
-    return buildEnrichedAddress(formatted, poiName, municipality, province);
+    // 4. Last resort: road name from Mapbox/Nominatim only (no cross-streets)
+    if (!metadata || !road) return null;
+
+    return buildEnrichedAddress(road, poiName, municipality, province);
   } catch {
     return null;
   }
