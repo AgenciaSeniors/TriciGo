@@ -3,17 +3,20 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import type { RecentAddress } from '@/services/recentAddresses';
 import type { PredictedDestination } from '@tricigo/utils';
 import { getCachedResults, setCachedResults } from '@/services/geocodeCache';
 
 /** Skeleton placeholder rows shown while searching */
 function SkeletonRows() {
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const anim = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     const loop = Animated.loop(
@@ -33,10 +36,10 @@ function SkeletonRows() {
           key={`skel-${i}`}
           style={{ opacity: anim, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }}
         >
-          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#e5e5e5' }} />
+          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: isDark ? darkColors.background.tertiary : '#e5e5e5' }} />
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <View style={{ height: 12, backgroundColor: '#e5e5e5', borderRadius: 4, width: `${85 - i * 15}%` as any }} />
-            <View style={{ height: 10, backgroundColor: '#f0f0f0', borderRadius: 4, width: `${60 - i * 10}%` as any, marginTop: 6 }} />
+            <View style={{ height: 12, backgroundColor: isDark ? darkColors.background.tertiary : '#e5e5e5', borderRadius: 4, width: `${85 - i * 15}%` as any }} />
+            <View style={{ height: 10, backgroundColor: isDark ? darkColors.background.secondary : '#f0f0f0', borderRadius: 4, width: `${60 - i * 10}%` as any, marginTop: 6 }} />
           </View>
         </Animated.View>
       ))}
@@ -71,6 +74,8 @@ function AddressSearchInputInner({
   onPickOnMap,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AddressSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -119,11 +124,41 @@ function AddressSearchInputInner({
     debounceRef.current = setTimeout(async () => {
       if (lastQueryRef.current !== text) return;
       try {
-        const searchResults = await searchAddress(text, 5);
+        const searchResults = await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results
         setCachedResults(text, searchResults).catch(() => {});
+
+        // Background cross-street enrichment (only for generic streets, not POIs)
+        const currentQuery = text;
+        const toEnrich = searchResults.filter(r => r.latitude && r.longitude);
+        Promise.allSettled(
+          toEnrich.map(async (r, idx) => {
+            if (!isGenericStreetAddress(r.address)) return null;
+            const enriched = await enrichWithCrossStreets(r.latitude, r.longitude);
+            if (enriched && lastQueryRef.current === currentQuery) {
+              if (enriched.includes(' e/ ') || enriched.includes(' entre ')) {
+                return { idx, address: enriched };
+              }
+            }
+            return null;
+          })
+        ).then((settled) => {
+          if (lastQueryRef.current !== currentQuery) return;
+          setResults(prev => {
+            const updated = [...prev];
+            for (const s of settled) {
+              if (s.status === 'fulfilled' && s.value) {
+                const { idx, address } = s.value;
+                if (updated[idx]) {
+                  updated[idx] = { ...updated[idx], address, displayName: address };
+                }
+              }
+            }
+            return updated;
+          });
+        });
       } catch {
         // Network error — try cache fallback
         try {
@@ -309,14 +344,14 @@ function AddressSearchInputInner({
   if (selectedAddress && !isExpanded) {
     return (
       <Pressable
-        className="bg-neutral-100 rounded-xl px-4 py-3 mb-2 flex-row items-center"
+        className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-4 py-3 mb-2 flex-row items-center"
         onPress={() => setIsExpanded(true)}
       >
         <Ionicons name="location-outline" size={18} color={colors.brand.orange} />
         <Text variant="body" color="primary" className="flex-1 ml-2" numberOfLines={1}>
           {selectedAddress}
         </Text>
-        <Ionicons name="pencil-outline" size={16} color={colors.neutral[400]} />
+        <Ionicons name="pencil-outline" size={16} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
       </Pressable>
     );
   }
@@ -324,12 +359,12 @@ function AddressSearchInputInner({
   return (
     <View className="mb-2">
       {/* Search input */}
-      <View className="bg-neutral-100 rounded-xl px-3 py-2 flex-row items-center" accessibilityRole="search">
-        <Ionicons name="search-outline" size={18} color={colors.neutral[400]} />
+      <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-2 flex-row items-center" accessibilityRole="search">
+        <Ionicons name="search-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
         <TextInput
-          className="flex-1 text-base text-neutral-900 ml-2 py-1"
+          className="flex-1 text-base text-neutral-900 dark:text-neutral-100 ml-2 py-1"
           placeholder={placeholder ?? t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
-          placeholderTextColor={colors.neutral[400]}
+          placeholderTextColor={isDark ? darkColors.text.tertiary : colors.neutral[400]}
           value={query}
           onChangeText={handleTextChange}
           onFocus={handleFocus}
@@ -340,16 +375,16 @@ function AddressSearchInputInner({
         {isSearching && <ActivityIndicator size="small" color={colors.brand.orange} />}
         {query.length > 0 && !isSearching && (
           <Pressable onPress={handleClear} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color={colors.neutral[400]} />
+            <Ionicons name="close-circle" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
           </Pressable>
         )}
       </View>
 
       {/* Offline banner */}
       {isOffline && isExpanded && (
-        <View className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mt-1 flex-row items-center">
-          <Ionicons name="cloud-offline-outline" size={14} color="#b45309" />
-          <Text variant="caption" style={{ color: '#b45309', marginLeft: 6, flex: 1 }}>
+        <View className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-3 py-2 mt-1 flex-row items-center">
+          <Ionicons name="cloud-offline-outline" size={14} color={isDark ? '#fbbf24' : '#b45309'} />
+          <Text variant="caption" style={{ color: isDark ? '#fbbf24' : '#b45309', marginLeft: 6, flex: 1 }}>
             {t('home.offline_results', { defaultValue: 'Sin conexión — mostrando resultados guardados' })}
           </Text>
         </View>
@@ -366,19 +401,19 @@ function AddressSearchInputInner({
 
       {/* Merged ranked results (query >= 2 chars) — max 5 */}
       {isExpanded && hasActiveQuery && (
-        <View className="bg-white rounded-xl mt-1 border border-neutral-200 overflow-hidden">
+        <View className="bg-white dark:bg-neutral-900 rounded-xl mt-1 border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
             {mergedResults.map((item, index) => (
               <Pressable
                 key={`merged-${item.source}-${item.latitude}-${item.longitude}`}
-                className={`px-4 flex-row items-center border-b border-neutral-100 ${index === 0 ? 'py-4' : 'py-3'}`}
+                className={`px-4 flex-row items-center border-b border-neutral-100 dark:border-neutral-800 ${index === 0 ? 'py-4' : 'py-3'}`}
                 onPress={() => handleSelectMerged(item)}
                 accessibilityLabel={item.address}
               >
                 <Ionicons
                   name={item.icon as any}
                   size={index === 0 ? 18 : 16}
-                  color={index === 0 ? colors.brand.orange : colors.neutral[500]}
+                  color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
                 />
                 <View className="flex-1 ml-2">
                   <Text
@@ -458,21 +493,21 @@ function AddressSearchInputInner({
           {/* Pick on map */}
           {onPickOnMap && (
             <Pressable
-              className="flex-row items-center px-3 py-3 mb-1 rounded-lg bg-neutral-50"
+              className="flex-row items-center px-3 py-3 mb-1 rounded-lg bg-neutral-50 dark:bg-neutral-800"
               onPress={() => { setIsExpanded(false); onPickOnMap(); }}
             >
               <Ionicons name="map-outline" size={18} color={colors.brand.orange} />
               <Text variant="body" color="accent" className="flex-1 ml-3">
                 {t('ride.pick_on_map', { defaultValue: 'Elegir en el mapa' })}
               </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
+              <Ionicons name="chevron-forward" size={16} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
             </Pressable>
           )}
 
           {/* Use my location */}
           {showUseMyLocation && (
             <Pressable
-              className="flex-row items-center px-3 py-3 mb-1 rounded-lg bg-neutral-50"
+              className="flex-row items-center px-3 py-3 mb-1 rounded-lg bg-neutral-50 dark:bg-neutral-800"
               onPress={handleUseMyLocation}
               disabled={isLocating}
             >
@@ -531,7 +566,7 @@ function AddressSearchInputInner({
                 <Ionicons
                   name={item.icon as any}
                   size={index === 0 ? 18 : 16}
-                  color={index === 0 ? colors.brand.orange : colors.neutral[500]}
+                  color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
                 />
                 <View className="flex-1 ml-3">
                   <Text
@@ -566,7 +601,7 @@ function AddressSearchInputInner({
                     className={`px-3 py-1.5 rounded-full ${
                       selectedAddress === p.address
                         ? 'bg-primary-500'
-                        : 'bg-neutral-100'
+                        : 'bg-neutral-100 dark:bg-neutral-800'
                     }`}
                     onPress={() => handleSelectPreset(p)}
                   >

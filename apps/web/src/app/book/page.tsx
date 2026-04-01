@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences, CorporateAccount } from '@tricigo/types';
@@ -695,7 +695,7 @@ export default function BookPage() {
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
             proximity={mapCenter}
-            enrichAddress={reverseGeocode}
+            enrichAddress={enrichWithCrossStreets}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetPickup(loc);
@@ -745,7 +745,7 @@ export default function BookPage() {
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
             proximity={mapCenter}
-            enrichAddress={reverseGeocode}
+            enrichAddress={enrichWithCrossStreets}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetDropoff(loc);
@@ -950,7 +950,7 @@ export default function BookPage() {
                         placeholder={t('book.stop_placeholder', { defaultValue: 'Dirección de la parada' })}
                         mapboxToken={mapboxToken}
                         proximity={mapCenter}
-                        enrichAddress={reverseGeocode}
+                        enrichAddress={enrichWithCrossStreets}
                         savedLocations={savedLocations}
                         onSelect={(r) => {
                           setWaypoints((prev) => [

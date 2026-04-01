@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, findIntersection, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch } from '@tricigo/utils';
+import { haversineDistance, findIntersection, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress } from '@tricigo/utils';
 import type { SearchBoxResult } from '@tricigo/utils';
 
 const OVERPASS_MIRRORS = [
@@ -527,7 +527,12 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           try {
             const enriched = await enrichAddress(r.latitude, r.longitude);
             if (enriched && searchIdRef.current === thisSearchId) {
-              return { idx, place_name: enriched, address: r.address, latitude: r.latitude, longitude: r.longitude };
+              // Only enrich generic streets (not named POIs like hotels/airports)
+              const hasCrossStreets = enriched.includes(' e/ ') || enriched.includes(' entre ');
+              const originalIsGeneric = isGenericStreetAddress(r.place_name || r.address);
+              if (hasCrossStreets && originalIsGeneric) {
+                return { idx, place_name: enriched, address: r.address, latitude: r.latitude, longitude: r.longitude };
+              }
             }
           } catch { /* ignore */ }
           return null;

@@ -737,7 +737,7 @@ function minDistToWay(lat: number, lng: number, geom: Array<{ lat: number; lon: 
  * Lookup pre-computed cross-streets from Supabase (instant, ~5-10ms).
  * Returns null if table is empty or no match within radius.
  */
-async function lookupCrossStreetsSupabase(
+export async function lookupCrossStreetsSupabase(
   lat: number,
   lng: number,
 ): Promise<{ mainStreet: string; crossStreets: string[]; municipality?: string; province?: string } | null> {
@@ -785,6 +785,43 @@ async function lookupCrossStreetsSupabase(
   } catch {
     return null; // Fallback to Overpass
   }
+}
+
+/* ─── Cross-street enrichment for search results ─── */
+
+const STREET_PREFIXES = /^(calle|avenida|ave?\.?|calzada|callejón|paseo|carretera|autopista|boulevard|blvd|camino|sendero|pasaje)\s/i;
+
+/**
+ * Returns true if the address looks like a generic street (safe to enrich with cross-streets).
+ * Returns false for named POIs (hotels, airports, restaurants) to avoid losing the name.
+ */
+export function isGenericStreetAddress(address: string): boolean {
+  const trimmed = address.trim();
+  if (STREET_PREFIXES.test(trimmed)) return true;
+  if (trimmed.includes(' e/ ') || trimmed.includes(' entre ')) return false;
+  if (/^\d+\s/.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Fast enrichment: lookup cross-streets from Supabase (~5-10ms) and format as Cuban address.
+ * Returns null if no cross-streets found (outside coverage, rural area, etc.).
+ * Use this instead of full reverseGeocode() when you only need cross-street enrichment.
+ */
+export async function enrichWithCrossStreets(lat: number, lng: number): Promise<string | null> {
+  const result = await lookupCrossStreetsSupabase(lat, lng);
+  if (!result || result.crossStreets.length === 0) return null;
+  const { mainStreet, crossStreets, municipality, province } = result;
+  let streetPart = mainStreet;
+  if (crossStreets.length >= 2) {
+    streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
+  } else if (crossStreets.length === 1) {
+    streetPart = `${mainStreet} y ${crossStreets[0]}`;
+  }
+  const parts = [streetPart];
+  if (municipality) parts.push(municipality);
+  if (province && province !== municipality) parts.push(province);
+  return parts.join(', ');
 }
 
 /**
