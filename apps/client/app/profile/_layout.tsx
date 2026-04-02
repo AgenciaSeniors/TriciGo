@@ -15,6 +15,10 @@ export default function ProfileLayout() {
       <Stack.Screen name="ticket-detail" />
       <Stack.Screen name="referral" />
       <Stack.Screen name="about" />
+      <Stack.Screen name="blog" />
+      <Stack.Screen name="corporate" />
+      <Stack.Screen name="terms" />
+      <Stack.Screen name="privacy" />
     </Stack>
   );
 }

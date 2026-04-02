@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { View, Text, Animated, Platform } from 'react-native';
-import { colors } from '@tricigo/theme';
+import { View, Text, Animated, Platform, useColorScheme } from 'react-native';
+import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
@@ -87,6 +87,8 @@ function RideMapViewInner({
   height = 200,
 }: RideMapViewProps) {
   const { t } = useTranslation('rider');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Smooth driver position interpolation
@@ -197,13 +199,13 @@ function RideMapViewInner({
       <View
         style={{
           height,
-          backgroundColor: colors.neutral[100],
+          backgroundColor: isDark ? darkColors.background.tertiary : colors.neutral[100],
           justifyContent: 'center',
           alignItems: 'center',
           borderRadius: 12,
         }}
       >
-        <Text style={{ color: colors.neutral[500] }} accessibilityRole="alert">{t('map.unavailable')}</Text>
+        <Text style={{ color: isDark ? darkColors.text.secondary : colors.neutral[500] }} accessibilityRole="alert">{t('map.unavailable')}</Text>
       </View>
     );
   }

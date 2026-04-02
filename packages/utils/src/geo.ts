@@ -96,27 +96,38 @@ export function estimateRoadDistance(straightLineM: number): number {
   return straightLineM * 1.3;
 }
 
-/** Average speeds in km/h per service type. */
+/**
+ * Average speeds in km/h per service type.
+ * Calibrated for Cuban urban conditions:
+ * - Narrow streets, potholes, long traffic lights
+ * - Dense traffic in Havana center
+ * - Triciclos limited to ~10-12 km/h actual
+ */
 const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
-  triciclo_basico: 15,
-  triciclo_premium: 15,
-  triciclo_cargo: 12,
-  moto_standard: 30,
-  auto_standard: 25,
-  auto_confort: 25,
-  mensajeria: 20,
+  triciclo_basico: 10,
+  triciclo_premium: 10,
+  triciclo_cargo: 8,
+  moto_standard: 22,
+  auto_standard: 18,
+  auto_confort: 20,
+  mensajeria: 15,
 };
 
 /**
  * Estimate trip duration in seconds from road distance.
+ * Only used as fallback when Mapbox/OSRM route fetch fails.
+ * Includes 15% buffer for traffic lights, stops, and urban delays.
  */
 export function estimateDuration(
   roadDistanceM: number,
   serviceType: ServiceTypeSlug,
 ): number {
-  const speedKmh = AVG_SPEEDS[serviceType] ?? 15;
+  const speedKmh = AVG_SPEEDS[serviceType] ?? 10;
   const speedMs = (speedKmh * 1000) / 3600;
-  return Math.round(roadDistanceM / speedMs);
+  const rawDuration = roadDistanceM / speedMs;
+  // 15% buffer for traffic lights, stops, and urban delays
+  const URBAN_DELAY_FACTOR = 1.15;
+  return Math.round(rawDuration * URBAN_DELAY_FACTOR);
 }
 
 /**
@@ -358,20 +369,51 @@ async function fetchMetadataNominatim(lat: number, lng: number): Promise<GeoMeta
 
 /* ─── OSRM Routing ─── */
 
+/** Route cache: avoids re-fetching the same route within 5 minutes. */
+const routeCache = new Map<string, { result: RouteResult; ts: number }>();
+const ROUTE_CACHE_TTL = 5 * 60 * 1000; // 5 min
+const ROUTE_CACHE_MAX = 30;
+
+function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
+  // ~50m precision: same intersection pair → cache hit
+  return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}_${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
+}
+
 /**
  * Fetch route via Mapbox Directions API (primary) with OSRM fallback.
  * Mapbox provides traffic-aware routing and more accurate ETAs.
+ * Results are cached for 5 minutes to avoid redundant API calls.
  */
 export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
+  // Check cache first
+  const key = routeCacheKey(from, to);
+  const cached = routeCache.get(key);
+  if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) return cached.result;
+
   // Try Mapbox first (traffic-aware, better accuracy)
   const mapboxResult = await fetchRouteMapbox(from, to);
-  if (mapboxResult) return mapboxResult;
+  if (mapboxResult) {
+    if (routeCache.size >= ROUTE_CACHE_MAX) {
+      const oldest = routeCache.keys().next().value;
+      if (oldest) routeCache.delete(oldest);
+    }
+    routeCache.set(key, { result: mapboxResult, ts: Date.now() });
+    return mapboxResult;
+  }
 
   // Fallback to OSRM (free, no auth)
-  return fetchRouteOSRM(from, to);
+  const osrmResult = await fetchRouteOSRM(from, to);
+  if (osrmResult) {
+    if (routeCache.size >= ROUTE_CACHE_MAX) {
+      const oldest = routeCache.keys().next().value;
+      if (oldest) routeCache.delete(oldest);
+    }
+    routeCache.set(key, { result: osrmResult, ts: Date.now() });
+  }
+  return osrmResult;
 }
 
 /**
@@ -395,7 +437,7 @@ export async function fetchRouteMapbox(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson&access_token=${token}`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -429,7 +471,7 @@ export async function fetchRouteOSRM(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -466,7 +508,7 @@ export async function fetchMultiStopRoute(
   const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return null;
     const data = (await res.json()) as {
       routes?: Array<{
@@ -787,6 +829,215 @@ export async function lookupCrossStreetsSupabase(
   }
 }
 
+/**
+ * Find the nearest named POI from Supabase cuba_pois table (~5-10ms).
+ * Only returns user-recognizable POIs (shops, hotels, restaurants, etc.)
+ * within 30m radius. Returns null if no POI nearby.
+ */
+async function lookupNearestPoi(
+  lat: number,
+  lng: number,
+): Promise<string | null> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/nearest_poi`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 30 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+    return data[0].name || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lookup intersection coordinates by street names from Supabase (~5ms).
+ * Uses pre-computed street_intersections table instead of slow Overpass (~1-5s).
+ * Returns null if no matching intersection found.
+ */
+export async function lookupIntersectionPoint(
+  mainStreet: string,
+  crossStreet1: string,
+  crossStreet2?: string,
+  proximity?: { latitude: number; longitude: number },
+): Promise<{ address: string; latitude: number; longitude: number } | null> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/find_intersection_point`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        p_main: mainStreet,
+        p_cross1: crossStreet1,
+        p_cross2: crossStreet2 || null,
+        p_lat: proximity?.latitude ?? 23.1136,
+        p_lng: proximity?.longitude ?? -82.3666,
+        p_radius_m: 5000,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+    const row = data[0];
+    if (!row.latitude || !row.longitude) return null;
+
+    return {
+      address: row.address || `${mainStreet} y ${crossStreet1}`,
+      latitude: row.latitude,
+      longitude: row.longitude,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ─── Cuban Address Parsing ─── */
+
+export interface CubanParsed {
+  main: string;
+  cross1: string;
+  cross2?: string;
+  partial?: 'waiting_cross1' | 'waiting_cross2';
+}
+
+/**
+ * Parse a Cuban-format address query into structured parts.
+ * Supports "e/" and "entre" separators.
+ *
+ * Examples:
+ *   "Castillo e/ Fernandina y Pila"  → { main: "Castillo", cross1: "Fernandina", cross2: "Pila" }
+ *   "Reina entre Campanario y Lealtad" → { main: "Reina", cross1: "Campanario", cross2: "Lealtad" }
+ *   "Castillo e/ "                    → { main: "Castillo", cross1: "", partial: "waiting_cross1" }
+ *   "Reina entre Campanario"          → { main: "Reina", cross1: "Campanario", partial: "waiting_cross2" }
+ */
+export function parseCubanAddress(query: string): CubanParsed | null {
+  let m: RegExpMatchArray | null;
+
+  // COMPLETE: "X entre Y y Z" or "X e/ Y y Z"
+  m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+  m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+
+  // PARTIAL: "X entre Y y " or "X e/ Y y " (about to type cross2)
+  m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s*$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s*$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+
+  // PARTIAL: "X entre Y" (user still typing, waiting for " y Z")
+  m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
+  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+
+  // PARTIAL: "X entre " or "X e/ " (waiting for cross1)
+  m = query.match(/^(.+?)\s+entre\s*$/i);
+  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+  m = query.match(/^(.+?)\s+e\/\s*$/i);
+  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+
+  return null;
+}
+
+/**
+ * Suggest cross-streets for a main street from Supabase (~5ms).
+ * Uses pre-computed street_intersections table.
+ * Replaces slow Overpass-based suggestCrossStreets() (~1-5s).
+ */
+export async function suggestCrossStreetsSupabase(
+  mainStreet: string,
+  proximity?: { latitude: number; longitude: number },
+): Promise<string[]> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return [];
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/suggest_cross_streets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        p_main: mainStreet,
+        p_lat: proximity?.latitude ?? 23.1136,
+        p_lng: proximity?.longitude ?? -82.3666,
+        p_radius_m: 3000,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data || !Array.isArray(data)) return [];
+
+    return data.map((r: { cross_street: string }) => r.cross_street).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 /* ─── Cross-street enrichment for search results ─── */
 
 const STREET_PREFIXES = /^(calle|avenida|ave?\.?|calzada|callejón|paseo|carretera|autopista|boulevard|blvd|camino|sendero|pasaje)\s/i;
@@ -805,10 +1056,14 @@ export function isGenericStreetAddress(address: string): boolean {
 
 /**
  * Fast enrichment: lookup cross-streets from Supabase (~5-10ms) and format as Cuban address.
+ * Returns address string AND corrected coordinates (from intersection lookup).
  * Returns null if no cross-streets found (outside coverage, rural area, etc.).
  * Use this instead of full reverseGeocode() when you only need cross-street enrichment.
  */
-export async function enrichWithCrossStreets(lat: number, lng: number): Promise<string | null> {
+export async function enrichWithCrossStreets(
+  lat: number,
+  lng: number,
+): Promise<{ address: string; latitude: number; longitude: number } | null> {
   const result = await lookupCrossStreetsSupabase(lat, lng);
   if (!result || result.crossStreets.length === 0) return null;
   const { mainStreet, crossStreets, municipality, province } = result;
@@ -821,7 +1076,21 @@ export async function enrichWithCrossStreets(lat: number, lng: number): Promise<
   const parts = [streetPart];
   if (municipality) parts.push(municipality);
   if (province && province !== municipality) parts.push(province);
-  return parts.join(', ');
+  const address = parts.join(', ');
+
+  // Resolve exact intersection coordinates from Supabase (~5ms)
+  const intersection = await lookupIntersectionPoint(
+    mainStreet,
+    crossStreets[0],
+    crossStreets[1],
+    { latitude: lat, longitude: lng },
+  ).catch(() => null);
+
+  return {
+    address,
+    latitude: intersection?.latitude ?? lat,
+    longitude: intersection?.longitude ?? lng,
+  };
 }
 
 /**
@@ -1002,8 +1271,8 @@ function buildEnrichedAddress(
   const parts: string[] = [];
   const hasCrossStreets = streetPart.includes(' e/ ') || streetPart.includes(' entre ');
 
-  // Only add POI name when there are NO cross-streets (i.e. we're on a POI, not a street)
-  if (!hasCrossStreets && poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
+  // Always include POI name when available (before street address)
+  if (poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
     parts.push(poiName);
   }
 
@@ -1021,6 +1290,7 @@ function buildEnrichedAddress(
  * Pipeline (parallel):
  *   Supabase pre-computed cross-streets (~5-10ms)       ─┐
  *   Mapbox metadata (~50-100ms, Nominatim fallback)     ─┤── merge → address
+ *   Supabase nearest POI (~5-10ms)                      ─┤
  *   Overpass fallback (only if Supabase misses, 1-6s)   ─┘
  *
  * Format: "Calle Principal e/ Cruz1 y Cruz2, Municipio, Provincia"
@@ -1030,19 +1300,20 @@ export async function reverseGeocode(
   lng: number,
 ): Promise<string | null> {
   try {
-    // 1. Run Supabase cross-streets + Mapbox metadata in parallel (both fast, no throttle)
-    //    Mapbox: ~50-100ms | Supabase: ~5-10ms | Nominatim fallback: ~200ms + throttle
-    const [supabaseResult, metadata] = await Promise.all([
+    // 1. Run Supabase cross-streets + Mapbox metadata + POI lookup in parallel
+    //    Mapbox: ~50-100ms | Supabase cross-streets: ~5-10ms | Supabase POI: ~5-10ms
+    const [supabaseResult, metadata, nearestPoi] = await Promise.all([
       lookupCrossStreetsSupabase(lat, lng).catch(() => null),
       fetchMetadataMapbox(lat, lng)
         .then(r => r || fetchMetadataNominatim(lat, lng))
         .catch(() => null),
+      lookupNearestPoi(lat, lng).catch(() => null),
     ]);
 
     const road = metadata?.road || '';
     const municipality = metadata?.municipality || '';
     const province = metadata?.province || '';
-    const poiName = metadata?.poiName || '';
+    const poiName = nearestPoi || metadata?.poiName || '';
 
     // 2. If Supabase has cross-streets, use them (instant path, ~100ms total)
     if (supabaseResult && supabaseResult.crossStreets.length > 0) {

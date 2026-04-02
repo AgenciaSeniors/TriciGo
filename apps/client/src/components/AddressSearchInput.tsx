@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -124,6 +124,62 @@ function AddressSearchInputInner({
     debounceRef.current = setTimeout(async () => {
       if (lastQueryRef.current !== text) return;
       try {
+        // ── Cuban address parsing (e.g. "Castillo e/ Fernandina y Pila") ──
+        const cubanParsed = parseCubanAddress(text);
+
+        // Partial → suggest cross-streets in real-time
+        if (cubanParsed?.partial) {
+          const loc = userLocation ?? undefined;
+          if (cubanParsed.partial === 'waiting_cross1' && cubanParsed.main) {
+            const crossStreets = await suggestCrossStreetsSupabase(cubanParsed.main, loc ? { latitude: loc.latitude, longitude: loc.longitude } : undefined);
+            if (lastQueryRef.current !== text) return;
+            if (crossStreets.length > 0) {
+              const suggestions: AddressSearchResult[] = crossStreets.map(cs => {
+                const addr = `${cubanParsed.main} e/ ${cs}`;
+                return { address: addr, displayName: addr, latitude: loc?.latitude ?? 23.1136, longitude: loc?.longitude ?? -82.3666 };
+              });
+              setResults(suggestions);
+              setIsSearching(false);
+              return;
+            }
+          } else if (cubanParsed.partial === 'waiting_cross2' && cubanParsed.cross1) {
+            const crossStreets = await suggestCrossStreetsSupabase(cubanParsed.main, loc ? { latitude: loc.latitude, longitude: loc.longitude } : undefined);
+            if (lastQueryRef.current !== text) return;
+            // Filter out the first cross-street already typed
+            const filtered = crossStreets.filter(cs => cs.toLowerCase() !== cubanParsed.cross1.toLowerCase());
+            if (filtered.length > 0) {
+              const suggestions: AddressSearchResult[] = filtered.map(cs => {
+                const addr = `${cubanParsed.main} e/ ${cubanParsed.cross1} y ${cs}`;
+                return { address: addr, displayName: addr, latitude: loc?.latitude ?? 23.1136, longitude: loc?.longitude ?? -82.3666 };
+              });
+              setResults(suggestions);
+              setIsSearching(false);
+              return;
+            }
+          }
+        }
+
+        // Complete Cuban address → resolve intersection via Supabase (~5ms)
+        if (cubanParsed && !cubanParsed.partial && cubanParsed.cross1) {
+          const intersection = await lookupIntersectionPoint(
+            cubanParsed.main, cubanParsed.cross1, cubanParsed.cross2,
+            userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : undefined,
+          );
+          if (lastQueryRef.current !== text) return;
+          if (intersection) {
+            setResults([{
+              address: intersection.address,
+              displayName: intersection.address,
+              latitude: intersection.latitude,
+              longitude: intersection.longitude,
+            }]);
+            setIsSearching(false);
+            return;
+          }
+          // If no intersection found, fall through to normal search
+        }
+
+        // ── Normal search (Mapbox + POIs + Nominatim) ──
         const searchResults = await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
@@ -138,8 +194,8 @@ function AddressSearchInputInner({
             if (!isGenericStreetAddress(r.address)) return null;
             const enriched = await enrichWithCrossStreets(r.latitude, r.longitude);
             if (enriched && lastQueryRef.current === currentQuery) {
-              if (enriched.includes(' e/ ') || enriched.includes(' entre ')) {
-                return { idx, address: enriched };
+              if (enriched.address.includes(' e/ ') || enriched.address.includes(' entre ')) {
+                return { idx, address: enriched.address, latitude: enriched.latitude, longitude: enriched.longitude };
               }
             }
             return null;
@@ -150,9 +206,9 @@ function AddressSearchInputInner({
             const updated = [...prev];
             for (const s of settled) {
               if (s.status === 'fulfilled' && s.value) {
-                const { idx, address } = s.value;
+                const { idx, address, latitude, longitude } = s.value;
                 if (updated[idx]) {
-                  updated[idx] = { ...updated[idx], address, displayName: address };
+                  updated[idx] = { ...updated[idx], address, displayName: address, latitude, longitude };
                 }
               }
             }
@@ -178,7 +234,7 @@ function AddressSearchInputInner({
         setIsSearching(false);
       }
     }, 500);
-  }, []);
+  }, [userLocation]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

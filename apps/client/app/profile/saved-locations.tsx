@@ -11,12 +11,13 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
 import { getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -25,6 +26,8 @@ import type { GeoPoint } from '@tricigo/utils';
 
 export default function SavedLocationsScreen() {
   const { t } = useTranslation('common');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const user = useAuthStore((s) => s.user);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [locations, setLocations] = useState<SavedLocation[]>([]);
@@ -161,7 +164,7 @@ export default function SavedLocationsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
                   >
-                    <Ionicons name="pencil-outline" size={18} color={colors.neutral[500]} />
+                    <Ionicons name="pencil-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
                   </Pressable>
                   <Pressable
                     onPress={() => handleDelete(index)}

@@ -11,6 +11,8 @@ import { rideService } from '@tricigo/api';
 import { formatTRC } from '@tricigo/utils';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import type { RideSplit } from '@tricigo/types';
 
 interface FareSplitSheetProps {
@@ -22,6 +24,8 @@ interface FareSplitSheetProps {
 
 export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: FareSplitSheetProps) {
   const { t } = useTranslation('rider');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
   const splits = useRideStore((s) => s.splits);
   const { addSplit, removeSplit } = useRideStore();
@@ -115,9 +119,9 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
 
       {/* Current participants */}
       {splits.map((split) => (
-        <View key={split.id} className="flex-row items-center justify-between py-2 border-b border-neutral-100">
+        <View key={split.id} className="flex-row items-center justify-between py-2 border-b border-neutral-100 dark:border-neutral-800">
           <View className="flex-row items-center gap-2 flex-1">
-            <Ionicons name="person-circle-outline" size={28} color="#888" />
+            <Ionicons name="person-circle-outline" size={28} color={isDark ? darkColors.text.secondary : '#888'} />
             <View>
               <Text variant="body">{split.user_name || split.user_phone || '...'}</Text>
               <Text variant="caption" color="secondary">

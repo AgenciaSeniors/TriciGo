@@ -2,54 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, findIntersection, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress } from '@tricigo/utils';
-import type { SearchBoxResult } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase } from '@tricigo/utils';
+import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 
-const OVERPASS_MIRRORS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
-
-/** Find all streets that cross a given main street, near a location */
-async function suggestCrossStreets(
-  mainStreet: string,
-  proximity: { latitude: number; longitude: number },
-): Promise<string[]> {
-  const esc = (s: string) => s
-    .replace(/[\\"/]/g, '')
-    .replace(/[();\[\]~^$*+?{}|]/g, '') // Strip Overpass QL / regex metacharacters
-    .replace(/[aáàâãä]/gi, '.')
-    .replace(/[eéèêë]/gi, '.')
-    .replace(/[iíìîï]/gi, '.')
-    .replace(/[oóòôõö]/gi, '.')
-    .replace(/[uúùûü]/gi, '.')
-    .replace(/ñ/gi, '.');
-
-  const mainEsc = esc(mainStreet);
-  const { latitude: lat, longitude: lng } = proximity;
-  const query = `[out:json][timeout:3];way["name"~"${mainEsc}",i]["highway"](around:2000,${lat},${lng})->.main;way(around.main:5)["highway"]["name"];out tags;`;
-
-  const encoded = encodeURIComponent(query);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
-  try {
-    const res = await Promise.any(
-      OVERPASS_MIRRORS.map(m => fetch(`${m}?data=${encoded}`, { signal: controller.signal }).then(r => {
-        if (!r.ok) throw new Error('fail');
-        return r.json();
-      }))
-    );
-    clearTimeout(timeout);
-    if (!res?.elements?.length) return [];
-    const mainLower = mainStreet.toLowerCase();
-    const names = res.elements
-      .map((el: any) => el.tags?.name)
-      .filter((n: string | undefined): n is string => !!n && !n.toLowerCase().includes(mainLower));
-    return [...new Set(names as string[])].slice(0, 8);
-  } catch {
-    return [];
-  }
-}
+// suggestCrossStreets and parseCubanAddress imported from @tricigo/utils (Supabase-backed, ~5ms)
 
 interface AddressResult {
   address: string;
@@ -77,7 +33,7 @@ interface AddressAutocompleteProps {
   mapboxToken: string;
   savedLocations?: SavedLocationItem[];
   proximity?: { latitude: number; longitude: number };
-  enrichAddress?: (lat: number, lng: number) => Promise<string | null>;
+  enrichAddress?: (lat: number, lng: number) => Promise<{ address: string; latitude: number; longitude: number } | null>;
 }
 
 function getSavedIcon(label: string): string {
@@ -89,44 +45,7 @@ function getSavedIcon(label: string): string {
   return '⭐';
 }
 
-interface CubanParsed {
-  main: string;
-  cross1: string;
-  cross2?: string;
-  partial?: 'waiting_cross1' | 'waiting_cross2'; // user still typing
-}
-
-function parseCubanAddress(query: string): CubanParsed | null {
-  let m: RegExpMatchArray | null;
-
-  // COMPLETE: "X entre Y y Z" or "X e/ Y y Z"
-  m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
-  m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
-
-  // PARTIAL: "X entre Y y " or "X e/ Y y " (user about to type cross2)
-  m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
-  m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
-
-  // PARTIAL: "X entre Y" (could be complete or user still typing)
-  m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim() };
-
-  // PARTIAL: "X entre " (user about to type cross1)
-  m = query.match(/^(.+?)\s+entre\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
-  m = query.match(/^(.+?)\s+e\/\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
-
-  // NOTE: "X y Z" pattern removed — too many false positives
-  // ("Capitolio Nacional" was detected as intersection)
-  // For "23 y L", user should write "23 entre L" or use fallback
-
-  return null;
-}
+// CubanParsed and parseCubanAddress imported from @tricigo/utils
 
 function highlightMatch(text: string, query: string): React.ReactNode {
   if (!query || query.length < 1) return text;
@@ -378,7 +297,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
 
       // ─── PATH 1: PARTIAL CUBAN (user typing "Lindero e/ Clavel y ") ───
       if (cubanParsed?.partial && proximity) {
-        const crossStreets = await suggestCrossStreets(cubanParsed.main, proximity);
+        const crossStreets = await suggestCrossStreetsSupabase(cubanParsed.main, proximity);
         if (searchIdRef.current !== thisSearchId) return; // Stale — discard
         if (crossStreets.length > 0) {
           const suggestions: AddressResult[] = crossStreets.map(cs => {
@@ -398,7 +317,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       // ─── PATH 2: COMPLETE CUBAN ("Reina entre Campanario y Lealtad") ───
       // ONLY run findIntersection — NO Mapbox (avoids irrelevant results)
       if (cubanParsed && !cubanParsed.partial && cubanParsed.cross1) {
-        const intersection = await findIntersection(
+        const intersection = await lookupIntersectionPoint(
           cubanParsed.main, cubanParsed.cross1, cubanParsed.cross2, proximity || undefined,
         );
         if (searchIdRef.current !== thisSearchId) return; // Stale
@@ -494,7 +413,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         const yMatch = q.match(/^(.+?)\s+y\s+(.+)$/i);
         if (yMatch && yMatch[1].trim().length >= 2 && yMatch[2].trim().length >= 1) {
           try {
-            const intersection = await findIntersection(yMatch[1].trim(), yMatch[2].trim(), undefined, proximity || undefined);
+            const intersection = await lookupIntersectionPoint(yMatch[1].trim(), yMatch[2].trim(), undefined, proximity || undefined);
             if (searchIdRef.current !== thisSearchId) return;
             if (intersection) {
               merged = [{ address: intersection.address, latitude: intersection.latitude, longitude: intersection.longitude, place_name: intersection.address }];
@@ -528,10 +447,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             const enriched = await enrichAddress(r.latitude, r.longitude);
             if (enriched && searchIdRef.current === thisSearchId) {
               // Only enrich generic streets (not named POIs like hotels/airports)
-              const hasCrossStreets = enriched.includes(' e/ ') || enriched.includes(' entre ');
+              const hasCrossStreets = enriched.address.includes(' e/ ') || enriched.address.includes(' entre ');
               const originalIsGeneric = isGenericStreetAddress(r.place_name || r.address);
               if (hasCrossStreets && originalIsGeneric) {
-                return { idx, place_name: enriched, address: r.address, latitude: r.latitude, longitude: r.longitude };
+                return { idx, place_name: enriched.address, address: r.address, latitude: enriched.latitude, longitude: enriched.longitude };
               }
             }
           } catch { /* ignore */ }
@@ -543,9 +462,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             const updated = [...prev];
             for (const s of settled) {
               if (s.status === 'fulfilled' && s.value) {
-                const { idx, place_name, address } = s.value;
+                const { idx, place_name, address, latitude, longitude } = s.value;
                 if (updated[idx]) {
-                  updated[idx] = { ...updated[idx], place_name, address };
+                  updated[idx] = { ...updated[idx], place_name, address, latitude, longitude };
                 }
               }
             }
@@ -599,7 +518,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     const parsed = parseCubanAddress(result.place_name);
     if (parsed && !parsed.partial && parsed.cross1 && proximity) {
       try {
-        const intersection = await findIntersection(parsed.main, parsed.cross1, parsed.cross2, proximity);
+        const intersection = await lookupIntersectionPoint(parsed.main, parsed.cross1, parsed.cross2, proximity);
         if (intersection) {
           setQuery(intersection.address);
           const intersectionResult = {

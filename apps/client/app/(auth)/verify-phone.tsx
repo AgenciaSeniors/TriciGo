@@ -9,13 +9,16 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone, isValidOTP } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 
 type Step = 'phone' | 'otp';
 
 export default function VerifyPhoneScreen() {
   const { t } = useTranslation('common');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -134,7 +137,7 @@ export default function VerifyPhoneScreen() {
               </Text>
 
               <View className="flex-row items-center gap-2 mb-1">
-                <View className="bg-neutral-100 rounded-xl px-3 py-3.5 flex-row items-center">
+                <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center">
                   <Text variant="body" className="font-semibold">🇨🇺 +53</Text>
                 </View>
                 <View className="flex-1">
@@ -171,7 +174,7 @@ export default function VerifyPhoneScreen() {
                 {t('auth.otp_subtitle', { phone: normalizedPhone })}
               </Text>
 
-              <View className="bg-neutral-50 rounded-xl px-4 py-2.5 flex-row items-center mb-8 self-start">
+              <View className="bg-neutral-50 dark:bg-neutral-900 rounded-xl px-4 py-2.5 flex-row items-center mb-8 self-start">
                 <Ionicons name="call-outline" size={16} color={colors.brand.orange} />
                 <Text variant="body" className="ml-2 font-semibold">{normalizedPhone}</Text>
               </View>
@@ -183,7 +186,7 @@ export default function VerifyPhoneScreen() {
                 maxLength={6}
                 value={code}
                 onChangeText={setCode}
-                leftIcon={<Ionicons name="keypad-outline" size={20} color={colors.neutral[400]} />}
+                leftIcon={<Ionicons name="keypad-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
                 autoFocus
               />
 

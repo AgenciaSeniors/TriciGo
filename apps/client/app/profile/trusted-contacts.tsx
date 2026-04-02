@@ -11,10 +11,11 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { AddContactSheet } from '@/components/AddContactSheet';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { TrustedContact } from '@tricigo/types';
@@ -23,6 +24,8 @@ const MAX_CONTACTS = 5;
 
 export default function TrustedContactsScreen() {
   const { t } = useTranslation('common');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const user = useAuthStore((s) => s.user);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +122,7 @@ export default function TrustedContactsScreen() {
           <Card key={contact.id} variant="outlined" padding="md" className="mb-3">
             <View className="flex-row items-start">
               <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3 mt-1">
-                <Ionicons name="person-outline" size={20} color={colors.primary[500]} />
+                <Ionicons name="person-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center">
@@ -140,14 +143,14 @@ export default function TrustedContactsScreen() {
                 ) : null}
 
                 {/* Auto-share toggle */}
-                <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-neutral-100">
+                <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
                   <Text variant="caption" color="secondary">
                     {t('trusted_contacts.auto_share')}
                   </Text>
                   <Switch
                     value={contact.auto_share}
                     onValueChange={() => handleToggleAutoShare(contact)}
-                    trackColor={{ true: colors.primary[500], false: colors.neutral[300] }}
+                    trackColor={{ true: colors.primary[500], false: isDark ? darkColors.border.default : colors.neutral[300] }}
                   />
                 </View>
               </View>
@@ -160,7 +163,7 @@ export default function TrustedContactsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('delete')}
               >
-                <Ionicons name="trash-outline" size={18} color={colors.neutral[400]} />
+                <Ionicons name="trash-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
               </Pressable>
             </View>
           </Card>

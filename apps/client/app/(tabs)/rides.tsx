@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -9,6 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
 import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
+import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -17,74 +18,223 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import Toast from 'react-native-toast-message';
+import { vehicleSelectionImages } from '@/utils/vehicleImages';
 
 import { Platform, useColorScheme } from 'react-native';
 
 const PAGE_SIZE = 20;
 
 // Web rides: uses real data from Supabase
+type WebFilterTab = 'all' | 'completed' | 'canceled';
+
+const WEB_PAGE_SIZE = 20;
+
 function WebRidesScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [activeTab, setActiveTab] = useState<WebFilterTab>('all');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+
+  const fetchRides = useCallback(async (p: number, tab: WebFilterTab, append: boolean) => {
+    if (!userId) return;
+    if (append) setLoadingMore(true); else setLoading(true);
+    try {
+      const statusFilter = tab === 'all' ? undefined : tab;
+      const data = await rideService.getRideHistoryFiltered({
+        userId,
+        page: p,
+        pageSize: WEB_PAGE_SIZE,
+        status: statusFilter,
+      });
+      if (append) {
+        setRides((prev) => [...prev, ...data]);
+      } else {
+        setRides(data);
+      }
+      setHasMore(data.length >= WEB_PAGE_SIZE);
+    } catch (err) {
+      logger.error('Rides fetch error', { error: String(err) });
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const data = await rideService.getRideHistory(userId!, { page: 0, pageSize: 20 });
-        if (!cancelled) setRides(data);
-      } catch (err) {
-        logger.error('Rides fetch error', { error: String(err) });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    setPage(0);
+    fetchRides(0, activeTab, false);
+  }, [userId, activeTab, fetchRides]);
+
+  const handleLoadMore = useCallback(() => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchRides(nextPage, activeTab, true);
+  }, [page, activeTab, fetchRides]);
+
+  const filterTabs: { key: WebFilterTab; label: string }[] = useMemo(() => [
+    { key: 'all', label: t('rides_history.all_statuses', { defaultValue: 'Todos' }) },
+    { key: 'completed', label: t('rides_history.completed', { defaultValue: 'Completados' }) },
+    { key: 'canceled', label: t('rides_history.canceled', { defaultValue: 'Cancelados' }) },
+  ], [t]);
+
+  const getPaymentLabel = useCallback((method: string) => {
+    switch (method) {
+      case 'cash': return t('payment.cash', { defaultValue: 'Efectivo' });
+      case 'tropipay': return 'TropiPay';
+      default: return 'TriciCoin';
     }
-    load();
-    return () => { cancelled = true; };
-  }, [userId]);
+  }, [t]);
+
+  const getVehicleIcon = useCallback((serviceType: string): keyof typeof Ionicons.glyphMap => {
+    if (serviceType.startsWith('triciclo')) return 'bicycle-outline';
+    if (serviceType.startsWith('moto')) return 'speedometer-outline';
+    if (serviceType === 'mensajeria') return 'cube-outline';
+    return 'car-outline';
+  }, []);
 
   return (
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
-        <Text variant="h3" className="mb-4">{t('rides_history.title', { defaultValue: 'Historial de viajes' })}</Text>
+        <Text variant="h3" className="mb-4">
+          {t('rides_history.title', { defaultValue: 'Historial de viajes' })}
+        </Text>
 
+        {/* Filter tabs */}
+        <View className="flex-row gap-2 mb-5">
+          {filterTabs.map((tab) => (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-full ${
+                activeTab === tab.key
+                  ? 'bg-primary-500'
+                  : 'bg-neutral-100'
+              }`}
+            >
+              <Text
+                variant="bodySmall"
+                className={`font-medium ${
+                  activeTab === tab.key ? 'text-white' : 'text-neutral-600'
+                }`}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Loading state */}
         {loading ? (
           <View>
             <SkeletonListItem />
             <SkeletonListItem />
             <SkeletonListItem />
+            <SkeletonListItem />
           </View>
         ) : rides.length === 0 ? (
+          /* Empty state */
           <EmptyState
             icon="car-outline"
             title={t('rides_history.no_rides', { defaultValue: 'Sin viajes' })}
             description={t('rides_history.no_rides_desc', { defaultValue: 'Tu historial de viajes aparecerá aquí.' })}
           />
         ) : (
-          rides.map((ride) => (
-            <Card key={ride.id} variant="outlined" padding="md" className="mb-3">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text variant="caption" color="secondary">{getRelativeDay(ride.created_at)}</Text>
-                <StatusBadge
-                  label={ride.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
-                  variant={ride.status === 'completed' ? 'success' : 'error'}
+          <View>
+            {/* Ride cards */}
+            {rides.map((ride) => {
+              const fare = ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0;
+              return (
+                <Pressable
+                  key={ride.id}
+                  onPress={() => router.push(`/ride/${ride.id}`)}
+                  accessibilityRole="button"
+                >
+                  <Card variant="outlined" padding="md" className="mb-3">
+                    {/* Header: icon + date + status badge */}
+                    <View className="flex-row items-center justify-between mb-3">
+                      <View className="flex-row items-center gap-2">
+                        <View className="w-8 h-8 rounded-full bg-neutral-100 items-center justify-center">
+                          <Ionicons
+                            name={getVehicleIcon(ride.service_type)}
+                            size={16}
+                            color={colors.neutral[500]}
+                          />
+                        </View>
+                        <Text variant="bodySmall" color="secondary">
+                          {getRelativeDay(ride.created_at)}
+                        </Text>
+                      </View>
+                      <StatusBadge
+                        label={
+                          ride.status === 'completed'
+                            ? t('rides_history.completed', { defaultValue: 'Completado' })
+                            : t('rides_history.canceled', { defaultValue: 'Cancelado' })
+                        }
+                        variant={ride.status === 'completed' ? 'success' : 'error'}
+                      />
+                    </View>
+
+                    {/* Body: Route visualization */}
+                    <View className="flex-row mb-3 ml-1">
+                      {/* Dots + dashed line column */}
+                      <View className="items-center mr-3" style={{ width: 12 }}>
+                        {/* Green pickup dot */}
+                        <View className="w-2 h-2 rounded-full bg-green-500" />
+                        {/* Dashed vertical line */}
+                        <View
+                          className="bg-neutral-300"
+                          style={{ width: 2, height: 28, borderStyle: 'dashed' }}
+                        />
+                        {/* Red dropoff dot */}
+                        <View className="w-2 h-2 rounded-full bg-red-500" />
+                      </View>
+                      {/* Address labels */}
+                      <View className="flex-1 justify-between" style={{ minHeight: 44 }}>
+                        <Text variant="bodySmall" numberOfLines={1}>
+                          {ride.pickup_address}
+                        </Text>
+                        <Text variant="bodySmall" color="secondary" numberOfLines={1}>
+                          {ride.dropoff_address}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Footer: fare + payment method */}
+                    <View className="flex-row justify-between items-center pt-2 border-t border-neutral-100">
+                      <Text variant="body" className="font-bold text-lg">
+                        {formatTRC(fare)}
+                      </Text>
+                      <Text variant="caption" color="tertiary">
+                        {getPaymentLabel(ride.payment_method)}
+                      </Text>
+                    </View>
+                  </Card>
+                </Pressable>
+              );
+            })}
+
+            {/* Pagination: Load more */}
+            {hasMore && (
+              <View className="items-center mb-6">
+                <Button
+                  title={t('rides_history.load_more', { defaultValue: 'Cargar más' })}
+                  variant="outline"
+                  size="sm"
+                  onPress={handleLoadMore}
+                  loading={loadingMore}
                 />
               </View>
-              <RouteSummary pickupAddress={ride.pickup_address} dropoffAddress={ride.dropoff_address} compact className="mb-2" />
-              <View className="flex-row justify-between items-center">
-                <Text variant="body" className="font-semibold">{formatTRC(ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0)}</Text>
-                <Text variant="caption" color="tertiary">{ride.payment_method === 'cash' ? t('payment.cash') : 'TriciCoin'}</Text>
-              </View>
-            </Card>
-          ))
+            )}
+          </View>
         )}
       </View>
     </Screen>
@@ -236,40 +386,51 @@ function NativeRidesScreen() {
     }
   }, [userId, filters]);
 
-  const renderItem = useCallback(({ item }: { item: Ride }) => {
+  const renderItem = useCallback(({ item, index }: { item: Ride; index: number }) => {
     const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.estimated_fare_cup;
 
     return (
-      <Pressable
-        onPress={() => router.push(`/ride/${item.id}`)}
-        accessibilityRole="button"
-        accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
-      >
-        <Card variant="outlined" padding="md" className="mb-3">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text variant="caption" color="secondary">
-              {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
-            </Text>
-            <StatusBadge
-              label={item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
-              variant={item.status === 'completed' ? 'success' : 'error'}
+      <AnimatedCard delay={Math.min(index * 60, 300)}>
+        <Pressable
+          onPress={() => router.push(`/ride/${item.id}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
+        >
+          <Card variant="outlined" padding="md" className="mb-3">
+            <View className="flex-row items-center justify-between mb-2">
+              <View className="flex-row items-center gap-2">
+                {item.service_type && vehicleSelectionImages[item.service_type as ServiceTypeSlug] && (
+                  <Image
+                    source={vehicleSelectionImages[item.service_type as ServiceTypeSlug]}
+                    style={{ width: 28, height: 28 }}
+                    resizeMode="contain"
+                  />
+                )}
+                <Text variant="caption" color="secondary">
+                  {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
+                </Text>
+              </View>
+              <StatusBadge
+                label={item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
+                variant={item.status === 'completed' ? 'success' : 'error'}
+              />
+            </View>
+
+            <RouteSummary
+              pickupAddress={item.pickup_address}
+              dropoffAddress={item.dropoff_address}
+              compact
+              className="mb-2"
             />
-          </View>
 
-          <RouteSummary
-            pickupAddress={item.pickup_address}
-            dropoffAddress={item.dropoff_address}
-            compact
-            className="mb-2"
-          />
+            <View className="flex-row justify-between items-center">
+              <Text variant="body" className="font-semibold">{formatTRC(fare)}</Text>
+              <Text variant="caption" color="tertiary">{item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}</Text>
+            </View>
 
-          <View className="flex-row justify-between items-center">
-            <Text variant="body" className="font-semibold">{formatTRC(fare)}</Text>
-            <Text variant="caption" color="tertiary">{item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}</Text>
-          </View>
-
-        </Card>
-      </Pressable>
+          </Card>
+        </Pressable>
+      </AnimatedCard>
     );
   }, [t]);
 
@@ -279,8 +440,8 @@ function NativeRidesScreen() {
         <View className="flex-row items-center justify-between mb-2">
           <Text variant="h3">{t('rides_history.title')}</Text>
           {rides.length > 0 && (
-            <Pressable onPress={handleExportCSV} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100" accessibilityRole="button" accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}>
-              <Ionicons name="download-outline" size={14} color={isDark ? '#9CA3AF' : '#6b7280'} />
+            <Pressable onPress={handleExportCSV} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800" accessibilityRole="button" accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}>
+              <Ionicons name="download-outline" size={14} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
               <Text variant="caption" color="secondary" className="font-medium">CSV</Text>
             </Pressable>
           )}
@@ -300,30 +461,32 @@ function NativeRidesScreen() {
             <Text variant="h4" className="mb-3">
               {t('ride.scheduled_rides', { defaultValue: 'Viajes programados' })}
             </Text>
-            {scheduledRides.map((ride) => (
-              <Pressable key={ride.id} onPress={() => router.push(`/ride/${ride.id}`)}>
-                <Card variant="outlined" padding="md" className="mb-3 border-primary-500/30">
-                  <View className="flex-row items-center mb-2">
-                    <View className="w-8 h-8 rounded-full bg-primary-50 items-center justify-center mr-3">
-                      <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />
+            <StaggeredList staggerDelay={60}>
+              {scheduledRides.map((ride) => (
+                <Pressable key={ride.id} onPress={() => router.push(`/ride/${ride.id}`)}>
+                  <Card variant="outlined" padding="md" className="mb-3 border-primary-500/30">
+                    <View className="flex-row items-center mb-2">
+                      <View className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-950 items-center justify-center mr-3">
+                        <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />
+                      </View>
+                      <View className="flex-1">
+                        <Text variant="bodySmall" color="accent" className="font-semibold">
+                          {ride.scheduled_at
+                            ? formatTimestamp(ride.scheduled_at, 'absolute')
+                            : ''}
+                        </Text>
+                      </View>
+                      <StatusBadge label={t('ride.scheduled_for', { defaultValue: 'Programado' })} variant="warning" />
                     </View>
-                    <View className="flex-1">
-                      <Text variant="bodySmall" color="accent" className="font-semibold">
-                        {ride.scheduled_at
-                          ? formatTimestamp(ride.scheduled_at, 'absolute')
-                          : ''}
-                      </Text>
-                    </View>
-                    <StatusBadge label={t('ride.scheduled_for', { defaultValue: 'Programado' })} variant="warning" />
-                  </View>
-                  <RouteSummary
-                    pickupAddress={ride.pickup_address}
-                    dropoffAddress={ride.dropoff_address}
-                    compact
-                  />
-                </Card>
-              </Pressable>
-            ))}
+                    <RouteSummary
+                      pickupAddress={ride.pickup_address}
+                      dropoffAddress={ride.dropoff_address}
+                      compact
+                    />
+                  </Card>
+                </Pressable>
+              ))}
+            </StaggeredList>
           </View>
         )}
 

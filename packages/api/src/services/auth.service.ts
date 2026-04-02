@@ -157,6 +157,23 @@ export const authService = {
   },
 
   /**
+   * Request account deletion. Marks the user profile as deleted
+   * and signs out. A Supabase Edge Function handles the actual
+   * auth.admin.deleteUser call server-side.
+   */
+  async deleteAccount(userId: string) {
+    const supabase = getSupabaseClient();
+    // Soft-delete: mark profile
+    const { error: profileErr } = await supabase
+      .from('users')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (profileErr) throw profileErr;
+    // Sign out locally
+    await this.signOut();
+  },
+
+  /**
    * Listen for auth state changes.
    */
   onAuthStateChange(

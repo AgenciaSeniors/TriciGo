@@ -125,6 +125,31 @@ export function useRideActions() {
       });
       setFareEstimate(estimate);
       setFlowStep('reviewing');
+
+      // Estimate other service types in background for comparison UI
+      const allSlugs: import('@tricigo/types').ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
+      const otherSlugs = allSlugs.filter((s) => s !== draft.serviceType);
+      const { setAllFareEstimates } = useRideStore.getState();
+      // Seed with current estimate
+      const estimates: Partial<Record<import('@tricigo/types').ServiceTypeSlug, import('@tricigo/types').FareEstimate>> = {
+        [draft.serviceType]: estimate,
+      };
+      setAllFareEstimates({ ...estimates });
+      // Fire background estimates
+      Promise.allSettled(
+        otherSlugs.map((slug) =>
+          rideService.getLocalFareEstimate({
+            service_type: slug,
+            pickup_lat: draft.pickup!.location.latitude,
+            pickup_lng: draft.pickup!.location.longitude,
+            dropoff_lat: draft.dropoff!.location.latitude,
+            dropoff_lng: draft.dropoff!.location.longitude,
+          }).then((est) => {
+            estimates[slug] = est;
+            setAllFareEstimates({ ...estimates });
+          })
+        )
+      ).catch(() => {});
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

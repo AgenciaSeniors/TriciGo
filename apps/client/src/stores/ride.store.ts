@@ -126,6 +126,9 @@ interface RideState {
   promoCode: string;
   promoResult: PromoResult | null;
 
+  // Multi-type fare estimates for comparison UI
+  allFareEstimates: Partial<Record<ServiceTypeSlug, FareEstimate>> | null;
+
   // Fare splitting
   splits: RideSplit[];
 
@@ -145,6 +148,7 @@ interface RideState {
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
   setCorporateAccount: (id: string | null) => void;
+  setAllFareEstimates: (estimates: Partial<Record<ServiceTypeSlug, FareEstimate>> | null) => void;
   setDeliveryField: (field: keyof DeliveryDraft, value: DeliveryDraft[keyof DeliveryDraft]) => void;
   addWaypoint: () => void;
   removeWaypoint: (index: number) => void;
@@ -175,6 +179,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   prefetchedPickup: null,
   promoCode: '',
   promoResult: null,
+  allFareEstimates: null,
   splits: [],
 
   setFlowStep: (flowStep) => set({ flowStep }),
@@ -252,6 +257,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
+  setAllFareEstimates: (allFareEstimates) => set({ allFareEstimates }),
   setCorporateAccount: (corporateAccountId) =>
     set((s) => ({
       draft: {
@@ -305,7 +311,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
+    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, allFareEstimates: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
 
   resetAll: () =>
     set({
@@ -313,6 +319,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       draft: { ...defaultDraft },
       fareEstimate: null,
       fareEstimatedAt: null,
+      allFareEstimates: null,
       activeRide: null,
       rideWithDriver: null,
       isLoading: false,

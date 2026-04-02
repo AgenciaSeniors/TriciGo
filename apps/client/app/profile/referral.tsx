@@ -13,11 +13,12 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { Skeleton } from '@tricigo/ui/Skeleton';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { formatCUP, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Referral } from '@tricigo/types';
 
@@ -29,6 +30,8 @@ const STATUS_DISPLAY: Record<string, { bg: string; text: string; key: string }> 
 
 export default function ReferralScreen() {
   const { t } = useTranslation('common');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
 
   const [myCode, setMyCode] = useState('');
@@ -161,7 +164,7 @@ export default function ReferralScreen() {
                     {myCode || '...'}
                   </Text>
                   {myCode ? (
-                    <Ionicons name="copy-outline" size={20} color={colors.primary[500]} style={{ marginLeft: 8 }} />
+                    <Ionicons name="copy-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} style={{ marginLeft: 8 }} />
                   ) : null}
                 </Pressable>
                 )}

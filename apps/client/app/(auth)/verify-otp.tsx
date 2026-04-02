@@ -10,13 +10,16 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidOTP } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 
 export default function VerifyOTPScreen() {
   const { t } = useTranslation('common');
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const setUser = useAuthStore((s) => s.setUser);
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -96,7 +99,7 @@ export default function VerifyOTPScreen() {
           className="flex-row items-center mb-6"
           hitSlop={16}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.neutral[400]} />
+          <Ionicons name="arrow-back" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
           <Text variant="bodySmall" color="secondary" className="ml-1">
             {t('auth.back_to_login', { defaultValue: 'Volver' })}
           </Text>
@@ -106,7 +109,7 @@ export default function VerifyOTPScreen() {
         <View
           className="w-20 h-20 rounded-full items-center justify-center mb-6"
           style={{
-            backgroundColor: 'rgba(255, 77, 0, 0.08)',
+            backgroundColor: isDark ? 'rgba(255, 77, 0, 0.15)' : 'rgba(255, 77, 0, 0.08)',
           }}
         >
           <Ionicons name="shield-checkmark-outline" size={40} color={colors.brand.orange} />
@@ -120,7 +123,7 @@ export default function VerifyOTPScreen() {
         </Text>
 
         {/* Phone number display */}
-        <View className="bg-neutral-50 rounded-xl px-4 py-2.5 flex-row items-center mb-8 self-start">
+        <View className="bg-neutral-50 dark:bg-neutral-800 rounded-xl px-4 py-2.5 flex-row items-center mb-8 self-start">
           <Ionicons name="call-outline" size={16} color={colors.brand.orange} />
           <Text variant="body" className="ml-2 font-semibold">{phone}</Text>
         </View>
@@ -132,7 +135,7 @@ export default function VerifyOTPScreen() {
           maxLength={6}
           value={code}
           onChangeText={setCode}
-          leftIcon={<Ionicons name="keypad-outline" size={20} color={colors.neutral[400]} />}
+          leftIcon={<Ionicons name="keypad-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
           autoFocus
         />
 

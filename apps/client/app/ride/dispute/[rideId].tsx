@@ -13,7 +13,8 @@ import { disputeService, getSupabaseClient } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import { Ionicons } from '@expo/vector-icons';
 import type { DisputeReason } from '@tricigo/types';
 
@@ -37,6 +38,8 @@ export default function DisputeFormScreen() {
   const { t } = useTranslation('rider');
   const { userId } = useAuth();
   const disputesEnabled = useFeatureFlag('formal_disputes_enabled');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
 
   const [reason, setReason] = useState<DisputeReason | null>(null);
   const [description, setDescription] = useState('');
@@ -171,7 +174,7 @@ export default function DisputeFormScreen() {
             <Pressable
               key={r}
               onPress={() => setReason(r)}
-              className={`px-4 py-3 flex-row items-center border-b border-neutral-100 ${
+              className={`px-4 py-3 flex-row items-center border-b border-neutral-100 dark:border-neutral-800 ${
                 reason === r ? 'bg-primary-500/10' : ''
               }`}
             >
@@ -192,9 +195,10 @@ export default function DisputeFormScreen() {
         {/* Description */}
         <Text variant="label" className="mb-2">{t('dispute.description_label')}</Text>
         <TextInput
-          className="border border-neutral-200 rounded-xl px-4 py-3 text-base min-h-[120px] mb-4"
+          className="border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-base min-h-[120px] mb-4"
           placeholder={t('dispute.description_placeholder')}
-          placeholderTextColor="#999"
+          placeholderTextColor={isDark ? darkColors.text.tertiary : '#999'}
+          style={isDark ? { color: darkColors.text.primary, backgroundColor: darkColors.background.secondary } : undefined}
           value={description}
           onChangeText={setDescription}
           multiline
@@ -234,11 +238,11 @@ export default function DisputeFormScreen() {
             {evidenceUris.length < MAX_EVIDENCE_PHOTOS && (
               <Pressable
                 onPress={pickImage}
-                className="w-20 h-20 rounded-lg border-2 border-dashed border-neutral-300 items-center justify-center bg-neutral-50"
+                className="w-20 h-20 rounded-lg border-2 border-dashed border-neutral-300 dark:border-neutral-600 items-center justify-center bg-neutral-50 dark:bg-neutral-800"
                 accessibilityRole="button"
                 accessibilityLabel={t('dispute.add_photo', { defaultValue: 'Agregar foto' })}
               >
-                <Ionicons name="camera-outline" size={24} color={colors.neutral[400]} />
+                <Ionicons name="camera-outline" size={24} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
                 <Text variant="caption" color="secondary" className="mt-1 text-[10px]">
                   {t('dispute.add_photo', { defaultValue: 'Agregar' })}
                 </Text>
