@@ -10,7 +10,7 @@ declare const __DEV__: boolean | undefined;
 
 export const authService = {
   /**
-   * Send OTP to a phone number via SMSPM Edge Function.
+   * Send OTP to a phone number via Twilio SMS Edge Function.
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
@@ -20,7 +20,7 @@ export const authService = {
       return;
     }
 
-    // Send OTP via Edge Function (SMSPM)
+    // Send OTP via Edge Function (Twilio SMS)
     const { data, error } = await supabase.functions.invoke('send-sms-otp', {
       body: { phone },
     });
@@ -46,7 +46,7 @@ export const authService = {
     }
 
     // Verify OTP via Edge Function (validates against otp_codes table, creates session)
-    const { data, error } = await supabase.functions.invoke('verify-whatsapp-otp', {
+    const { data, error } = await supabase.functions.invoke('verify-otp', {
       body: { phone, code: token },
     });
 
