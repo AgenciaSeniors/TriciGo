@@ -17,10 +17,12 @@ export function useDemandHeatmap(enabled: boolean): HeatmapPoint[] {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    // TODO: Enable when demand-heatmap edge function is deployed
     if (!enabled) {
       setPoints([]);
       return;
     }
+    return;
 
     const fetchHeatmap = async () => {
       try {

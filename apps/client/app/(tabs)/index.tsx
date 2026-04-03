@@ -99,6 +99,345 @@ interface LocationPreset {
   label?: string;
 }
 
+/* ── CSS keyframes for web searching animations ── */
+const WEB_SEARCHING_CSS = `
+  @keyframes ws-ripple {
+    0% { transform: translate(-50%,-50%) scale(0.8); opacity: 0.5; }
+    100% { transform: translate(-50%,-50%) scale(2.4); opacity: 0; }
+  }
+  @keyframes ws-progress {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+  @keyframes ws-fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes ws-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,0,0.3); }
+    50% { box-shadow: 0 0 0 12px rgba(255,77,0,0); }
+  }
+  @keyframes ws-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+`;
+
+const WEB_SEARCH_MESSAGES = [
+  'Buscando el mejor conductor para ti...',
+  'Verificando conductores cercanos...',
+  'Conductores evaluando tu solicitud...',
+  'Ampliando el radio de búsqueda...',
+  'Pocos conductores disponibles, esperando...',
+];
+
+/* ── Premium Web Searching State ── */
+function WebSearchingState({
+  pickup, dropoff, pickupAddress, dropoffAddress, routeCoords,
+  selectedEstimate, serviceType, onReset, font,
+}: {
+  pickup: LocationPreset | null;
+  dropoff: LocationPreset | null;
+  pickupAddress: string;
+  dropoffAddress: string;
+  routeCoords: [number, number][];
+  selectedEstimate: any;
+  serviceType: string;
+  onReset: () => void;
+  font: { fontFamily: string };
+}) {
+  const [searchPhase, setSearchPhase] = useState(0);
+  const [searchTimedOut, setSearchTimedOut] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  // Progressive messages
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setSearchPhase(1), 15000),
+      setTimeout(() => setSearchPhase(2), 30000),
+      setTimeout(() => setSearchPhase(3), 60000),
+      setTimeout(() => setSearchPhase(4), 90000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Timeout
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearchTimedOut(true), 120_000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // Elapsed timer
+  useEffect(() => {
+    const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const searchMessage = WEB_SEARCH_MESSAGES[searchPhase] ?? WEB_SEARCH_MESSAGES[0];
+  const fmtCUP = (v: number) => `${Math.round(v).toLocaleString('es-CU')} CUP`;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', ...font }}>
+      <style dangerouslySetInnerHTML={{ __html: WEB_SEARCHING_CSS }} />
+
+      {/* ═══ LEFT: Map ═══ */}
+      <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
+        {pickup && dropoff && (
+          <WebMapView
+            pickup={{ latitude: pickup.latitude, longitude: pickup.longitude }}
+            dropoff={{ latitude: dropoff.latitude, longitude: dropoff.longitude }}
+            routeCoords={routeCoords}
+            style={{ width: '100%', height: '100%' }}
+          />
+        )}
+
+        {/* ETA Badge floating on map */}
+        {selectedEstimate?.estimated_duration_s && !searchTimedOut && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 20px', borderRadius: 999,
+            background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+            fontSize: 14, fontWeight: 700, color: '#1a1a1a', zIndex: 10,
+            animation: 'ws-fadeIn 0.4s ease both',
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            ~{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min
+          </div>
+        )}
+      </div>
+
+      {/* ═══ RIGHT: Searching Panel ═══ */}
+      <div style={{
+        width: 440, minWidth: 380, maxWidth: 480,
+        display: 'flex', flexDirection: 'column',
+        backgroundColor: '#fff', borderLeft: '1px solid #e5e5e5',
+        overflowY: 'auto', padding: '32px 28px',
+        gap: 20, ...font,
+      }}>
+        {/* Header */}
+        <div style={{ animation: 'ws-fadeIn 0.3s ease both' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
+            {serviceType === 'mensajeria' ? 'Seguimiento de envío' : 'Seguimiento de viaje'}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+            {searchTimedOut ? 'Sin conductor disponible' : '¡Viaje solicitado!'}
+          </div>
+        </div>
+
+        {/* Ripple Animation or Timeout */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '20px 0', animation: 'ws-fadeIn 0.4s ease both 0.05s',
+        }}>
+          {searchTimedOut ? (
+            <>
+              <div style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'rgba(156,163,175,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 16,
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 6 }}>
+                No encontramos conductor
+              </div>
+              <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center' as const, marginBottom: 16 }}>
+                Intenta de nuevo o prueba con otro tipo de vehículo
+              </div>
+              <button onClick={onReset} style={{
+                width: '100%', padding: '14px 24px', borderRadius: 12,
+                background: colors.brand.orange, color: '#fff',
+                fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer',
+                ...font,
+              }}>
+                Solicitar otro viaje
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Ripple circles */}
+              <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 16 }}>
+                {[0, 0.6, 1.2].map((delay, i) => (
+                  <div key={i} style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    width: 80, height: 80, borderRadius: '50%',
+                    border: '2px solid rgba(255,77,0,0.3)',
+                    animation: `ws-ripple 2.4s ease-out ${delay}s infinite`,
+                  }} />
+                ))}
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #FF4D00, #FF6B2C)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(255,77,0,0.3)',
+                  animation: 'ws-glow 2s ease-in-out infinite',
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L19 21L12 17L5 21L12 2Z" />
+                  </svg>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 4 }}>
+                Buscando conductor
+              </div>
+              <div key={searchPhase} style={{
+                fontSize: 13, color: '#6b7280', textAlign: 'center' as const,
+                animation: 'ws-fadeIn 0.3s ease both',
+              }}>
+                {searchMessage}
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
+                <div style={{ height: 3, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', backgroundColor: colors.brand.orange,
+                    borderRadius: 2, animation: 'ws-progress 120s linear forwards',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: '#9ca3af' }}>
+                  <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
+                  <span>2:00</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Status Stepper */}
+        {!searchTimedOut && (
+          <div style={{
+            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.1s',
+          }}>
+            {[
+              { label: 'Buscando conductor', active: true },
+              { label: 'Conductor asignado', active: false },
+              { label: 'En camino a recogerte', active: false },
+              { label: 'Viaje en curso', active: false },
+            ].map((step, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: idx < 3 ? 12 : 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24, flexShrink: 0 }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                    ...(step.active
+                      ? { background: colors.brand.orange, color: '#fff', animation: 'ws-glow 2s ease-in-out infinite' }
+                      : { background: '#f0f0f0', color: '#9ca3af', border: '2px solid #e5e5e5' }),
+                  }}>
+                    {idx + 1}
+                  </div>
+                  {idx < 3 && (
+                    <div style={{
+                      width: 2, flex: 1, minHeight: 12, marginTop: 4,
+                      background: step.active ? colors.brand.orange : '#e5e5e5',
+                      ...(step.active ? {} : {
+                        background: 'repeating-linear-gradient(to bottom, #e5e5e5 0px, #e5e5e5 3px, transparent 3px, transparent 6px)',
+                      }),
+                    }} />
+                  )}
+                </div>
+                <span style={{
+                  fontSize: 13, paddingTop: 3, lineHeight: '1.3',
+                  ...(step.active
+                    ? { fontWeight: 700, color: '#1a1a1a' }
+                    : { fontWeight: 500, color: '#9ca3af' }),
+                }}>
+                  {step.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Route Card */}
+        <div style={{
+          background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+          padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.15s',
+        }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, gap: 2 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+              <div style={{ width: 2, flex: 1, minHeight: 20, background: '#e5e5e5', borderRadius: 1 }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Desde</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{pickupAddress || 'Origen'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Hasta</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{dropoffAddress || 'Destino'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Fare Card */}
+        {selectedEstimate && (
+          <div style={{
+            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            animation: 'ws-fadeIn 0.4s ease both 0.2s',
+          }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>Tarifa estimada</div>
+              {selectedEstimate.estimated_distance_m && (
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                  {(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: colors.brand.orange, letterSpacing: '-0.02em' }}>
+              {fmtCUP(selectedEstimate.estimated_fare_cup)}
+            </div>
+          </div>
+        )}
+
+        {/* Cancel button */}
+        {!searchTimedOut && (
+          <button onClick={onReset} style={{
+            width: '100%', padding: '14px 24px', borderRadius: 12,
+            background: 'transparent', color: '#6b7280',
+            fontWeight: 600, fontSize: 14, cursor: 'pointer',
+            border: '1.5px solid #e5e5e5', ...font,
+            transition: 'all 0.2s ease',
+            animation: 'ws-fadeIn 0.4s ease both 0.25s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.color = '#6b7280'; }}
+          >
+            Cancelar búsqueda
+          </button>
+        )}
+
+        {/* Live indicator */}
+        {!searchTimedOut && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 8, fontSize: 11, color: '#9ca3af', fontWeight: 500,
+            animation: 'ws-fadeIn 0.4s ease both 0.3s',
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#22c55e',
+              animation: 'ws-pulse 2s ease-in-out infinite',
+            }} />
+            Búsqueda en tiempo real
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Web version of home screen — full booking flow matching tricigo.com
 function WebHomeScreen() {
   const { t } = useTranslation('rider');
@@ -464,22 +803,19 @@ function WebHomeScreen() {
   // Format CUP helper
   const fmtCUP = (cup: number) => `${Math.round(cup).toLocaleString('es-CU')} CUP`;
 
-  // Success state
+  // Success state — Premium searching UI
   if (requestSuccess) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <Text style={{ fontSize: 48, marginBottom: 16 }}>✅</Text>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: '#1a1a1a', textAlign: 'center', ...font }}>
-          ¡Viaje solicitado!
-        </Text>
-        <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginTop: 8, ...font }}>
-          Buscando conductor disponible...
-        </Text>
-        <Pressable onPress={handleReset} style={{ marginTop: 24, backgroundColor: colors.brand.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, ...font }}>Solicitar otro viaje</Text>
-        </Pressable>
-      </View>
-    );
+    return <WebSearchingState
+      pickup={pickup}
+      dropoff={dropoff}
+      pickupAddress={pickupAddress}
+      dropoffAddress={dropoffAddress}
+      routeCoords={routeCoords}
+      selectedEstimate={selectedEstimate}
+      serviceType={serviceType}
+      onReset={handleReset}
+      font={font}
+    />;
   }
 
   return (

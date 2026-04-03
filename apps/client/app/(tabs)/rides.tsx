@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
@@ -34,6 +34,42 @@ type WebFilterTab = 'all' | 'completed' | 'canceled';
 
 const WEB_PAGE_SIZE = 20;
 
+/* ── CSS keyframes for web rides animations ── */
+const WEB_RIDES_CSS = `
+  @keyframes wr-fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+`;
+
+const WEB_SERVICE_LABELS: Record<string, string> = {
+  triciclo_basico: 'Triciclo',
+  triciclo_premium: 'Triciclo Premium',
+  triciclo_cargo: 'Triciclo Cargo',
+  moto_standard: 'Moto',
+  auto_standard: 'Auto',
+  auto_confort: 'Confort',
+  mensajeria: 'Envío',
+};
+
+const WEB_PAYMENT_LABELS: Record<string, string> = {
+  cash: 'Efectivo',
+  tricicoin: 'TriciCoin',
+  mixed: 'Mixto',
+  tropipay: 'TropiPay',
+  corporate: 'Corporativo',
+};
+
+function webGroupRidesByDate(rides: Ride[]): { label: string; rides: Ride[] }[] {
+  const groups: Map<string, Ride[]> = new Map();
+  for (const ride of rides) {
+    const label = getRelativeDay(ride.created_at, 'Hoy', 'Ayer');
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(ride);
+  }
+  return Array.from(groups.entries()).map(([label, groupRides]) => ({ label, rides: groupRides }));
+}
+
 function WebRidesScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
@@ -44,16 +80,17 @@ function WebRidesScreen() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
+  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+
   const fetchRides = useCallback(async (p: number, tab: WebFilterTab, append: boolean) => {
     if (!userId) return;
     if (append) setLoadingMore(true); else setLoading(true);
     try {
-      const statusFilter = tab === 'all' ? undefined : tab;
       const data = await rideService.getRideHistoryFiltered({
         userId,
         page: p,
         pageSize: WEB_PAGE_SIZE,
-        status: statusFilter,
+        ...(tab !== 'all' && { status: [tab] }),
       });
       if (append) {
         setRides((prev) => [...prev, ...data]);
@@ -86,158 +123,222 @@ function WebRidesScreen() {
     { key: 'canceled', label: t('rides_history.canceled', { defaultValue: 'Cancelados' }) },
   ], [t]);
 
-  const getPaymentLabel = useCallback((method: string) => {
-    switch (method) {
-      case 'cash': return t('payment.cash', { defaultValue: 'Efectivo' });
-      case 'tropipay': return 'TropiPay';
-      default: return 'TriciCoin';
-    }
-  }, [t]);
-
-  const getVehicleIcon = useCallback((serviceType: string): keyof typeof Ionicons.glyphMap => {
-    if (serviceType.startsWith('triciclo')) return 'bicycle-outline';
-    if (serviceType.startsWith('moto')) return 'speedometer-outline';
-    if (serviceType === 'mensajeria') return 'cube-outline';
-    return 'car-outline';
-  }, []);
+  const dateGroups = webGroupRidesByDate(rides);
+  let globalCardIdx = 0;
 
   return (
-    <Screen bg="white" padded>
-      <View className="pt-4 flex-1">
-        <Text variant="h3" className="mb-4">
+    <div style={{ height: 'calc(100vh - 60px)', overflowY: 'auto', background: '#fafafa', ...font }}>
+      <style dangerouslySetInnerHTML={{ __html: WEB_RIDES_CSS }} />
+
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 20px' }}>
+        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginBottom: 20, color: '#1a1a1a' }}>
           {t('rides_history.title', { defaultValue: 'Historial de viajes' })}
-        </Text>
+        </h1>
 
-        {/* Filter tabs */}
-        <View className="flex-row gap-2 mb-5">
+        {/* Filter tabs — identical to web */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
           {filterTabs.map((tab) => (
-            <Pressable
+            <button
               key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 rounded-full ${
-                activeTab === tab.key
-                  ? 'bg-primary-500'
-                  : 'bg-neutral-100'
-              }`}
+              onClick={() => { if (tab.key !== activeTab) { setActiveTab(tab.key); setRides([]); setPage(0); } }}
+              style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '8px 18px', borderRadius: 999,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                whiteSpace: 'nowrap', ...font,
+                transition: 'all 0.2s ease',
+                ...(activeTab === tab.key
+                  ? { background: '#FF4D00', borderColor: '#FF4D00', color: '#fff', border: '1.5px solid #FF4D00' }
+                  : { background: 'transparent', border: '1.5px solid #e5e5e5', color: '#666' }),
+              }}
             >
-              <Text
-                variant="bodySmall"
-                className={`font-medium ${
-                  activeTab === tab.key ? 'text-white' : 'text-neutral-600'
-                }`}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
+              {tab.label}
+            </button>
           ))}
-        </View>
+        </div>
 
-        {/* Loading state */}
-        {loading ? (
-          <View>
-            <SkeletonListItem />
-            <SkeletonListItem />
-            <SkeletonListItem />
-            <SkeletonListItem />
-          </View>
-        ) : rides.length === 0 ? (
-          /* Empty state */
-          <EmptyState
-            icon="car-outline"
-            title={t('rides_history.no_rides', { defaultValue: 'Sin viajes' })}
-            description={t('rides_history.no_rides_desc', { defaultValue: 'Tu historial de viajes aparecerá aquí.' })}
-          />
-        ) : (
-          <View>
-            {/* Ride cards */}
-            {rides.map((ride) => {
-              const fare = ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0;
-              return (
-                <Pressable
-                  key={ride.id}
-                  onPress={() => router.push(`/ride/${ride.id}`)}
-                  accessibilityRole="button"
-                >
-                  <Card variant="outlined" padding="md" className="mb-3">
-                    {/* Header: icon + date + status badge */}
-                    <View className="flex-row items-center justify-between mb-3">
-                      <View className="flex-row items-center gap-2">
-                        <View className="w-8 h-8 rounded-full bg-neutral-100 items-center justify-center">
-                          <Ionicons
-                            name={getVehicleIcon(ride.service_type)}
-                            size={16}
-                            color={colors.neutral[500]}
-                          />
-                        </View>
-                        <Text variant="bodySmall" color="secondary">
-                          {getRelativeDay(ride.created_at)}
-                        </Text>
-                      </View>
-                      <StatusBadge
-                        label={
-                          ride.status === 'completed'
-                            ? t('rides_history.completed', { defaultValue: 'Completado' })
-                            : t('rides_history.canceled', { defaultValue: 'Cancelado' })
-                        }
-                        variant={ride.status === 'completed' ? 'success' : 'error'}
-                      />
-                    </View>
-
-                    {/* Body: Route visualization */}
-                    <View className="flex-row mb-3 ml-1">
-                      {/* Dots + dashed line column */}
-                      <View className="items-center mr-3" style={{ width: 12 }}>
-                        {/* Green pickup dot */}
-                        <View className="w-2 h-2 rounded-full bg-green-500" />
-                        {/* Dashed vertical line */}
-                        <View
-                          className="bg-neutral-300"
-                          style={{ width: 2, height: 28, borderStyle: 'dashed' }}
-                        />
-                        {/* Red dropoff dot */}
-                        <View className="w-2 h-2 rounded-full bg-red-500" />
-                      </View>
-                      {/* Address labels */}
-                      <View className="flex-1 justify-between" style={{ minHeight: 44 }}>
-                        <Text variant="bodySmall" numberOfLines={1}>
-                          {ride.pickup_address}
-                        </Text>
-                        <Text variant="bodySmall" color="secondary" numberOfLines={1}>
-                          {ride.dropoff_address}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Footer: fare + payment method */}
-                    <View className="flex-row justify-between items-center pt-2 border-t border-neutral-100">
-                      <Text variant="body" className="font-bold text-lg">
-                        {formatTRC(fare)}
-                      </Text>
-                      <Text variant="caption" color="tertiary">
-                        {getPaymentLabel(ride.payment_method)}
-                      </Text>
-                    </View>
-                  </Card>
-                </Pressable>
-              );
-            })}
-
-            {/* Pagination: Load more */}
-            {hasMore && (
-              <View className="items-center mb-6">
-                <Button
-                  title={t('rides_history.load_more', { defaultValue: 'Cargar más' })}
-                  variant="outline"
-                  size="sm"
-                  onPress={handleLoadMore}
-                  loading={loadingMore}
-                />
-              </View>
-            )}
-          </View>
+        {/* Loading */}
+        {loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} style={{ padding: '16px 20px', borderRadius: 12, border: '1px solid #f0f0f0', background: '#fff' }}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f0f0f0' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: '40%', height: 14, background: '#f0f0f0', borderRadius: 4, marginBottom: 6 }} />
+                    <div style={{ width: '25%', height: 10, background: '#f5f5f5', borderRadius: 4 }} />
+                  </div>
+                </div>
+                <div style={{ width: '80%', height: 12, background: '#f5f5f5', borderRadius: 4, marginBottom: 8 }} />
+                <div style={{ width: '60%', height: 12, background: '#f5f5f5', borderRadius: 4 }} />
+              </div>
+            ))}
+          </div>
         )}
-      </View>
-    </Screen>
+
+        {/* Empty */}
+        {!loading && rides.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🚗</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a', marginBottom: 8 }}>
+              {activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
+            </div>
+            <div style={{ fontSize: 14, color: '#999' }}>
+              {activeTab === 'all' ? 'Cuando completes un viaje, aparecerá aquí.' : 'No hay viajes con este filtro.'}
+            </div>
+          </div>
+        )}
+
+        {/* Rides grouped by date — identical to web */}
+        {!loading && rides.length > 0 && (
+          <div>
+            {dateGroups.map((group) => (
+              <div key={group.label}>
+                {/* Date header */}
+                <div style={{
+                  fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const,
+                  letterSpacing: '0.06em', color: '#999',
+                  padding: '12px 0 8px', marginTop: 8,
+                }}>
+                  {group.label}
+                </div>
+
+                {/* Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {group.rides.map((ride) => {
+                    const cardIdx = globalCardIdx++;
+                    const fare = ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0;
+                    const serviceType = ride.service_type ?? '';
+                    const isCompleted = ride.status === 'completed';
+
+                    return (
+                      <div
+                        key={ride.id}
+                        onClick={() => router.push(`/ride/${ride.id}`)}
+                        style={{
+                          padding: '16px 20px', borderRadius: 12,
+                          border: '1px solid #f0f0f0', background: '#fff',
+                          cursor: 'pointer',
+                          transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+                          opacity: 0,
+                          animation: `wr-fadeInUp 0.4s ease ${Math.min(cardIdx * 0.05, 0.4)}s forwards`,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                      >
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            <div style={{
+                              width: 40, height: 40, borderRadius: 8,
+                              background: '#f5f5f5', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <Image
+                                source={vehicleSelectionImages[serviceType as ServiceTypeSlug] ?? vehicleSelectionImages.auto_standard}
+                                style={{ width: 28, height: 28 }}
+                                resizeMode="contain"
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.3' }}>
+                                {WEB_SERVICE_LABELS[serviceType] ?? serviceType}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#999', marginTop: 1 }}>
+                                {formatTime(ride.created_at)}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Status badge */}
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '4px 10px', borderRadius: 999,
+                            fontSize: 11, fontWeight: 700,
+                            textTransform: 'uppercase' as const, letterSpacing: '0.03em',
+                            background: isCompleted ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                            color: isCompleted ? '#22c55e' : '#ef4444',
+                          }}>
+                            <span style={{
+                              width: 6, height: 6, borderRadius: '50%',
+                              background: 'currentColor', flexShrink: 0,
+                            }} />
+                            {isCompleted ? 'Completado' : 'Cancelado'}
+                          </span>
+                        </div>
+
+                        {/* Route */}
+                        <div style={{ display: 'flex', gap: 12, marginBottom: 12, paddingLeft: 4 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 12, paddingTop: 4 }}>
+                            <div style={{
+                              width: 10, height: 10, borderRadius: '50%',
+                              background: '#22c55e', flexShrink: 0,
+                              boxShadow: '0 0 0 3px rgba(34,197,94,0.15)',
+                            }} />
+                            <div style={{
+                              width: 2, flex: 1, minHeight: 24, borderRadius: 1,
+                              backgroundImage: 'repeating-linear-gradient(to bottom, #e5e5e5 0px, #e5e5e5 3px, transparent 3px, transparent 6px)',
+                            }} />
+                            <div style={{
+                              width: 10, height: 10, borderRadius: '50%',
+                              background: '#ef4444', flexShrink: 0,
+                              boxShadow: '0 0 0 3px rgba(239,68,68,0.15)',
+                            }} />
+                          </div>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: '#999', marginBottom: 1 }}>Desde</div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.pickup_address}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: '#999', marginBottom: 1 }}>Hasta</div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.dropoff_address}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          paddingTop: 12, borderTop: '1px solid #f0f0f0',
+                        }}>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+                            {formatTRC(fare)}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#999', fontWeight: 500 }}>
+                            {ride.estimated_distance_m != null && ride.estimated_distance_m > 0 && (
+                              <span>{(ride.estimated_distance_m / 1000).toFixed(1)} km ·</span>
+                            )}
+                            <span>{WEB_PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* Load more */}
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                style={{
+                  width: '100%', marginTop: 16, padding: '12px 24px',
+                  borderRadius: 12, border: '1.5px solid #FF4D00',
+                  background: 'transparent', color: '#FF4D00',
+                  fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                  ...font, transition: 'all 0.2s ease',
+                  opacity: loadingMore ? 0.5 : 1,
+                }}
+              >
+                {loadingMore ? 'Cargando...' : t('rides_history.load_more', { defaultValue: 'Cargar más viajes' })}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
