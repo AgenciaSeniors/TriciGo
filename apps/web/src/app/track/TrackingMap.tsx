@@ -15,6 +15,8 @@ export interface TrackingMapProps {
   driverLat?: number;
   driverLng?: number;
   driverHeading?: number;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
 /* ── Marker HTML builders ── */
@@ -102,6 +104,8 @@ export default function TrackingMap({
   driverLat,
   driverLng,
   driverHeading,
+  className,
+  style: styleProp,
 }: TrackingMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -307,8 +311,9 @@ export default function TrackingMap({
   if (!hasValidCoords) {
     return (
       <div style={{
-        width: '100%', height: 300, borderRadius: '0.75rem', background: '#f0f0f0',
+        width: '100%', height: styleProp?.height ?? 300, borderRadius: styleProp?.borderRadius ?? '0.75rem', background: '#f0f0f0',
         display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888',
+        ...styleProp,
       }}>
         Cargando mapa...
       </div>
@@ -322,17 +327,14 @@ export default function TrackingMap({
         ref={mapContainerRef}
         style={{
           width: '100%',
-          height: 300,
-          borderRadius: '0.75rem',
+          height: styleProp?.height ?? '100%',
+          minHeight: 250,
+          borderRadius: styleProp?.borderRadius ?? 0,
           overflow: 'hidden',
+          ...styleProp,
         }}
-        className="tracking-map-container"
+        className={className ?? 'tracking-map-container'}
       />
-      <style>{`
-        @media (max-width: 640px) {
-          .tracking-map-container { height: 250px !important; }
-        }
-      `}</style>
     </>
   );
 }

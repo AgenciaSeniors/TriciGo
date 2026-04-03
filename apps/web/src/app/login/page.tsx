@@ -57,7 +57,7 @@ export default function LoginPage() {
     setError(null);
     try {
       const supabase = getSupabaseClient();
-      const { data, error: verifyError } = await supabase.functions.invoke('verify-whatsapp-otp', {
+      const { data, error: verifyError } = await supabase.functions.invoke('verify-otp', {
         body: { phone, code: otp },
       });
       if (verifyError) throw verifyError;

@@ -645,7 +645,13 @@ export default function BookPage() {
   }
 
   /* ─── Auth gate (after all hooks) ─── */
-  if (authLoading) {
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  if (authLoading || !isAuthenticated) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d1a' }}>
         <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
@@ -656,11 +662,6 @@ export default function BookPage() {
         </div>
       </div>
     );
-  }
-
-  if (!isAuthenticated) {
-    router.replace('/login');
-    return null;
   }
 
   return (
