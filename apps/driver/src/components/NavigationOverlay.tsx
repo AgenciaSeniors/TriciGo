@@ -67,11 +67,11 @@ function NavigationOverlayInner({
         {/* DT-5: Destination context line */}
         {destinationLabel && (
           <View style={{
-            backgroundColor: '#1F2937',
+            backgroundColor: '#1a1a2e',
             paddingHorizontal: 16,
             paddingVertical: 6,
             borderBottomWidth: 1,
-            borderBottomColor: '#374151',
+            borderBottomColor: '#252540',
           }}>
             <Text style={{ fontSize: 12, color: '#9CA3AF' }} numberOfLines={1}>
               {destinationLabel}

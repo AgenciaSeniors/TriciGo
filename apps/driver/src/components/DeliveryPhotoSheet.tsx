@@ -9,19 +9,24 @@ import { useTranslation } from '@tricigo/i18n';
 import { deliveryService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
+import { Ionicons } from '@expo/vector-icons';
 
 interface DeliveryPhotoSheetProps {
   rideId: string;
   phase?: 'pickup' | 'delivery';
   onPhotoUploaded: () => void;
   onSkip?: () => void;
+  /** Delivery context to show above photo */
+  recipientName?: string;
+  recipientPhone?: string;
+  specialInstructions?: string | null;
 }
 
 /**
  * Mandatory delivery photo capture sheet.
  * Supports two phases: 'pickup' (at package collection) and 'delivery' (at drop-off).
  */
-export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded, onSkip }: DeliveryPhotoSheetProps) {
+export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded, onSkip, recipientName, recipientPhone, specialInstructions }: DeliveryPhotoSheetProps) {
   const { t } = useTranslation('driver');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -80,6 +85,33 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
 
   return (
     <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4">
+      {/* Delivery context */}
+      {(recipientName || specialInstructions) && (
+        <View className="mb-3">
+          {recipientName && (
+            <View className="flex-row items-center mb-1">
+              <Ionicons name="person" size={14} color="#F97316" />
+              <Text variant="bodySmall" color="inverse" className="ml-2 font-semibold">
+                {recipientName}
+              </Text>
+              {recipientPhone && (
+                <Text variant="caption" color="secondary" className="ml-auto">
+                  {recipientPhone}
+                </Text>
+              )}
+            </View>
+          )}
+          {specialInstructions && (
+            <View className="bg-yellow-900/20 rounded-lg p-2 mt-1 flex-row items-start">
+              <Ionicons name="alert-circle" size={12} color="#F59E0B" style={{ marginTop: 2 }} />
+              <Text variant="caption" color="inverse" className="ml-1.5 opacity-80 flex-1">
+                {specialInstructions}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
       <Text variant="h3" color="inverse" className="text-center mb-2">
         {phase === 'pickup'
           ? t('trip.pickup_photo_title', { defaultValue: 'Foto de recogida' })
@@ -113,7 +145,6 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
           fullWidth
           onPress={takePhoto}
           className="mb-2"
-          icon="camera-outline"
         />
       )}
 

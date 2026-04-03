@@ -1,12 +1,14 @@
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
-import { View, Animated, Pressable } from 'react-native';
+import { View, Animated, Pressable, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { useLocationStore } from '@/stores/location.store';
 import type { Ride } from '@tricigo/types';
 
@@ -23,26 +25,26 @@ interface IncomingRideCardProps {
   onReject?: (rideId: string) => void;
   driverCustomRateCup: number | null;
   serviceConfig: ServiceConfig | null;
-  /** Rider display name */
   riderName?: string;
-  /** Rider avatar URL */
   riderAvatarUrl?: string | null;
-  /** Rider average rating (1-5) */
   riderRating?: number | null;
 }
 
+// Profit level colors from theme tokens
+const PROFIT_COLORS = {
+  great: colors.profit.high,
+  good: colors.status.online,
+  short: colors.profit.medium,
+} as const;
+
+const PROFIT_ICONS = {
+  great: 'trending-up' as const,
+  good: 'checkmark-circle' as const,
+  short: 'alert-circle' as const,
+} as const;
+
 function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, serviceConfig }: IncomingRideCardProps) {
   const { t } = useTranslation('driver');
-
-  const handleReject = useCallback(() => {
-    trackValidationEvent('driver_ride_rejected', {
-      profit_level: profitLevel,
-      seconds_remaining: autoAcceptSecondsLeft,
-      distance_km: distanceKm,
-      net_earnings: netEarnings,
-    }, ride.id);
-    onReject?.(ride.id);
-  }, [onReject, ride.id, profitLevel, autoAcceptSecondsLeft, distanceKm, netEarnings]);
 
   // ── Distance + ETA to pickup ──
   const driverLat = useLocationStore((s) => s.latitude);
@@ -59,7 +61,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
 
   const etaMinutes = useMemo(() => {
     if (!distanceKm) return null;
-    return Math.ceil(distanceKm / 0.33); // ~20 km/h average urban speed
+    return Math.ceil(distanceKm / 0.33);
   }, [distanceKm]);
 
   // ── Net earnings (fare minus 15% commission) ──
@@ -103,20 +105,28 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     return 'short';
   }, [netEarnings, distanceKm]);
 
-  // ── OMEGA: Auto-accept countdown (must be after profitLevel) ──
+  // ── Auto-accept countdown ──
   const autoAcceptDuration = profitLevel === 'great' ? 2 : profitLevel === 'good' ? 5 : 8;
   const countdownProgress = useRef(new Animated.Value(1)).current;
   const [autoAcceptSecondsLeft, setAutoAcceptSecondsLeft] = useState(autoAcceptDuration);
 
+  const handleReject = useCallback(() => {
+    trackValidationEvent('driver_ride_rejected', {
+      profit_level: profitLevel,
+      seconds_remaining: autoAcceptSecondsLeft,
+      distance_km: distanceKm,
+      net_earnings: netEarnings,
+    }, ride.id);
+    onReject?.(ride.id);
+  }, [onReject, ride.id, profitLevel, autoAcceptSecondsLeft, distanceKm, netEarnings]);
+
   useEffect(() => {
-    // Countdown animation
     Animated.timing(countdownProgress, {
       toValue: 0,
       duration: autoAcceptDuration * 1000,
       useNativeDriver: false,
     }).start();
 
-    // Seconds countdown
     const interval = setInterval(() => {
       setAutoAcceptSecondsLeft(prev => {
         if (prev <= 1) {
@@ -128,7 +138,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
             net_earnings: netEarnings,
           }, ride.id);
           Toast.show({ type: 'success', text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }), visibilityTime: 1500 });
-          onAccept(ride.id); // Auto-accept!
+          onAccept(ride.id);
           return 0;
         }
         return prev - 1;
@@ -136,122 +146,171 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     }, 1000);
 
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- HF-3: include critical deps to avoid stale closures
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoAcceptDuration, onAccept]);
 
-  const cardBorderStyle = profitLevel === 'great'
-    ? { borderColor: '#22C55E', borderWidth: 2 }
+  const profitColor = PROFIT_COLORS[profitLevel];
+  const profitIcon = PROFIT_ICONS[profitLevel];
+
+  const profitLabel = profitLevel === 'great'
+    ? t('home.profitable_ride', { defaultValue: 'Viaje rentable' })
     : profitLevel === 'short'
-      ? { borderColor: '#F59E0B', borderWidth: 2 }
-      : {};
+      ? t('home.short_ride_reject', { defaultValue: 'Viaje corto' })
+      : t('home.available_ride', { defaultValue: 'Viaje disponible' });
 
   return (
     <AnimatedCard delay={0} duration={300}>
-    <Card variant="filled" padding="md" className="bg-neutral-800 mb-3" style={cardBorderStyle}>
-      {/* Distance + ETA to pickup */}
-      {distanceKm !== null && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <Ionicons name="navigate-outline" size={14} color="#9CA3AF" />
-          <Text style={{ fontSize: 13, color: '#9CA3AF', marginLeft: 4 }}>
-            {distanceKm} km · ~{etaMinutes} min
-          </Text>
-        </View>
-      )}
+    <Card
+      variant="surface"
+      padding="md"
+      className="mb-3"
+      style={profitLevel === 'great' ? { borderColor: colors.profit.high, borderWidth: 2 } : profitLevel === 'short' ? { borderColor: colors.profit.medium, borderWidth: 1.5 } : {}}
+    >
+      {/* ── Top: Distance + ETA + Profit indicator ── */}
+      <View className="flex-row items-center justify-between mb-3">
+        {distanceKm !== null && (
+          <View className="flex-row items-center">
+            <Ionicons name="navigate-outline" size={14} color={colors.neutral[400]} />
+            <Text variant="caption" color="secondary" className="ml-1">
+              {distanceKm} km · ~{etaMinutes} min
+            </Text>
+          </View>
+        )}
+        {/* Accessible profit badge: icon + text + color */}
+        <StatusBadge
+          label={profitLabel}
+          icon={profitIcon}
+          variant={profitLevel === 'great' ? 'success' : profitLevel === 'short' ? 'warning' : 'info'}
+        />
+      </View>
 
-      {/* Net earnings — most prominent */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-        {profitLevel === 'great' && (
-          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', marginRight: 6 }} />
-        )}
-        {profitLevel === 'short' && (
-          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F59E0B', marginRight: 6 }} />
-        )}
-        <Text style={{ fontSize: 22, fontWeight: '800', color: '#22C55E' }}>
-          {t('home.net_earnings', { amount: `₧${netEarnings.toLocaleString()}` })}
+      {/* ── Net earnings — hero value ── */}
+      <View className="flex-row items-baseline mb-1">
+        <Text variant="stat" style={{ color: profitColor }}>
+          ₧{netEarnings.toLocaleString()}
         </Text>
       </View>
 
-      {/* Match confidence line */}
-      <Text style={{
-        fontSize: 12,
-        color: profitLevel === 'great' ? '#22C55E' : profitLevel === 'short' ? '#F59E0B' : '#9CA3AF',
-        marginTop: 2,
-        textAlign: 'center',
-      }}>
-        {profitLevel === 'great'
-          ? t('home.profitable_ride', { defaultValue: 'Viaje rentable cerca de ti' })
-          : profitLevel === 'short'
-            ? t('home.short_ride_reject', { defaultValue: 'Viaje corto · puedes rechazar' })
-            : t('home.available_ride', { defaultValue: 'Viaje disponible' })
-        }
-      </Text>
-
       {/* Fare (secondary) */}
-      <View className="mb-3" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>
-        <Text variant="bodySmall" color="inverse" className="opacity-60">
+      <View className="mb-4" accessible accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>
+        <Text variant="caption" color="secondary">
           {t('trip.total_fare')}: {formatCUP(driverFare.cup)}
           {driverFare.trc != null ? ` (~${formatTRC(driverFare.trc)})` : ''}
         </Text>
       </View>
 
-      {/* Pickup */}
-      <View className="flex-row items-start mb-2" accessible={true} accessibilityLabel={t('a11y.pickup_address', { ns: 'common', address: ride.pickup_address })}>
-        <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-        <Text variant="bodySmall" color="inverse" className="flex-1" numberOfLines={1}>
-          {ride.pickup_address}
-        </Text>
-      </View>
-
-      {/* Dropoff */}
-      <View className="flex-row items-start mb-3" accessible={true} accessibilityLabel={t('a11y.dropoff_address', { ns: 'common', address: ride.dropoff_address })}>
-        <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-        <Text variant="bodySmall" color="inverse" className="flex-1" numberOfLines={1}>
-          {ride.dropoff_address}
-        </Text>
-      </View>
-
-      {/* Service type + payment badges */}
-      <View className="flex-row items-center gap-2 mb-3">
-        <View className="bg-neutral-700 px-2 py-1 rounded">
-          <Ionicons
-            name={ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
-            size={16}
-            color="white"
-            accessibilityLabel={ride.service_type === 'triciclo_basico' ? t('onboarding.triciclo', { defaultValue: 'Triciclo' }) : ride.service_type === 'triciclo_cargo' ? 'Cargo' : ride.service_type === 'moto_standard' ? t('onboarding.moto', { defaultValue: 'Moto' }) : t('onboarding.auto', { defaultValue: 'Auto' })}
-          />
+      {/* ── Route: Pickup → Dropoff ── */}
+      <View className="mb-4">
+        <View className="flex-row items-start mb-2.5" accessible accessibilityLabel={t('a11y.pickup_address', { ns: 'common', address: ride.pickup_address })}>
+          <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
+          <Text variant="bodySmall" color="inverse" className="flex-1 font-medium" numberOfLines={1}>
+            {ride.pickup_address}
+          </Text>
         </View>
-        {ride.service_type === 'triciclo_cargo' && (
-          <View className="bg-orange-600 px-2 py-1 rounded">
-            <Text variant="caption" color="inverse" className="font-bold">CARGO</Text>
-          </View>
-        )}
-        <View className="bg-neutral-700 px-2 py-1 rounded">
-          <Text variant="caption" color="inverse">
-            {ride.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
+
+        {/* Connecting line */}
+        <View className="ml-[5px] w-px h-3 bg-white/12 mb-0.5" />
+
+        <View className="flex-row items-start" accessible accessibilityLabel={t('a11y.dropoff_address', { ns: 'common', address: ride.dropoff_address })}>
+          <View className="w-3 h-3 rounded-full bg-neutral-500 mt-1 mr-3" />
+          <Text variant="bodySmall" color="inverse" className="flex-1" numberOfLines={1}>
+            {ride.dropoff_address}
           </Text>
         </View>
       </View>
 
-      {/* OMEGA: Auto-accept countdown bar */}
-      <View style={{ height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 8 }}>
-        <Animated.View style={{
-          height: 4,
-          backgroundColor: profitLevel === 'great' ? '#22C55E' : profitLevel === 'good' ? '#3B82F6' : '#F59E0B',
-          borderRadius: 2,
-          width: countdownProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-        }} />
+      {/* ── Info badges ── */}
+      <View className="flex-row flex-wrap items-center gap-2 mb-4">
+        <View className="bg-[#252540] px-2.5 py-1.5 rounded-lg flex-row items-center">
+          <Ionicons
+            name={ride.service_type === 'triciclo_basico' || ride.service_type === 'triciclo_cargo' ? 'bicycle-outline' : ride.service_type === 'moto_standard' ? 'flash-outline' : 'car-outline'}
+            size={14}
+            color={colors.neutral[300]}
+          />
+        </View>
+
+        {(ride.service_type === 'triciclo_cargo' || ride.ride_mode === 'cargo') && (
+          <View className="bg-primary-500/20 px-2.5 py-1.5 rounded-lg flex-row items-center">
+            <Ionicons name="cube" size={12} color={colors.brand.orange} />
+            <Text variant="badge" color="accent" className="ml-1">CARGO</Text>
+          </View>
+        )}
+
+        <View className="bg-[#252540] px-2.5 py-1.5 rounded-lg">
+          <Text variant="badge" color="inverse">
+            {ride.payment_method === 'cash' ? t('common.cash')
+              : ride.payment_method === 'tropipay' ? 'TropiPay'
+              : ride.payment_method === 'corporate' ? t('home.payment_corporate', { defaultValue: 'Corporativo' })
+              : ride.payment_method === 'mixed' ? t('home.payment_mixed', { defaultValue: 'Mixto' })
+              : t('trip.tricicoin')}
+          </Text>
+        </View>
+
+        {ride.waypoints && ride.waypoints.length > 0 && (
+          <View className="bg-purple-500/20 px-2.5 py-1.5 rounded-lg flex-row items-center gap-1">
+            <Ionicons name="flag-outline" size={12} color="#A78BFA" />
+            <Text variant="badge" style={{ color: '#A78BFA' }}>
+              {t('home.waypoints_badge', { count: ride.waypoints.length, defaultValue: '{{count}} paradas' })}
+            </Text>
+          </View>
+        )}
+
+        {ride.corporate_account_id && (
+          <View className="bg-blue-500/20 px-2.5 py-1.5 rounded-lg flex-row items-center gap-1">
+            <Ionicons name="business-outline" size={12} color="#60A5FA" />
+            <Text variant="badge" style={{ color: '#60A5FA' }}>
+              {t('home.corporate_ride', { defaultValue: 'Corporativo' })}
+            </Text>
+          </View>
+        )}
       </View>
 
-      <Text style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>
-        {t('home.auto_accepting_in', { seconds: autoAcceptSecondsLeft })}
-      </Text>
+      {/* Scheduled ride banner */}
+      {ride.scheduled_at && (
+        <View className="flex-row items-center bg-blue-500/10 rounded-xl py-2 px-3 mb-4 border border-blue-500/20">
+          <Ionicons name="time-outline" size={14} color="#60A5FA" />
+          <Text variant="caption" style={{ color: '#60A5FA' }} className="ml-2">
+            {t('home.scheduled_at', { time: new Date(ride.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), defaultValue: 'Programado: {{time}}' })}
+          </Text>
+        </View>
+      )}
 
-      {/* Only REJECT button */}
+      {/* ── Auto-accept countdown ── */}
+      <View className="mb-3">
+        <View className="flex-row items-center justify-between mb-1.5">
+          <Text variant="caption" color="secondary">
+            {t('home.auto_accepting_in', { seconds: autoAcceptSecondsLeft })}
+          </Text>
+          <Text variant="badge" style={{ color: profitColor }}>
+            {autoAcceptSecondsLeft}s
+          </Text>
+        </View>
+        <View style={{ height: 4, backgroundColor: '#252540', borderRadius: 2 }}>
+          <Animated.View style={{
+            height: 4,
+            backgroundColor: profitColor,
+            borderRadius: 2,
+            width: countdownProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          }} />
+        </View>
+      </View>
+
+      {/* ── Reject button (min 48px height) ── */}
       <Pressable
-        style={{ backgroundColor: '#EF4444', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+        style={{
+          backgroundColor: colors.error.DEFAULT,
+          borderRadius: 16,
+          paddingVertical: 14,
+          alignItems: 'center',
+          minHeight: 48,
+          justifyContent: 'center',
+        }}
         onPress={handleReject}
+        accessibilityRole="button"
+        accessibilityLabel={t('home.reject', { defaultValue: 'Rechazar viaje' })}
+        accessibilityHint={t('home.reject_hint', { defaultValue: 'Rechaza este viaje y espera el siguiente' })}
       >
-        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
+        <Text variant="body" color="inverse">
           {t('home.reject', { defaultValue: 'Rechazar' })}
         </Text>
       </Pressable>

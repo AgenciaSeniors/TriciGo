@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
 
@@ -22,6 +23,17 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Entrance animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 200, mass: 1, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const handleSendCode = async () => {
     setError('');
@@ -53,77 +65,88 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero section with dark gradient */}
+          {/* Hero section — deep dark premium gradient */}
           <LinearGradient
-            colors={['#1A1A1A', '#2D2D2D', '#1A1A1A']}
+            colors={['#0d0d1a', '#1a1a2e', '#0d0d1a']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={{ paddingTop: 80, paddingBottom: 40, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
+            style={{ paddingTop: 60, paddingBottom: 40, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
           >
             <View
               style={!isPhone ? { maxWidth: 420, width: '100%', alignSelf: 'center' } : undefined}
             >
-              {/* Logo */}
-              <Image
-                source={require('../../assets/logo-wordmark-white.png')}
-                style={{ width: 200, height: 48 }}
-                resizeMode="contain"
-              />
+              {/* Top row: Logo + Language Switcher */}
+              <View className="flex-row items-center justify-between mb-3">
+                <Image
+                  source={require('../../assets/logo-wordmark-white.png')}
+                  style={{ width: 160, height: 40 }}
+                  resizeMode="contain"
+                  accessibilityLabel="TriciGo"
+                />
+                <LanguageSwitcher variant="pill" />
+              </View>
 
               {/* Driver badge */}
               <View className="flex-row items-center mt-2 mb-1">
-                <View className="bg-primary-500 px-2.5 py-1 rounded-full flex-row items-center">
-                  <Ionicons name="car-sport" size={12} color="white" />
-                  <Text variant="caption" color="inverse" className="ml-1 font-bold">
+                <View className="bg-primary-500 px-3 py-1.5 rounded-full flex-row items-center">
+                  <Ionicons name="car-sport" size={13} color="white" />
+                  <Text variant="badge" color="inverse" className="ml-1.5 font-bold uppercase tracking-wider">
                     {td('common.driver_label')}
                   </Text>
                 </View>
               </View>
 
-              <Text
-                variant="body"
-                className="mt-2"
-                style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15 }}
-              >
-                {t('auth.driver_tagline')}
-              </Text>
+              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                <Text variant="bodySmall" color="secondary" className="mt-3">
+                  {t('auth.driver_tagline')}
+                </Text>
+              </Animated.View>
 
               {/* Vehicle illustration */}
-              <View style={{ alignItems: 'flex-end', marginTop: 16 }}>
+              <Animated.View style={{ alignItems: 'flex-end', marginTop: 16, opacity: fadeAnim }}>
                 <Image
                   source={vehicleRow}
-                  style={{ width: 120, height: 120, opacity: 0.7 }}
+                  style={{ width: 120, height: 120, opacity: 0.5 }}
                   resizeMode="contain"
                 />
-              </View>
+              </Animated.View>
             </View>
           </LinearGradient>
 
           {/* Orange accent line */}
           <LinearGradient
-            colors={['#FF4D00', '#FF6B2C']}
+            colors={[colors.brand.orange, '#FF6B2C']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={{ height: 3 }}
           />
 
           {/* Form section */}
-          <View
+          <Animated.View
             className="px-6 pt-8 flex-1"
-            style={!isPhone ? { maxWidth: 420, width: '100%', alignSelf: 'center' } : undefined}
+            style={[
+              !isPhone ? { maxWidth: 420, width: '100%', alignSelf: 'center' } : undefined,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+            ]}
           >
             {/* Welcome text */}
             <Text variant="h3" color="inverse" className="mb-1">
               {t('auth.welcome', { defaultValue: 'Bienvenido' })}
             </Text>
-            <Text variant="bodySmall" color="inverse" className="mb-6 opacity-50">
+            <Text variant="bodySmall" color="secondary" className="mb-6">
               {t('auth.enter_phone_description', { defaultValue: 'Ingresa tu número para comenzar' })}
             </Text>
 
             {/* Phone input with country prefix */}
             <View className="flex-row items-center gap-2 mb-1">
-              <View className="bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center border border-neutral-700">
-                <Text variant="body" color="inverse" className="font-semibold">🇨🇺 +53</Text>
+              <View
+                className="bg-[#1a1a2e] rounded-xl px-3 py-3.5 flex-row items-center border border-white/12"
+                accessible
+                accessibilityLabel="Cuba +53"
+                accessibilityRole="text"
+              >
+                <Ionicons name="flag" size={14} color={colors.brand.orange} />
+                <Text variant="body" color="inverse" className="font-semibold ml-1.5">+53</Text>
               </View>
               <View className="flex-1">
                 <Input
@@ -133,6 +156,7 @@ export default function LoginScreen() {
                   onChangeText={setPhone}
                   variant="dark"
                   autoFocus
+                  accessibilityLabel={t('auth.phone_input_label', { defaultValue: 'Número de teléfono' })}
                 />
               </View>
             </View>
@@ -150,32 +174,34 @@ export default function LoginScreen() {
               disabled={phone.length < 7 || loading}
               fullWidth
               size="lg"
-              className="mt-2"
+              className="mt-3"
             />
 
             {/* Divider */}
             <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-neutral-700" />
-              <Text variant="caption" color="inverse" className="mx-4 opacity-40">
+              <View className="flex-1 h-px bg-white/6" />
+              <Text variant="caption" color="secondary" className="mx-4">
                 {t('auth.or_continue_with')}
               </Text>
-              <View className="flex-1 h-px bg-neutral-700" />
+              <View className="flex-1 h-px bg-white/6" />
             </View>
 
             {/* Social login buttons */}
             <View className="flex-row gap-3">
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-800 border border-neutral-700 active:bg-neutral-700"
-                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithGoogle()}
+                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[48px]"
+                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined)}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.sign_in_google', { defaultValue: 'Iniciar sesión con Google' })}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" color="inverse" className="font-medium">Google</Text>
               </Pressable>
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-white active:bg-neutral-100"
-                style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}
-                onPress={() => authService.signInWithApple()}
+                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[48px]"
+                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined)}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.sign_in_apple', { defaultValue: 'Iniciar sesión con Apple' })}
               >
                 <Ionicons name="logo-apple" size={20} color="#000" />
                 <Text variant="body" className="font-medium" style={{ color: '#000' }}>Apple</Text>
@@ -183,7 +209,7 @@ export default function LoginScreen() {
             </View>
 
             {/* Legal text */}
-            <Text variant="caption" color="inverse" className="text-center mt-8 pb-8 leading-5 opacity-30">
+            <Text variant="caption" color="secondary" className="text-center mt-8 pb-8 leading-5">
               {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
               <Text variant="caption" color="accent" className="underline">
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
@@ -193,7 +219,7 @@ export default function LoginScreen() {
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
               </Text>
             </Text>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>

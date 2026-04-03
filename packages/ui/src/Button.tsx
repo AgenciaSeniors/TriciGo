@@ -39,9 +39,9 @@ const variantStyles = {
 } as const;
 
 const sizeStyles = {
-  sm: { container: 'px-4 py-2 rounded-md', text: 'text-sm font-semibold' },
-  md: { container: 'px-6 py-3 rounded-lg', text: 'text-base font-bold' },
-  lg: { container: 'px-8 py-4 rounded-xl', text: 'text-lg font-bold' },
+  sm: { container: 'px-4 py-2.5 rounded-lg min-h-[40px]', text: 'text-sm font-semibold' },
+  md: { container: 'px-6 py-3.5 rounded-xl min-h-[48px]', text: 'text-base font-bold' },
+  lg: { container: 'px-8 py-4 rounded-2xl min-h-[56px]', text: 'text-lg font-bold' },
 } as const;
 
 export function Button({

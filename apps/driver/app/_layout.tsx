@@ -37,6 +37,7 @@ function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const driverProfile = useDriverStore((s) => s.profile);
+  const isProfileLoaded = useDriverStore((s) => s.isProfileLoaded);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const segments = useSegments();
 
@@ -65,6 +66,12 @@ function RootNavigator() {
       router.replace('/(auth)/login');
       return;
     }
+
+    // Wait until the driver profile fetch has completed before making
+    // routing decisions. Without this guard, the router sees
+    // driverProfile=null (not yet loaded) and wrongly redirects to onboarding
+    // even for approved drivers who just logged in.
+    if (isAuthenticated && !isProfileLoaded) return;
 
     // Authenticated but in auth group → redirect based on profile state
     if (isAuthenticated && inAuthGroup) {
@@ -100,7 +107,7 @@ function RootNavigator() {
     ) {
       router.replace('/onboarding/pending');
     }
-  }, [isAuthenticated, isLoading, driverProfile, segments]);
+  }, [isAuthenticated, isLoading, isProfileLoaded, driverProfile, segments]);
 
   if (isLoading) {
     return (

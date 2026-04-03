@@ -40,12 +40,7 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
           </Text>
         )}
         <View
-          className={`
-            flex-row items-center
-            border rounded-lg px-3 py-3
-            ${bgColor}
-            ${borderColor}
-          `}
+          className={`flex-row items-center border rounded-lg px-3 py-3 ${bgColor} ${borderColor}`}
         >
           {leftIcon && <View className="mr-2">{leftIcon}</View>}
           <TextInput

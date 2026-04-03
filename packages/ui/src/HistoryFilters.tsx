@@ -108,7 +108,7 @@ function DropdownChip({
       >
         <Text
           variant="caption"
-          color={active ? 'white' : dark ? 'secondary' : 'primary'}
+          color={active ? 'inverse' : dark ? 'secondary' : 'primary'}
           className={active ? 'font-semibold text-white' : 'font-medium'}
         >
           {selectedLabel ?? label}
@@ -146,7 +146,7 @@ function DropdownChip({
             >
               <Text
                 variant="caption"
-                color={dark ? 'white' : 'primary'}
+                color={dark ? 'inverse' : 'primary'}
                 className="font-medium"
               >
                 {opt.label}
@@ -210,7 +210,7 @@ export function HistoryFilters({
           />
           <Text
             variant="bodySmall"
-            color={dark ? 'white' : 'primary'}
+            color={dark ? 'inverse' : 'primary'}
             className="font-medium"
           >
             {labels.filters}

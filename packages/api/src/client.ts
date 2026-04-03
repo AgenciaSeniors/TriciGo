@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 // ============================================================
 // TriciGo — Supabase Client Factory
 // Detects environment (Expo vs Next.js) and uses the correct

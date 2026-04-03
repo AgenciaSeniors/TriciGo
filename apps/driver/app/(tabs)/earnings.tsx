@@ -10,6 +10,7 @@ import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import i18next from 'i18next';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
@@ -17,45 +18,67 @@ import { driverService } from '@tricigo/api/services/driver';
 import { reviewService } from '@tricigo/api/services/review';
 import { questService } from '@tricigo/api/services/quest';
 import { formatCUP } from '@tricigo/utils';
-import type { Ride, QuestWithProgress } from '@tricigo/types';
+import type { Ride, QuestWithProgress, LedgerTransaction } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { EarningsBarChart } from '@/components/EarningsBarChart';
 import type { BarChartDataPoint } from '@/components/EarningsBarChart';
 import { Platform } from 'react-native';
 import { HourlyHeatmap } from '@/components/HourlyHeatmap';
 
+const CARD_BG = '#1a1a2e';
+const BORDER_SUBTLE = 'rgba(255,255,255,0.06)';
+
 type Period = 'day' | 'week' | 'month';
+
+type TransactionWithAmount = LedgerTransaction & {
+  ledger_entries: { account_id: string; amount: number }[];
+};
 
 // TEMP: Static web version for Play Store screenshots
 function WebEarningsScreen() {
   return (
-    <Screen bg="dark" padded scroll>
+    <Screen bg="dark" statusBarStyle="light-content" padded scroll>
       <View className="pt-4">
         <Text variant="h3" color="inverse" className="mb-4">Ganancias</Text>
 
-        <View className="bg-neutral-800 rounded-2xl p-5 mb-6">
-          <Text variant="caption" className="text-neutral-400 mb-1">Saldo disponible</Text>
-          <Text variant="h2" className="text-white font-bold">T$ 12,450.00</Text>
-          <Text variant="caption" className="text-neutral-500 mt-1">En retención: T$ 850.00</Text>
+        <View
+          className="rounded-2xl p-5 mb-6"
+          style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+        >
+          <Text variant="badge" style={{ color: colors.neutral[400] }} className="mb-1">Saldo disponible</Text>
+          <Text variant="stat" className="text-white">T$ 12,450.00</Text>
+          <Text variant="badge" style={{ color: colors.neutral[400] }} className="mt-1">En retención: T$ 850.00</Text>
         </View>
 
-        <View className="flex-row bg-neutral-800 rounded-xl p-1 mb-6">
+        <View
+          className="flex-row rounded-2xl p-1 mb-6"
+          style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+        >
           {(['Hoy', 'Semana', 'Mes'] as const).map((period, i) => (
-            <Pressable key={period} className={`flex-1 py-2 rounded-lg items-center ${i === 1 ? 'bg-primary-500' : ''}`}>
-              <Text variant="bodySmall" className={i === 1 ? 'text-white font-semibold' : 'text-neutral-400'}>{period}</Text>
+            <Pressable
+              key={period}
+              className={`flex-1 min-h-[48px] justify-center rounded-xl items-center ${i === 1 ? 'bg-primary-500' : ''}`}
+              accessibilityRole="tab"
+              accessibilityLabel={period}
+            >
+              <Text variant="bodySmall" className={i === 1 ? 'text-white font-semibold' : ''} style={i !== 1 ? { color: colors.neutral[400] } : undefined}>{period}</Text>
             </Pressable>
           ))}
         </View>
 
-        <View className="bg-neutral-800 rounded-xl p-4 mb-6">
-          <Text variant="bodySmall" className="text-neutral-400 mb-3">Ganancias de la semana</Text>
+        <View
+          className="rounded-2xl p-4 mb-6"
+          style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+        >
+          <Text variant="bodySmall" style={{ color: colors.neutral[400] }} className="mb-3">Ganancias de la semana</Text>
           <View className="flex-row items-end justify-between h-24">
             {[45, 72, 38, 90, 65, 85, 55].map((h, i) => (
               <View key={i} className="items-center flex-1 mx-0.5">
-                <View style={{ height: h, backgroundColor: i === 3 ? colors.brand.orange : '#374151', borderRadius: 4, width: '80%' }} />
-                <Text variant="caption" className="text-neutral-500 mt-1 text-[10px]">{['L', 'M', 'X', 'J', 'V', 'S', 'D'][i]}</Text>
+                <View style={{ height: h, backgroundColor: i === 3 ? colors.brand.orange : '#252540', borderRadius: 4, width: '80%' }} />
+                <Text variant="caption" style={{ color: colors.neutral[400], fontSize: 10 }} className="mt-1">{['L', 'M', 'X', 'J', 'V', 'S', 'D'][i]}</Text>
               </View>
             ))}
           </View>
@@ -68,13 +91,17 @@ function WebEarningsScreen() {
             { label: 'Promedio por viaje', value: 'T$ 175.53', trend: '-3%', up: false },
             { label: 'Calificación', value: '4.87 ★', trend: '+0.05', up: true },
           ].map((stat, i) => (
-            <View key={i} className="bg-neutral-800 rounded-xl p-4" style={{ width: '48%' }}>
-              <Text variant="caption" className="text-neutral-400 mb-1">{stat.label}</Text>
-              <Text variant="body" className="text-white font-bold">{stat.value}</Text>
+            <View
+              key={i}
+              className="rounded-2xl p-4"
+              style={{ width: '48%', backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+            >
+              <Text variant="badge" style={{ color: colors.neutral[400] }} className="mb-1">{stat.label}</Text>
+              <Text variant="metric" className="text-white">{stat.value}</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text variant="caption" className={stat.up ? 'text-green-400' : 'text-red-400'}>{stat.trend}</Text>
+                <Text variant="badge" style={{ color: stat.up ? colors.success.DEFAULT : '#EF4444' }}>{stat.trend}</Text>
                 {stat.label === 'Calificación' && (
-                  <Text style={{ fontSize: 11, color: colors.brand.orange }}>Ver reseñas →</Text>
+                  <Text variant="badge" style={{ color: colors.brand.orange }}>Ver reseñas →</Text>
                 )}
               </View>
             </View>
@@ -88,11 +115,15 @@ function WebEarningsScreen() {
             { label: 'Completados', value: '98%' },
             { label: 'Cancelación', value: '2%' },
           ].map((metric, i) => (
-            <View key={i} className="flex-1 bg-neutral-800 rounded-xl p-3 items-center">
-              <Text variant="h4" className="text-white font-bold">{metric.value}</Text>
-              <Text variant="caption" className="text-neutral-400">{metric.label}</Text>
+            <View
+              key={i}
+              className="flex-1 rounded-2xl p-3 items-center"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+            >
+              <Text variant="metric" className="text-white">{metric.value}</Text>
+              <Text variant="badge" style={{ color: colors.neutral[400] }}>{metric.label}</Text>
               {metric.label === 'Cancelación' && (
-                <Text style={{ fontSize: 11, color: colors.brand.orange, marginTop: 4 }}>Ver penalidades →</Text>
+                <Text variant="badge" style={{ color: colors.brand.orange, marginTop: 4 }}>Ver penalidades →</Text>
               )}
             </View>
           ))}
@@ -158,7 +189,10 @@ function EarningsChart({ data }: { data: Map<string, { earnings: number; count: 
   const barWidth = Math.min(40, (Dimensions.get('window').width - 80) / Math.max(entries.length, 1));
 
   return (
-    <View className="bg-neutral-800 rounded-xl p-4 mb-4">
+    <View
+      className="rounded-2xl p-4 mb-4"
+      style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+    >
       <View className="flex-row items-end justify-center" style={{ height: 120 }}>
         {entries.map(([day, val]) => {
           const height = Math.max((val.earnings / maxEarnings) * 100, 4);
@@ -270,7 +304,7 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
   }, [inputValue]);
 
   const pct = goal > 0 ? Math.min((currentEarnings / goal) * 100, 100) : 0;
-  const progressColor = pct >= 75 ? '#22c55e' : pct >= 50 ? '#eab308' : '#ef4444';
+  const progressColor = pct >= 75 ? colors.success.DEFAULT : pct >= 50 ? '#eab308' : '#ef4444';
 
   const milestoneLabel = pct >= 100
     ? t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' })
@@ -286,7 +320,8 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
     return (
       <Pressable
         onPress={() => { setEditing(true); setInputValue(''); }}
-        className="bg-neutral-800 rounded-2xl p-4 mb-4"
+        className="rounded-2xl p-4 mb-4"
+        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
         accessibilityRole="button"
         accessibilityLabel={t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
       >
@@ -296,7 +331,7 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
             {t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
           </Text>
         </View>
-        <Text variant="caption" color="inverse" className="opacity-50 mt-1">
+        <Text variant="badge" style={{ color: colors.neutral[400] }} className="mt-1">
           {t('earnings.set_goal_hint', { defaultValue: 'Define cuanto quieres ganar hoy' })}
         </Text>
       </Pressable>
@@ -305,31 +340,39 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
 
   if (editing) {
     return (
-      <View className="bg-neutral-800 rounded-2xl p-4 mb-4">
+      <View
+        className="rounded-2xl p-4 mb-4"
+        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+      >
         <Text variant="body" color="inverse" className="font-semibold mb-3">
           🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })} (CUP)
         </Text>
         <View className="flex-row items-center gap-3">
           <TextInput
-            className="flex-1 bg-neutral-700 rounded-xl px-4 py-3 text-white text-lg"
+            className="flex-1 rounded-xl px-4 py-3 text-white text-lg"
+            style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 18 }}
             value={inputValue}
             onChangeText={setInputValue}
             placeholder={goal > 0 ? String(goal) : '5000'}
-            placeholderTextColor="#6b7280"
+            placeholderTextColor={colors.neutral[400]}
             keyboardType="numeric"
             autoFocus
             onSubmitEditing={saveGoal}
-            style={{ color: '#fff', fontSize: 18 }}
+            accessibilityLabel={t('earnings.goal_input', { defaultValue: 'Monto de meta diaria' })}
           />
           <Pressable
             onPress={saveGoal}
-            className="bg-primary-500 rounded-xl px-5 py-3"
+            className="bg-primary-500 rounded-xl px-5 min-h-[48px] justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={t('earnings.save_goal', { defaultValue: 'Guardar meta' })}
           >
             <Text variant="body" color="inverse" className="font-semibold">OK</Text>
           </Pressable>
           <Pressable
             onPress={() => setEditing(false)}
-            className="px-3 py-3"
+            className="px-3 min-h-[48px] justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={t('earnings.cancel', { defaultValue: 'Cancelar' })}
           >
             <Text variant="body" color="inverse" className="opacity-50">✕</Text>
           </Pressable>
@@ -339,7 +382,10 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
   }
 
   return (
-    <View className="bg-neutral-800 rounded-2xl p-4 mb-4">
+    <View
+      className="rounded-2xl p-4 mb-4"
+      style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE }}
+    >
       <View className="flex-row items-center justify-between mb-2">
         <Text variant="body" color="inverse" className="font-semibold">
           🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })}: {formatCUP(goal)}
@@ -349,7 +395,8 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
 
       {/* Progress bar */}
       <View
-        className="h-3 bg-neutral-700 rounded-full overflow-hidden mb-2"
+        className="h-3 rounded-full overflow-hidden mb-2"
+        style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: goal, now: Math.min(currentEarnings, goal) }}
       >
@@ -366,14 +413,14 @@ function EarningsGoalCard({ currentEarnings }: { currentEarnings: number }) {
       </View>
 
       {milestoneLabel && (
-        <Text variant="caption" style={{ color: progressColor, marginTop: 4, fontWeight: '600' }}>
+        <Text variant="badge" style={{ color: progressColor, marginTop: 4, fontWeight: '600' }}>
           {milestoneLabel}
         </Text>
       )}
 
       <Pressable
         onPress={() => { setEditing(true); setInputValue(String(goal)); }}
-        className="mt-2"
+        className="mt-2 min-h-[48px] justify-center"
         accessibilityRole="button"
         accessibilityLabel={t('earnings.change_goal', { defaultValue: 'Cambiar meta' })}
       >
@@ -412,6 +459,13 @@ function NativeEarningsScreen() {
     avgResponseTimeS: number | null;
     matchScore: number;
   } | null>(null);
+
+  // Recent activity (wallet transactions)
+  const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
+  const [txPage, setTxPage] = useState(0);
+  const [txHasMore, setTxHasMore] = useState(true);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txExpanded, setTxExpanded] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!userId || !driverProfileId) return;
@@ -506,8 +560,36 @@ function NativeEarningsScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    // Reset transactions on refresh
+    setTransactions([]);
+    setTxPage(0);
+    setTxHasMore(true);
     fetchData();
   }, [fetchData]);
+
+  const loadTransactions = useCallback(async () => {
+    if (!userId || txLoading) return;
+    setTxLoading(true);
+    try {
+      const account = await walletService.getAccount(userId);
+      if (!account) return;
+      const data = await walletService.getTransactions(account.id, txPage, 10);
+      if (data.length < 10) setTxHasMore(false);
+      setTransactions(prev => txPage === 0 ? (data as TransactionWithAmount[]) : [...prev, ...(data as TransactionWithAmount[])]);
+    } catch {
+      // silent fail — non-critical
+    } finally {
+      setTxLoading(false);
+    }
+  }, [userId, txPage, txLoading]);
+
+  // Load transactions when section is expanded or page changes
+  useEffect(() => {
+    if (txExpanded) {
+      loadTransactions();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txExpanded, txPage]);
 
   // Computed stats
   const periodStats = useMemo(() => {
@@ -554,12 +636,20 @@ function NativeEarningsScreen() {
     month: t('earnings.month', { defaultValue: 'Mes' }),
   };
 
+  // Check if there is no earnings data at all
+  const hasNoEarningsData = !loading && periodStats.totalEarnings === 0 && periodStats.completedCount === 0;
+
   return (
     <Screen bg="dark" statusBarStyle="light-content">
       <ScrollView
         className="flex-1 px-5"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#fff"
+            accessibilityLabel={t('earnings.refresh', { defaultValue: 'Actualizar ganancias' })}
+          />
         }
       >
         <View className="pt-4 pb-8">
@@ -579,11 +669,24 @@ function NativeEarningsScreen() {
           <EarningsGoalCard currentEarnings={todayEarnings} />
 
           <AnimatedCard delay={0}>
-            <BalanceBadge
-              balance={balance}
-              size="lg"
-              className="mb-6"
-            />
+            <Pressable
+              onPress={() => router.push('/wallet')}
+              accessibilityRole="button"
+              accessibilityLabel={t('wallet.open', { defaultValue: 'Abrir Wallet' })}
+            >
+              <BalanceBadge
+                balance={balance}
+                size="lg"
+                className="mb-2"
+              />
+              <View className="flex-row items-center justify-center mb-4">
+                <Ionicons name="wallet-outline" size={14} color={colors.brand.orange} />
+                <Text variant="caption" color="accent" className="ml-1">
+                  {t('wallet.open', { defaultValue: 'Ver Wallet' })}
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={colors.brand.orange} />
+              </View>
+            </Pressable>
           </AnimatedCard>
 
           {/* Period Tabs */}
@@ -592,9 +695,10 @@ function NativeEarningsScreen() {
               <Pressable
                 key={p}
                 onPress={() => setPeriod(p)}
-                className={`flex-1 py-3 min-h-[44px] justify-center rounded-full items-center ${
-                  period === p ? 'bg-primary-500' : 'bg-neutral-800'
+                className={`flex-1 min-h-[48px] justify-center rounded-full items-center ${
+                  period === p ? 'bg-primary-500' : ''
                 }`}
+                style={period !== p ? { backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE } : undefined}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: period === p }}
                 accessibilityLabel={periodLabels[p]}
@@ -610,6 +714,15 @@ function NativeEarningsScreen() {
             ))}
           </View>
 
+          {/* Empty state when no earnings data */}
+          {hasNoEarningsData ? (
+            <EmptyState
+              icon="wallet-outline"
+              title={t('earnings.no_earnings_title', { defaultValue: 'Sin ganancias' })}
+              description={t('earnings.no_earnings_yet', { defaultValue: 'Aún no tienes ganancias en este periodo. Completa viajes para ver tus estadísticas aquí.' })}
+            />
+          ) : (
+          <>
           {/* Bar Chart (SVG) */}
           {period !== 'day' && chartData.length > 0 && (
             <EarningsBarChart data={chartData} />
@@ -617,22 +730,28 @@ function NativeEarningsScreen() {
 
           {/* Period Stats */}
           <View className="flex-row gap-3 mb-2">
-            <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
-              <Text variant="caption" color="inverse" className="opacity-50">
+            <Card
+              variant="filled"
+              padding="md"
+              className="flex-1"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+            >
+              <Text variant="badge" style={{ color: colors.neutral[400] }}>
                 {t('earnings.net_today', { defaultValue: 'Ganancia neta' })}
               </Text>
-              <Text variant="h4" color="inverse" className="mt-1">
+              <Text variant="metric" color="inverse" className="mt-1">
                 {formatCUP(periodStats.netEarnings)}
               </Text>
               {periodStats.totalCommission > 0 && (
-                <Text variant="caption" className="text-red-500 mt-0.5">
+                <Text variant="badge" style={{ color: '#EF4444' }} className="mt-0.5">
                   {t('earnings.commission_label', { defaultValue: 'Comision' })}: {formatCUP(periodStats.totalCommission)}
                 </Text>
               )}
               {trendPct !== null && (
                 <Text
-                  variant="caption"
-                  className={`mt-0.5 ${trendPct >= 0 ? 'text-green-500' : 'text-red-500'}`}
+                  variant="badge"
+                  style={{ color: trendPct >= 0 ? colors.success.DEFAULT : '#EF4444' }}
+                  className="mt-0.5"
                 >
                   {trendPct >= 0
                     ? t('earnings.trend_up', { pct: trendPct, defaultValue: `+${trendPct}% vs anterior` })
@@ -640,11 +759,16 @@ function NativeEarningsScreen() {
                 </Text>
               )}
             </Card>
-            <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
-              <Text variant="caption" color="inverse" className="opacity-50">
+            <Card
+              variant="filled"
+              padding="md"
+              className="flex-1"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+            >
+              <Text variant="badge" style={{ color: colors.neutral[400] }}>
                 {t('earnings.total_trips')}
               </Text>
-              <Text variant="h4" color="inverse" className="mt-1">
+              <Text variant="metric" color="inverse" className="mt-1">
                 {periodStats.completedCount}
               </Text>
             </Card>
@@ -652,30 +776,44 @@ function NativeEarningsScreen() {
 
           {/* Avg per trip */}
           <View className="flex-row gap-3 mb-4">
-            <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
-              <Text variant="caption" color="inverse" className="opacity-50">
+            <Card
+              variant="filled"
+              padding="md"
+              className="flex-1"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+            >
+              <Text variant="badge" style={{ color: colors.neutral[400] }}>
                 {t('earnings.avg_per_trip', { defaultValue: 'Promedio por viaje' })}
               </Text>
-              <Text variant="h4" color="inverse" className="mt-1">
+              <Text variant="metric" color="inverse" className="mt-1">
                 {formatCUP(periodStats.avgPerTrip)}
               </Text>
             </Card>
-            <Pressable onPress={() => router.push('/profile/reviews')}>
-              <Card variant="filled" padding="md" className="flex-1 bg-neutral-800">
-                <Text variant="caption" color="inverse" className="opacity-50">
+            <Pressable
+              onPress={() => router.push('/profile/reviews')}
+              accessibilityRole="button"
+              accessibilityLabel={t('earnings.see_reviews', { defaultValue: 'Ver reseñas' })}
+            >
+              <Card
+                variant="filled"
+                padding="md"
+                className="flex-1"
+                style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+              >
+                <Text variant="badge" style={{ color: colors.neutral[400] }}>
                   {t('earnings.rating')}
                 </Text>
                 <View className="flex-row items-center mt-1">
-                  <Text variant="h4" color="inverse" className="mr-1">
+                  <Text variant="metric" color="inverse" className="mr-1">
                     {avgRating != null ? `★ ${avgRating.toFixed(1)}` : '★ —'}
                   </Text>
                   {totalReviews > 0 && (
-                    <Text variant="caption" color="inverse" className="opacity-50">
+                    <Text variant="badge" style={{ color: colors.neutral[400] }}>
                       ({totalReviews})
                     </Text>
                   )}
                 </View>
-                <Text variant="caption" className="text-primary-400 mt-1">
+                <Text variant="badge" style={{ color: colors.brand.orange }} className="mt-1">
                   {t('earnings.see_reviews', { defaultValue: 'Ver reseñas →' })}
                 </Text>
               </Card>
@@ -708,12 +846,23 @@ function NativeEarningsScreen() {
                 const desc = qAny[`description_${langKey}`] ?? q.description_es;
 
                 return (
-                  <Card key={q.id} variant="filled" padding="md" className={`mb-3 ${isCompleted ? 'bg-green-900/30' : 'bg-neutral-800'}`}>
+                  <Card
+                    key={q.id}
+                    variant="filled"
+                    padding="md"
+                    className="mb-3"
+                    style={{
+                      backgroundColor: isCompleted ? 'rgba(34,197,94,0.12)' : CARD_BG,
+                      borderWidth: 1,
+                      borderColor: isCompleted ? 'rgba(34,197,94,0.2)' : BORDER_SUBTLE,
+                      borderRadius: 16,
+                    }}
+                  >
                     <View className="flex-row items-center justify-between mb-1">
                       <Text variant="body" color="inverse" className="font-semibold flex-1 mr-2">
                         {isCompleted ? '✅ ' : ''}{title}
                       </Text>
-                      <Text variant="caption" className="text-primary-400 font-bold">
+                      <Text variant="badge" style={{ color: colors.brand.orange, fontWeight: '700' }}>
                         +{formatCUP(q.reward_cup)}
                       </Text>
                     </View>
@@ -722,7 +871,8 @@ function NativeEarningsScreen() {
                     </Text>
                     {/* Progress bar */}
                     <View
-                      className="h-2 bg-neutral-700 rounded-full overflow-hidden mb-1"
+                      className="h-2 rounded-full overflow-hidden mb-1"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}
                       accessibilityRole="progressbar"
                       accessibilityValue={{ min: 0, max: q.target_value, now: current }}
                     >
@@ -730,11 +880,11 @@ function NativeEarningsScreen() {
                         className="h-full rounded-full"
                         style={{
                           width: `${Math.round(progress * 100)}%`,
-                          backgroundColor: isCompleted ? '#22c55e' : colors.brand.orange,
+                          backgroundColor: isCompleted ? colors.success.DEFAULT : colors.brand.orange,
                         }}
                       />
                     </View>
-                    <Text variant="caption" color="inverse" className="opacity-50">
+                    <Text variant="badge" style={{ color: colors.neutral[400] }}>
                       {current} / {q.target_value} {isCompleted
                         ? t('earnings.quest_completed', { defaultValue: '¡Completada!' })
                         : t('earnings.quest_remaining', { defaultValue: 'restante' })}
@@ -752,65 +902,200 @@ function NativeEarningsScreen() {
                 {t('earnings.performance_title', { defaultValue: 'Rendimiento' })}
               </Text>
               <View className="flex-row gap-3 mb-3">
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.acceptance_rate', { defaultValue: 'Tasa aceptación' })}: ${Math.round(driverStats.acceptanceRate * 100)}%`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
+                <Card
+                  variant="filled"
+                  padding="md"
+                  className="flex-1"
+                  style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                  accessible={true}
+                  accessibilityLabel={`${t('earnings.acceptance_rate', { defaultValue: 'Tasa aceptación' })}: ${Math.round(driverStats.acceptanceRate * 100)}%`}
+                >
+                  <Text variant="badge" style={{ color: colors.neutral[400] }}>
                     {t('earnings.acceptance_rate', { defaultValue: 'Tasa aceptación' })}
                   </Text>
-                  <Text variant="h4" color="inverse" className="mt-1">
+                  <Text variant="metric" color="inverse" className="mt-1">
                     {Math.round(driverStats.acceptanceRate * 100)}%
                   </Text>
                 </Card>
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.completion_rate', { defaultValue: 'Tasa completado' })}: ${Math.round(driverStats.completionRate * 100)}%`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
+                <Card
+                  variant="filled"
+                  padding="md"
+                  className="flex-1"
+                  style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                  accessible={true}
+                  accessibilityLabel={`${t('earnings.completion_rate', { defaultValue: 'Tasa completado' })}: ${Math.round(driverStats.completionRate * 100)}%`}
+                >
+                  <Text variant="badge" style={{ color: colors.neutral[400] }}>
                     {t('earnings.completion_rate', { defaultValue: 'Tasa completado' })}
                   </Text>
-                  <Text variant="h4" color="inverse" className="mt-1">
+                  <Text variant="metric" color="inverse" className="mt-1">
                     {Math.round(driverStats.completionRate * 100)}%
                   </Text>
                 </Card>
               </View>
               <View className="flex-row gap-3 mb-3">
-                <Pressable onPress={() => router.push('/profile/penalties')} className="flex-1">
-                  <Card variant="filled" padding="md" className="bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}: ${Math.round(driverStats.cancellationRate * 100)}%`}>
-                    <Text variant="caption" color="inverse" className="opacity-50">
+                <Pressable
+                  onPress={() => router.push('/profile/penalties')}
+                  className="flex-1"
+                  accessibilityRole="button"
+                  accessibilityLabel={t('earnings.see_penalties', { defaultValue: 'Ver penalidades' })}
+                >
+                  <Card
+                    variant="filled"
+                    padding="md"
+                    style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                    accessible={true}
+                    accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}: ${Math.round(driverStats.cancellationRate * 100)}%`}
+                  >
+                    <Text variant="badge" style={{ color: colors.neutral[400] }}>
                       {t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}
                     </Text>
-                    <Text variant="h4" style={{ color: driverStats.cancellationRate > 0.15 ? '#EF4444' : '#fff' }} className="mt-1">
+                    <Text variant="metric" style={{ color: driverStats.cancellationRate > 0.15 ? '#EF4444' : '#fff' }} className="mt-1">
                       {Math.round(driverStats.cancellationRate * 100)}%
                     </Text>
-                    <Text variant="caption" className="text-primary-400 mt-1">
+                    <Text variant="badge" style={{ color: colors.brand.orange }} className="mt-1">
                       {t('earnings.see_penalties', { defaultValue: 'Ver penalidades →' })}
                     </Text>
                   </Card>
                 </Pressable>
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}: ${driverStats.avgResponseTimeS != null ? `${driverStats.avgResponseTimeS}s` : '—'}`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
+                <Card
+                  variant="filled"
+                  padding="md"
+                  className="flex-1"
+                  style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                  accessible={true}
+                  accessibilityLabel={`${t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}: ${driverStats.avgResponseTimeS != null ? `${driverStats.avgResponseTimeS}s` : '—'}`}
+                >
+                  <Text variant="badge" style={{ color: colors.neutral[400] }}>
                     {t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}
                   </Text>
-                  <Text variant="h4" color="inverse" className="mt-1">
+                  <Text variant="metric" color="inverse" className="mt-1">
                     {driverStats.avgResponseTimeS != null ? `${driverStats.avgResponseTimeS}s` : '—'}
                   </Text>
                 </Card>
               </View>
               <View className="flex-row gap-3">
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.rides_this_week', { defaultValue: 'Esta semana' })}: ${driverStats.ridesThisWeek}`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
+                <Card
+                  variant="filled"
+                  padding="md"
+                  className="flex-1"
+                  style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                  accessible={true}
+                  accessibilityLabel={`${t('earnings.rides_this_week', { defaultValue: 'Esta semana' })}: ${driverStats.ridesThisWeek}`}
+                >
+                  <Text variant="badge" style={{ color: colors.neutral[400] }}>
                     {t('earnings.rides_this_week', { defaultValue: 'Esta semana' })}
                   </Text>
-                  <Text variant="h4" color="inverse" className="mt-1">
+                  <Text variant="metric" color="inverse" className="mt-1">
                     {driverStats.ridesThisWeek}
                   </Text>
                 </Card>
-                <Card variant="filled" padding="md" className="flex-1 bg-neutral-800" accessible={true} accessibilityLabel={`${t('earnings.match_score', { defaultValue: 'Puntuación' })}: ${driverStats.matchScore}`}>
-                  <Text variant="caption" color="inverse" className="opacity-50">
+                <Card
+                  variant="filled"
+                  padding="md"
+                  className="flex-1"
+                  style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+                  accessible={true}
+                  accessibilityLabel={`${t('earnings.match_score', { defaultValue: 'Puntuación' })}: ${driverStats.matchScore}`}
+                >
+                  <Text variant="badge" style={{ color: colors.neutral[400] }}>
                     {t('earnings.match_score', { defaultValue: 'Puntuación' })}
                   </Text>
-                  <Text variant="h4" color="inverse" className="mt-1">
+                  <Text variant="metric" color="inverse" className="mt-1">
                     {driverStats.matchScore}
                   </Text>
                 </Card>
               </View>
             </View>
+          )}
+
+          {/* Recent Wallet Activity */}
+          <View className="mt-8 mb-4">
+            <Card
+              variant="filled"
+              padding="md"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+            >
+              <Pressable
+                onPress={() => setTxExpanded(!txExpanded)}
+                className="flex-row items-center justify-between min-h-[48px]"
+                accessibilityRole="button"
+                accessibilityLabel={t('earnings.recent_activity', { defaultValue: 'Actividad reciente' })}
+                accessibilityState={{ expanded: txExpanded }}
+              >
+                <View className="flex-row items-center">
+                  <Ionicons name="receipt-outline" size={18} color={colors.brand.orange} />
+                  <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                    {t('earnings.recent_activity', { defaultValue: 'Actividad reciente' })}
+                  </Text>
+                </View>
+                <Ionicons name={txExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.neutral[400]} />
+              </Pressable>
+
+              {txExpanded && (
+                <View className="mt-3">
+                  {transactions.length === 0 && !txLoading && (
+                    <Text variant="bodySmall" color="secondary" className="text-center py-4">
+                      {t('earnings.no_transactions', { defaultValue: 'No hay transacciones recientes' })}
+                    </Text>
+                  )}
+                  {transactions.map((tx) => {
+                    const amount = tx.ledger_entries?.[0]?.amount ?? 0;
+                    const isCredit = amount > 0;
+                    return (
+                      <View
+                        key={tx.id}
+                        className="flex-row items-center py-2"
+                        style={{ borderBottomWidth: 1, borderBottomColor: BORDER_SUBTLE }}
+                      >
+                        <Ionicons
+                          name={
+                            tx.type === 'recharge' ? 'add-circle' :
+                            tx.type === 'ride_payment' ? 'car' :
+                            tx.type === 'commission' ? 'cut' :
+                            tx.type === 'transfer_in' ? 'arrow-down-circle' :
+                            tx.type === 'transfer_out' ? 'arrow-up-circle' :
+                            tx.type === 'promo_credit' ? 'gift' :
+                            tx.type === 'redemption' ? 'wallet' :
+                            'swap-horizontal'
+                          }
+                          size={16}
+                          color={isCredit ? colors.success.DEFAULT : '#EF4444'}
+                        />
+                        <View className="flex-1 ml-2">
+                          <Text variant="bodySmall" color="inverse">
+                            {t(`earnings.tx_${tx.type}`, { defaultValue: tx.type })}
+                          </Text>
+                          <Text variant="badge" style={{ color: colors.neutral[400] }}>
+                            {new Date(tx.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+                        <Text variant="bodySmall" style={{ color: isCredit ? colors.success.DEFAULT : '#EF4444', fontWeight: '600' }}>
+                          {isCredit ? '+' : ''}{formatCUP(amount)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  {txHasMore && transactions.length > 0 && (
+                    <Pressable
+                      onPress={() => setTxPage(p => p + 1)}
+                      className="py-3 items-center min-h-[48px] justify-center"
+                      accessibilityRole="button"
+                      accessibilityLabel={t('earnings.view_more', { defaultValue: 'Ver mas' })}
+                    >
+                      <Text variant="bodySmall" style={{ color: colors.brand.orange }}>
+                        {txLoading ? '...' : t('earnings.view_more', { defaultValue: 'Ver mas' })}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {txLoading && transactions.length === 0 && (
+                    <ActivityIndicator size="small" color={colors.brand.orange} className="py-4" />
+                  )}
+                </View>
+              )}
+            </Card>
+          </View>
+          </>
           )}
           </>
           )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,8 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
@@ -32,11 +34,14 @@ export default function DocumentsScreen() {
   const [reuploading, setReuploading] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!driverId) return;
+    if (!driverId) {
+      setLoading(false);
+      return;
+    }
     try {
       const [docs, checks] = await Promise.all([
         driverService.getDocumentVerificationStatus(driverId),
-        driverService.getSelfieChecks(driverId, 5),
+        driverService.getSelfieChecks(driverId, 5).catch(() => [] as SelfieCheck[]),
       ]);
       setDocuments(docs);
       setSelfieChecks(checks);
@@ -55,7 +60,8 @@ export default function DocumentsScreen() {
 
     try {
       const isSelfie = docType === 'selfie';
-      const result = isSelfie
+      const useCamera = isSelfie && Platform.OS !== 'web';
+      const result = useCamera
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: 'images',
             quality: 0.7,
@@ -82,23 +88,23 @@ export default function DocumentsScreen() {
     }
   }, [driverId, fetchData, t]);
 
-  const getStatusBadge = (doc: DriverDocument) => {
+  const getStatusBadgeProps = (doc: DriverDocument) => {
     if (doc.is_verified) {
-      return { bg: 'bg-green-900', text: 'text-green-400', label: t('verification.doc_verified') };
+      return { variant: 'success' as const, label: t('verification.doc_verified'), icon: 'checkmark-circle' as const };
     }
     if (doc.rejection_reason) {
-      return { bg: 'bg-red-900', text: 'text-red-400', label: t('verification.doc_rejected') };
+      return { variant: 'error' as const, label: t('verification.doc_rejected'), icon: 'close-circle' as const };
     }
-    return { bg: 'bg-yellow-900', text: 'text-yellow-400', label: t('verification.doc_pending') };
+    return { variant: 'warning' as const, label: t('verification.doc_pending'), icon: 'time-outline' as const };
   };
 
-  const getSelfieStatusBadge = (check: SelfieCheck) => {
+  const getSelfieStatusProps = (check: SelfieCheck) => {
     switch (check.status) {
-      case 'passed': return { bg: 'bg-green-900', text: 'text-green-400', label: t('verification.passed') };
-      case 'failed': return { bg: 'bg-red-900', text: 'text-red-400', label: t('verification.failed') };
-      case 'processing': return { bg: 'bg-blue-900', text: 'text-blue-400', label: t('verification.processing') };
-      case 'expired': return { bg: 'bg-neutral-700', text: 'text-neutral-400', label: t('verification.expired') };
-      default: return { bg: 'bg-yellow-900', text: 'text-yellow-400', label: t('verification.doc_pending') };
+      case 'passed': return { variant: 'success' as const, label: t('verification.passed'), icon: 'checkmark-circle' as const };
+      case 'failed': return { variant: 'error' as const, label: t('verification.failed'), icon: 'close-circle' as const };
+      case 'processing': return { variant: 'info' as const, label: t('verification.processing'), icon: 'sync-outline' as const };
+      case 'expired': return { variant: 'neutral' as const, label: t('verification.expired'), icon: 'time-outline' as const };
+      default: return { variant: 'warning' as const, label: t('verification.doc_pending'), icon: 'time-outline' as const };
     }
   };
 
@@ -108,8 +114,13 @@ export default function DocumentsScreen() {
     <Screen scroll bg="dark" statusBarStyle="light-content" padded>
       <View className="pt-4">
         <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+          <Pressable
+            onPress={() => router.back()}
+            className="mr-3 w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
+          >
+            <Ionicons name="arrow-back" size={20} color="#FAFAFA" />
           </Pressable>
           <Text variant="h3" color="inverse">{t('profile.documents', { defaultValue: 'Documentos' })}</Text>
         </View>
@@ -119,53 +130,51 @@ export default function DocumentsScreen() {
             <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>
         ) : documents.length === 0 ? (
-          <View className="items-center py-20">
-            <Text variant="body" color="inverse" className="opacity-50">
-              {t('verification.no_documents', { defaultValue: 'No hay documentos cargados' })}
-            </Text>
-          </View>
+          <EmptyState
+            icon="document-text-outline"
+            title={t('verification.no_documents', { defaultValue: 'No hay documentos' })}
+            description={t('verification.no_documents_desc', { defaultValue: 'Aún no has cargado documentos de verificación' })}
+          />
         ) : (
           <>
             {documents.map((doc) => {
-              const badge = getStatusBadge(doc);
+              const badgeProps = getStatusBadgeProps(doc);
               const isRejected = !doc.is_verified && !!doc.rejection_reason;
 
               return (
-                <Card key={doc.id} variant="filled" padding="md" className="mb-3 bg-neutral-800">
+                <Card key={doc.id} variant="surface" padding="md" className="mb-3">
                   <View className="flex-row items-center">
-                    <View className="w-10 h-10 rounded-lg bg-neutral-700 items-center justify-center mr-3">
+                    <View className="w-10 h-10 rounded-xl bg-[#252540] items-center justify-center mr-3">
                       <Ionicons
                         name={doc.is_verified ? 'checkmark-circle' : isRejected ? 'close-circle' : 'document-text'}
                         size={20}
-                        color={doc.is_verified ? colors.success.DEFAULT : isRejected ? colors.error.DEFAULT : colors.brand.orange}
+                        color={doc.is_verified ? colors.status.verified : isRejected ? colors.error.DEFAULT : colors.brand.orange}
                       />
                     </View>
                     <View className="flex-1">
                       <Text variant="body" color="inverse">
                         {DOC_TYPE_KEY[doc.document_type] ? t(DOC_TYPE_KEY[doc.document_type]!) : doc.document_type}
                       </Text>
-                      <Text variant="caption" color="inverse" className="opacity-50">
+                      <Text variant="caption" color="secondary" className="mt-0.5">
                         {doc.file_name}
                       </Text>
                       {isRejected && doc.rejection_reason && (
-                        <Text variant="caption" className="text-red-400 mt-1">
-                          {t('verification.rejection_reason', { reason: doc.rejection_reason })}
-                        </Text>
+                        <View className="flex-row items-start mt-1.5">
+                          <Ionicons name="alert-circle" size={12} color={colors.error.DEFAULT} style={{ marginTop: 2, marginRight: 4 }} />
+                          <Text variant="caption" color="error" className="flex-1">
+                            {t('verification.rejection_reason', { reason: doc.rejection_reason })}
+                          </Text>
+                        </View>
                       )}
                     </View>
-                    <View className="items-end">
-                      <View className={`px-2 py-0.5 rounded-full ${badge.bg}`}>
-                        <Text variant="caption" className={badge.text}>
-                          {badge.label}
-                        </Text>
-                      </View>
-                      <Text variant="caption" color="inverse" className="opacity-40 mt-1">
+                    <View className="items-end ml-2">
+                      <StatusBadge {...badgeProps} />
+                      <Text variant="badge" color="secondary" className="mt-1.5">
                         {new Date(doc.uploaded_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Re-upload button for rejected documents */}
                   {isRejected && (
                     <Button
                       title={t('verification.reupload')}
@@ -177,12 +186,23 @@ export default function DocumentsScreen() {
                     />
                   )}
 
-                  {/* Face match score if available */}
                   {doc.face_match_score != null && (
-                    <View className="flex-row items-center mt-2">
+                    <View className="flex-row items-center mt-3 bg-[#252540] rounded-lg px-3 py-2">
                       <Ionicons name="scan-outline" size={14} color={colors.neutral[400]} />
-                      <Text variant="caption" color="inverse" className="opacity-50 ml-1">
-                        Score: {Math.round(doc.face_match_score * 100)}%
+                      <Text variant="caption" color="secondary" className="ml-2 flex-1">
+                        Face match
+                      </Text>
+                      <View className="flex-1 h-1.5 bg-[#0d0d1a] rounded-full mx-2">
+                        <View
+                          className="h-1.5 rounded-full"
+                          style={{
+                            width: `${Math.round(doc.face_match_score * 100)}%`,
+                            backgroundColor: doc.face_match_score >= 0.7 ? colors.profit.high : doc.face_match_score >= 0.4 ? colors.profit.medium : colors.profit.low,
+                          }}
+                        />
+                      </View>
+                      <Text variant="badge" style={{ color: doc.face_match_score >= 0.7 ? colors.profit.high : colors.profit.medium }}>
+                        {Math.round(doc.face_match_score * 100)}%
                       </Text>
                     </View>
                   )}
@@ -190,33 +210,30 @@ export default function DocumentsScreen() {
               );
             })}
 
-            {/* Selfie checks history */}
             {selfieChecks.length > 0 && (
               <View className="mt-6">
-                <Text variant="label" color="inverse" className="mb-3 opacity-70">
+                <Text variant="label" color="secondary" className="mb-3">
                   {t('verification.selfie_history', { defaultValue: 'Verificaciones de Selfie' })}
                 </Text>
                 {selfieChecks.map((check) => {
-                  const badge = getSelfieStatusBadge(check);
+                  const badgeProps = getSelfieStatusProps(check);
                   return (
-                    <Card key={check.id} variant="filled" padding="sm" className="mb-2 bg-neutral-800">
+                    <Card key={check.id} variant="surface" padding="sm" className="mb-2">
                       <View className="flex-row items-center">
-                        <Ionicons name="camera-outline" size={18} color={colors.neutral[400]} />
-                        <Text variant="caption" color="inverse" className="flex-1 ml-2">
+                        <View className="w-8 h-8 rounded-lg bg-[#252540] items-center justify-center mr-3">
+                          <Ionicons name="camera-outline" size={16} color={colors.neutral[400]} />
+                        </View>
+                        <Text variant="caption" color="inverse" className="flex-1">
                           {new Date(check.requested_at).toLocaleDateString('es-CU', {
                             day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                           })}
                         </Text>
                         {check.face_match_score != null && (
-                          <Text variant="caption" color="inverse" className="opacity-50 mr-2">
+                          <Text variant="badge" color="secondary" className="mr-2">
                             {Math.round(check.face_match_score * 100)}%
                           </Text>
                         )}
-                        <View className={`px-2 py-0.5 rounded-full ${badge.bg}`}>
-                          <Text variant="caption" className={badge.text}>
-                            {badge.label}
-                          </Text>
-                        </View>
+                        <StatusBadge {...badgeProps} />
                       </View>
                     </Card>
                   );

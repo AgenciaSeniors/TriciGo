@@ -5,55 +5,15 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { StatCard } from '@tricigo/ui/StatCard';
+import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { authService, driverService } from '@tricigo/api';
-import { Platform } from 'react-native';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useNotificationStore } from '@/stores/notification.store';
-
-// TEMP: Static web version for Play Store screenshots
-function WebDriverProfileScreen() {
-  const menuItems = [
-    { icon: 'person-outline' as const, label: 'Editar perfil' },
-    { icon: 'car-outline' as const, label: 'Info del vehículo' },
-    { icon: 'document-text-outline' as const, label: 'Documentos' },
-    { icon: 'shield-checkmark-outline' as const, label: 'Seguridad' },
-    { icon: 'gift-outline' as const, label: 'Referir amigos' },
-    { icon: 'language-outline' as const, label: 'Idioma' },
-    { icon: 'settings-outline' as const, label: 'Configuración' },
-    { icon: 'help-circle-outline' as const, label: 'Ayuda' },
-  ];
-  return (
-    <Screen scroll bg="dark" padded>
-      <View className="pt-4">
-        <Text variant="h3" color="inverse" className="mb-6">Perfil</Text>
-        <Card variant="filled" padding="md" className="mb-6 flex-row items-center bg-neutral-800">
-          <View className="w-14 h-14 rounded-full bg-primary-500 items-center justify-center mr-4">
-            <Text variant="h4" color="inverse">J</Text>
-          </View>
-          <View className="flex-1">
-            <Text variant="body" color="inverse" className="font-semibold">Juan Pérez</Text>
-            <Text variant="caption" className="text-neutral-400">+53 55123456</Text>
-            <View className="flex-row items-center mt-1">
-              <Ionicons name="star" size={14} color={colors.brand.orange} />
-              <Text variant="caption" className="text-neutral-300 ml-1">4.87 — 342 viajes</Text>
-            </View>
-          </View>
-        </Card>
-        {menuItems.map((item, i) => (
-          <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-800">
-            <Ionicons name={item.icon} size={22} color="#9ca3af" />
-            <Text variant="body" color="inverse" className="flex-1 ml-4">{item.label}</Text>
-            <Ionicons name="chevron-forward" size={18} color="#6b7280" />
-          </Pressable>
-        ))}
-      </View>
-    </Screen>
-  );
-}
 
 function NativeDriverProfileScreen() {
   const { t } = useTranslation('common');
@@ -80,7 +40,6 @@ function NativeDriverProfileScreen() {
   const doLogout = async () => {
     setLoggingOut(true);
     try {
-      // Mark driver offline before signing out so backend stops routing rides
       if (driverProfile?.id) {
         await driverService.setOnlineStatus(driverProfile.id, false).catch(() => {});
       }
@@ -89,7 +48,6 @@ function NativeDriverProfileScreen() {
       resetDriver();
       resetNotifications();
     } catch {
-      // Still reset locally even if API call fails
       reset();
       resetDriver();
       resetNotifications();
@@ -109,13 +67,16 @@ function NativeDriverProfileScreen() {
     );
   };
 
+  const statusVariant = driverProfile?.status === 'approved' ? 'success'
+    : driverProfile?.status === 'under_review' ? 'warning'
+    : driverProfile?.status === 'suspended' ? 'error'
+    : 'neutral';
+
   const menuItems = [
     { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-    { icon: 'car-outline' as const, label: t('profile.vehicle_info'), onPress: () => router.push('/profile/vehicle') },
     { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents') },
     { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
     { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
-    { icon: 'language-outline' as const, label: t('profile.language'), onPress: () => router.push('/profile/settings') },
     { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
     { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
   ];
@@ -127,74 +88,98 @@ function NativeDriverProfileScreen() {
           {t('profile.title')}
         </Text>
 
-        <Card variant="filled" padding="md" className="mb-6 flex-row items-center bg-neutral-800">
-          <View className="w-14 h-14 rounded-full bg-primary-500 items-center justify-center mr-4">
-            <Text variant="h4" color="inverse">
-              {user?.full_name?.charAt(0) ?? 'C'}
-            </Text>
-          </View>
-          <View className="flex-1">
-            <Text variant="h4" color="inverse">{user?.full_name ?? td('common.driver_label')}</Text>
-            <Text variant="bodySmall" color="inverse" className="opacity-50">
-              {user?.phone ?? '+53 5XXXXXXX'}
-            </Text>
+        {/* ── Profile header card ── */}
+        <Card variant="surface" padding="md" className="mb-4">
+          <View className="flex-row items-center">
+            <View
+              className="w-16 h-16 rounded-full items-center justify-center mr-4"
+              style={{ backgroundColor: colors.brand.orange }}
+              accessible
+              accessibilityLabel={`Avatar de ${user?.full_name ?? td('common.driver_label')}`}
+            >
+              <Text variant="h3" color="inverse">
+                {user?.full_name?.charAt(0)?.toUpperCase() ?? 'C'}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text variant="h4" color="inverse">{user?.full_name ?? td('common.driver_label')}</Text>
+              <Text variant="bodySmall" color="secondary" className="mt-0.5">
+                {user?.phone ?? '+53 5XXXXXXX'}
+              </Text>
+              {driverProfile?.status && (
+                <View className="mt-2">
+                  <StatusBadge
+                    label={driverProfile.status === 'approved' ? td('common.active') : driverProfile.status}
+                    variant={statusVariant}
+                    icon={statusVariant === 'success' ? 'checkmark-circle' : statusVariant === 'warning' ? 'time-outline' : 'alert-circle'}
+                  />
+                </View>
+              )}
+            </View>
+            <Pressable
+              onPress={() => router.push('/profile/edit')}
+              className="w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.edit_profile')}
+            >
+              <Ionicons name="pencil" size={16} color={colors.neutral[400]} />
+            </Pressable>
           </View>
         </Card>
 
-        {driverProfile ? (
-          <Card variant="filled" padding="md" className="mb-6 bg-neutral-800">
-            <View className="flex-row justify-between">
-              <View className="items-center flex-1">
-                <Text variant="h4" color="accent">
-                  {driverProfile.status ?? '--'}
-                </Text>
-                <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  {td('common.status_label')}
-                </Text>
-              </View>
-              <View className="items-center flex-1">
-                <Text variant="h4" color="accent">
-                  {driverProfile.rating_avg != null && !isNaN(driverProfile.rating_avg)
-                    ? driverProfile.rating_avg.toFixed(1)
-                    : '--'}
-                </Text>
-                <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  {td('earnings.rating')}
-                </Text>
-              </View>
-              <View className="items-center flex-1">
-                <Text variant="h4" color="accent">
-                  {driverProfile.total_rides ?? 0}
-                </Text>
-                <Text variant="bodySmall" color="inverse" className="opacity-50">
-                  {td('trips_history.title')}
-                </Text>
-              </View>
+        {/* ── Stats row ── */}
+        {driverProfile && (
+          <View className="flex-row gap-3 mb-6">
+            <View className="flex-1">
+              <StatCard
+                icon="star"
+                value={driverProfile.rating_avg != null && !isNaN(driverProfile.rating_avg)
+                  ? driverProfile.rating_avg.toFixed(1) : '--'}
+                label={td('earnings.rating')}
+                iconColor="#FBBF24"
+              />
             </View>
-          </Card>
-        ) : null}
+            <View className="flex-1">
+              <StatCard
+                icon="car-outline"
+                value={String(driverProfile.total_rides ?? 0)}
+                label={td('trips_history.title')}
+              />
+            </View>
+          </View>
+        )}
 
-        {menuItems.map((item) => (
-          <Pressable
-            key={item.label}
-            className="flex-row items-center py-4 border-b border-neutral-800"
-            onPress={item.onPress}
-          >
-            <Ionicons name={item.icon} size={22} color={colors.neutral[400]} />
-            <Text variant="body" color="inverse" className="ml-3 flex-1">
-              {item.label}
-            </Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.neutral[600]} />
-          </Pressable>
-        ))}
+        {/* ── Menu items ── */}
+        <Card variant="surface" padding="none" className="mb-4">
+          {menuItems.map((item, index) => (
+            <Pressable
+              key={item.label}
+              className={`flex-row items-center px-4 min-h-[48px] ${index < menuItems.length - 1 ? 'border-b border-white/6' : ''}`}
+              onPress={item.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+            >
+              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                <Ionicons name={item.icon} size={18} color={colors.neutral[400]} />
+              </View>
+              <Text variant="body" color="inverse" className="flex-1">
+                {item.label}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.neutral[600]} />
+            </Pressable>
+          ))}
+        </Card>
 
+        {/* ── Logout ── */}
         <Pressable
-          className="flex-row items-center py-4 mt-4"
+          className="flex-row items-center justify-center py-4 mt-2 mb-8 rounded-2xl bg-red-500/10 min-h-[48px]"
           onPress={handleLogout}
           disabled={loggingOut}
+          accessibilityRole="button"
+          accessibilityLabel={loggingOut ? t('auth.logging_out') : t('auth.logout')}
         >
-          <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
-          <Text variant="body" color="error" className="ml-3">
+          <Ionicons name="log-out-outline" size={20} color={colors.error.DEFAULT} />
+          <Text variant="body" color="error" className="ml-2 font-semibold">
             {loggingOut ? t('auth.logging_out') : t('auth.logout')}
           </Text>
         </Pressable>
@@ -204,6 +189,5 @@ function NativeDriverProfileScreen() {
 }
 
 export default function DriverProfileScreen() {
-  if (Platform.OS === 'web') return <WebDriverProfileScreen />;
   return <NativeDriverProfileScreen />;
 }

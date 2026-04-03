@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch } from 'react-native';
+import { View, Pressable, Switch, Alert, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, driverService } from '@tricigo/api';
+import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,13 +49,11 @@ export default function DriverSettingsScreen() {
       setCategoryPrefs(Object.fromEntries(results));
     });
 
-    // Load SMS preference from server
     if (userId) {
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
     }
   }, [userId]);
 
-  // Load auto-accept eligibility and current setting
   useEffect(() => {
     if (!profile?.id) return;
     setAutoAcceptEnabled(!!profile.auto_accept_enabled);
@@ -63,8 +61,9 @@ export default function DriverSettingsScreen() {
   }, [profile?.id]);
 
   const toggleLanguage = () => {
-    const next = currentLang === 'es' ? 'en' : 'es';
+    const next = currentLang === 'es' ? 'en' : currentLang === 'en' ? 'pt' : 'es';
     i18n.changeLanguage(next);
+    AsyncStorage.setItem('tricigo_language', next);
   };
 
   const handleNotificationToggle = async (enabled: boolean) => {
@@ -86,54 +85,82 @@ export default function DriverSettingsScreen() {
     await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
   }, []);
 
+  const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
+
   return (
     <Screen scroll bg="dark" statusBarStyle="light-content" padded>
       <View className="pt-4">
+        {/* Header */}
         <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color={colors.neutral[50]} />
+          <Pressable
+            onPress={() => router.back()}
+            className="mr-3 w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
           </Pressable>
           <Text variant="h3" color="inverse">{t('profile.settings_title')}</Text>
         </View>
 
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <Pressable onPress={toggleLanguage} className="flex-row items-center justify-between">
+        {/* ── Language ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_language', { defaultValue: 'Idioma' })}
+        </Text>
+        <Card variant="surface" padding="md" className="mb-5">
+          <Pressable
+            onPress={toggleLanguage}
+            className="flex-row items-center justify-between min-h-[48px]"
+            accessibilityRole="button"
+            accessibilityLabel={`${t('profile.preferred_language')}: ${LANG_LABELS[currentLang] ?? currentLang}`}
+          >
             <View className="flex-row items-center">
-              <Ionicons name="language-outline" size={22} color={colors.neutral[400]} />
-              <Text variant="body" color="inverse" className="ml-3">{t('profile.preferred_language')}</Text>
+              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                <Ionicons name="language-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <Text variant="body" color="inverse">{t('profile.preferred_language')}</Text>
             </View>
-            <Text variant="body" color="accent">
-              {currentLang === 'es' ? t('profile.spanish') : t('profile.english')}
-            </Text>
+            <View className="flex-row items-center">
+              <Text variant="bodySmall" color="accent" className="mr-1">
+                {LANG_LABELS[currentLang] ?? currentLang}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.neutral[500]} />
+            </View>
           </Pressable>
         </Card>
 
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <View className="flex-row items-center justify-between">
+        {/* ── Notifications ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_notifications', { defaultValue: 'Notificaciones' })}
+        </Text>
+        <Card variant="surface" padding="md" className="mb-5">
+          <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
-              <Ionicons name="notifications-outline" size={22} color={colors.neutral[400]} />
-              <Text variant="body" color="inverse" className="ml-3">{t('profile.notifications_toggle')}</Text>
+              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                <Ionicons name="notifications-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <Text variant="body" color="inverse">{t('profile.notifications_toggle')}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ true: colors.brand.orange }}
+              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              accessibilityLabel={t('profile.notifications_toggle')}
             />
           </View>
 
-          {/* Granular category toggles */}
           {notificationsEnabled && (
-            <View className="mt-3 pt-3 border-t border-neutral-700">
+            <View className="mt-3 pt-3 border-t border-white/6">
               <Text variant="caption" color="secondary" className="mb-2">
                 {t('profile.notif_section_title')}
               </Text>
               {NOTIF_CATEGORIES.map((cat) => (
                 <View
                   key={cat.key}
-                  className="flex-row items-center justify-between py-2"
+                  className="flex-row items-center justify-between py-2.5"
                 >
                   <View className="flex-row items-center">
-                    <Ionicons name={cat.icon} size={18} color={colors.neutral[500]} />
+                    <Ionicons name={cat.icon} size={16} color={colors.neutral[500]} />
                     <Text variant="bodySmall" color="inverse" className="ml-2.5">
                       {t(cat.labelKey)}
                     </Text>
@@ -141,8 +168,9 @@ export default function DriverSettingsScreen() {
                   <Switch
                     value={categoryPrefs[cat.key] !== false}
                     onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                    trackColor={{ true: colors.brand.orange }}
+                    trackColor={{ false: '#252540', true: colors.brand.orange }}
                     style={{ transform: [{ scale: 0.85 }] }}
+                    accessibilityLabel={t(cat.labelKey)}
                   />
                 </View>
               ))}
@@ -150,24 +178,31 @@ export default function DriverSettingsScreen() {
           )}
         </Card>
 
+        {/* ── Preferences ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_preferences', { defaultValue: 'Preferencias' })}
+        </Text>
+
         {/* Auto-accept rides */}
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <View className="flex-row items-center justify-between">
+        <Card variant="surface" padding="md" className="mb-3">
+          <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <Ionicons name="flash-outline" size={22} color={colors.neutral[400]} />
-              <View className="ml-3 flex-1">
+              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                <Ionicons name="flash-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <View className="flex-1">
                 <Text variant="body" color="inverse">
                   {t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
                 </Text>
                 {autoAcceptEligible ? (
-                  <Text variant="caption" color="secondary">
+                  <Text variant="caption" color="secondary" className="mt-0.5">
                     {autoAcceptEnabled
-                      ? t('profile.auto_accept_on_desc', { defaultValue: 'Los viajes se aceptarán automáticamente. Tienes 5 segundos para cancelar.' })
-                      : t('profile.auto_accept_off_desc', { defaultValue: 'Los viajes entrantes requieren aceptación manual.' })}
+                      ? t('profile.auto_accept_on_desc', { defaultValue: 'Aceptación automática. 5s para cancelar.' })
+                      : t('profile.auto_accept_off_desc', { defaultValue: 'Aceptación manual requerida.' })}
                   </Text>
                 ) : (
-                  <Text variant="caption" color="secondary">
-                    {t('profile.auto_accept_not_eligible', { defaultValue: 'Disponible después de 50 viajes y 4.5 de calificación' })}
+                  <Text variant="caption" color="secondary" className="mt-0.5">
+                    {t('profile.auto_accept_not_eligible', { defaultValue: 'Disponible con 50+ viajes y 4.5+ rating' })}
                   </Text>
                 )}
               </View>
@@ -187,19 +222,22 @@ export default function DriverSettingsScreen() {
                   setAutoAcceptLoading(false);
                 }
               }}
-              trackColor={{ true: colors.brand.orange }}
+              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
             />
           </View>
         </Card>
 
-        {/* SMS Alerts section */}
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <View className="flex-row items-center justify-between">
+        {/* SMS Alerts */}
+        <Card variant="surface" padding="md" className="mb-8">
+          <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.neutral[400]} />
-              <View className="ml-3 flex-1">
+              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <View className="flex-1">
                 <Text variant="body" color="inverse">{t('profile.notif_sms')}</Text>
-                <Text variant="caption" color="secondary">
+                <Text variant="caption" color="secondary" className="mt-0.5">
                   {t('profile.notif_sms_desc')}
                 </Text>
               </View>
@@ -219,10 +257,101 @@ export default function DriverSettingsScreen() {
                   setSmsLoading(false);
                 }
               }}
-              trackColor={{ true: colors.brand.orange }}
+              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              accessibilityLabel={t('profile.notif_sms')}
             />
           </View>
         </Card>
+
+        {/* ── Delete Account ── */}
+        <View className="mt-6">
+          <Text variant="h4" color="inverse" className="mb-3 px-1">
+            {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
+          </Text>
+          <Card variant="surface" padding="md">
+            <Text variant="bodySmall" color="secondary" className="mb-3">
+              {t('profile.delete_account_desc', {
+                defaultValue: 'Eliminar tu cuenta es permanente. Se perderan todos tus datos, historial de viajes y balance.',
+              })}
+            </Text>
+            <Pressable
+              onPress={() => {
+                Alert.prompt
+                  ? Alert.prompt(
+                      t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
+                      t('profile.delete_account_confirm', {
+                        defaultValue: 'Escribe ELIMINAR para confirmar la eliminacion de tu cuenta.',
+                      }),
+                      [
+                        { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+                        {
+                          text: t('profile.delete', { defaultValue: 'Eliminar' }),
+                          style: 'destructive',
+                          onPress: async (text?: string) => {
+                            if (text?.toUpperCase() !== 'ELIMINAR') {
+                              Alert.alert('Error', t('profile.delete_mismatch', { defaultValue: 'Texto incorrecto.' }));
+                              return;
+                            }
+                            try {
+                              if (userId) {
+                                const supabase = getSupabaseClient();
+                                await supabase
+                                  .from('driver_profiles')
+                                  .update({ is_active: false, deactivated_at: new Date().toISOString() })
+                                  .eq('user_id', userId);
+                              }
+                              await authService.signOut();
+                              router.replace('/(auth)/login');
+                            } catch {
+                              Alert.alert('Error', t('profile.delete_error', { defaultValue: 'No se pudo eliminar la cuenta.' }));
+                            }
+                          },
+                        },
+                      ],
+                      'plain-text',
+                    )
+                  : // Android fallback (Alert.prompt is iOS-only)
+                    Alert.alert(
+                      t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
+                      t('profile.delete_account_confirm_android', {
+                        defaultValue: '¿Estas seguro de que deseas eliminar tu cuenta? Esta accion es irreversible.',
+                      }),
+                      [
+                        { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+                        {
+                          text: t('profile.delete', { defaultValue: 'Eliminar' }),
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              if (userId) {
+                                const supabase = getSupabaseClient();
+                                await supabase
+                                  .from('driver_profiles')
+                                  .update({ is_active: false, deactivated_at: new Date().toISOString() })
+                                  .eq('user_id', userId);
+                              }
+                              await authService.signOut();
+                              router.replace('/(auth)/login');
+                            } catch {
+                              Alert.alert('Error', t('profile.delete_error', { defaultValue: 'No se pudo eliminar la cuenta.' }));
+                            }
+                          },
+                        },
+                      ],
+                    );
+              }}
+              className="flex-row items-center justify-center py-3 rounded-xl"
+              style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', minHeight: 48 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
+            >
+              <Ionicons name="trash-outline" size={18} color="#ef4444" />
+              <Text variant="body" style={{ color: '#ef4444', marginLeft: 8, fontWeight: '600' }}>
+                {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
+              </Text>
+            </Pressable>
+          </Card>
+        </View>
       </View>
     </Screen>
   );

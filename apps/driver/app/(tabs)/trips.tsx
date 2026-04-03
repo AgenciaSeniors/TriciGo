@@ -19,7 +19,7 @@ import { ErrorState } from '@tricigo/ui/ErrorState';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const PAGE_SIZE = 20;
 

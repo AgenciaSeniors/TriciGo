@@ -2,14 +2,16 @@ import React from 'react';
 import { View, type ViewProps } from 'react-native';
 
 export interface CardProps extends ViewProps {
-  variant?: 'elevated' | 'outlined' | 'filled';
+  variant?: 'elevated' | 'outlined' | 'filled' | 'surface';
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
 const variantClasses = {
-  elevated: 'bg-white dark:bg-neutral-800 rounded-xl shadow-md',
-  outlined: 'bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700',
-  filled: 'bg-neutral-50 dark:bg-neutral-800 rounded-xl',
+  elevated: 'bg-white dark:bg-neutral-800 rounded-2xl shadow-lg border border-transparent dark:border-white/6',
+  outlined: 'bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-white/12',
+  filled: 'bg-neutral-50 dark:bg-neutral-800 rounded-2xl',
+  /** Dark premium surface card with subtle border */
+  surface: 'bg-[#1a1a2e] rounded-2xl border border-white/6',
 } as const;
 
 const paddingClasses = {
