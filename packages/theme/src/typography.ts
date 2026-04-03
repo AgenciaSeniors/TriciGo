@@ -86,4 +86,22 @@ export const textVariants = {
     fontWeight: fontWeight.medium,
     lineHeight: lineHeight.tight,
   },
+  /** Large stat numbers (earnings totals, hero metrics) */
+  stat: {
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.extrabold,
+    lineHeight: lineHeight.tight,
+  },
+  /** Medium metric values (dashboard cards) */
+  metric: {
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+    lineHeight: lineHeight.tight,
+  },
+  /** Small badge/pill text */
+  badge: {
+    fontSize: 11 as const,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.tight,
+  },
 } as const;

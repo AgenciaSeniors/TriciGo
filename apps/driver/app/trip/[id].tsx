@@ -167,14 +167,14 @@ export default function TripDetailScreen() {
                 <Text variant="caption" color="inverse" className="opacity-40">
                   {t('trip.base_fare', { defaultValue: 'Tarifa base' })}
                 </Text>
-                <Text variant="caption" color="inverse" className="opacity-40">{formatCUP(pricing.base_fare_cup ?? 0)}</Text>
+                <Text variant="caption" color="inverse" className="opacity-40">{formatCUP(pricing.base_fare ?? 0)}</Text>
               </View>
               <View className="flex-row justify-between mb-1">
                 <Text variant="caption" color="inverse" className="opacity-40">
                   {t('trip.distance_charge', { defaultValue: 'Distancia' })} ({((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000).toFixed(1)} km)
                 </Text>
                 <Text variant="caption" color="inverse" className="opacity-40">
-                  {formatCUP(Math.round(((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000) * (pricing.per_km_rate_cup ?? 0)))}
+                  {formatCUP(Math.round(((ride.actual_distance_m ?? ride.estimated_distance_m ?? 0) / 1000) * (pricing.per_km_rate ?? 0)))}
                 </Text>
               </View>
               <View className="flex-row justify-between mb-1">
@@ -182,7 +182,7 @@ export default function TripDetailScreen() {
                   {t('trip.time_charge', { defaultValue: 'Tiempo' })} ({Math.round((ride.actual_duration_s ?? ride.estimated_duration_s ?? 0) / 60)} min)
                 </Text>
                 <Text variant="caption" color="inverse" className="opacity-40">
-                  {formatCUP(Math.round(((ride.actual_duration_s ?? ride.estimated_duration_s ?? 0) / 60) * (pricing.per_minute_rate_cup ?? 0)))}
+                  {formatCUP(Math.round(((ride.actual_duration_s ?? ride.estimated_duration_s ?? 0) / 60) * (pricing.per_minute_rate ?? 0)))}
                 </Text>
               </View>
               {(ride.surge_multiplier ?? 1) > 1 && (
@@ -193,12 +193,12 @@ export default function TripDetailScreen() {
                   <Text variant="caption" className="text-orange-400">+{formatCUP(Math.round(fare * (1 - 1 / (ride.surge_multiplier ?? 1))))}</Text>
                 </View>
               )}
-              {(ride.tip_amount_cup ?? 0) > 0 && (
+              {(ride.tip_amount ?? 0) > 0 && (
                 <View className="flex-row justify-between mb-1">
                   <Text variant="caption" className="text-green-400">
                     {t('trip.tip', { defaultValue: 'Propina' })}
                   </Text>
-                  <Text variant="caption" className="text-green-400">+{formatCUP(ride.tip_amount_cup ?? 0)}</Text>
+                  <Text variant="caption" className="text-green-400">+{formatCUP(ride.tip_amount ?? 0)}</Text>
                 </View>
               )}
               <View className="h-px bg-neutral-700 my-2" />

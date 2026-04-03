@@ -1,6 +1,7 @@
 export * from './currency';
 export * from './date';
 export * from './validation';
+export * from './cuba-geo';
 export * from './geo';
 export * from './fareCalculator';
 export { initAnalytics, trackEvent, trackValidationEvent, identifyUser, resetAnalytics } from './analytics';

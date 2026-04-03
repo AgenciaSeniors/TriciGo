@@ -32,7 +32,7 @@ export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
     const counts = new Array(24).fill(0) as number[];
     for (const trip of trips) {
       const hour = new Date(trip.created_at).getHours();
-      counts[hour]++;
+      counts[hour] = (counts[hour] ?? 0) + 1;
     }
     return counts;
   }, [trips]);
@@ -49,7 +49,7 @@ export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
     .slice(0, 3);
 
   return (
-    <View className="bg-neutral-800 rounded-xl p-4 mb-4">
+    <View className="bg-[#1a1a2e] border border-white/6 rounded-xl p-4 mb-4">
       <Text variant="bodySmall" color="inverse" className="font-semibold mb-3">
         {t('earnings.hourly_activity', { defaultValue: 'Actividad por hora' })}
       </Text>

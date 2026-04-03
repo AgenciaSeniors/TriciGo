@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -30,6 +30,13 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   auto: 'Auto',
 };
 
+const VEHICLE_IMAGES: Record<string, any> = {
+  triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
+  moto_standard: require('../../assets/vehicles/selection/moto.png'),
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  auto_confort: require('../../assets/vehicles/selection/confort.png'),
+};
+
 export default function ReviewScreen() {
   const { t } = useTranslation('driver');
   const STEPS = useSteps();
@@ -52,9 +59,20 @@ export default function ReviewScreen() {
       await authService.updateProfile(user.id, {
         full_name: personalInfo.full_name,
         email: personalInfo.email || null,
+        phone: personalInfo.phone || undefined,
       });
 
-      // 2. Register vehicle
+      // 2. Save personal identity info to driver_profiles
+      await driverService.updatePersonalInfo(driverProfileId, {
+        identity_number: personalInfo.identity_number || undefined,
+        address: personalInfo.address || undefined,
+        province: personalInfo.province || undefined,
+        municipality: personalInfo.municipality || undefined,
+        has_criminal_record: personalInfo.has_criminal_record,
+        criminal_record_details: personalInfo.has_criminal_record ? personalInfo.criminal_record_details || undefined : undefined,
+      });
+
+      // 3. Register vehicle
       await driverService.registerVehicle({
         driver_id: driverProfileId,
         type: vehicle.type as VehicleType,
@@ -65,7 +83,11 @@ export default function ReviewScreen() {
         plate_number: vehicle.plate_number,
         capacity: parseInt(vehicle.capacity, 10),
         accepts_cargo: vehicle.accepts_cargo,
-        max_cargo_weight_kg: vehicle.accepts_cargo && vehicle.max_cargo_weight_kg ? parseInt(vehicle.max_cargo_weight_kg, 10) : null,
+        max_cargo_weight_kg: vehicle.accepts_cargo && vehicle.max_cargo_weight_kg ? parseFloat(vehicle.max_cargo_weight_kg) : null,
+        max_cargo_length_cm: vehicle.accepts_cargo && vehicle.max_cargo_length_cm ? parseInt(vehicle.max_cargo_length_cm, 10) : null,
+        max_cargo_width_cm: vehicle.accepts_cargo && vehicle.max_cargo_width_cm ? parseInt(vehicle.max_cargo_width_cm, 10) : null,
+        max_cargo_height_cm: vehicle.accepts_cargo && vehicle.max_cargo_height_cm ? parseInt(vehicle.max_cargo_height_cm, 10) : null,
+        accepted_cargo_categories: vehicle.accepts_cargo ? vehicle.accepted_cargo_categories : [],
         is_active: true,
         photo_url: null,
       });
@@ -95,11 +117,11 @@ export default function ReviewScreen() {
   };
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
       <View className="pt-4">
         <StatusStepper steps={STEPS} currentStep="review" className="mb-6" />
 
-        <Text variant="h3" className="mb-1">
+        <Text variant="h3" color="inverse" className="mb-1">
           {t('onboarding.step_review')}
         </Text>
         <Text variant="bodySmall" color="secondary" className="mb-6">
@@ -107,37 +129,63 @@ export default function ReviewScreen() {
         </Text>
 
         {/* Personal Info */}
-        <Card variant="filled" padding="md" className="mb-4">
+        <Card variant="surface" padding="md" className="mb-4">
           <Text variant="label" color="secondary" className="mb-2">
             {t('onboarding.personal_info_summary')}
           </Text>
-          <Text variant="body">{personalInfo.full_name}</Text>
-          <Text variant="bodySmall" color="secondary">{user?.phone}</Text>
+          <Text variant="body" color="inverse">{personalInfo.full_name}</Text>
+          <Text variant="bodySmall" color="secondary">{personalInfo.phone || user?.phone}</Text>
           {personalInfo.email ? (
             <Text variant="bodySmall" color="secondary">{personalInfo.email}</Text>
           ) : null}
         </Card>
 
-        {/* Vehicle */}
-        <Card variant="filled" padding="md" className="mb-4">
-          <Text variant="label" color="secondary" className="mb-2">
+        {/* Vehicle — Visual card with image */}
+        <Card variant="surface" padding="md" className="mb-4">
+          <Text variant="label" color="secondary" className="mb-3">
             {t('onboarding.vehicle_summary')}
           </Text>
-          <Text variant="body">
-            {VEHICLE_TYPE_LABELS[vehicle.type ?? ''] ?? ''} — {vehicle.make} {vehicle.model} ({vehicle.year})
-          </Text>
-          <Text variant="bodySmall" color="secondary">
-            {vehicle.color} | {vehicle.plate_number} | {vehicle.capacity} pasajeros
-          </Text>
+          <View className="flex-row items-center mb-3">
+            {vehicle.service_type_slug && VEHICLE_IMAGES[vehicle.service_type_slug] && (
+              <Image
+                source={VEHICLE_IMAGES[vehicle.service_type_slug]}
+                style={{ width: 64, height: 64, marginRight: 12 }}
+                resizeMode="contain"
+              />
+            )}
+            <View className="flex-1">
+              <Text variant="body" color="inverse" className="font-bold">
+                {vehicle.service_type_slug === 'auto_confort' ? 'Confort' : VEHICLE_TYPE_LABELS[vehicle.type ?? ''] ?? ''}
+              </Text>
+              <Text variant="bodySmall" color="secondary">
+                {vehicle.make} {vehicle.model} ({vehicle.year})
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row flex-wrap gap-2 mb-2">
+            <View className="bg-[#252540] px-3 py-1.5 rounded-full">
+              <Text variant="caption" color="inverse">{vehicle.color}</Text>
+            </View>
+            <View className="bg-[#252540] px-3 py-1.5 rounded-full">
+              <Text variant="caption" color="inverse">{vehicle.plate_number}</Text>
+            </View>
+            <View className="bg-[#252540] px-3 py-1.5 rounded-full flex-row items-center gap-1">
+              <Ionicons name="people" size={12} color="#A3A3A3" />
+              <Text variant="caption" color="inverse">{vehicle.capacity} pasajeros</Text>
+            </View>
+          </View>
           {vehicle.accepts_cargo && (
-            <Text variant="caption" className="text-orange-600 mt-1">
-              Acepta carga — Max {vehicle.max_cargo_weight_kg} kg
-            </Text>
+            <View className="flex-row items-center bg-primary-500/10 rounded-lg px-3 py-2 mt-1">
+              <Ionicons name="cube" size={14} color="#FF4D00" />
+              <Text variant="caption" color="accent" className="ml-2">
+                {t('onboarding.accepts_deliveries')} — Max {vehicle.max_cargo_weight_kg} kg
+              </Text>
+            </View>
           )}
         </Card>
 
         {/* Documents */}
-        <Card variant="filled" padding="md" className="mb-6">
+        <Card variant="surface" padding="md" className="mb-6">
           <Text variant="label" color="secondary" className="mb-2">
             {t('onboarding.documents_summary')}
           </Text>
@@ -145,9 +193,9 @@ export default function ReviewScreen() {
             <Ionicons
               name={uploadedCount === 5 ? 'checkmark-circle' : 'alert-circle'}
               size={20}
-              color={uploadedCount === 5 ? '#10B981' : '#F59E0B'}
+              color={uploadedCount === 5 ? '#22C55E' : '#F59E0B'}
             />
-            <Text variant="body" className="ml-2">
+            <Text variant="body" color="inverse" className="ml-2">
               {t('onboarding.documents_count', { count: uploadedCount, total: 5 })}
             </Text>
           </View>

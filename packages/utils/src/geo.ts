@@ -624,7 +624,7 @@ function pointToSegmentDistanceM(
 function minDistToWay(lat: number, lng: number, geom: Array<{ lat: number; lon: number }>): number {
   let min = Infinity;
   for (let i = 0; i < geom.length - 1; i++) {
-    const d = pointToSegmentDistanceM(lat, lng, geom[i].lat, geom[i].lon, geom[i + 1].lat, geom[i + 1].lon);
+    const d = pointToSegmentDistanceM(lat, lng, geom[i]!.lat, geom[i]!.lon, geom[i + 1]!.lat, geom[i + 1]!.lon);
     if (d < min) min = d;
   }
   return min;
@@ -665,7 +665,7 @@ async function findNearestStreetAndCross(
     if (!waysWithDist.length) return null;
 
     // Closest way = main street
-    const mainStreet = waysWithDist[0].name;
+    const mainStreet = waysWithDist[0]!.name;
 
     // Other ways with different names = cross streets (max 2, unique)
     const crossStreets = waysWithDist
@@ -1019,7 +1019,7 @@ export async function findIntersection(
     let point2: { lat: number; lon: number } | null = null;
 
     if (nodes.length === 1) {
-      point1 = { lat: nodes[0].lat!, lon: nodes[0].lon! };
+      point1 = { lat: nodes[0]!.lat!, lon: nodes[0]!.lon! };
     } else if (crossStreet2 && nodes.length >= 2) {
       // With 2 cross streets, we expect 2 intersection groups
       // Sort by distance from map center, take the 2 most different positions
@@ -1030,17 +1030,17 @@ export async function findIntersection(
           const db = haversineDistance({ latitude: lat, longitude: lng }, { latitude: b.lat, longitude: b.lon });
           return da - db;
         });
-      point1 = sorted[0];
+      point1 = sorted[0]!;
       // Find the node that is farthest from point1 (= the other intersection)
       let maxDist = 0;
-      point2 = sorted[1];
+      point2 = sorted[1] ?? null;
       for (const n of sorted.slice(1)) {
         const d = haversineDistance({ latitude: point1.lat, longitude: point1.lon }, { latitude: n.lat, longitude: n.lon });
         if (d > maxDist) { maxDist = d; point2 = n; }
       }
     } else {
       // Just take the closest node
-      point1 = { lat: nodes[0].lat!, lon: nodes[0].lon! };
+      point1 = { lat: nodes[0]!.lat!, lon: nodes[0]!.lon! };
     }
 
     if (!point1) return null;

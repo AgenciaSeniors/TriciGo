@@ -2,7 +2,7 @@ import React from 'react';
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
 export interface TextProps extends RNTextProps {
-  variant?: 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'bodySmall' | 'caption' | 'label';
+  variant?: 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'bodySmall' | 'caption' | 'label' | 'stat' | 'metric' | 'badge';
   color?: 'primary' | 'secondary' | 'tertiary' | 'inverse' | 'accent' | 'error';
 }
 
@@ -15,6 +15,9 @@ const variantClasses = {
   bodySmall: 'text-sm font-normal',
   caption: 'text-xs font-medium',
   label: 'text-sm font-medium',
+  stat: 'text-3xl font-extrabold',
+  metric: 'text-2xl font-bold',
+  badge: 'text-[11px] font-semibold',
 } as const;
 
 const colorClasses = {

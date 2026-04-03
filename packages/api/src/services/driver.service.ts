@@ -8,6 +8,8 @@ import type {
   DriverDocument,
   CancellationPenalty,
   Vehicle,
+  VehicleType,
+  PackageCategory,
   Ride,
   CompleteRideResult,
   ServiceTypeSlug,
@@ -137,6 +139,52 @@ export const driverService = {
   },
 
   /**
+   * Update vehicle cargo/delivery settings.
+   */
+  async updateVehicleCargo(vehicleId: string, updates: {
+    accepts_cargo: boolean;
+    max_cargo_weight_kg?: number | null;
+    max_cargo_length_cm?: number | null;
+    max_cargo_width_cm?: number | null;
+    max_cargo_height_cm?: number | null;
+    accepted_cargo_categories?: PackageCategory[];
+  }): Promise<Vehicle> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('vehicles')
+      .update(updates)
+      .eq('id', vehicleId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Vehicle;
+  },
+
+  /**
+   * Update vehicle details (type, make, model, year, color, plate, capacity, photo).
+   */
+  async updateVehicle(vehicleId: string, updates: {
+    type?: VehicleType;
+    make?: string;
+    model?: string;
+    year?: number;
+    color?: string;
+    plate_number?: string;
+    capacity?: number;
+    photo_url?: string | null;
+  }): Promise<Vehicle> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('vehicles')
+      .update(updates)
+      .eq('id', vehicleId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Vehicle;
+  },
+
+  /**
    * Submit driver profile for verification.
    */
   async submitForVerification(driverId: string): Promise<void> {
@@ -144,6 +192,29 @@ export const driverService = {
     const { error } = await supabase
       .from('driver_profiles')
       .update({ status: 'under_review' as DriverStatus })
+      .eq('id', driverId);
+    if (error) throw error;
+  },
+
+  /**
+   * Update driver personal information (identity, address, province, municipality, criminal record).
+   * Called during onboarding to save extended personal data.
+   */
+  async updatePersonalInfo(
+    driverId: string,
+    info: {
+      identity_number?: string;
+      address?: string;
+      province?: string;
+      municipality?: string;
+      has_criminal_record?: boolean;
+      criminal_record_details?: string;
+    },
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update(info)
       .eq('id', driverId);
     if (error) throw error;
   },

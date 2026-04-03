@@ -82,7 +82,7 @@ export function AnimatedPressable({
       style={[{ transform: [{ scale }] }, style]}
     >
       <Animated.View>
-        {React.cloneElement(children as React.ReactElement, {
+        {React.cloneElement(children as React.ReactElement<any>, {
           onPress,
           onPressIn,
           onPressOut,

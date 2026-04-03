@@ -25,7 +25,7 @@ export interface AvatarProps {
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return `${parts[0]![0]}${parts[1]![0]}`.toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
 }
@@ -46,7 +46,7 @@ function getColorFromName(name: string): string {
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return colors[Math.abs(hash) % colors.length];
+  return colors[Math.abs(hash) % colors.length]!;
 }
 
 export function Avatar({

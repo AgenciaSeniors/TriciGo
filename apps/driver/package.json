@@ -27,8 +27,8 @@
     "expo": "~55.0.6",
     "expo-constants": "~55.0.7",
     "expo-dev-client": "~55.0.16",
-    "expo-image": "~2.0.0",
     "expo-haptics": "~55.0.8",
+    "expo-image": "~2.0.0",
     "expo-image-manipulator": "^55.0.10",
     "expo-image-picker": "~55.0.12",
     "expo-linear-gradient": "^55.0.8",
@@ -42,6 +42,7 @@
     "expo-sharing": "~55.0.11",
     "expo-status-bar": "~55.0.4",
     "i18next": "^24.2.2",
+    "mapbox-gl": "^3.20.0",
     "nativewind": "^4.1.23",
     "posthog-react-native": "^4.37.2",
     "react": "19.2.0",
@@ -53,6 +54,7 @@
     "react-native-svg": "^15.15.3",
     "react-native-toast-message": "^2.3.3",
     "react-native-web": "~0.21.2",
+    "react-native-webview": "13.16.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

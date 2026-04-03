@@ -16,7 +16,7 @@ const themeStore = createThemeStore('light');
 // Load persisted theme on startup
 AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
   if (stored === 'light' || stored === 'dark' || stored === 'system') {
-    const systemScheme = Appearance.getColorScheme() ?? 'light';
+    const systemScheme = (Appearance.getColorScheme() ?? 'light') as 'light' | 'dark';
     themeStore.getState().setSystemScheme(systemScheme);
     themeStore.getState().setMode(stored);
   }
@@ -44,7 +44,7 @@ export function setThemeMode(mode: ThemeMode) {
 export function useSystemThemeSync() {
   useEffect(() => {
     const subscription = Appearance.addChangeListener(({ colorScheme }) => {
-      themeStore.getState().setSystemScheme(colorScheme ?? 'light');
+      themeStore.getState().setSystemScheme((colorScheme ?? 'light') as 'light' | 'dark');
     });
     return () => subscription.remove();
   }, []);

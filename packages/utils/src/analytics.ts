@@ -82,6 +82,7 @@ export async function trackValidationEvent(
 
   // Send to Supabase validation_events (fire-and-forget)
   try {
+    // @ts-expect-error — dynamic import to avoid circular dependency between packages
     const { getSupabaseClient } = await import('@tricigo/api');
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
