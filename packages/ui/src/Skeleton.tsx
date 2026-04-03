@@ -41,7 +41,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius,
-          backgroundColor: '#e5e5e5',
+          backgroundColor: '#252540',
           opacity,
         },
         style,

@@ -36,63 +36,60 @@ const storageOps =
 const adapter = createStorageAdapter(storageOps);
 configureStorage(adapter);
 
+/** Helper: load user + driver profile and update stores */
+async function loadUserAndProfile(
+  setUser: (user: any) => void,
+  setProfile: (profile: any) => void,
+  setProfileLoaded: () => void,
+  reset: () => void,
+  mounted: { current: boolean },
+) {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!mounted.current) return;
+    setUser(user);
+    if (user) {
+      identifyUser(user.id, { email: user.email, role: 'driver' });
+      try {
+        const dp = await driverService.getProfile(user.id);
+        if (mounted.current) setProfile(dp);
+      } catch {
+        // No driver profile yet — user needs onboarding
+        // Still mark profile as loaded so routing can proceed
+        if (mounted.current) setProfileLoaded();
+      }
+    } else {
+      // No user — mark profile loaded to unblock routing
+      if (mounted.current) setProfileLoaded();
+    }
+  } catch {
+    if (mounted.current) reset();
+  }
+}
+
 export function useAuthInit() {
   const setUser = useAuthStore((s) => s.setUser);
   const reset = useAuthStore((s) => s.reset);
   const setProfile = useDriverStore((s) => s.setProfile);
+  const setProfileLoaded = useDriverStore((s) => s.setProfileLoaded);
   const resetDriver = useDriverStore((s) => s.reset);
 
   useEffect(() => {
-    let mounted = true;
+    const mounted = { current: true };
 
-    async function init() {
-      try {
-        const session = await authService.getSession();
-        if (session && mounted) {
-          const user = await authService.getCurrentUser();
-          if (mounted) setUser(user);
-          if (user) {
-            identifyUser(user.id, { email: user.email, role: 'driver' });
-            try {
-              const dp = await driverService.getProfile(user.id);
-              if (mounted) setProfile(dp);
-            } catch {
-              // No driver profile yet - user needs onboarding
-            }
-          }
-        } else if (mounted) {
-          reset();
-        }
-      } catch (err) {
-        // On web, "Lock broken" errors happen during remounts — retry instead of resetting
-        const isLockError = err instanceof Error && err.message?.includes('Lock broken');
-        if (isLockError) {
-          console.warn('[Auth] Lock contention during init, retrying...');
-          setTimeout(async () => {
-            if (!mounted) return;
-            try {
-              const session = await authService.getSession();
-              if (session && mounted) {
-                const user = await authService.getCurrentUser();
-                if (mounted) setUser(user);
-              } else if (mounted) {
-                reset();
-              }
-            } catch {
-              if (mounted) reset();
-            }
-          }, 500);
-          return;
-        }
-        if (mounted) reset();
-      }
-    }
-
-    init();
-
+    // ── STEP 1: Register auth state listener FIRST ──
+    // This MUST happen before getSession() so we catch the SIGNED_IN event
+    // that Supabase fires when it detects OAuth tokens in the URL hash.
     const { data: { subscription } } = authService.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return;
+        if (!mounted.current) return;
+
+        // Handle INITIAL_SESSION with a valid session (e.g., after OAuth redirect)
+        if (event === 'INITIAL_SESSION' && session) {
+          await loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted);
+          return;
+        }
+
         if (event === 'SIGNED_OUT' || !session) {
           resetAnalytics();
           reset();
@@ -100,31 +97,63 @@ export function useAuthInit() {
           useChatStore.getState().reset();
           useDriverRideStore.getState().reset();
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          try {
-            const user = await authService.getCurrentUser();
-            if (mounted) setUser(user);
-            if (user) {
-              identifyUser(user.id, { email: user.email, role: 'driver' });
-              try {
-                const dp = await driverService.getProfile(user.id);
-                if (mounted) setProfile(dp);
-              } catch {
-                // No driver profile - needs onboarding
-              }
-            }
-          } catch {
-            reset();
-          }
+          await loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted);
         }
       },
     );
 
-    // Subscribe to driver profile changes in realtime (e.g., admin suspends driver)
+    // ── STEP 2: Check existing session ──
+    async function init() {
+      try {
+        const session = await authService.getSession();
+        if (session && mounted.current) {
+          await loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted);
+        } else if (mounted.current) {
+          reset();
+        }
+      } catch (err) {
+        const isLockError = err instanceof Error && err.message?.includes('Lock broken');
+        if (isLockError) {
+          console.warn('[Auth] Lock contention during init, retrying...');
+          setTimeout(async () => {
+            if (!mounted.current) return;
+            try {
+              const session = await authService.getSession();
+              if (session && mounted.current) {
+                await loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted);
+              } else if (mounted.current) {
+                reset();
+              }
+            } catch {
+              if (mounted.current) reset();
+            }
+          }, 500);
+          return;
+        }
+        if (mounted.current) reset();
+      }
+    }
+
+    init();
+
+    // ── STEP 3: Safety timeout ──
+    // If isLoading is still true after 8 seconds, force exit loading state.
+    // This prevents infinite spinner in any edge case.
+    const safetyTimeout = setTimeout(() => {
+      if (!mounted.current) return;
+      const state = useAuthStore.getState();
+      if (state.isLoading) {
+        console.warn('[Auth] Safety timeout: forcing exit from loading state');
+        reset();
+      }
+    }, 8000);
+
+    // ── STEP 4: Subscribe to driver profile changes in realtime ──
     let profileChannel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
     async function subscribeToProfile() {
       try {
         const session = await authService.getSession();
-        if (!session?.user || !mounted) return;
+        if (!session?.user || !mounted.current) return;
         const supabase = getSupabaseClient();
         profileChannel = supabase
           .channel(`driver-profile-${session.user.id}`)
@@ -137,7 +166,7 @@ export function useAuthInit() {
               filter: `user_id=eq.${session.user.id}`,
             },
             (payload) => {
-              if (mounted && payload.new) {
+              if (mounted.current && payload.new) {
                 setProfile(payload.new as any);
               }
             },
@@ -150,11 +179,12 @@ export function useAuthInit() {
     subscribeToProfile();
 
     return () => {
-      mounted = false;
+      mounted.current = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
       if (profileChannel) {
         getSupabaseClient().removeChannel(profileChannel);
       }
     };
-  }, [setUser, reset, setProfile, resetDriver]);
+  }, [setUser, reset, setProfile, setProfileLoaded, resetDriver]);
 }

@@ -5,3 +5,11 @@ export { spacing, borderRadius, shadows } from './spacing';
 export { brand } from './brand';
 export { createThemeStore } from './theme-store';
 export type { ThemeMode, ThemeState } from './theme-store';
+export {
+  TOUCH_TARGET_MIN,
+  TOUCH_SPACING_MIN,
+  animation,
+  spring,
+  pressScale,
+  stateOpacity,
+} from './interaction';

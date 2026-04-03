@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import { initI18n } from '@tricigo/i18n';
 import { initAnalytics } from '@tricigo/utils';
-import * as Localization from 'expo-localization';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -61,9 +60,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   useNotificationSetup(user?.id);
 
   useEffect(() => {
-    const locales = Localization.getLocales();
-    const deviceLang = locales[0]?.languageCode ?? 'es';
-    initI18n(deviceLang);
+    (async () => {
+      // Prioritize saved preference, default to Spanish
+      const savedLang = await AsyncStorage.getItem('tricigo_language');
+      if (savedLang && ['es', 'en', 'pt'].includes(savedLang)) {
+        initI18n(savedLang);
+        return;
+      }
+      initI18n('es');
+    })();
   }, []);
 
   // Subscribe to network state changes

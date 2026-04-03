@@ -12,6 +12,8 @@ export default function ProfileLayout() {
       <Stack.Screen name="help" />
       <Stack.Screen name="ticket-detail" />
       <Stack.Screen name="referral" />
+      <Stack.Screen name="cargo-settings" />
+      <Stack.Screen name="edit-vehicle" />
     </Stack>
   );
 }

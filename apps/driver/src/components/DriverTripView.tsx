@@ -11,11 +11,13 @@ import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic, haversineDistance, trackValidationEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { incidentService, walletService } from '@tricigo/api';
+import { incidentService, walletService, deliveryService } from '@tricigo/api';
+import type { DeliveryDetails } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { RideMapView } from '@/components/RideMapView';
+import { useRiderLocation } from '@/hooks/useRiderLocation';
 import { useDriverStore } from '@/stores/driver.store';
 import { openNavigation } from '@/utils/navigation';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
@@ -54,7 +56,7 @@ function WaitTimer({ arrivedAt, freeMinutes }: { arrivedAt: string; freeMinutes:
   const billableMin = Math.max(0, elapsedMin - freeMinutes);
 
   return (
-    <View className={`rounded-xl p-3 mb-3 items-center ${isFree ? 'bg-green-900/30' : 'bg-red-900/30'}`}>
+    <View className={`rounded-2xl p-3 mb-3 items-center border border-white/[0.06] ${isFree ? 'bg-green-900/30' : 'bg-red-900/30'}`}>
       <Text variant="caption" color="inverse" className="opacity-60 mb-1">
         {t('trip.waiting_passenger', { defaultValue: 'Esperando al pasajero' })}
       </Text>
@@ -62,11 +64,11 @@ function WaitTimer({ arrivedAt, freeMinutes }: { arrivedAt: string; freeMinutes:
         {String(elapsedMin).padStart(2, '0')}:{String(elapsedSec).padStart(2, '0')}
       </Text>
       {isFree ? (
-        <Text variant="caption" className="text-green-400 mt-1">
+        <Text variant="caption" style={{ color: '#10B981' }} className="mt-1">
           {t('trip.wait_free', { defaultValue: 'Gratis' })} ({freeMinutes - elapsedMin} min)
         </Text>
       ) : (
-        <Text variant="caption" className="text-red-400 mt-1 font-semibold">
+        <Text variant="caption" style={{ color: '#EF4444' }} className="mt-1 font-semibold">
           {t('trip.wait_charging', { defaultValue: 'Cobrando espera' })} +{billableMin} min
         </Text>
       )}
@@ -101,7 +103,12 @@ export function DriverTripView() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverProfile = useDriverStore((s) => s.profile);
   const { advanceStatus, cancelTrip, clearCompletedTrip } = useDriverRideActions();
-  const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
+
+  // Subscribe to rider's real-time location during pickup phase
+  const isPickupPhase = activeTrip?.status === 'accepted' || activeTrip?.status === 'driver_en_route';
+  const riderLocation = useRiderLocation(activeTrip?.id, isPickupPhase);
+  type LocalWaypoint = { id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null };
+  const [waypoints, setWaypoints] = useState<LocalWaypoint[]>([]);
   const [waypointLoading, setWaypointLoading] = useState<string | null>(null);
   const [prefsExpanded, setPrefsExpanded] = useState(false);
   const [routeExpanded, setRouteExpanded] = useState(false);
@@ -113,6 +120,7 @@ export function DriverTripView() {
   const [pickupPhotoUploaded, setPickupPhotoUploaded] = useState(false);
   const [deliveryPhotoUploaded, setDeliveryPhotoUploaded] = useState(false);
   const isDeliveryRide = activeTrip?.ride_mode === 'cargo';
+  const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails | null>(null);
   const needsPickupPhoto = isDeliveryRide && activeTrip?.status === 'arrived_at_pickup' && !pickupPhotoUploaded;
   const needsDeliveryPhoto = isDeliveryRide && activeTrip?.status === 'in_progress' && !deliveryPhotoUploaded;
   const lastAdvancePressRef = useRef(0);
@@ -127,6 +135,14 @@ export function DriverTripView() {
     : null;
   const inAppNav = useInAppNavigation(driverLocation);
 
+  // Fetch delivery details for cargo rides
+  useEffect(() => {
+    if (!isDeliveryRide || !activeTrip?.id) return;
+    deliveryService.getDeliveryDetails(activeTrip.id)
+      .then(setDeliveryDetails)
+      .catch((err) => console.error('[DriverTripView] Failed to load delivery details', err instanceof Error ? err.message : 'unknown'));
+  }, [isDeliveryRide, activeTrip?.id]);
+
   // Subscribe to waypoints first, then fetch (avoids race condition where a
   // waypoint inserted between fetch and subscribe would be missed)
   useEffect(() => {
@@ -136,16 +152,19 @@ export function DriverTripView() {
     const channel = rideService.subscribeToWaypoints(
       activeTrip.id,
       (newWp) => {
+        const w = newWp as any;
+        const flat: LocalWaypoint = { id: w.id, address: w.address, sort_order: w.sort_order, latitude: w.latitude ?? w.location?.latitude ?? 0, longitude: w.longitude ?? w.location?.longitude ?? 0, arrived_at: w.arrived_at ?? null, departed_at: w.departed_at ?? null };
         setWaypoints((prev) => {
-          // Dedup: skip if already present from initial fetch
-          if (prev.some((w) => w.id === newWp.id)) return prev;
-          return [...prev, newWp];
+          if (prev.some((p) => p.id === flat.id)) return prev;
+          return [...prev, flat];
         });
         Alert.alert('', t('trip.new_stop_added', { defaultValue: 'El pasajero agregó una parada' }));
       },
       (updatedWp) => {
+        const w = updatedWp as any;
+        const flat: LocalWaypoint = { id: w.id, address: w.address, sort_order: w.sort_order, latitude: w.latitude ?? w.location?.latitude ?? 0, longitude: w.longitude ?? w.location?.longitude ?? 0, arrived_at: w.arrived_at ?? null, departed_at: w.departed_at ?? null };
         setWaypoints((prev) =>
-          prev.map((wp) => (wp.id === updatedWp.id ? { ...wp, ...updatedWp } : wp)),
+          prev.map((wp) => (wp.id === flat.id ? { ...wp, ...flat } : wp)),
         );
       },
     );
@@ -153,10 +172,10 @@ export function DriverTripView() {
     // Then fetch existing waypoints (merge with any that arrived via subscription)
     rideService.getRideWaypoints(activeTrip.id)
       .then((wps) => setWaypoints((prev) => {
-        // Merge: keep subscription waypoints that aren't in the fetch result
-        const fetchedIds = new Set(wps.map((w: any) => w.id));
+        const flatWps: LocalWaypoint[] = (wps as any[]).map((w: any) => ({ id: w.id, address: w.address, sort_order: w.sort_order, latitude: w.latitude ?? w.location?.latitude ?? 0, longitude: w.longitude ?? w.location?.longitude ?? 0, arrived_at: w.arrived_at ?? null, departed_at: w.departed_at ?? null }));
+        const fetchedIds = new Set(flatWps.map((w) => w.id));
         const subscriptionOnly = prev.filter((w) => !fetchedIds.has(w.id));
-        return [...wps, ...subscriptionOnly];
+        return [...flatWps, ...subscriptionOnly];
       }))
       .catch(() => {});
 
@@ -306,10 +325,10 @@ export function DriverTripView() {
   const actionButtonColor = useMemo(() => {
     switch (activeTrip?.status) {
       case 'accepted': return '#3B82F6'; // blue
-      case 'driver_en_route': return '#F97316'; // orange
-      case 'arrived_at_pickup': return '#22C55E'; // green
-      case 'in_progress': return '#EF4444'; // red
-      default: return '#F97316'; // orange fallback
+      case 'driver_en_route': return '#FF4D00'; // brand orange
+      case 'arrived_at_pickup': return '#10B981'; // success green
+      case 'in_progress': return '#EF4444'; // error red
+      default: return '#FF4D00'; // brand orange fallback
     }
   }, [activeTrip?.status]);
 
@@ -317,8 +336,8 @@ export function DriverTripView() {
   const stepperTint = useMemo(() => {
     switch (activeTrip?.status) {
       case 'accepted': return 'rgba(59,130,246,0.1)'; // blue tint
-      case 'driver_en_route': return 'rgba(249,115,22,0.1)'; // orange tint
-      case 'arrived_at_pickup': return 'rgba(34,197,94,0.1)'; // green tint
+      case 'driver_en_route': return 'rgba(255,77,0,0.1)'; // brand orange tint
+      case 'arrived_at_pickup': return 'rgba(16,185,129,0.1)'; // success green tint
       case 'in_progress': return 'rgba(168,85,247,0.1)'; // purple tint
       default: return 'transparent';
     }
@@ -392,7 +411,7 @@ export function DriverTripView() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140, paddingTop: 16 }}>
         {/* Chained ride banner */}
         {activeTrip.next_ride_id && (
-          <View className="bg-info px-4 py-3 rounded-xl mb-3 flex-row items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
+          <View className="bg-info px-4 py-3 rounded-2xl mb-3 flex-row items-center border border-white/[0.06]" accessibilityRole="alert" accessibilityLiveRegion="polite">
             <Ionicons name="link-outline" size={18} color="white" />
             <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
               {t('trip.next_ride_queued', { defaultValue: 'Proximo viaje asignado' })}
@@ -422,14 +441,26 @@ export function DriverTripView() {
           pickupLocation={activeTrip.pickup_location}
           dropoffLocation={activeTrip.dropoff_location}
           driverLocation={driverLocation}
+          riderLocation={isPickupPhase ? riderLocation : null}
           routeCoordinates={inAppNav.isNavigating && inAppNav.routeCoordinates.length > 0
             ? inAppNav.routeCoordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }))
             : routeCoordinates}
           height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
+          vehicleType="triciclo"
         />
 
+        {/* Scheduled ride banner */}
+        {activeTrip.scheduled_at && (
+          <View className="flex-row items-center bg-blue-900/30 rounded-2xl py-2 px-3 mb-3 mt-3 border border-white/[0.06]">
+            <Ionicons name="time-outline" size={16} color="#60A5FA" />
+            <Text variant="bodySmall" color="inverse" className="ml-2">
+              {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
+            </Text>
+          </View>
+        )}
+
         {/* DT-4: Status stepper with phase-colored tint */}
-        <View style={{ backgroundColor: stepperTint, borderRadius: 12, padding: 8, marginTop: 12, marginBottom: 8 }}>
+        <View style={{ backgroundColor: stepperTint, borderRadius: 16, padding: 8, marginTop: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
           <StatusStepper
             steps={TRIP_STEPS}
             currentStep={activeTrip.status}
@@ -457,8 +488,8 @@ export function DriverTripView() {
 
         {/* DE-2.1: Arriving at waypoint banner */}
         {nearWaypoint && nextWaypoint && (
-          <View style={{ backgroundColor: '#22C55E20', padding: 8, borderRadius: 8, marginBottom: 4 }}>
-            <Text style={{ color: '#22C55E', textAlign: 'center', fontSize: 13 }}>
+          <View style={{ backgroundColor: 'rgba(16,185,129,0.12)', padding: 8, borderRadius: 16, marginBottom: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+            <Text variant="caption" style={{ color: '#10B981', textAlign: 'center' }}>
               {t('trip.arriving_waypoint', { n: nextWaypoint.sort_order })}
             </Text>
           </View>
@@ -475,16 +506,20 @@ export function DriverTripView() {
           <Pressable
             style={{
               backgroundColor: '#F59E0B',
-              borderRadius: 12,
+              borderRadius: 16,
               paddingVertical: 14,
               paddingHorizontal: 24,
               marginHorizontal: 16,
               marginBottom: 8,
+              minHeight: 48,
               alignItems: 'center',
+              justifyContent: 'center',
             }}
             onPress={() => cancelTrip('passenger_no_show')}
+            accessibilityRole="button"
+            accessibilityLabel={`${t('trip.passenger_no_show')} — ${t('trip.cancel_no_show')}`}
           >
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
+            <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>
               {t('trip.passenger_no_show')} — {t('trip.cancel_no_show')}
             </Text>
           </Pressable>
@@ -492,16 +527,110 @@ export function DriverTripView() {
 
         {/* Cargo badge */}
         {activeTrip.service_type === 'triciclo_cargo' && (
-          <View className="flex-row items-center justify-center mb-3 bg-orange-600 rounded-lg py-2 px-4">
+          <View className="flex-row items-center justify-center mb-3 rounded-2xl py-2 px-4 border border-white/[0.06]" style={{ backgroundColor: '#FF4D00' }}>
             <Ionicons name="cube" size={16} color="white" />
             <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">CARGO</Text>
           </View>
         )}
 
+        {/* Corporate ride badge */}
+        {activeTrip.corporate_account_id && (
+          <View className="flex-row items-center justify-center mb-3 bg-blue-600/80 rounded-2xl py-2 px-4 border border-white/[0.06]">
+            <Ionicons name="business" size={16} color="white" />
+            <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">
+              {t('home.corporate_ride')}
+            </Text>
+          </View>
+        )}
+
+        {/* Delivery details (recipient, package info, instructions) */}
+        {isDeliveryRide && deliveryDetails && (
+          <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-3 rounded-2xl border border-white/[0.06]">
+            {/* Recipient */}
+            <View className="flex-row items-center mb-2">
+              <Ionicons name="person" size={16} color="#FF4D00" />
+              <Text variant="body" color="inverse" className="ml-2 font-semibold flex-1">
+                {deliveryDetails.recipient_name}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => Linking.openURL(`tel:${deliveryDetails.recipient_phone}`)}
+              className="flex-row items-center mb-3 bg-neutral-700 rounded-2xl py-2 px-3"
+              style={{ minHeight: 48 }}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('delivery.tap_to_call')} ${deliveryDetails.recipient_phone}`}
+            >
+              <Ionicons name="call" size={14} color="#10B981" />
+              <Text variant="bodySmall" color="inverse" className="ml-2">
+                {deliveryDetails.recipient_phone}
+              </Text>
+              <Text variant="caption" color="accent" className="ml-auto">
+                {t('delivery.tap_to_call')}
+              </Text>
+            </Pressable>
+
+            {/* Package info */}
+            <View className="mb-2">
+              <Text variant="caption" color="secondary" className="mb-1">
+                {t('delivery.package_description')}
+              </Text>
+              <Text variant="bodySmall" color="inverse">
+                {deliveryDetails.package_description}
+              </Text>
+            </View>
+
+            {/* Category + weight badges */}
+            <View className="flex-row flex-wrap gap-1.5 mb-2">
+              {deliveryDetails.package_category && (
+                <View className="px-2.5 py-1 rounded-full" style={{ backgroundColor: 'rgba(255,77,0,0.2)' }}>
+                  <Text variant="caption" color="inverse" className="text-xs">
+                    {t(`delivery.cat_${deliveryDetails.package_category}`, { defaultValue: deliveryDetails.package_category })}
+                  </Text>
+                </View>
+              )}
+              {deliveryDetails.estimated_weight_kg != null && (
+                <View className="bg-neutral-700 px-2.5 py-1 rounded-full">
+                  <Text variant="caption" color="inverse" className="text-xs">
+                    {t('delivery.weight_kg', { weight: deliveryDetails.estimated_weight_kg })}
+                  </Text>
+                </View>
+              )}
+              {deliveryDetails.client_accompanies && (
+                <View className="bg-blue-600/20 px-2.5 py-1 rounded-full flex-row items-center gap-1">
+                  <Ionicons name="people" size={10} color="#60A5FA" />
+                  <Text variant="caption" color="inverse" className="text-xs">
+                    {t('delivery.client_accompanies')}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Special instructions */}
+            {deliveryDetails.special_instructions ? (
+              <View className="bg-yellow-900/20 rounded-lg p-2.5 mt-1">
+                <View className="flex-row items-center mb-1">
+                  <Ionicons name="alert-circle" size={14} color="#F59E0B" />
+                  <Text variant="caption" color="inverse" className="ml-1 font-semibold">
+                    {t('delivery.special_instructions')}
+                  </Text>
+                </View>
+                <Text variant="bodySmall" color="inverse" className="opacity-80">
+                  {deliveryDetails.special_instructions}
+                </Text>
+              </View>
+            ) : null}
+          </Card>
+        )}
+
         {/* Rider preferences (collapsible) */}
         {activeTrip.rider_preferences && Object.values(activeTrip.rider_preferences).some(Boolean) && (
           <View className="mb-3">
-            <Pressable onPress={() => setPrefsExpanded(!prefsExpanded)}>
+            <Pressable
+              onPress={() => setPrefsExpanded(!prefsExpanded)}
+              style={{ minHeight: 48, justifyContent: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel={prefsExpanded ? t('trip.hide_preferences') : t('trip.view_preferences')}
+            >
               <Text variant="bodySmall" color="accent" style={{ textAlign: 'center', marginVertical: 4 }}>
                 {prefsExpanded ? t('trip.hide_preferences') : t('trip.view_preferences')}
               </Text>
@@ -510,31 +639,31 @@ export function DriverTripView() {
               <View className="flex-row flex-wrap gap-1.5 px-1">
                 <Ionicons name="options-outline" size={14} color="#9CA3AF" />
                 {activeTrip.rider_preferences.quiet_mode && (
-                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                  <View className="flex-row items-center bg-[#1a1a2e] px-2.5 py-1 rounded-full gap-1">
                     <Ionicons name="volume-mute" size={12} color="#FFA726" />
                     <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_quiet', { defaultValue: 'Silencio' })}</Text>
                   </View>
                 )}
                 {activeTrip.rider_preferences.temperature === 'cool' && (
-                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                  <View className="flex-row items-center bg-[#1a1a2e] px-2.5 py-1 rounded-full gap-1">
                     <Ionicons name="snow" size={12} color="#42A5F5" />
                     <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_cool', { defaultValue: 'AC fresco' })}</Text>
                   </View>
                 )}
                 {activeTrip.rider_preferences.temperature === 'warm' && (
-                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                  <View className="flex-row items-center bg-[#1a1a2e] px-2.5 py-1 rounded-full gap-1">
                     <Ionicons name="sunny" size={12} color="#FFA726" />
                     <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_warm', { defaultValue: 'Cálido' })}</Text>
                   </View>
                 )}
                 {activeTrip.rider_preferences.conversation_ok && (
-                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                  <View className="flex-row items-center bg-[#1a1a2e] px-2.5 py-1 rounded-full gap-1">
                     <Ionicons name="chatbubbles" size={12} color="#66BB6A" />
                     <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_conversation', { defaultValue: 'Conversación' })}</Text>
                   </View>
                 )}
                 {activeTrip.rider_preferences.luggage_trunk && (
-                  <View className="flex-row items-center bg-neutral-800 px-2.5 py-1 rounded-full gap-1">
+                  <View className="flex-row items-center bg-[#1a1a2e] px-2.5 py-1 rounded-full gap-1">
                     <Ionicons name="briefcase" size={12} color="#AB47BC" />
                     <Text variant="caption" color="inverse" className="text-xs">{t('ride.pref_trunk', { defaultValue: 'Maletero' })}</Text>
                   </View>
@@ -578,18 +707,23 @@ export function DriverTripView() {
         {activeTrip.status === 'in_progress' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
-              <Ionicons name="location" size={16} color="#F97316" />
+              <Ionicons name="location" size={16} color="#FF4D00" />
               <Text variant="body" color="primary" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
                 {nextWaypoint?.address || activeTrip.dropoff_address}
               </Text>
             </View>
-            <Pressable onPress={() => setRouteExpanded(!routeExpanded)}>
+            <Pressable
+              onPress={() => setRouteExpanded(!routeExpanded)}
+              style={{ minHeight: 48, justifyContent: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel={routeExpanded ? t('trip.hide_route') : t('trip.view_full_route')}
+            >
               <Text variant="caption" color="accent" style={{ textAlign: 'center' }}>
                 {routeExpanded ? t('trip.hide_route') : t('trip.view_full_route')}
               </Text>
             </Pressable>
             {routeExpanded && (
-              <Card variant="filled" padding="md" className="bg-neutral-800 mb-4 mt-2">
+              <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 mt-2 rounded-2xl border border-white/[0.06]">
                 <View className="flex-row items-start mb-3">
                   <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
                   <View className="flex-1">
@@ -637,7 +771,7 @@ export function DriverTripView() {
             )}
           </>
         ) : (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
             <View className="flex-row items-start mb-3">
               <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
               <View className="flex-1">
@@ -710,12 +844,12 @@ export function DriverTripView() {
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#111827',
+        backgroundColor: '#0d0d1a',
         paddingHorizontal: 16,
         paddingBottom: 16,
         paddingTop: 8,
         borderTopWidth: 1,
-        borderTopColor: '#1F2937',
+        borderTopColor: 'rgba(255,255,255,0.06)',
       }}>
         {/* Icon toolbar: navigate, in-app nav, chat, SOS */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 }}>
@@ -725,7 +859,7 @@ export function DriverTripView() {
                 AsyncStorage.setItem('preferred_nav', 'external');
                 openNavigation(navTarget.latitude, navTarget.longitude);
               }}
-              style={{ padding: 12 }}
+              style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
               accessibilityRole="button"
               accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
             >
@@ -738,16 +872,16 @@ export function DriverTripView() {
                 AsyncStorage.setItem('preferred_nav', 'inapp');
                 inAppNav.startNavigation(navTarget);
               }}
-              style={{ padding: 12 }}
+              style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
               accessibilityRole="button"
               accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
             >
-              <Ionicons name="compass" size={22} color="#F97316" />
+              <Ionicons name="compass" size={22} color="#FF4D00" />
             </Pressable>
           )}
           <Pressable
             onPress={() => router.push(`/chat/${activeTrip.id}`)}
-            style={{ padding: 12 }}
+            style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
             accessibilityRole="button"
             accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
           >
@@ -755,7 +889,7 @@ export function DriverTripView() {
           </Pressable>
           <Pressable
             onPress={handleSOS}
-            style={{ padding: 12 }}
+            style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
             accessibilityRole="button"
             accessibilityLabel="SOS"
             accessibilityHint={t('trip.sos_body')}
@@ -795,6 +929,9 @@ export function DriverTripView() {
             onPhotoUploaded={() => {
               setPickupPhotoUploaded(true);
             }}
+            recipientName={deliveryDetails?.recipient_name}
+            recipientPhone={deliveryDetails?.recipient_phone}
+            specialInstructions={deliveryDetails?.special_instructions}
           />
         )}
 
@@ -808,6 +945,9 @@ export function DriverTripView() {
               // Auto-advance to complete after photo upload
               debouncedAdvanceStatus();
             }}
+            recipientName={deliveryDetails?.recipient_name}
+            recipientPhone={deliveryDetails?.recipient_phone}
+            specialInstructions={deliveryDetails?.special_instructions}
           />
         )}
 
@@ -820,7 +960,7 @@ export function DriverTripView() {
               fullWidth
               onPress={debouncedAdvanceStatus}
               className="mb-2"
-              style={{ backgroundColor: actionButtonColor }}
+              style={{ backgroundColor: actionButtonColor, minHeight: 56 }}
             />
           </Animated.View>
         )}
@@ -925,9 +1065,7 @@ function TripCompleteView() {
     <View className="flex-1 pt-8 items-center">
       {/* DT-6: Earnings delta — large green amount at top */}
       {activeTrip.final_fare_cup != null && (
-        <Text style={{
-          fontSize: 28,
-          fontWeight: '800',
+        <Text variant="h2" style={{
           color: '#22C55E',
           textAlign: 'center',
           marginBottom: 8,
@@ -947,14 +1085,14 @@ function TripCompleteView() {
       </Text>
 
       {/* DT-6: Compressed trip summary — single line */}
-      <Text style={{ fontSize: 14, color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>
+      <Text variant="bodySmall" style={{ color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>
         {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {((activeTrip.actual_distance_m ?? 0) / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
       </Text>
 
       {/* Commission breakdown */}
-      <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
+      <Card variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
         <View className="flex-row justify-between mb-2">
-          <Text variant="bodySmall" color="inverse" className="opacity-60">
+          <Text variant="bodySmall" style={{ color: '#9CA3AF' }}>
             {t('trip.total_fare', { defaultValue: 'Tarifa total' })}
           </Text>
           <Text variant="bodySmall" color="inverse">
@@ -962,14 +1100,14 @@ function TripCompleteView() {
           </Text>
         </View>
         <View className="flex-row justify-between mb-2">
-          <Text variant="bodySmall" color="inverse" className="opacity-60">
+          <Text variant="bodySmall" style={{ color: '#9CA3AF' }}>
             {t('trip.platform_commission', { defaultValue: 'Comisión plataforma (15%)' })}
           </Text>
-          <Text variant="bodySmall" className="text-red-400">
+          <Text variant="bodySmall" style={{ color: '#EF4444' }}>
             -{formatCUP(commissionAmount)}
           </Text>
         </View>
-        <View className="h-px bg-neutral-600 my-2" />
+        <View className="h-px my-2" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
         <View className="flex-row justify-between">
           <Text variant="body" color="inverse" className="font-bold">
             {isCash ? t('trip.collect_cash', { defaultValue: 'Cobras en efectivo' }) : t('trip.net_earnings', { defaultValue: 'Ganancia neta' })}
@@ -979,7 +1117,7 @@ function TripCompleteView() {
           </Text>
         </View>
         {isCash && (
-          <Text variant="caption" color="inverse" className="opacity-40 mt-1">
+          <Text variant="caption" style={{ color: '#9CA3AF' }} className="mt-1">
             {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
           </Text>
         )}
@@ -987,7 +1125,7 @@ function TripCompleteView() {
 
       {/* Tip received */}
       {(activeTrip.tip_amount ?? 0) > 0 && (
-        <Card variant="filled" padding="md" className="w-full bg-neutral-800 mb-6">
+        <Card variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
           <View className="flex-row justify-between items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
             <View className="flex-row items-center gap-1">
               <Ionicons name="gift-outline" size={16} color="white" />

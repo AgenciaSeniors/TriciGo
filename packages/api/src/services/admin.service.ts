@@ -812,9 +812,9 @@ export const adminService = {
           const loc = dp.current_location;
           if (typeof loc === 'string') {
             const match = loc.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-            if (match) { longitude = parseFloat(match[1]); latitude = parseFloat(match[2]); }
+            if (match) { longitude = parseFloat(match[1]!); latitude = parseFloat(match[2]!); }
           } else if (loc.coordinates) {
-            longitude = loc.coordinates[0]; latitude = loc.coordinates[1];
+            longitude = loc.coordinates[0]!; latitude = loc.coordinates[1]!;
           }
         }
 

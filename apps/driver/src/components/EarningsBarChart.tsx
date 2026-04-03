@@ -39,7 +39,7 @@ export function EarningsBarChart({ data, height = 160 }: EarningsBarChartProps) 
   }));
 
   return (
-    <View className="bg-neutral-800 rounded-xl p-3 mb-4">
+    <View className="bg-[#1a1a2e] border border-white/6 rounded-xl p-3 mb-4">
       <Svg width={chartWidth} height={height}>
         {/* Grid lines */}
         {gridLines.map((line, i) => (

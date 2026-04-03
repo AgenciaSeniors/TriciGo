@@ -21,7 +21,7 @@ export interface ScreenProps extends ViewProps {
 const bgClasses = {
   white: 'bg-white dark:bg-neutral-900',
   neutral: 'bg-neutral-50 dark:bg-neutral-950',
-  dark: 'bg-neutral-950',
+  dark: 'bg-[#0d0d1a]',
 } as const;
 
 export function Screen({

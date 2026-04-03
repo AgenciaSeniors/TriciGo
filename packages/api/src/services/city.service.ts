@@ -70,6 +70,7 @@ export const cityService = {
       }
     }
 
+    if (!nearest) throw new Error('No cities configured');
     return { id: nearest.id, name: nearest.name, slug: nearest.slug };
   },
 

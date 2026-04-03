@@ -51,6 +51,17 @@ export function isValidPlateNumber(plate: string): boolean {
 }
 
 /**
+ * Validates a Cuban identity card number (Carnet de Identidad).
+ * Format: 11 digits where first 6 are birth date (YYMMDD).
+ */
+export function isValidCubanId(id: string): boolean {
+  if (!/^\d{11}$/.test(id)) return false;
+  const month = parseInt(id.substring(2, 4), 10);
+  const day = parseInt(id.substring(4, 6), 10);
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+
+/**
  * Validate latitude is within Cuba's range.
  */
 export function isValidCubaLatitude(lat: number): boolean {

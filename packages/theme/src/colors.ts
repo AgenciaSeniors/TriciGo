@@ -85,6 +85,41 @@ export const colors = {
     inverse: '#FFFFFF',
     accent: '#FF4D00',
   },
+
+  // Surface tokens (dark mode cards, modals, overlays)
+  surface: {
+    card: '#1a1a2e',
+    elevated: '#252540',
+    overlay: 'rgba(13,13,26,0.85)',
+    input: '#1a1a2e',
+    /** Subtle pressed/hover state */
+    pressed: '#252540',
+  },
+
+  // Border tokens
+  border: {
+    subtle: 'rgba(255,255,255,0.06)',
+    default: 'rgba(255,255,255,0.12)',
+    strong: 'rgba(255,255,255,0.20)',
+    accent: '#FF4D00',
+  },
+
+  // Profit level indicators (always use with icon + text, never color-only)
+  profit: {
+    high: '#22C55E',
+    medium: '#F59E0B',
+    low: '#EF4444',
+  },
+
+  // Status indicators
+  status: {
+    online: '#22C55E',
+    busy: '#F59E0B',
+    offline: '#6B7280',
+    verified: '#22C55E',
+    pending: '#F59E0B',
+    rejected: '#EF4444',
+  },
 } as const;
 
 // ============================================================

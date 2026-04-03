@@ -43,7 +43,7 @@ export function useDriverRideInit() {
           const localTrip = useDriverRideStore.getState().activeTrip;
           if (localTrip) {
             logger.info('[Reconcile] Clearing stale local trip', { ride_id: localTrip.id });
-            useDriverRideStore.getState().clearActiveTrip?.() || useDriverRideStore.getState().setActiveTrip?.(null);
+            useDriverRideStore.getState().setActiveTrip(null);
           }
           logger.info('[Reconcile] Result', { had_local_trip: !!localTrip, server_trip: false, action: 'cleared' });
           return;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { useTranslation } from '@tricigo/i18n';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export default function OnboardingLayout() {
   const { t } = useTranslation('driver');
@@ -13,6 +14,7 @@ export default function OnboardingLayout() {
         headerTintColor: '#FFFFFF',
         headerTitleStyle: { fontWeight: 'bold' },
         animation: 'slide_from_right',
+        headerRight: () => <LanguageSwitcher variant="compact" />,
       }}
     >
       <Stack.Screen name="personal-info" options={{ title: t('onboarding.step_personal') }} />

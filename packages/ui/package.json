@@ -28,7 +28,9 @@
     "./Text": "./src/Text.tsx",
     "./Skeleton": "./src/Skeleton.tsx",
     "./AnimatedCard": "./src/AnimatedCard.tsx",
-    "./hooks/useResponsive": "./src/hooks/useResponsive.ts"
+    "./hooks/useResponsive": "./src/hooks/useResponsive.ts",
+    "./StatCard": "./src/StatCard.tsx",
+    "./Toast": "./src/Toast.tsx"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",
