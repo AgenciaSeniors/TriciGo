@@ -159,7 +159,7 @@ export default function NotificationsScreen() {
     return (
       <Pressable
         onPress={() => handleTap(item)}
-        className={`flex-row px-4 py-3 border-b border-neutral-100 ${!item.read ? 'bg-orange-50/50' : ''}`}
+        className={`flex-row px-4 py-3 border-b border-neutral-100 dark:border-neutral-800 ${!item.read ? 'bg-orange-50/50 dark:bg-orange-950/30' : ''}`}
         accessibilityRole="button"
         accessibilityLabel={`${item.title}: ${item.body}`}
       >
@@ -167,7 +167,7 @@ export default function NotificationsScreen() {
           <Ionicons name={icon.name} size={20} color={icon.color} />
         </View>
         <View className="flex-1 mr-2">
-          <Text variant="bodySmall" className={`font-semibold ${!item.read ? 'text-neutral-900' : 'text-neutral-600'}`}>
+          <Text variant="bodySmall" className={`font-semibold ${!item.read ? 'text-neutral-900 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-400'}`}>
             {item.title}
           </Text>
           <Text variant="caption" color="secondary" numberOfLines={2}>
@@ -205,12 +205,12 @@ export default function NotificationsScreen() {
             key={f}
             onPress={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-full ${
-              filter === f ? 'bg-primary-500' : 'bg-neutral-100'
+              filter === f ? 'bg-primary-500' : 'bg-neutral-100 dark:bg-neutral-800'
             }`}
           >
             <Text
               variant="caption"
-              className={`font-medium ${filter === f ? 'text-white' : 'text-neutral-600'}`}
+              className={`font-medium ${filter === f ? 'text-white' : 'text-neutral-600 dark:text-neutral-400'}`}
             >
               {t(`notifications.${f}`)}
             </Text>

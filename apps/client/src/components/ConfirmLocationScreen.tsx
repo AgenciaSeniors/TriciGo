@@ -6,7 +6,8 @@ import { Button } from '@tricigo/ui/Button';
 import { reverseGeocode } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 
 let MapboxGL: any;
 try {
@@ -31,6 +32,8 @@ export function ConfirmLocationScreen({
   onClose,
 }: ConfirmLocationScreenProps) {
   const { t } = useTranslation('rider');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const [address, setAddress] = useState<string | null>(null);
   const [center, setCenter] = useState<GeoPoint>(
     initialLocation ?? { latitude: 23.1136, longitude: -82.3666 },
@@ -108,7 +111,7 @@ export function ConfirmLocationScreen({
 
   if (!MapboxGL) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.neutral[100] }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? darkColors.background.primary : colors.neutral[100] }}>
         <Text variant="body" color="secondary">
           {t('map.unavailable', { defaultValue: 'Mapa no disponible' })}
         </Text>
@@ -207,7 +210,7 @@ export function ConfirmLocationScreen({
           top: Platform.OS === 'ios' ? 60 : 40,
           left: 16,
           right: 16,
-          backgroundColor: '#fff',
+          backgroundColor: isDark ? darkColors.card : '#fff',
           borderRadius: 12,
           paddingHorizontal: 16,
           paddingVertical: 14,
@@ -221,7 +224,7 @@ export function ConfirmLocationScreen({
         }}
       >
         <Pressable onPress={onClose} hitSlop={8} style={{ marginRight: 12 }}>
-          <Ionicons name="arrow-back" size={22} color={colors.neutral[800]} />
+          <Ionicons name="arrow-back" size={22} color={isDark ? darkColors.text.primary : colors.neutral[800]} />
         </Pressable>
 
         <View style={{ flex: 1 }}>
@@ -234,7 +237,7 @@ export function ConfirmLocationScreen({
             <Animated.View
               style={{
                 height: 14,
-                backgroundColor: colors.neutral[200],
+                backgroundColor: isDark ? darkColors.background.tertiary : colors.neutral[200],
                 borderRadius: 4,
                 width: '80%',
                 opacity: shimmerOpacity,
@@ -261,7 +264,7 @@ export function ConfirmLocationScreen({
           onPress={handleConfirm}
           disabled={!address || isGeocoding}
           style={{
-            backgroundColor: !address || isGeocoding ? colors.neutral[300] : pinColor,
+            backgroundColor: !address || isGeocoding ? (isDark ? darkColors.background.tertiary : colors.neutral[300]) : pinColor,
             borderRadius: 14,
             paddingVertical: 16,
             alignItems: 'center',

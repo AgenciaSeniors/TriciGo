@@ -12,7 +12,8 @@ import { getErrorMessage } from '@tricigo/utils';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import type { LostItemCategory } from '@tricigo/types';
 
 const CATEGORIES: { key: LostItemCategory; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -31,6 +32,8 @@ export default function LostItemReportScreen() {
   const { t } = useTranslation('rider');
   const { userId } = useAuth();
   const lostFoundEnabled = useFeatureFlag('lost_and_found_enabled');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
 
   const [category, setCategory] = useState<LostItemCategory | null>(null);
   const [description, setDescription] = useState('');
@@ -115,13 +118,13 @@ export default function LostItemReportScreen() {
               className={`items-center justify-center w-[22%] py-3 rounded-xl border-2 ${
                 category === c.key
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-neutral-200 bg-white'
+                  : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
               }`}
             >
               <Ionicons
                 name={c.icon}
                 size={24}
-                color={category === c.key ? colors.brand.orange : colors.neutral[400]}
+                color={category === c.key ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[400])}
               />
               <Text
                 variant="caption"
@@ -137,9 +140,10 @@ export default function LostItemReportScreen() {
         {/* Description */}
         <Text variant="label" className="mb-2">{t('lost_found.description_label')}</Text>
         <TextInput
-          className="border border-neutral-200 rounded-xl px-4 py-3 text-base min-h-[120px] mb-6"
+          className="border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-base min-h-[120px] mb-6"
           placeholder={t('lost_found.description_placeholder')}
-          placeholderTextColor="#999"
+          placeholderTextColor={isDark ? darkColors.text.tertiary : '#999'}
+          style={isDark ? { color: darkColors.text.primary, backgroundColor: darkColors.background.secondary } : undefined}
           value={description}
           onChangeText={setDescription}
           multiline

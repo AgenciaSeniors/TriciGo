@@ -102,29 +102,51 @@ export const rideService = {
   }): Promise<FareEstimate> {
     const supabase = getSupabaseClient();
 
-    // Fetch the service config for pricing (default rates)
-    const { data: config, error } = await supabase
-      .from('service_type_configs')
-      .select('*')
-      .eq('slug', params.service_type)
-      .eq('is_active', true)
-      .single();
-    if (error) throw error;
+    const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };
+    const dropoff = { latitude: params.dropoff_lat, longitude: params.dropoff_lng };
 
-    const svcConfig = config as ServiceTypeConfig;
+    // ─── Parallel Block: fetch all independent data at once ───
+    const [configResult, rulesResult, routeResult, surgeResult, experimentResult, exchangeRate] =
+      await Promise.all([
+        supabase
+          .from('service_type_configs')
+          .select('*')
+          .eq('slug', params.service_type)
+          .eq('is_active', true)
+          .single(),
+        supabase
+          .from('pricing_rules')
+          .select('*')
+          .eq('service_type', params.service_type)
+          .eq('is_active', true),
+        fetchRoute(
+          { lat: params.pickup_lat, lng: params.pickup_lng },
+          { lat: params.dropoff_lat, lng: params.dropoff_lng },
+        ).catch(() => null),
+        Promise.resolve(supabase.rpc('calculate_dynamic_surge', {
+          p_zone_id: null,
+          p_lat: params.pickup_lat,
+          p_lng: params.pickup_lng,
+          p_radius_m: 3000,
+        })).catch(() => ({ data: 1.0 as number, error: null })),
+        supabase
+          .from('pricing_experiments')
+          .select('*')
+          .eq('status', 'active')
+          .eq('service_type', params.service_type)
+          .maybeSingle(),
+        exchangeRateService.getUsdCupRate().catch(() => 300),
+      ]);
 
-    // Check for time-based pricing rules
+    if (configResult.error) throw configResult.error;
+    const svcConfig = configResult.data as ServiceTypeConfig;
+    const pricingRules = rulesResult.data;
+
+    // Find matching time-based rule (using pure function)
     const now = new Date();
     const currentHour = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const currentDay = now.getDay(); // 0=Sun, 6=Sat
 
-    const { data: pricingRules } = await supabase
-      .from('pricing_rules')
-      .select('*')
-      .eq('service_type', params.service_type)
-      .eq('is_active', true);
-
-    // Find matching time-based rule (using pure function)
     let baseFare = svcConfig.base_fare_cup;
     let perKmRate = svcConfig.per_km_rate_cup;
     let perMinRate = svcConfig.per_minute_rate_cup;
@@ -147,26 +169,13 @@ export const rideService = {
       }
     }
 
-    const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };
-    const dropoff = { latitude: params.dropoff_lat, longitude: params.dropoff_lng };
-
-    // Try real route distance from Mapbox/OSRM, fallback to haversine×1.3
+    // Use route result or fallback to haversine estimate
     let roadDistance: number;
     let duration: number;
-    try {
-      const route = await fetchRoute(
-        { lat: params.pickup_lat, lng: params.pickup_lng },
-        { lat: params.dropoff_lat, lng: params.dropoff_lng },
-      );
-      if (route) {
-        roadDistance = route.distance_m;
-        duration = route.duration_s;
-      } else {
-        const straightLine = haversineDistance(pickup, dropoff);
-        roadDistance = estimateRoadDistance(straightLine);
-        duration = estimateDuration(roadDistance, params.service_type);
-      }
-    } catch {
+    if (routeResult) {
+      roadDistance = routeResult.distance_m;
+      duration = routeResult.duration_s;
+    } else {
       const straightLine = haversineDistance(pickup, dropoff);
       roadDistance = estimateRoadDistance(straightLine);
       duration = estimateDuration(roadDistance, params.service_type);
@@ -193,21 +202,16 @@ export const rideService = {
           minimumFare: minFare,
         });
 
-    // ─── Dynamic Surge ───
+    // ─── Dynamic Surge (conditional weather check) ───
     let surgeMultiplier = 1.0;
     let surgeType: SurgeType = 'none';
 
     try {
-      const { data: surgeData } = await supabase.rpc('calculate_dynamic_surge', {
-        p_zone_id: null,
-        p_lat: params.pickup_lat,
-        p_lng: params.pickup_lng,
-        p_radius_m: 3000,
-      });
+      const surgeData = surgeResult.data;
       if (typeof surgeData === 'number' && surgeData > 1.0) {
         surgeMultiplier = surgeData;
 
-        // Check if weather surge is active
+        // Only check weather surge if surge is active (conditional query)
         const { data: weatherSurge } = await supabase
           .from('surge_zones')
           .select('id')
@@ -217,27 +221,21 @@ export const rideService = {
 
         const hasWeatherSurge = weatherSurge && weatherSurge.length > 0;
         const hasTimeRule = pricingRules && (pricingRules as PricingRule[]).some(
-          (r) => r.time_window_start && r.time_window_end,
+          (r: PricingRule) => r.time_window_start && r.time_window_end,
         );
         surgeType = hasWeatherSurge ? 'weather' : hasTimeRule ? 'combined' : 'demand';
       }
     } catch {
-      console.warn('calculate_dynamic_surge failed, defaulting to 1.0x');
+      console.warn('Surge processing failed, defaulting to 1.0x');
     }
 
     let surgedFare = applySurge(fareResult.fare, surgeMultiplier);
 
-    // ─── A/B Pricing Experiment ───
+    // ─── A/B Pricing Experiment (conditional user check) ───
     try {
-      const { data: experiment } = await supabase
-        .from('pricing_experiments')
-        .select('*')
-        .eq('status', 'active')
-        .eq('service_type', params.service_type)
-        .maybeSingle();
-
+      const experiment = experimentResult.data;
       if (experiment) {
-        // Deterministic variant assignment: hash userId to get consistent A/B
+        // Only fetch user if we have an active experiment
         const userId = (await supabase.auth.getUser()).data.user?.id;
         if (userId) {
           // Simple hash: sum of char codes mod 2
@@ -261,7 +259,6 @@ export const rideService = {
     } catch { /* experiments are optional, don't break pricing */ }
 
     // ─── Exchange Rate: convert CUP → TRC ───
-    const exchangeRate = await exchangeRateService.getUsdCupRate();
     const estimatedFareTrc = cupToTrcCentavos(surgedFare, exchangeRate);
 
     // ─── Fare Range (min-max considering traffic variance) ───

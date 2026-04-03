@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences, CorporateAccount } from '@tricigo/types';
@@ -116,6 +116,7 @@ export default function BookPage() {
   /* ─── Center pin state (for BookingMap) ─── */
   const [centerAddress, setCenterAddress] = useState<string | null>(null);
   const [centerAddressLoading, setCenterAddressLoading] = useState(false);
+  const centerGeoIdRef = useRef(0); // Race condition guard for reverse geocode
   const [flyToTarget, setFlyToTarget] = useState<{ latitude: number; longitude: number } | null>(null);
 
   /* ─── Waypoints state (W1.1) ─── */
@@ -256,14 +257,18 @@ export default function BookPage() {
       return;
     }
     setCenterAddressLoading(true);
+    const geoId = ++centerGeoIdRef.current;
     const timeout = setTimeout(async () => {
       try {
         const addr = await reverseGeocode(mapCenter.latitude, mapCenter.longitude);
+        // Only update if this is still the latest request (race condition guard)
+        if (geoId !== centerGeoIdRef.current) return;
         setCenterAddress(addr);
       } catch {
+        if (geoId !== centerGeoIdRef.current) return;
         setCenterAddress(null);
       } finally {
-        setCenterAddressLoading(false);
+        if (geoId === centerGeoIdRef.current) setCenterAddressLoading(false);
       }
     }, 400);
     return () => clearTimeout(timeout);
@@ -690,7 +695,7 @@ export default function BookPage() {
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
             proximity={mapCenter}
-            enrichAddress={reverseGeocode}
+            enrichAddress={enrichWithCrossStreets}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetPickup(loc);
@@ -740,7 +745,7 @@ export default function BookPage() {
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
             proximity={mapCenter}
-            enrichAddress={reverseGeocode}
+            enrichAddress={enrichWithCrossStreets}
             onSelect={(r) => {
               const loc = { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude };
               handleSetDropoff(loc);
@@ -945,7 +950,7 @@ export default function BookPage() {
                         placeholder={t('book.stop_placeholder', { defaultValue: 'Dirección de la parada' })}
                         mapboxToken={mapboxToken}
                         proximity={mapCenter}
-                        enrichAddress={reverseGeocode}
+                        enrichAddress={enrichWithCrossStreets}
                         savedLocations={savedLocations}
                         onSelect={(r) => {
                           setWaypoints((prev) => [

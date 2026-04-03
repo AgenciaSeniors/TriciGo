@@ -29,4 +29,5 @@ export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
 export { CUBAN_CITY_PACKS } from './mapboxOffline';
 export type { SearchBoxResult } from './geo';
-export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, computeSpecificity } from './geo';
+export type { CubanParsed } from './geo';
+export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, computeSpecificity, enrichWithCrossStreets, isGenericStreetAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';

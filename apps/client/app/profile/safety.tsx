@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
 import { getErrorMessage, logger } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
@@ -147,7 +147,7 @@ export default function SafetyCenterScreen() {
             onPress={() => router.push('/profile/trusted-contacts')}
           >
             <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="people-outline" size={20} color={colors.primary[500]} />
+              <Ionicons name="people-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} />
             </View>
             <View className="flex-1">
               <Text variant="body" className="font-semibold">{t('trusted_contacts.title')}</Text>
@@ -164,7 +164,7 @@ export default function SafetyCenterScreen() {
                 </Text>
               )}
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+            <Ionicons name="chevron-forward" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
           </Pressable>
         </Card>
 
@@ -172,7 +172,7 @@ export default function SafetyCenterScreen() {
         <Card variant="outlined" padding="md" className="mb-3">
           <View className="flex-row items-center mb-2">
             <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="share-outline" size={20} color={colors.primary[500]} />
+              <Ionicons name="share-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} />
             </View>
             <View className="flex-1">
               <Text variant="body" className="font-semibold">{t('safety.share_trip')}</Text>
@@ -208,7 +208,7 @@ export default function SafetyCenterScreen() {
               <Text variant="body" className="font-semibold">{t('safety.report')}</Text>
               <Text variant="caption" color="secondary">{t('safety.report_desc')}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.neutral[400]} />
+            <Ionicons name="chevron-forward" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
           </Pressable>
         </Card>
 
@@ -227,11 +227,11 @@ export default function SafetyCenterScreen() {
             <Ionicons
               name={tipsExpanded ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color={colors.neutral[400]}
+              color={isDark ? darkColors.text.secondary : colors.neutral[400]}
             />
           </Pressable>
           {tipsExpanded && (
-            <View className="mt-3 pt-3 border-t border-neutral-100">
+            <View className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
               {SAFETY_TIPS.map((tipKey, idx) => (
                 <View key={tipKey} className="flex-row items-start mb-2">
                   <Text variant="caption" color="secondary" className="mr-2">{idx + 1}.</Text>
@@ -245,8 +245,8 @@ export default function SafetyCenterScreen() {
         {/* My Safety Reports */}
         <Card variant="outlined" padding="md" className="mb-6">
           <View className="flex-row items-center mb-3">
-            <View className="w-10 h-10 rounded-full bg-neutral-100 items-center justify-center mr-3">
-              <Ionicons name="document-text-outline" size={20} color={colors.neutral[500]} />
+            <View className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 items-center justify-center mr-3">
+              <Ionicons name="document-text-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
             </View>
             <Text variant="body" className="font-semibold">{t('safety.my_reports')}</Text>
           </View>
@@ -256,7 +256,7 @@ export default function SafetyCenterScreen() {
             </Text>
           ) : (
             incidents.slice(0, 5).map((incident) => (
-              <View key={incident.id} className="flex-row items-center justify-between py-2 border-t border-neutral-100">
+              <View key={incident.id} className="flex-row items-center justify-between py-2 border-t border-neutral-100 dark:border-neutral-800">
                 <View className="flex-1">
                   <Text variant="bodySmall">{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" color="secondary">

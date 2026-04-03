@@ -86,7 +86,7 @@ function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
           : null;
 
         return (
-          <Card key={invite.id} variant="filled" padding="md" className="mb-2 border border-primary-200 bg-primary-50">
+          <Card key={invite.id} variant="filled" padding="md" className="mb-2 border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20">
             <View className="flex-row items-center mb-2">
               <View className="w-8 h-8 rounded-full bg-primary-500 items-center justify-center mr-3">
                 <Ionicons name="people" size={16} color="#fff" />

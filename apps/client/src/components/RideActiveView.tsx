@@ -488,7 +488,7 @@ export function RideActiveView() {
         />
         {!driverPosition && (
           <View
-            className="absolute inset-0 items-center justify-center bg-neutral-100/80"
+            className="absolute inset-0 items-center justify-center bg-neutral-100/80 dark:bg-neutral-900/80"
             style={{ borderRadius: 12 }}
           >
             {positionTimeoutReached ? (

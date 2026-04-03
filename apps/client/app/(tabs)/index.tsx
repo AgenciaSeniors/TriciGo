@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime } from '@tricigo/utils';
+import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -22,6 +22,8 @@ import { useNotificationStore } from '@/stores/notification.store';
 import { useRideInit, useRideActions } from '@/hooks/useRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { WebMapView } from '@/components/WebMapView';
+import type { WebMapViewRef } from '@/components/WebMapView';
+import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
@@ -40,7 +42,8 @@ import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { SplitInviteCard } from '@/components/SplitInviteCard';
 import { FareSplitSheet } from '@/components/FareSplitSheet';
-import type { SavedLocation, ServiceTypeSlug, CorporateAccount } from '@tricigo/types';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory } from '@tricigo/types';
+import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { rideService } from '@tricigo/api/services/ride';
@@ -64,92 +67,887 @@ function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000
   }, [callback, delayMs]);
 }
 
-// Web version of home screen — uses real data from stores
+// Service type definitions for web booking
+const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: any }[] = [
+  { name: 'Triciclo', desc: 'Económico', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
+  { name: 'Moto', desc: 'Rápido', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
+  { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
+  { name: 'Confort', desc: 'Premium', slug: 'auto_confort', img: require('../../assets/vehicles/selection/confort.png') },
+  { name: 'Envío', desc: 'Delivery', slug: 'mensajeria', img: require('../../assets/vehicles/selection/mensajeria.png') },
+];
+
+const DELIVERY_VEHICLES: { slug: ServiceTypeSlug; label: string; img: any }[] = [
+  { slug: 'moto_standard', label: 'Moto', img: require('../../assets/vehicles/selection/moto.png') },
+  { slug: 'triciclo_basico', label: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png') },
+  { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/selection/auto.png') },
+];
+
+const DELIVERY_CATS = [
+  { value: 'documentos' as PackageCategory, icon: '📄', label: 'Documentos' },
+  { value: 'comida' as PackageCategory, icon: '🍔', label: 'Comida' },
+  { value: 'paquete_pequeno' as PackageCategory, icon: '📦', label: 'Pequeño' },
+  { value: 'paquete_grande' as PackageCategory, icon: '📫', label: 'Grande' },
+  { value: 'fragil' as PackageCategory, icon: '⚠️', label: 'Frágil' },
+];
+
+type WebSelectionStep = 'pickup' | 'dropoff' | 'done';
+
+interface LocationPreset {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  label?: string;
+}
+
+// Web version of home screen — full booking flow matching tricigo.com
 function WebHomeScreen() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
-  const unreadCount = useNotificationStore((s) => s.unreadCount);
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
 
+  // Recent addresses
+  const { recentAddresses, addRecentAddress } = useRecentAddresses();
+
+  // Saved locations from profile
+  const [savedLocations, setSavedLocations] = useState<Array<{ label: string; address: string; latitude: number; longitude: number }>>([]);
+  useEffect(() => {
+    if (!user?.id) return;
+    customerService.getProfile(user.id).then((p) => {
+      if (p?.saved_locations?.length) {
+        setSavedLocations(p.saved_locations.filter((l: any) => l.latitude && l.longitude));
+      }
+    }).catch(() => {});
+  }, [user?.id]);
+
+  // Balance
   const [balance, setBalance] = useState(0);
   useEffect(() => {
     if (!user?.id) return;
     walletService.getBalance(user.id).then((b) => setBalance(b.available)).catch(() => {});
   }, [user?.id]);
 
-  const firstName = user?.full_name?.split(' ')[0] ?? '';
-  const services = [
-    { name: 'Moto', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
-    { name: 'Triciclo', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
-    { name: 'Auto', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
-    { name: 'Confort', slug: 'auto_confort', img: require('../../assets/vehicles/selection/confort.png') },
-  ];
+  // Location state
+  const [pickup, setPickup] = useState<LocationPreset | null>(null);
+  const [dropoff, setDropoff] = useState<LocationPreset | null>(null);
+  const [pickupAddress, setPickupAddress] = useState('');
+  const [dropoffAddress, setDropoffAddress] = useState('');
+  const [selectionStep, setSelectionStep] = useState<WebSelectionStep>('pickup');
+
+  // Ride state
+  const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin'>('cash');
+  const [allEstimates, setAllEstimates] = useState<Record<string, any>>({});
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
+
+  // Route
+  const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distance_m: number; duration_s: number } | null>(null);
+
+  // Promo
+  const [promoCode, setPromoCode] = useState('');
+  const [promoResult, setPromoResult] = useState<{ valid: boolean; discount: number; promoId?: string; error?: string } | null>(null);
+  const [promoValidating, setPromoValidating] = useState(false);
+
+  // Schedule
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+
+  // Delivery details
+  const [deliveryName, setDeliveryName] = useState('');
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [deliveryCategory, setDeliveryCategory] = useState<PackageCategory>('paquete_pequeno');
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [clientAccompanies, setClientAccompanies] = useState(false);
+
+  // Request state
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requestSuccess, setRequestSuccess] = useState(false);
+
+  // Refs
+  const dropoffInputRef = useRef<any>(null);
+  const geoAttemptedRef = useRef(false);
+  const mapViewRef = useRef<WebMapViewRef>(null);
+  const centerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const centerGeoIdRef = useRef(0); // Race condition guard for reverse geocode
+
+  // Center pin reverse geocode state
+  const [mapCenter, setMapCenter] = useState<{ lng: number; lat: number } | null>(null);
+  const [centerAddress, setCenterAddress] = useState<string | null>(null);
+  const [centerAddressLoading, setCenterAddressLoading] = useState(false);
+
+  // Derived
+  const selectedEstimate = serviceType === 'mensajeria' ? allEstimates[deliveryVehicle] : allEstimates[serviceType];
+  const hasBothLocations = !!(pickup && dropoff);
+
+  // Load route when both locations set
+  useEffect(() => {
+    if (!pickup || !dropoff) {
+      setRouteCoords([]);
+      setRouteInfo(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { fetchRoute } = await import('@tricigo/utils');
+        const result = await fetchRoute(
+          { lat: pickup.latitude, lng: pickup.longitude },
+          { lat: dropoff.latitude, lng: dropoff.longitude },
+        );
+        if (!cancelled && result) {
+          setRouteCoords(result.coordinates);
+          setRouteInfo({ distance_m: result.distance_m, duration_s: result.duration_s });
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
+
+  // Auto-geolocation on first load
+  useEffect(() => {
+    if (geoAttemptedRef.current || pickup) return;
+    geoAttemptedRef.current = true;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        let address = 'Mi ubicación';
+        try {
+          const result = await reverseGeocode(loc.latitude, loc.longitude);
+          if (result) address = result;
+        } catch { /* fallback */ }
+        // Only set if pickup hasn't been set by user in the meantime
+        if (!pickup) {
+          handleSetPickup({ address, latitude: loc.latitude, longitude: loc.longitude });
+          // Fly map to user's location at street-level zoom
+          mapViewRef.current?.flyTo(loc.longitude, loc.latitude, 16);
+        }
+      },
+      () => { /* silently fail — user can manually enter */ },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
+
+  // Reverse geocode map center when panning (400ms debounce)
+  // Supabase lookup is instant (~5-10ms), Overpass fallback if needed
+  const handleCenterChanged = useCallback((center: { lng: number; lat: number }) => {
+    setMapCenter(center);
+    if (selectionStep === 'done') {
+      setCenterAddress(null);
+      return;
+    }
+    setCenterAddressLoading(true);
+    const geoId = ++centerGeoIdRef.current;
+    if (centerDebounceRef.current) clearTimeout(centerDebounceRef.current);
+    centerDebounceRef.current = setTimeout(async () => {
+      try {
+        const addr = await reverseGeocode(center.lat, center.lng);
+        // Only update if this is still the latest request (race condition guard)
+        if (geoId !== centerGeoIdRef.current) return;
+        setCenterAddress(addr);
+      } catch {
+        if (geoId !== centerGeoIdRef.current) return;
+        setCenterAddress(null);
+      } finally {
+        if (geoId === centerGeoIdRef.current) setCenterAddressLoading(false);
+      }
+    }, 400);
+  }, [selectionStep]);
+
+  // Confirm center pin location as pickup or dropoff
+  const handleConfirmCenter = useCallback(() => {
+    if (!mapCenter || !centerAddress) return;
+    const result = {
+      address: centerAddress,
+      latitude: mapCenter.lat,
+      longitude: mapCenter.lng,
+    };
+    if (selectionStep === 'pickup') {
+      handleSetPickup(result);
+    } else if (selectionStep === 'dropoff') {
+      handleSetDropoff(result);
+    }
+  }, [mapCenter, centerAddress, selectionStep]);
+
+  // Auto-fetch estimates when both locations set
+  const handleEstimateAll = useCallback(async () => {
+    if (!pickup || !dropoff || estimateLoading) return;
+    setEstimateLoading(true);
+    setAllEstimates({});
+    const serviceTypes: ServiceTypeSlug[] = ['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'];
+    try {
+      const results = await Promise.allSettled(
+        serviceTypes.map((st) =>
+          rideService.getLocalFareEstimate({
+            pickup_lat: pickup.latitude,
+            pickup_lng: pickup.longitude,
+            dropoff_lat: dropoff.latitude,
+            dropoff_lng: dropoff.longitude,
+            service_type: st,
+          }),
+        ),
+      );
+      const estimates: Record<string, any> = {};
+      serviceTypes.forEach((st, i) => {
+        const r = results[i];
+        estimates[st] = r.status === 'fulfilled' ? r.value : null;
+      });
+      setAllEstimates(estimates);
+    } catch { /* silent */ } finally {
+      setEstimateLoading(false);
+    }
+  }, [pickup, dropoff, estimateLoading]);
+
+  useEffect(() => {
+    if (pickup && dropoff && Object.keys(allEstimates).length === 0 && !estimateLoading) {
+      handleEstimateAll();
+    }
+  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
+
+  // Promo code handler
+  const handleApplyPromo = async () => {
+    const code = promoCode.trim();
+    if (!code || !selectedEstimate) return;
+    setPromoValidating(true);
+    setPromoResult(null);
+    try {
+      const result = await rideService.validatePromoCode({
+        code,
+        userId: user?.id || '',
+        fareAmount: selectedEstimate.estimated_fare_cup,
+      });
+      if (result.valid && result.promotion) {
+        setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
+      } else {
+        const msgs: Record<string, string> = { invalid: 'Código no válido', expired: 'Código expirado', max_uses: 'Código agotado', already_used: 'Ya usaste este código' };
+        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || 'Código no válido' });
+      }
+    } catch {
+      setPromoResult({ valid: false, discount: 0, error: 'Error al validar código' });
+    } finally {
+      setPromoValidating(false);
+    }
+  };
+
+  // Request ride handler
+  const handleRequest = async () => {
+    if (!pickup || !dropoff || !selectedEstimate) return;
+    if (serviceType === 'mensajeria') {
+      if (!deliveryName.trim()) { setError('Ingresa el nombre del destinatario'); return; }
+      if (!deliveryPhone.trim() || !/^\+?[\d\s-]{6,}$/.test(deliveryPhone.trim())) { setError('Ingresa un teléfono válido'); return; }
+    }
+    setIsRequesting(true);
+    setError(null);
+    try {
+      const activeSlug = serviceType === 'mensajeria' ? deliveryVehicle : serviceType;
+      // Re-estimate to catch pricing changes
+      let freshEstimate = selectedEstimate;
+      try {
+        const reEstimated = await rideService.getLocalFareEstimate({
+          service_type: activeSlug,
+          pickup_lat: pickup.latitude,
+          pickup_lng: pickup.longitude,
+          dropoff_lat: dropoff.latitude,
+          dropoff_lng: dropoff.longitude,
+        });
+        setAllEstimates((prev) => ({ ...prev, [activeSlug]: reEstimated }));
+        freshEstimate = reEstimated;
+        const oldFare = selectedEstimate.estimated_fare_cup;
+        const newFare = reEstimated.estimated_fare_cup;
+        if (oldFare > 0 && Math.abs(newFare - oldFare) / oldFare > 0.05) {
+          setError(`El precio se actualizó a ${newFare.toLocaleString()} CUP. Revisa y confirma de nuevo.`);
+          setIsRequesting(false);
+          return;
+        }
+      } catch { /* proceed with original */ }
+
+      await rideService.createRide({
+        service_type: activeSlug,
+        payment_method: paymentMethod,
+        pickup_latitude: pickup.latitude,
+        pickup_longitude: pickup.longitude,
+        pickup_address: pickupAddress || 'Origen',
+        dropoff_latitude: dropoff.latitude,
+        dropoff_longitude: dropoff.longitude,
+        dropoff_address: dropoffAddress || 'Destino',
+        estimated_fare_cup: freshEstimate.estimated_fare_cup,
+        estimated_distance_m: freshEstimate.estimated_distance_m,
+        estimated_duration_s: freshEstimate.estimated_duration_s,
+        ...(isScheduled && scheduleDate && { scheduled_at: new Date(scheduleDate).toISOString() }),
+        ...(promoResult?.valid && promoResult.promoId && { promo_code_id: promoResult.promoId, discount_amount_cup: promoResult.discount }),
+        ...(serviceType === 'mensajeria' && {
+          ride_mode: 'cargo' as const,
+          delivery_details: {
+            recipient_name: deliveryName,
+            recipient_phone: deliveryPhone,
+            package_description: 'Paquete',
+            package_category: deliveryCategory,
+            special_instructions: deliveryInstructions || null,
+            client_accompanies: clientAccompanies,
+            delivery_vehicle_type: deliveryVehicle,
+          },
+        }),
+      });
+      setRequestSuccess(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Not authenticated')) setError('Debes iniciar sesión.');
+      else if (msg.includes('outside the service area')) setError('Ubicación fuera del área de servicio.');
+      else setError(`Error: ${msg}`);
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  // Pickup/dropoff handlers
+  const handleSetPickup = (result: { address: string; latitude: number; longitude: number }) => {
+    setPickup({ latitude: result.latitude, longitude: result.longitude, address: result.address });
+    setPickupAddress(result.address);
+    setAllEstimates({});
+    setSelectionStep('dropoff');
+    setCenterAddress(null);
+    mapViewRef.current?.flyTo(result.longitude, result.latitude, 16);
+    setTimeout(() => dropoffInputRef.current?.focus(), 100);
+  };
+
+  const handleSetDropoff = (result: { address: string; latitude: number; longitude: number }) => {
+    setDropoff({ latitude: result.latitude, longitude: result.longitude, address: result.address });
+    setDropoffAddress(result.address);
+    setAllEstimates({});
+    setSelectionStep('done');
+    setCenterAddress(null);
+    mapViewRef.current?.flyTo(result.longitude, result.latitude, 16);
+  };
+
+  const handleSwap = () => {
+    const tmpP = pickup;
+    const tmpPA = pickupAddress;
+    setPickup(dropoff);
+    setPickupAddress(dropoffAddress);
+    setDropoff(tmpP);
+    setDropoffAddress(tmpPA);
+    setAllEstimates({});
+  };
+
+  const handleReset = () => {
+    setPickup(null);
+    setDropoff(null);
+    setPickupAddress('');
+    setDropoffAddress('');
+    setSelectionStep('pickup');
+    setAllEstimates({});
+    setRouteCoords([]);
+    setRouteInfo(null);
+    setError(null);
+    setRequestSuccess(false);
+  };
+
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        let address = 'Mi ubicación';
+        try {
+          const result = await reverseGeocode(loc.latitude, loc.longitude);
+          if (result) address = result;
+        } catch { /* fallback */ }
+        handleSetPickup({ address, latitude: loc.latitude, longitude: loc.longitude });
+      },
+      () => setError('No se pudo obtener tu ubicación'),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  // Format CUP helper
+  const fmtCUP = (cup: number) => `${Math.round(cup).toLocaleString('es-CU')} CUP`;
+
+  // Success state
+  if (requestSuccess) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <Text style={{ fontSize: 48, marginBottom: 16 }}>✅</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: '#1a1a1a', textAlign: 'center', ...font }}>
+          ¡Viaje solicitado!
+        </Text>
+        <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginTop: 8, ...font }}>
+          Buscando conductor disponible...
+        </Text>
+        <Pressable onPress={handleReset} style={{ marginTop: 24, backgroundColor: colors.brand.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, ...font }}>Solicitar otro viaje</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#111111' }}>
-      {/* Map background — full height */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <WebMapView center={[-82.38, 23.13]} zoom={14} interactive={true} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <div style={{ display: 'flex', flexDirection: 'row', height: 'calc(100vh - 60px)', fontFamily: 'Montserrat, system-ui, sans-serif' }}>
+        {/* ═══ LEFT SIDEBAR — Booking controls ═══ */}
+        <div style={{
+          width: 420, minWidth: 380, maxWidth: 460,
+          display: 'flex', flexDirection: 'column',
+          backgroundColor: '#fff', borderRight: '1px solid #e5e5e5',
+          overflowY: 'auto',
+        }}>
+          <div style={{ padding: '24px 20px', flex: 1 }}>
+            {/* Header */}
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+                Solicita tu viaje
+              </h2>
+              <p style={{ fontSize: 13, color: '#9ca3af', margin: '4px 0 0' }}>
+                Selecciona origen y destino
+              </p>
+            </div>
 
-      {/* Overlay UI */}
-      <View style={{ flex: 1, justifyContent: 'space-between' }}>
-        {/* Top section */}
-        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-          {/* Header */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>
-              {firstName ? `¡Hola, ${firstName}!` : t('home.greeting', { defaultValue: 'Bienvenido' })}
-            </Text>
-            <Pressable onPress={() => router.push('/notifications')} style={{ position: 'relative', padding: 8 }}>
-              <Ionicons name="notifications" size={24} color="#fff" />
-              {unreadCount > 0 && (
-                <View style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', ...font }}>{unreadCount}</Text>
-                </View>
-              )}
+            {/* Address inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              <div style={{ position: 'relative', zIndex: 30 }}>
+                <WebAddressInput
+                  placeholder="Origen — ¿Dónde te recogemos?"
+                  value={pickupAddress}
+                  onSelect={handleSetPickup}
+                  onClear={() => { setPickup(null); setPickupAddress(''); setAllEstimates({}); setSelectionStep('pickup'); }}
+                  onFocus={() => setSelectionStep('pickup')}
+                  icon={<View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' }} />}
+                  proximity={pickup}
+                  autoFocus
+                  savedLocations={savedLocations}
+                  recentAddresses={recentAddresses}
+                  onAddRecent={(a) => addRecentAddress(a.address, a.latitude, a.longitude)}
+                />
+              </div>
+
+              {/* Swap button */}
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0' }}>
+                <Pressable onPress={handleSwap} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="swap-vertical" size={18} color="#6b7280" />
+                </Pressable>
+              </div>
+
+              <div style={{ position: 'relative', zIndex: 20 }}>
+                <WebAddressInput
+                  placeholder="Destino — ¿A dónde vas?"
+                  value={dropoffAddress}
+                  onSelect={handleSetDropoff}
+                  onClear={() => { setDropoff(null); setDropoffAddress(''); setAllEstimates({}); setSelectionStep('dropoff'); }}
+                  onFocus={() => setSelectionStep('dropoff')}
+                  icon={<View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ef4444' }} />}
+                  proximity={pickup}
+                  inputRef={dropoffInputRef}
+                  savedLocations={savedLocations}
+                  recentAddresses={recentAddresses}
+                  onAddRecent={(a) => addRecentAddress(a.address, a.latitude, a.longitude)}
+                />
+              </div>
+            </div>
+
+            {/* Use my location button */}
+            <Pressable onPress={handleUseMyLocation} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, marginBottom: 12 }}>
+              <Ionicons name="locate" size={18} color={colors.brand.orange} />
+              <Text style={{ fontSize: 13, color: colors.brand.orange, fontWeight: '600', marginLeft: 8, ...font }}>
+                Usar mi ubicación
+              </Text>
             </Pressable>
-          </View>
 
-          {/* Balance badge */}
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 12 }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>
-              T$ {(balance / 100).toFixed(2)}
-            </Text>
-          </View>
+            {/* Location summary badges */}
+            {(pickup || dropoff) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {pickup && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e' }} />
+                    <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pickupAddress || 'Origen'}
+                    </span>
+                  </div>
+                )}
+                {dropoff && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' }} />
+                    <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {dropoffAddress || 'Destino'}
+                    </span>
+                  </div>
+                )}
+                {hasBothLocations && (
+                  <button onClick={handleReset} type="button" style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid #e5e5e5', backgroundColor: '#fff', fontSize: 12, color: '#6b7280', cursor: 'pointer' }}>
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
 
-          {/* Search bar */}
-          <Pressable style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 }}>
-            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
-            <Text style={{ fontSize: 16, color: '#9ca3af', ...font }}>{t('ride.where_to', { defaultValue: '¿A dónde vas?' })}</Text>
-          </Pressable>
-        </View>
+            {/* Route info */}
+            {routeInfo && (
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#6b7280', marginBottom: 16, padding: '10px 14px', backgroundColor: '#f9fafb', borderRadius: 10 }}>
+                <span>📏 {(routeInfo.distance_m / 1000).toFixed(1)} km</span>
+                <span>⏱ {Math.round(routeInfo.duration_s / 60)} min</span>
+              </div>
+            )}
 
-        {/* Bottom section — services */}
-        <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-          {/* Service type cards */}
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 4 }}>
-            <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 12, ...font }}>
-              {t('ride.select_service', { defaultValue: 'Servicios' })}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {services.map((svc, i) => (
-                <View key={svc.slug} style={{
-                  flex: 1, borderRadius: 12, padding: 10, alignItems: 'center',
-                  backgroundColor: i === 1 ? '#FFF7ED' : '#fafafa',
-                  borderWidth: i === 1 ? 2 : 0,
-                  borderColor: i === 1 ? colors.brand.orange : 'transparent',
-                }}>
-                  <Image source={svc.img} style={{ width: 44, height: 44 }} resizeMode="contain" />
-                  <Text style={{ marginTop: 4, fontSize: 11, fontWeight: i === 1 ? '700' : '500', color: i === 1 ? colors.brand.orange : '#6b7280', ...font }}>
-                    {svc.name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      </View>
+            {/* ═══ Service cards ═══ */}
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
+                Elige tu servicio
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: hasBothLocations ? 1 : 0.5, pointerEvents: hasBothLocations ? 'auto' : 'none' }}>
+                {WEB_SERVICES.map((svc) => {
+                  const isMensajeria = svc.slug === 'mensajeria';
+                  const est = isMensajeria ? allEstimates[deliveryVehicle] : allEstimates[svc.slug];
+                  const isSelected = serviceType === svc.slug;
+                  const isLoadingEst = estimateLoading && !est;
+
+                  return (
+                    <button
+                      key={svc.slug}
+                      type="button"
+                      onClick={() => setServiceType(svc.slug)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px', borderRadius: 12,
+                        border: isSelected ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5',
+                        background: isSelected ? '#FFF5F0' : '#fff',
+                        cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Image source={svc.img} style={{ width: 40, height: 40 }} resizeMode="contain" />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{svc.name}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                            {isMensajeria ? 'Según vehículo' : svc.desc}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        {isLoadingEst ? (
+                          <div style={{ width: 60, height: 14, borderRadius: 4, background: '#e5e5e5', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        ) : est ? (
+                          <>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: isSelected ? colors.brand.orange : '#1a1a1a' }}>
+                              {fmtCUP(est.estimated_fare_cup)}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                              ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 13, color: '#d1d5db' }}>—</div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ═══ Delivery form ═══ */}
+            {serviceType === 'mensajeria' && (
+              <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: '2px solid ' + colors.brand.orange, background: 'linear-gradient(135deg, rgba(255,77,0,0.03), rgba(255,77,0,0.08))' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 20 }}>📦</span>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Datos del envío</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Completa los datos del destinatario</div>
+                  </div>
+                </div>
+
+                {/* Delivery vehicle selector */}
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Vehículo *</label>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {DELIVERY_VEHICLES.map((v) => {
+                      const sel = deliveryVehicle === v.slug;
+                      return (
+                        <button key={v.slug} type="button" onClick={() => { setDeliveryVehicle(v.slug); setAllEstimates({}); }}
+                          style={{ flex: 1, padding: '8px 6px', borderRadius: 10, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
+                          <Image source={v.img} style={{ width: 28, height: 28, marginBottom: 2 }} resizeMode="contain" />
+                          <div style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? colors.brand.orange : '#6b7280' }}>{v.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Recipient name */}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Destinatario *</label>
+                  <input type="text" value={deliveryName} onChange={(e) => setDeliveryName(e.target.value)} placeholder="Nombre completo"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                {/* Recipient phone */}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Teléfono *</label>
+                  <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                {/* Package category */}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Tipo de paquete</label>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                    {DELIVERY_CATS.map((cat) => {
+                      const sel = deliveryCategory === cat.value;
+                      return (
+                        <button key={cat.value} type="button" onClick={() => setDeliveryCategory(cat.value)}
+                          style={{ padding: '6px 10px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 12 }}>
+                          {cat.icon} {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Instrucciones</label>
+                  <input type="text" value={deliveryInstructions} onChange={(e) => setDeliveryInstructions(e.target.value)} placeholder="Instrucciones especiales"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                {/* Client accompanies toggle */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={clientAccompanies} onChange={(e) => setClientAccompanies(e.target.checked)} />
+                  <span style={{ fontWeight: 500 }}>Voy con el envío</span>
+                </label>
+              </div>
+            )}
+
+            {/* ═══ Fare estimate card ═══ */}
+            <div style={{
+              padding: 16, borderRadius: 12, marginBottom: 16,
+              border: selectedEstimate ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5',
+              background: selectedEstimate ? '#FFF5F0' : '#fff',
+              opacity: selectedEstimate ? 1 : 0.6,
+            }}>
+              {!selectedEstimate && (
+                <p style={{ textAlign: 'center', fontSize: 13, color: '#9ca3af', margin: 0, padding: '8px 0' }}>
+                  Selecciona origen y destino para ver el estimado
+                </p>
+              )}
+              {selectedEstimate && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, color: '#6b7280' }}>Tarifa estimada</span>
+                    <div style={{ textAlign: 'right' }}>
+                      {promoResult?.valid && promoResult.discount > 0 ? (
+                        <>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginRight: 8 }}>
+                            {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                          </span>
+                          <span style={{ fontSize: 22, fontWeight: 800, color: '#22c55e' }}>
+                            {fmtCUP(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 22, fontWeight: 800, color: colors.brand.orange }}>
+                          {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#6b7280', flexWrap: 'wrap' }}>
+                    <span>{((selectedEstimate.estimated_distance_m || 0) / 1000).toFixed(1)} km</span>
+                    <span>{Math.round((selectedEstimate.estimated_duration_s || 0) / 60)} min</span>
+                    <span style={{ color: '#9ca3af' }}>~${((selectedEstimate.estimated_fare_cup || 0) / 300).toFixed(2)} USD</span>
+                  </div>
+                  {(selectedEstimate.surge_multiplier || 0) > 1 && (
+                    <span style={{ display: 'inline-block', marginTop: 8, color: '#fff', background: colors.brand.orange, fontWeight: 700, padding: '2px 10px', borderRadius: 12, fontSize: 11 }}>
+                      {selectedEstimate.surge_multiplier.toFixed(1)}x surge
+                    </span>
+                  )}
+
+                  {/* Payment method */}
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Método de pago</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(['cash', 'tricicoin'] as const).map((pm) => {
+                        const sel = paymentMethod === pm;
+                        return (
+                          <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
+                            style={{ flex: 1, padding: '8px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 400 }}>
+                            {pm === 'cash' ? 'Efectivo' : 'TriciCoin'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ═══ Promo code ═══ */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>Código promocional</label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
+                  placeholder="Ingresa un código"
+                  disabled={promoResult?.valid === true}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                    border: promoResult?.valid ? '2px solid #22c55e' : promoResult?.valid === false ? '2px solid #ef4444' : '1px solid #e5e5e5',
+                    background: promoResult?.valid ? 'rgba(34,197,94,0.05)' : '#fff',
+                  }}
+                />
+                {promoResult?.valid ? (
+                  <button type="button" onClick={() => { setPromoCode(''); setPromoResult(null); }}
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e5e5', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#6b7280' }}>
+                    Quitar
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleApplyPromo}
+                    disabled={!promoCode.trim() || !selectedEstimate || promoValidating}
+                    style={{
+                      padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: (!promoCode.trim() || !selectedEstimate || promoValidating) ? 'not-allowed' : 'pointer',
+                      background: (!promoCode.trim() || !selectedEstimate || promoValidating) ? '#d1d5db' : colors.brand.orange,
+                      color: '#fff',
+                    }}>
+                    {promoValidating ? 'Validando...' : 'Aplicar'}
+                  </button>
+                )}
+              </div>
+              {promoResult && (
+                <p style={{ fontSize: 12, marginTop: 4, color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
+                  {promoResult.valid ? `Descuento: -${fmtCUP(promoResult.discount)}` : promoResult.error}
+                </p>
+              )}
+            </div>
+
+            {/* ═══ Schedule toggle ═══ */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={isScheduled} onChange={(e) => { setIsScheduled(e.target.checked); if (!e.target.checked) setScheduleDate(''); }} />
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Programar viaje</span>
+              </label>
+              {isScheduled && (
+                <input
+                  type="datetime-local"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, boxSizing: 'border-box' }}
+                />
+              )}
+            </div>
+
+            {/* Error */}
+            {error && (
+              <p style={{ fontSize: 13, color: '#ef4444', marginBottom: 12, padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.05)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
+                {error}
+              </p>
+            )}
+
+            {/* ═══ Request button ═══ */}
+            <button
+              type="button"
+              onClick={handleRequest}
+              disabled={isRequesting || !selectedEstimate}
+              style={{
+                width: '100%', padding: 14, borderRadius: 12, border: 'none',
+                background: (!selectedEstimate || isRequesting) ? '#d1d5db' : colors.brand.orange,
+                color: '#fff', fontSize: 15, fontWeight: 700,
+                cursor: (!selectedEstimate || isRequesting) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {isRequesting
+                ? 'Solicitando...'
+                : selectedEstimate
+                  ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtCUP(
+                      promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup,
+                    )}`
+                : 'Solicitar viaje'}
+            </button>
+          </div>
+
+          {/* Balance footer */}
+          <div style={{
+            padding: '14px 20px', borderTop: '1px solid #e5e5e5',
+            background: 'linear-gradient(135deg, #FF4D00, #FF8A5C)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>TriciCoin</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>T$ {(balance / 100).toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* ═══ RIGHT SIDE — Map ═══ */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+            <WebMapView
+              ref={mapViewRef}
+              center={pickup ? [pickup.longitude, pickup.latitude] : [-82.38, 23.13]}
+              zoom={16}
+              interactive={true}
+              pickup={pickup}
+              dropoff={dropoff}
+              routeCoords={routeCoords}
+              showCenterPin={selectionStep !== 'done'}
+              onCenterChanged={handleCenterChanged}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 } as any}
+            />
+          </div>
+
+          {/* Center address bar — shows when panning map during selection */}
+          {selectionStep !== 'done' && (centerAddress || centerAddressLoading) && (
+            <div style={{
+              position: 'absolute',
+              bottom: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 16px',
+              backgroundColor: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              maxWidth: '80%',
+              zIndex: 20,
+              fontFamily: 'Montserrat, system-ui, sans-serif',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {centerAddressLoading ? (
+                  <span style={{ fontSize: 13, color: '#9ca3af' }}>Buscando dirección...</span>
+                ) : (
+                  <span style={{ fontSize: 13, color: '#1a1a1a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                    {centerAddress}
+                  </span>
+                )}
+                <span style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, display: 'block' }}>
+                  {selectionStep === 'pickup' ? 'Punto de recogida' : 'Punto de destino'}
+                </span>
+              </div>
+              {centerAddress && !centerAddressLoading && (
+                <button
+                  type="button"
+                  onClick={handleConfirmCenter}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    border: 'none',
+                    backgroundColor: colors.brand.orange,
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Confirmar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </View>
   );
 }
@@ -525,7 +1323,7 @@ function IdleView() {
       {/* Service types */}
       <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
       <View className="flex-row gap-3" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((slug) => (
+        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
           <ServiceTypeCard
             key={slug}
             slug={slug}
@@ -557,11 +1355,12 @@ function formatCurrency(amount: number): string {
 }
 
 // UBER-1.1: Service metadata for recommendation cards
-const SERVICE_META: Record<string, { label: string; maxPax: number; slug: ServiceTypeSlug }> = {
-  moto_standard: { label: 'Moto', maxPax: 1, slug: 'moto_standard' },
-  triciclo_basico: { label: 'Triciclo', maxPax: 3, slug: 'triciclo_basico' },
-  auto_standard: { label: 'Auto', maxPax: 4, slug: 'auto_standard' },
-  auto_confort: { label: 'Confort', maxPax: 4, slug: 'auto_confort' },
+const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number; slug: ServiceTypeSlug }> = {
+  moto_standard: { label: 'Moto', desc: 'Rápido', maxPax: 1, slug: 'moto_standard' },
+  triciclo_basico: { label: 'Triciclo', desc: 'Económico', maxPax: 3, slug: 'triciclo_basico' },
+  auto_standard: { label: 'Auto', desc: 'Cómodo', maxPax: 4, slug: 'auto_standard' },
+  auto_confort: { label: 'Confort', desc: 'Premium', maxPax: 4, slug: 'auto_confort' },
+  mensajeria: { label: 'Envío', desc: 'Delivery', maxPax: 0, slug: 'mensajeria' },
 };
 
 // ── Selecting View ─────────────────────────────────────────
@@ -572,6 +1371,7 @@ function SelectingView() {
   const {
     draft,
     prefetchedPickup,
+    allFareEstimates,
     setPickup,
     setDropoff,
     swapPickupDropoff,
@@ -620,6 +1420,20 @@ function SelectingView() {
     const roadDistanceM = nearest.distance * 1.3;
     const etaMinutes = Math.max(1, Math.round((roadDistanceM / 1000) / 20 * 60));
     return etaMinutes;
+  }, [draft.pickup?.location, nearbyVehicles]);
+
+  // ETA per vehicle type (min ETA from nearby vehicles of that type)
+  const etaByVehicleType = useMemo(() => {
+    if (!nearbyVehicles || nearbyVehicles.length === 0 || !draft.pickup?.location) return {} as Record<string, number>;
+    const result: Record<string, number> = {};
+    for (const v of nearbyVehicles) {
+      const dist = haversineDistance(draft.pickup!.location, { latitude: v.latitude, longitude: v.longitude });
+      const etaMin = Math.max(1, Math.round((dist * 1.3 / 1000) / 20 * 60));
+      if (!(v.vehicle_type in result) || etaMin < result[v.vehicle_type]) {
+        result[v.vehicle_type] = etaMin;
+      }
+    }
+    return result;
   }, [draft.pickup?.location, nearbyVehicles]);
 
   // UBER-4.4: Load saved payment method on mount
@@ -803,21 +1617,76 @@ function SelectingView() {
 
       <View className="h-4" />
 
-      {/* Service type */}
+      {/* Service type — vertical list cards matching web design */}
       <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
-      <View className="flex-row flex-wrap gap-3 mb-4" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as ServiceTypeSlug[]).map((slug) => (
-          <View key={slug} style={{ width: '22%' }}>
-            <ServiceTypeCard
-              slug={slug}
-              name={t(`service_type.${slug}` as const)}
-              icon={vehicleSelectionImages[slug]}
-              selected={draft.serviceType === slug || (slug === 'triciclo_basico' && draft.serviceType === 'triciclo_cargo')}
+      <View className="mb-4 gap-2" accessibilityRole="radiogroup">
+        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as ServiceTypeSlug[]).map((slug) => {
+          const meta = SERVICE_META[slug];
+          const isSelected = draft.serviceType === slug || (slug === 'triciclo_basico' && draft.serviceType === 'triciclo_cargo');
+          const est = allFareEstimates?.[slug];
+          const vt = serviceTypeToVehicleType(slug);
+          const pickupEta = vt ? etaByVehicleType[vt] : null;
+
+          return (
+            <Pressable
+              key={slug}
               onPress={() => { setServiceType(slug); triggerSelection(); }}
-              compact
-            />
-          </View>
-        ))}
+              className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
+                isSelected
+                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                  : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
+              }`}
+              accessibilityRole="radio"
+              accessibilityLabel={meta?.label ?? slug}
+              accessibilityState={{ selected: isSelected }}
+            >
+              <View className="flex-row items-center flex-1">
+                <Image
+                  source={vehicleSelectionImages[slug]}
+                  style={{ width: 40, height: 40 }}
+                  resizeMode="contain"
+                />
+                <View className="ml-3 flex-1">
+                  <Text variant="body" className="font-semibold">
+                    {meta?.label ?? slug}
+                  </Text>
+                  <View className="flex-row items-center mt-0.5">
+                    <Text variant="caption" color="tertiary">
+                      {slug === 'mensajeria' ? t('ride.delivery_label', { defaultValue: 'Según vehículo' }) : meta?.desc}
+                    </Text>
+                    {pickupEta != null && (
+                      <Text variant="caption" style={{ color: '#16a34a', fontWeight: '600', marginLeft: 6 }}>
+                        · {pickupEta} min
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+              <View className="items-end">
+                {est ? (
+                  <>
+                    <Text
+                      variant="body"
+                      className="font-bold"
+                      color={isSelected ? 'accent' : 'primary'}
+                    >
+                      ₧{formatCurrency(est.estimated_fare_cup)}
+                    </Text>
+                    {est.estimated_duration_s != null && est.estimated_duration_s > 0 && (
+                      <Text variant="caption" color="tertiary">
+                        ~{Math.ceil(est.estimated_duration_s / 60)} min
+                      </Text>
+                    )}
+                  </>
+                ) : isFareEstimating ? (
+                  <View style={{ width: 60, height: 14, borderRadius: 4, backgroundColor: '#e5e7eb' }} />
+                ) : (
+                  <Text variant="caption" color="tertiary">—</Text>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Triciclo mode toggle: Pasajero / Cargo */}
@@ -877,6 +1746,37 @@ function SelectingView() {
           />
           <View className="mb-1">
             <Text variant="caption" color="secondary">
+              {t('ride.package_category', { defaultValue: 'Categoría' })}
+            </Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+            <View className="flex-row gap-2">
+              {PACKAGE_CATEGORIES.map((cat) => {
+                const emoji = { documentos: '\u{1F4C4}', comida: '\u{1F354}', paquete_pequeno: '\u{1F4E6}', paquete_grande: '\u{1F4EB}', fragil: '\u26A0\uFE0F' }[cat] ?? '';
+                return (
+                  <Pressable
+                    key={cat}
+                    className={`px-3 py-1.5 rounded-full border ${
+                      draft.delivery.packageCategory === cat
+                        ? 'bg-primary-500 border-primary-500'
+                        : 'bg-neutral-50 border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700'
+                    }`}
+                    onPress={() => setDeliveryField('packageCategory', cat)}
+                  >
+                    <Text
+                      variant="caption"
+                      color={draft.delivery.packageCategory === cat ? 'inverse' : 'secondary'}
+                      className="font-medium"
+                    >
+                      {emoji} {t(`ride.package_cat_${cat}` as const, { defaultValue: cat.replace('_', ' ') })}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <View className="mb-1">
+            <Text variant="caption" color="secondary">
               {t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
               <Text variant="caption" className="text-red-500"> *</Text>
             </Text>
@@ -900,6 +1800,53 @@ function SelectingView() {
             keyboardType="phone-pad"
             className="mb-3"
           />
+          {/* Delivery vehicle selector */}
+          <View className="mb-1">
+            <Text variant="caption" color="secondary">
+              {t('ride.delivery_vehicle', { defaultValue: 'Vehículo para el envío' })}
+              <Text variant="caption" className="text-red-500"> *</Text>
+            </Text>
+          </View>
+          <View className="flex-row gap-2 mb-3 flex-wrap">
+            {([
+              { type: 'moto' as const, label: 'Moto', slug: 'moto_standard' as ServiceTypeSlug },
+              { type: 'triciclo' as const, label: 'Triciclo', slug: 'triciclo_basico' as ServiceTypeSlug },
+              { type: 'auto' as const, label: 'Auto', slug: 'auto_standard' as ServiceTypeSlug },
+            ]).map((v) => {
+              const isVSelected = draft.delivery.deliveryVehicleType === v.type;
+              const vEst = allFareEstimates?.[v.slug];
+              return (
+                <Pressable
+                  key={v.type}
+                  className={`flex-row items-center px-3 py-2 rounded-xl border ${
+                    isVSelected
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800'
+                  }`}
+                  onPress={() => setDeliveryField('deliveryVehicleType', v.type)}
+                >
+                  <Image
+                    source={vehicleSelectionImages[v.slug]}
+                    style={{ width: 22, height: 22, marginRight: 6 }}
+                    resizeMode="contain"
+                  />
+                  <Text
+                    variant="caption"
+                    color={isVSelected ? 'accent' : 'secondary'}
+                    className="font-semibold"
+                  >
+                    {v.label}
+                  </Text>
+                  {vEst && (
+                    <Text variant="caption" color="tertiary" className="ml-1" style={{ fontSize: 10 }}>
+                      ₧{formatCurrency(vEst.estimated_fare_cup)}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+
           <View className="flex-row gap-3">
             <View className="flex-1">
               <View className="mb-1">
@@ -935,6 +1882,40 @@ function SelectingView() {
               />
             </View>
           </View>
+
+          {/* Client accompanies toggle */}
+          <Pressable
+            className={`flex-row items-center mt-3 px-4 py-3 rounded-xl border ${
+              draft.delivery.clientAccompanies
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-neutral-200 dark:border-neutral-700'
+            }`}
+            onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)}
+          >
+            <View
+              style={{
+                width: 40, height: 22, borderRadius: 11,
+                backgroundColor: draft.delivery.clientAccompanies ? colors.brand.orange : '#ccc',
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 18, height: 18, borderRadius: 9,
+                  backgroundColor: '#fff',
+                  marginLeft: draft.delivery.clientAccompanies ? 20 : 2,
+                }}
+              />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text variant="bodySmall" className="font-semibold">
+                {t('ride.client_accompanies', { defaultValue: 'Voy con el envío' })}
+              </Text>
+              <Text variant="caption" color="tertiary">
+                {t('ride.client_accompanies_desc', { defaultValue: 'Acompaña tu paquete sin costo adicional' })}
+              </Text>
+            </View>
+          </Pressable>
         </Card>
       )}
 
@@ -1255,7 +2236,7 @@ function SelectingView() {
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
-  const { draft, fareEstimate, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
+  const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
   const [promoExpanded, setPromoExpanded] = useState(false);
@@ -1306,7 +2287,7 @@ function ReviewingView() {
   }, [recommendedSlug, draft.serviceType, servicePreSelected, setServiceType]);
 
   // UBER-1.1: Derive other (non-selected) services for secondary chips
-  const allServiceSlugs: ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'];
+  const allServiceSlugs: ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
   const selectedSlug = draft.serviceType || recommendedSlug;
   const otherServices = allServiceSlugs.filter((s) => s !== selectedSlug);
 
@@ -1401,9 +2382,34 @@ function ReviewingView() {
               </Text>
             </View>
           </View>
-          <Text variant="h2" color="accent" className="font-bold">
-            ₧{formatCurrency(fareEstimate.estimated_fare_cup)}
-          </Text>
+          <View className="items-end">
+            <Text variant="h2" color="accent" className="font-bold">
+              ₧{formatCurrency(fareEstimate.estimated_fare_cup)}
+            </Text>
+            {fareEstimate.exchange_rate_usd_cup > 0 && (
+              <Text variant="caption" color="tertiary">
+                ~${(fareEstimate.estimated_fare_cup / fareEstimate.exchange_rate_usd_cup).toFixed(2)} USD
+              </Text>
+            )}
+          </View>
+        </View>
+        {/* Distance · Per-km rate · Exchange rate */}
+        <View className="flex-row flex-wrap items-center mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 gap-x-3 gap-y-1">
+          {fareEstimate.estimated_distance_m > 0 && (
+            <Text variant="caption" color="secondary">
+              {(fareEstimate.estimated_distance_m / 1000).toFixed(1)} km
+            </Text>
+          )}
+          {fareEstimate.per_km_rate_cup > 0 && (
+            <Text variant="caption" color="tertiary">
+              ₧{formatCurrency(fareEstimate.per_km_rate_cup)}/km
+            </Text>
+          )}
+          {fareEstimate.exchange_rate_usd_cup > 0 && (
+            <Text variant="caption" color="tertiary">
+              1 USD = {formatCurrency(fareEstimate.exchange_rate_usd_cup)} CUP
+            </Text>
+          )}
         </View>
       </View>
 
@@ -1414,25 +2420,33 @@ function ReviewingView() {
         </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2">
-            {otherServices.map((slug) => (
-              <Pressable
-                key={slug}
-                className="bg-neutral-100 rounded-full px-4 py-2 flex-row items-center"
-                onPress={() => handleServiceSwap(slug)}
-                accessibilityRole="radio"
-                accessibilityLabel={t(`service_type.${slug}` as const)}
-                accessibilityState={{ selected: false }}
-              >
-                <Image
-                  source={vehicleSelectionImages[slug]}
-                  style={{ width: 24, height: 24, marginRight: 6 }}
-                  resizeMode="contain"
-                />
-                <Text variant="caption" className="text-neutral-600 font-medium">
-                  {SERVICE_META[slug]?.label ?? slug}
-                </Text>
-              </Pressable>
-            ))}
+            {otherServices.map((slug) => {
+              const est = allFareEstimates?.[slug];
+              return (
+                <Pressable
+                  key={slug}
+                  className="bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-2 flex-row items-center"
+                  onPress={() => handleServiceSwap(slug)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={t(`service_type.${slug}` as const)}
+                  accessibilityState={{ selected: false }}
+                >
+                  <Image
+                    source={vehicleSelectionImages[slug]}
+                    style={{ width: 24, height: 24, marginRight: 6 }}
+                    resizeMode="contain"
+                  />
+                  <Text variant="caption" className="text-neutral-600 dark:text-neutral-300 font-medium">
+                    {SERVICE_META[slug]?.label ?? slug}
+                  </Text>
+                  {est && (
+                    <Text variant="caption" color="accent" className="ml-2 font-semibold">
+                      ₧{formatCurrency(est.estimated_fare_cup)}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </ScrollView>
       </View>

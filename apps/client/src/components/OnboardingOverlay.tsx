@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 
 interface OnboardingOverlayProps {
@@ -40,21 +40,21 @@ function buildSteps(isDark: boolean): OnboardingStep[] {
       titleKey: 'onboarding.slide2_title',
       descKey: 'onboarding.slide2_desc',
       iconColor: isDark ? '#60A5FA' : '#2563eb',
-      iconBg: isDark ? '#1E3A5F' : '#eff6ff',
+      iconBg: isDark ? darkColors.background.tertiary : '#eff6ff',
     },
     {
       icon: 'shield-checkmark',
       titleKey: 'onboarding.slide3_title',
       descKey: 'onboarding.slide3_desc',
       iconColor: isDark ? '#4ADE80' : '#16a34a',
-      iconBg: isDark ? '#14532D' : '#f0fdf4',
+      iconBg: isDark ? darkColors.background.tertiary : '#f0fdf4',
     },
     {
       icon: 'wallet',
       titleKey: 'onboarding.slide4_title',
       descKey: 'onboarding.slide4_desc',
       iconColor: isDark ? '#A78BFA' : '#7c3aed',
-      iconBg: isDark ? '#3B0764' : '#f5f3ff',
+      iconBg: isDark ? darkColors.background.tertiary : '#f5f3ff',
     },
   ];
 }
@@ -108,7 +108,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop}>
-        <View style={[styles.card, { backgroundColor: isDark ? '#1F2937' : '#ffffff' }]}>
+        <View style={[styles.card, { backgroundColor: isDark ? darkColors.background.secondary : '#ffffff' }]}>
           {/* Skip button */}
           {!isLastStep && (
             <Pressable
@@ -117,7 +117,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
               accessibilityRole="button"
               accessibilityLabel={t('onboarding.skip')}
             >
-              <Text style={[styles.skipText, { color: isDark ? '#6B7280' : '#9ca3af' }]}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
+              <Text style={[styles.skipText, { color: isDark ? darkColors.text.tertiary : '#9ca3af' }]}>{t('onboarding.skip', { defaultValue: 'Omitir' })}</Text>
             </Pressable>
           )}
 
@@ -133,10 +133,10 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             </View>
 
             {/* Title */}
-            <Text style={[styles.title, { color: isDark ? '#F9FAFB' : '#111111' }]}>{t(step.titleKey)}</Text>
+            <Text style={[styles.title, { color: isDark ? darkColors.text.primary : '#111111' }]}>{t(step.titleKey)}</Text>
 
             {/* Description */}
-            <Text style={[styles.description, { color: isDark ? '#D1D5DB' : '#555555' }]}>{t(step.descKey)}</Text>
+            <Text style={[styles.description, { color: isDark ? darkColors.text.secondary : '#555555' }]}>{t(step.descKey)}</Text>
           </Animated.View>
 
           {/* Dots indicator */}
@@ -146,7 +146,7 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
                 key={i}
                 style={[
                   styles.dot,
-                  i === currentStep ? styles.dotActive : [styles.dotInactive, { backgroundColor: isDark ? '#4B5563' : '#d4d4d8' }],
+                  i === currentStep ? styles.dotActive : [styles.dotInactive, { backgroundColor: isDark ? darkColors.background.tertiary : '#d4d4d8' }],
                 ]}
               />
             ))}

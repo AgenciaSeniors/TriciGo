@@ -12,6 +12,7 @@ import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { rideService, notificationService, useFeatureFlag, getSupabaseClient } from '@tricigo/api';
+import { darkColors } from '@tricigo/theme';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
@@ -350,14 +351,14 @@ export function RideCompleteView() {
       {activeRide.is_split && splits.length > 0 && (
         <Card variant="filled" padding="md" className="w-full mb-4">
           <View className="flex-row items-center mb-2">
-            <Ionicons name="people" size={18} color={isDark ? '#9CA3AF' : '#888888'} />
+            <Ionicons name="people" size={18} color={isDark ? darkColors.text.secondary : '#888888'} />
             <Text variant="bodySmall" className="ml-2 font-bold">
               {t('ride.split_fare', { defaultValue: 'Dividir tarifa' })}
             </Text>
           </View>
 
           {/* Your share */}
-          <View className="flex-row justify-between items-center py-1 border-b border-neutral-100">
+          <View className="flex-row justify-between items-center py-1 border-b border-neutral-100 dark:border-neutral-800">
             <Text variant="bodySmall">
               {t('ride.split_you', { defaultValue: 'Tú' })}
             </Text>
@@ -372,7 +373,7 @@ export function RideCompleteView() {
 
           {/* Each participant */}
           {splits.map((split) => (
-            <View key={split.id} className="flex-row justify-between items-center py-1 border-b border-neutral-100">
+            <View key={split.id} className="flex-row justify-between items-center py-1 border-b border-neutral-100 dark:border-neutral-800">
               <View className="flex-row items-center gap-1">
                 <Text variant="bodySmall">
                   {split.user_name || split.user_phone || '...'}
@@ -482,7 +483,7 @@ export function RideCompleteView() {
                 {[5000, 10000, 20000].map((amount) => (
                   <Pressable
                     key={amount}
-                    className="px-4 py-2 rounded-full bg-neutral-100"
+                    className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800"
                     onPress={() => handleTip(amount)}
                     disabled={sendingTip}
                     accessibilityRole="button"
@@ -525,7 +526,7 @@ export function RideCompleteView() {
                       className={`px-3 py-1.5 rounded-full border ${
                         isSelected
                           ? 'bg-primary-500/10 border-primary-500'
-                          : 'bg-neutral-100 border-neutral-200'
+                          : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                       }`}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: isSelected }}

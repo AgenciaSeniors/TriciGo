@@ -8,6 +8,8 @@ import {
   type ProcessingStatus,
 } from '@tricigo/api';
 import { getOfflineActionLabel, getOfflineActionIcon, formatTimeAgo } from '@tricigo/utils/offlineLabels';
+import { darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
@@ -15,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
  * Shows sync progress and individual mutation status.
  */
 export function OfflineBanner() {
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const [isOnline, setIsOnline] = useState(true);
   const [mutations, setMutations] = useState<QueuedMutation[]>([]);
   const [processing, setProcessing] = useState<ProcessingStatus>({
@@ -52,7 +56,7 @@ export function OfflineBanner() {
     : 0;
 
   return (
-    <View className="bg-yellow-500" accessibilityLiveRegion="polite">
+    <View className="bg-yellow-500 dark:bg-yellow-900/80" accessibilityLiveRegion="polite">
       {/* Header */}
       <Pressable
         onPress={() => pending > 0 && setExpanded(!expanded)}
@@ -64,9 +68,9 @@ export function OfflineBanner() {
           <Ionicons
             name={!isOnline ? 'cloud-offline-outline' : 'sync-outline'}
             size={14}
-            color="#1a1a1a"
+            color={isDark ? '#fbbf24' : '#1a1a1a'}
           />
-          <Text variant="caption" className="font-semibold text-neutral-900 flex-1" numberOfLines={1}>
+          <Text variant="caption" className="font-semibold text-neutral-900 dark:text-yellow-100 flex-1" numberOfLines={1}>
             {processing.isProcessing && processing.currentAction
               ? `Sincronizando ${processing.currentIndex}/${processing.total}: ${getOfflineActionLabel(processing.currentAction)}...`
               : !isOnline
@@ -78,7 +82,7 @@ export function OfflineBanner() {
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={14}
-            color="#1a1a1a"
+            color={isDark ? '#fbbf24' : '#1a1a1a'}
           />
         )}
       </Pressable>
@@ -103,12 +107,12 @@ export function OfflineBanner() {
               <Ionicons
                 name={getOfflineActionIcon(m.action) as any}
                 size={14}
-                color="#44403c"
+                color={isDark ? '#d4d4d4' : '#44403c'}
               />
-              <Text variant="caption" className="text-neutral-800 flex-1">
+              <Text variant="caption" className="text-neutral-800 dark:text-neutral-200 flex-1">
                 {getOfflineActionLabel(m.action)}
               </Text>
-              <Text variant="caption" className="text-neutral-600 opacity-70">
+              <Text variant="caption" className="text-neutral-600 dark:text-neutral-400 opacity-70">
                 {formatTimeAgo(m.timestamp)}
               </Text>
               {m.retries > 0 && (

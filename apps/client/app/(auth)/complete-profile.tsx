@@ -11,11 +11,14 @@ import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
-import { colors } from '@tricigo/theme';
+import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 
 export default function CompleteProfileScreen() {
   const { t } = useTranslation('common');
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -164,7 +167,7 @@ export default function CompleteProfileScreen() {
             placeholder={t('profile.name_placeholder', { defaultValue: 'Tu nombre completo' })}
             value={fullName}
             onChangeText={setFullName}
-            leftIcon={<Ionicons name="person-outline" size={20} color={colors.neutral[400]} />}
+            leftIcon={<Ionicons name="person-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
             autoFocus
           />
 

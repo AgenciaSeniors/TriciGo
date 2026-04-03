@@ -104,7 +104,7 @@ export default function LoginScreen() {
 
             {/* Phone input with country prefix */}
             <View className="flex-row items-center gap-2 mb-1">
-              <View className="bg-neutral-100 rounded-xl px-3 py-3.5 flex-row items-center">
+              <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center">
                 <Text variant="body" className="font-semibold">🇨🇺 +53</Text>
               </View>
               <View className="flex-1">
@@ -136,17 +136,17 @@ export default function LoginScreen() {
 
             {/* Divider */}
             <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-neutral-200" />
+              <View className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
               <Text variant="caption" color="tertiary" className="mx-4">
                 {t('auth.or_continue_with', { defaultValue: 'o continúa con' })}
               </Text>
-              <View className="flex-1 h-px bg-neutral-200" />
+              <View className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
             </View>
 
             {/* Social login buttons */}
             <View className="flex-row gap-3">
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 active:bg-neutral-100"
+                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
                 onPress={async () => { setSocialLoading(true); try { await authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}

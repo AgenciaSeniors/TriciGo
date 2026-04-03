@@ -38,8 +38,8 @@ export function RouteSummary({
       {/* Pickup */}
       <View className="flex-row items-start">
         <View className="items-center mr-3 pt-1">
-          <View className="w-3 h-3 rounded-full bg-primary-500" />
-          <View className="w-0.5 h-5 bg-neutral-300 my-0.5" />
+          <View className="w-3 h-3 rounded-full bg-green-500" />
+          <View className="w-0.5 h-5 bg-neutral-300 my-0.5" style={{ borderStyle: 'dashed' }} />
         </View>
         <View className="flex-1">
           {pickupLabel && !compact && (
@@ -69,7 +69,7 @@ export function RouteSummary({
       {/* Dropoff */}
       <View className="flex-row items-start">
         <View className="items-center mr-3 pt-1">
-          <View className="w-3 h-3 rounded-full bg-neutral-800" />
+          <View className="w-3 h-3 rounded-full bg-red-500" />
         </View>
         <View className="flex-1">
           {dropoffLabel && !compact && (
