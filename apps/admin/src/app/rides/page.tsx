@@ -13,6 +13,7 @@ import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
@@ -156,10 +157,35 @@ export default function RidesPage() {
   const canGoPrev = page > 0;
   const canGoNext = rides.length === PAGE_SIZE;
 
+  function handleExportCsv() {
+    exportToCsv(
+      sortedData as unknown as Record<string, unknown>[],
+      [
+        { key: 'pickup_address', label: t('rides.col_route') + ' (pickup)' },
+        { key: 'dropoff_address', label: t('rides.col_route') + ' (dropoff)' },
+        { key: 'status', label: t('rides.col_status') },
+        { key: 'estimated_fare_cup', label: t('rides.col_fare') + ' (est.)' },
+        { key: 'final_fare_cup', label: t('rides.col_fare') + ' (final)' },
+        { key: 'estimated_distance_m', label: t('rides.col_distance') + ' (m)' },
+        { key: 'payment_method', label: t('rides.col_payment') },
+        { key: 'created_at', label: t('rides.col_date') },
+      ],
+      'rides',
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">{t('rides.title')}</h1>
+        <div className="flex items-center gap-2">
+        <button
+          onClick={handleExportCsv}
+          disabled={sortedData.length === 0}
+          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {t('common.export_csv', { defaultValue: 'Export CSV' })}
+        </button>
         <select
           value={selectedCity}
           onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
@@ -171,6 +197,7 @@ export default function RidesPage() {
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+        </div>
       </div>
 
       {error && (

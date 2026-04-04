@@ -69,7 +69,9 @@ export default function SettingsScreen() {
   }, [userId]);
 
   const toggleLanguage = () => {
-    const next = currentLang === 'es' ? 'en' : 'es';
+    const cycle = ['es', 'en', 'pt'] as const;
+    const idx = cycle.indexOf(currentLang as typeof cycle[number]);
+    const next = cycle[(idx + 1) % cycle.length];
     i18n.changeLanguage(next);
   };
 
@@ -111,7 +113,7 @@ export default function SettingsScreen() {
               <Text variant="body" className="ml-3">{t('profile.preferred_language')}</Text>
             </View>
             <Text variant="body" color="primary">
-              {currentLang === 'es' ? t('profile.spanish') : t('profile.english')}
+              {currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Português' })}
             </Text>
           </Pressable>
         </Card>

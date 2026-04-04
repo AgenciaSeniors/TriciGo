@@ -72,13 +72,39 @@ function NativeDriverProfileScreen() {
     : driverProfile?.status === 'suspended' ? 'error'
     : 'neutral';
 
-  const menuItems = [
-    { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-    { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents') },
-    { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
-    { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
-    { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
-    { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
+  const menuSections = [
+    {
+      title: t('profile.section_account', { defaultValue: 'Cuenta' }),
+      items: [
+        { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
+        { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents') },
+        { icon: 'location-outline' as const, label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones') },
+        { icon: 'car-outline' as const, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle') },
+      ],
+    },
+    {
+      title: t('profile.section_security', { defaultValue: 'Seguridad' }),
+      items: [
+        { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
+        { icon: 'people-outline' as const, label: t('trusted_contacts.title', { defaultValue: 'Contactos de confianza' }), onPress: () => router.push('/profile/trusted-contacts') },
+      ],
+    },
+    {
+      title: t('profile.section_activity', { defaultValue: 'Actividad' }),
+      items: [
+        { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate') },
+        { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
+      ],
+    },
+    {
+      title: t('profile.section_more', { defaultValue: 'Más' }),
+      items: [
+        { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
+        { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog') },
+        { icon: 'information-circle-outline' as const, label: t('profile.about_title', { defaultValue: 'Acerca de' }), onPress: () => router.push('/profile/about') },
+      ],
+    },
   ];
 
   return (
@@ -118,7 +144,7 @@ function NativeDriverProfileScreen() {
             </View>
             <Pressable
               onPress={() => router.push('/profile/edit')}
-              className="w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+              className="w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel={t('profile.edit_profile')}
             >
@@ -149,26 +175,33 @@ function NativeDriverProfileScreen() {
           </View>
         )}
 
-        {/* ── Menu items ── */}
-        <Card variant="surface" padding="none" className="mb-4">
-          {menuItems.map((item, index) => (
-            <Pressable
-              key={item.label}
-              className={`flex-row items-center px-4 min-h-[48px] ${index < menuItems.length - 1 ? 'border-b border-white/6' : ''}`}
-              onPress={item.onPress}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-            >
-              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
-                <Ionicons name={item.icon} size={18} color={colors.neutral[400]} />
-              </View>
-              <Text variant="body" color="inverse" className="flex-1">
-                {item.label}
-              </Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.neutral[600]} />
-            </Pressable>
-          ))}
-        </Card>
+        {/* ── Menu sections ── */}
+        {menuSections.map((section) => (
+          <View key={section.title} className="mb-4">
+            <Text variant="label" color="secondary" className="mb-2 ml-1">
+              {section.title}
+            </Text>
+            <Card variant="surface" padding="none">
+              {section.items.map((item, index) => (
+                <Pressable
+                  key={item.label}
+                  className={`flex-row items-center px-4 min-h-[48px] ${index < section.items.length - 1 ? 'border-b border-white/6' : ''}`}
+                  onPress={item.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                >
+                  <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
+                    <Ionicons name={item.icon} size={18} color={colors.brand.orange} />
+                  </View>
+                  <Text variant="body" color="inverse" className="flex-1">
+                    {item.label}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.neutral[600]} />
+                </Pressable>
+              ))}
+            </Card>
+          </View>
+        ))}
 
         {/* ── Logout ── */}
         <Pressable

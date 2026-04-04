@@ -13,6 +13,7 @@ import { SortableHeader } from '@/components/ui/SortableHeader';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { formatAdminDate } from '@/lib/formatDate';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
+import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
@@ -179,7 +180,65 @@ export default function WalletPage() {
 
   return (
     <div>
-      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('wallet_admin.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">{t('wallet_admin.title')}</h1>
+        <button
+          onClick={() => {
+            if (tab === 'redemptions') {
+              exportToCsv(
+                sortedRedemptions as unknown as Record<string, unknown>[],
+                [
+                  { key: 'driver_name', label: t('wallet_admin.col_driver') },
+                  { key: 'amount', label: t('wallet_admin.col_amount') },
+                  { key: 'status', label: t('wallet_admin.col_status') },
+                  { key: 'requested_at', label: t('wallet_admin.col_date') },
+                ],
+                'wallet-redemptions',
+              );
+            } else if (tab === 'recharges') {
+              exportToCsv(
+                sortedRecharges as unknown as Record<string, unknown>[],
+                [
+                  { key: 'user_name', label: t('wallet_admin.col_user') },
+                  { key: 'amount', label: t('wallet_admin.col_amount') },
+                  { key: 'status', label: t('wallet_admin.col_status') },
+                  { key: 'created_at', label: t('wallet_admin.col_date') },
+                ],
+                'wallet-recharges',
+              );
+            } else if (tab === 'ledger') {
+              exportToCsv(
+                sortedTransactions as unknown as Record<string, unknown>[],
+                [
+                  { key: 'description', label: t('wallet_admin.col_description') },
+                  { key: 'type', label: t('wallet_admin.col_type') },
+                  { key: 'amount', label: t('wallet_admin.col_amount') },
+                  { key: 'reference_id', label: t('wallet_admin.col_ref') },
+                  { key: 'created_at', label: t('wallet_admin.col_date') },
+                ],
+                'wallet-ledger',
+              );
+            } else if (tab === 'tropipay') {
+              exportToCsv(
+                sortedTropipay as unknown as Record<string, unknown>[],
+                [
+                  { key: 'user_name', label: t('wallet_admin.col_user') },
+                  { key: 'amount_cup', label: t('wallet_admin.col_amount') },
+                  { key: 'amount_usd', label: t('wallet_admin.col_usd_amount') },
+                  { key: 'status', label: t('wallet_admin.col_status') },
+                  { key: 'tropipay_reference', label: t('wallet_admin.col_reference') },
+                  { key: 'created_at', label: t('wallet_admin.col_date') },
+                ],
+                'wallet-tropipay',
+              );
+            }
+          }}
+          disabled={listData.length === 0}
+          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {t('common.export_csv', { defaultValue: 'Export CSV' })}
+        </button>
+      </div>
 
       {error && (
         <AdminErrorBanner

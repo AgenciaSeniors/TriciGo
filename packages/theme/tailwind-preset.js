@@ -61,7 +61,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-montserrat)', 'Montserrat', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {

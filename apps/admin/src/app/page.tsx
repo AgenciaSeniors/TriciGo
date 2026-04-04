@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { createBrowserClient } from '@/lib/supabase-server';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -50,35 +51,58 @@ export default function DashboardPage() {
   const [autoActions, setAutoActions] = useState<AdminAction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchDashboard() {
-      try {
-        const [metricsData, rides, drivers, autoActionsData] = await Promise.all([
-          adminService.getDashboardMetrics(),
-          adminService.getRides({}, 0, 5),
-          adminService.getDriversByStatus('pending_verification', 0, 5),
-          adminService.getRecentAutoActions(5).catch(() => [] as AdminAction[]),
-        ]);
-        if (!cancelled) {
-          setMetrics(metricsData);
-          setRecentRides(rides);
-          setPendingDrivers(drivers);
-          setAutoActions(autoActionsData);
-        }
-      } catch (err) {
-        // Error handled by UI
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const [metricsData, rides, drivers, autoActionsData] = await Promise.all([
+        adminService.getDashboardMetrics(),
+        adminService.getRides({}, 0, 5),
+        adminService.getDriversByStatus('pending_verification', 0, 5),
+        adminService.getRecentAutoActions(5).catch(() => [] as AdminAction[]),
+      ]);
+      setMetrics(metricsData);
+      setRecentRides(rides);
+      setPendingDrivers(drivers);
+      setAutoActions(autoActionsData);
+    } catch (err) {
+      // Error handled by UI
+    } finally {
+      setLoading(false);
     }
-
-    fetchDashboard();
-
-    const interval = setInterval(fetchDashboard, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  // Initial fetch + polling fallback (60s)
+  useEffect(() => {
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 60000);
+    return () => clearInterval(interval);
+  }, [fetchDashboard]);
+
+  // Supabase realtime — refetch on rides or driver_profiles changes
+  useEffect(() => {
+    const supabase = createBrowserClient();
+
+    const channel = supabase
+      .channel('admin-dashboard-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'rides',
+      }, () => {
+        fetchDashboard();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'driver_profiles',
+      }, () => {
+        fetchDashboard();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDashboard]);
 
   const stats = [
     { label: t('dashboard.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-primary-500', format: 'number' as const },
@@ -91,7 +115,13 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{t('dashboard.title')}</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          Live
+        </span>
+      </div>
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">

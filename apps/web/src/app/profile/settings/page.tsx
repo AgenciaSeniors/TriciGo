@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [prefsLoading, setPrefsLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system');
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -34,6 +35,10 @@ export default function SettingsPage() {
     const saved = localStorage.getItem('tricigo_language');
     if (saved) {
       setLanguage(saved);
+    }
+    const savedTheme = localStorage.getItem('tricigo_theme') as 'light' | 'dark' | 'system' | null;
+    if (savedTheme) {
+      setDarkMode(savedTheme);
     }
   }, []);
 
@@ -175,6 +180,46 @@ export default function SettingsPage() {
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                 </svg>
               )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Appearance */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          {t('web.appearance', { defaultValue: 'Apariencia' })}
+        </h2>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden', display: 'flex' }}>
+          {(['light', 'dark', 'system'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setDarkMode(mode);
+                localStorage.setItem('tricigo_theme', mode);
+                // Apply theme
+                if (mode === 'system') {
+                  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  document.documentElement.classList.toggle('dark', prefersDark);
+                } else {
+                  document.documentElement.classList.toggle('dark', mode === 'dark');
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '0.875rem 0.5rem',
+                background: darkMode === mode ? 'var(--primary)' : 'transparent',
+                color: darkMode === mode ? 'white' : 'var(--text-primary)',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: darkMode === mode ? 600 : 400,
+                fontSize: '0.875rem',
+                transition: 'all 0.2s',
+              }}
+            >
+              {mode === 'light' ? '☀️ ' + t('web.theme_light', { defaultValue: 'Claro' }) :
+               mode === 'dark' ? '🌙 ' + t('web.theme_dark', { defaultValue: 'Oscuro' }) :
+               '📱 ' + t('web.theme_system', { defaultValue: 'Sistema' })}
             </button>
           ))}
         </div>

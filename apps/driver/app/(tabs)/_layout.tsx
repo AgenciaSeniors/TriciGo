@@ -37,20 +37,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="trips"
-        options={{
-          title: t('trips_history.title'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="earnings"
         options={{
           title: t('earnings.title'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cash" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: t('wallet.title', { defaultValue: 'Billetera' }),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="trips"
+        options={{
+          title: t('trips_history.title'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="list" size={size} color={color} />
           ),
         }}
       />

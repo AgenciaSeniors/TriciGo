@@ -14,6 +14,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
@@ -153,17 +154,44 @@ export default function DriversPage() {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">{t('drivers.title')}</h1>
-        <select
-          value={selectedCity}
-          onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
-          aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
-          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
-        >
-          <option value="">{t('cities.all_cities')}</option>
-          {cities.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              exportToCsv(
+                sortedData.map((d) => ({
+                  ...d,
+                  name: d.users?.full_name ?? '',
+                  phone: d.users?.phone ?? '',
+                  vehicle: d.vehicles?.[0] ? `${d.vehicles[0].type} — ${d.vehicles[0].plate_number}` : '',
+                })) as unknown as Record<string, unknown>[],
+                [
+                  { key: 'name', label: t('drivers.col_name') },
+                  { key: 'phone', label: t('drivers.col_phone') },
+                  { key: 'vehicle', label: t('drivers.col_vehicle') },
+                  { key: 'status', label: t('drivers.col_status') },
+                  { key: 'rating_avg', label: t('drivers.col_rating') },
+                  { key: 'created_at', label: t('drivers.col_registered') },
+                ],
+                'drivers',
+              );
+            }}
+            disabled={sortedData.length === 0}
+            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {t('common.export_csv', { defaultValue: 'Export CSV' })}
+          </button>
+          <select
+            value={selectedCity}
+            onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
+            aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
+            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
+          >
+            <option value="">{t('cities.all_cities')}</option>
+            {cities.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Status filter tabs */}

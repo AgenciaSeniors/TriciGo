@@ -1,7 +1,16 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useColorScheme } from 'nativewind';
+import { useFonts } from 'expo-font';
+import {
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+  Montserrat_800ExtraBold,
+} from '@expo-google-fonts/montserrat';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -131,7 +140,32 @@ function RootNavigator() {
   );
 }
 
+// Keep splash screen visible while loading fonts
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function RootLayoutInner() {
+  const [fontsLoaded] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    Montserrat_800ExtraBold,
+  });
+
+  const onLayoutReady = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    onLayoutReady();
+  }, [onLayoutReady]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
       <AppProviders>

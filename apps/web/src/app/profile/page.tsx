@@ -18,6 +18,7 @@ function IconGift() { return <svg width="20" height="20" viewBox="0 0 24 24" fil
 function IconHelp() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
 function IconInfo() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>; }
 function IconBlog() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>; }
+function IconSupport() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>; }
 function IconChevron() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>; }
 
 const iconMap: Record<string, () => JSX.Element> = {
@@ -33,6 +34,7 @@ const iconMap: Record<string, () => JSX.Element> = {
   'profile.menu_help': IconHelp,
   'profile.menu_about': IconInfo,
   'profile.menu_blog': IconBlog,
+  'profile.menu_support': IconSupport,
 };
 
 interface MenuItem {
@@ -68,6 +70,7 @@ const menuGroups: { titleKey: string; items: MenuItem[] }[] = [
     titleKey: 'profile.group_more',
     items: [
       { labelKey: 'profile.menu_referral', href: '/profile/referral' },
+      { labelKey: 'profile.menu_support', href: '/support' },
       { labelKey: 'profile.menu_help', href: '/profile/help' },
       { labelKey: 'profile.menu_about', href: '/profile/about' },
       { labelKey: 'profile.menu_blog', href: '/blog' },
