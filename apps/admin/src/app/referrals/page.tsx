@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Gift } from 'lucide-react';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -171,7 +172,7 @@ export default function ReferralsPage() {
       {loading ? (
         <AdminTableSkeleton rows={5} columns={4} />
       ) : referrals.length === 0 ? (
-        <AdminEmptyState icon="🎁" title={t('referrals.no_referrals')} />
+        <AdminEmptyState icon={<Gift className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('referrals.no_referrals')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label={t('referrals.title')}>

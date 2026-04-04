@@ -7,13 +7,11 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
+import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { getSupabaseClient } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
-
-const CARD_BG = '#141414';
-const BORDER = '#2a2a2a';
 
 type FleetInfo = {
   id: string;
@@ -123,7 +121,11 @@ export default function CorporateScreen() {
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: driverDarkColors.hover }}
           >
             <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
           </Pressable>
@@ -153,9 +155,8 @@ export default function CorporateScreen() {
             <Text variant="label" color="secondary" className="mb-2 ml-1">
               {t('corporate.fleet_section', { defaultValue: 'Tu flota' })}
             </Text>
-            <View
-              className="rounded-2xl p-4 mb-6"
-              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
+            <AnimatedCard delay={0} className="rounded-2xl p-4 mb-6"
+              style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
             >
               <View className="flex-row items-center">
                 <View className="w-12 h-12 rounded-2xl items-center justify-center mr-4" style={{ backgroundColor: `${colors.brand.orange}20` }}>
@@ -171,7 +172,7 @@ export default function CorporateScreen() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </AnimatedCard>
 
             {/* Special Rates */}
             {rates.length > 0 && (
@@ -184,7 +185,7 @@ export default function CorporateScreen() {
                     <View
                       key={i}
                       className="rounded-xl p-3"
-                      style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER, minWidth: '45%' }}
+                      style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default, minWidth: '45%' }}
                     >
                       <Text variant="caption" color="secondary">{rate.service_type}</Text>
                       <Text variant="metric" color="accent">{rate.rate_multiplier}x</Text>
@@ -206,12 +207,12 @@ export default function CorporateScreen() {
                 message={t('corporate.no_rides_desc', { defaultValue: 'Tus viajes corporativos aparecerán aquí.' })}
               />
             ) : (
-              <View className="gap-2">
+              <StaggeredList staggerDelay={70}>
                 {rides.map((ride) => (
                   <View
                     key={ride.id}
-                    className="rounded-xl p-4"
-                    style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
+                    className="rounded-xl p-4 mb-2"
+                    style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
                   >
                     <View className="flex-row items-center justify-between mb-2">
                       <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${colors.info.DEFAULT}20` }}>
@@ -240,7 +241,7 @@ export default function CorporateScreen() {
                     </Text>
                   </View>
                 ))}
-              </View>
+              </StaggeredList>
             )}
           </>
         )}

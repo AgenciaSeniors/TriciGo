@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Star } from 'lucide-react';
 import { formatAdminDate } from '@/lib/formatDate';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -307,7 +308,7 @@ export default function ReviewsPage() {
       {loading ? (
         <AdminTableSkeleton rows={5} columns={4} />
       ) : reviews.length === 0 ? (
-        <AdminEmptyState icon="⭐" title={t('reviews.no_reviews')} />
+        <AdminEmptyState icon={<Star className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('reviews.no_reviews')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

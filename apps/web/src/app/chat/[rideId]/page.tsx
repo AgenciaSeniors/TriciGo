@@ -152,8 +152,13 @@ export default function ChatPage() {
         gap: '0.5rem',
       }}>
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-            <p style={{ color: 'var(--text-tertiary)' }}>Cargando mensajes...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem', gap: '0.75rem' }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+            </svg>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+              {t('web.loading_messages', { defaultValue: 'Cargando mensajes...' })}
+            </p>
           </div>
         ) : messages.length === 0 ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>

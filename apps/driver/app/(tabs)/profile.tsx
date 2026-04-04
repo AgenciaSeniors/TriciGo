@@ -7,6 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { StatCard } from '@tricigo/ui/StatCard';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -144,7 +145,8 @@ function NativeDriverProfileScreen() {
             </View>
             <Pressable
               onPress={() => router.push('/profile/edit')}
-              className="w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+              hitSlop={4}
+              className="w-11 h-11 rounded-xl bg-[#1e1e1e] items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel={t('profile.edit_profile')}
             >
@@ -176,8 +178,8 @@ function NativeDriverProfileScreen() {
         )}
 
         {/* ── Menu sections ── */}
-        {menuSections.map((section) => (
-          <View key={section.title} className="mb-4">
+        {menuSections.map((section, sectionIdx) => (
+          <AnimatedCard key={section.title} delay={sectionIdx * 100} className="mb-4">
             <Text variant="label" color="secondary" className="mb-2 ml-1">
               {section.title}
             </Text>
@@ -200,7 +202,7 @@ function NativeDriverProfileScreen() {
                 </Pressable>
               ))}
             </Card>
-          </View>
+          </AnimatedCard>
         ))}
 
         {/* ── Logout ── */}

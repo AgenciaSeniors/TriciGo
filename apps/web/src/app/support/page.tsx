@@ -16,10 +16,10 @@ type Ticket = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  open: '#3B82F6',
-  in_progress: '#F59E0B',
-  resolved: '#10B981',
-  closed: '#6B7280',
+  open: 'var(--info, #3B82F6)',
+  in_progress: 'var(--warning, #F59E0B)',
+  resolved: 'var(--success, #10B981)',
+  closed: 'var(--text-tertiary, #6B7280)',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -251,8 +251,8 @@ export default function SupportPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {[1, 2, 3].map((i) => (
             <div key={i} style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', padding: '1.25rem' }}>
-              <div style={{ width: '60%', height: 16, background: 'var(--border)', borderRadius: 4, marginBottom: '0.5rem' }} />
-              <div style={{ width: '40%', height: 12, background: 'var(--border)', borderRadius: 4 }} />
+              <div style={{ width: '60%', height: 16, background: 'var(--border)', borderRadius: 4, marginBottom: '0.5rem', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: '40%', height: 12, background: 'var(--border)', borderRadius: 4, animation: 'pulse 1.5s ease-in-out 0.2s infinite' }} />
             </div>
           ))}
         </div>

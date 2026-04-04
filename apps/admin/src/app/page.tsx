@@ -7,6 +7,7 @@ import { useTranslation } from '@tricigo/i18n';
 import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { Car, UserCheck, Bot } from 'lucide-react';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -128,7 +129,7 @@ export default function DashboardPage() {
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100"
+            className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
           >
             {loading ? (
               <>
@@ -150,7 +151,7 @@ export default function DashboardPage() {
       {/* Bottom section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent rides */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
           <h2 className="text-lg font-bold mb-4">{t('dashboard.recent_rides')}</h2>
           {loading ? (
             <div className="space-y-3">
@@ -165,7 +166,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : recentRides.length === 0 ? (
-            <AdminEmptyState icon="🚗" title={t('dashboard.no_recent_rides')} />
+            <AdminEmptyState icon={<Car className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('dashboard.no_recent_rides')} />
           ) : (
             <div className="space-y-3">
               {recentRides.map((ride) => (
@@ -184,7 +185,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Pending drivers */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
           <h2 className="text-lg font-bold mb-4">{t('dashboard.pending_drivers')}</h2>
           {loading ? (
             <div className="space-y-3">
@@ -199,7 +200,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : pendingDrivers.length === 0 ? (
-            <AdminEmptyState icon="✅" title={t('dashboard.no_pending_drivers')} />
+            <AdminEmptyState icon={<UserCheck className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('dashboard.no_pending_drivers')} />
           ) : (
             <div className="space-y-3">
               {pendingDrivers.map((driver) => (
@@ -225,10 +226,10 @@ export default function DashboardPage() {
         </div>
 
         {/* Automated actions */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
           <h2 className="text-lg font-bold mb-4">{t('dashboard_auto.recent_auto_actions')}</h2>
           {autoActions.length === 0 ? (
-            <AdminEmptyState icon="🤖" title={t('dashboard_auto.no_auto_actions')} />
+            <AdminEmptyState icon={<Bot className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('dashboard_auto.no_auto_actions')} />
           ) : (
             <div className="space-y-3">
               {autoActions.map((action) => {

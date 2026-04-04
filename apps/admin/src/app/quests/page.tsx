@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Trophy } from 'lucide-react';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 
@@ -209,7 +210,7 @@ export default function QuestsPage() {
       {loading ? (
         <AdminTableSkeleton rows={5} columns={4} />
       ) : quests.length === 0 ? (
-        <AdminEmptyState icon="🏆" title={t('quests.no_quests', { defaultValue: 'No hay misiones creadas' })} />
+        <AdminEmptyState icon={<Trophy className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('quests.no_quests', { defaultValue: 'No hay misiones creadas' })} />
       ) : (
         <>
         <div className="flex gap-2 mb-4">

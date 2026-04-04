@@ -8,14 +8,12 @@ import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { formatCUP } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { Ionicons } from '@expo/vector-icons';
+import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const CARD_BG = '#141414';
-const BORDER = '#2a2a2a';
 
 type CommissionEntry = {
   id: string;
@@ -158,9 +156,8 @@ export default function WalletScreen() {
         </Text>
 
         {/* Balance Card */}
-        <View
-          className="rounded-2xl p-5 mb-6"
-          style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
+        <AnimatedCard delay={0} className="rounded-2xl p-5 mb-6"
+          style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
         >
           <Text variant="caption" style={{ color: colors.neutral[400] }} className="mb-1">
             {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
@@ -171,21 +168,22 @@ export default function WalletScreen() {
               {t('wallet.hold_balance', { defaultValue: 'En retención' })}: {formatCUP(holdBalance)}
             </Text>
           )}
-        </View>
+        </AnimatedCard>
 
         {/* Earning Goals */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('wallet.earning_goals', { defaultValue: 'Metas de ganancia' })}
         </Text>
         <View className="flex-row gap-2 mb-6">
-          {goals.map((goal) => {
+          {goals.map((goal, goalIdx) => {
             const progress = Math.min(goal.current / goal.target, 1);
             const isComplete = progress >= 1;
             return (
-              <View
+              <AnimatedCard
                 key={goal.label}
+                delay={100 + goalIdx * 80}
                 className="flex-1 rounded-2xl p-3"
-                style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: isComplete ? colors.success.DEFAULT : BORDER }}
+                style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: isComplete ? colors.success.DEFAULT : driverDarkColors.border.default }}
               >
                 <Text variant="caption" style={{ color: colors.neutral[400] }} className="mb-1">
                   {goal.label}
@@ -194,7 +192,7 @@ export default function WalletScreen() {
                   {formatCUP(goal.current)}
                 </Text>
                 {/* Progress bar */}
-                <View className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
+                <View className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: driverDarkColors.border.default }}>
                   <View
                     className="h-full rounded-full"
                     style={{
@@ -206,7 +204,7 @@ export default function WalletScreen() {
                 <Text variant="caption" style={{ color: colors.neutral[500] }} className="mt-1">
                   {t('wallet.goal_of', { defaultValue: 'de' })} {formatCUP(goal.target)}
                 </Text>
-              </View>
+              </AnimatedCard>
             );
           })}
         </View>
@@ -220,11 +218,12 @@ export default function WalletScreen() {
         <View className="flex-row mb-3 gap-2 flex-wrap">
           <Pressable
             onPress={() => setFilter(null)}
-            className="px-3 py-1.5 rounded-full"
+            hitSlop={4}
+            className="px-4 py-2.5 rounded-full"
             style={{
-              backgroundColor: filter === null ? colors.brand.orange : '#1e1e1e',
+              backgroundColor: filter === null ? colors.brand.orange : driverDarkColors.hover,
               borderWidth: 1,
-              borderColor: filter === null ? colors.brand.orange : BORDER,
+              borderColor: filter === null ? colors.brand.orange : driverDarkColors.border.default,
             }}
           >
             <Text variant="caption" color={filter === null ? 'inverse' : 'secondary'}>
@@ -235,11 +234,12 @@ export default function WalletScreen() {
             <Pressable
               key={type}
               onPress={() => setFilter(filter === type ? null : type)}
-              className="px-3 py-1.5 rounded-full flex-row items-center gap-1"
+              hitSlop={4}
+              className="px-4 py-2.5 rounded-full flex-row items-center gap-1"
               style={{
-                backgroundColor: filter === type ? COMMISSION_TYPE_COLORS[type] : '#1e1e1e',
+                backgroundColor: filter === type ? COMMISSION_TYPE_COLORS[type] : driverDarkColors.hover,
                 borderWidth: 1,
-                borderColor: filter === type ? COMMISSION_TYPE_COLORS[type] : BORDER,
+                borderColor: filter === type ? COMMISSION_TYPE_COLORS[type] : driverDarkColors.border.default,
               }}
             >
               <Ionicons
@@ -261,12 +261,12 @@ export default function WalletScreen() {
             message={t('wallet.no_commissions_desc', { defaultValue: 'Tus comisiones aparecerán aquí' })}
           />
         ) : (
-          <View className="gap-2">
+          <StaggeredList staggerDelay={60}>
             {filteredCommissions.map((entry) => (
               <View
                 key={entry.id}
-                className="rounded-xl p-4 flex-row items-center"
-                style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
+                className="rounded-xl p-4 flex-row items-center mb-2"
+                style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
               >
                 <View
                   className="w-10 h-10 rounded-xl items-center justify-center mr-3"
@@ -291,7 +291,7 @@ export default function WalletScreen() {
                 </Text>
               </View>
             ))}
-          </View>
+          </StaggeredList>
         )}
       </View>
     </Screen>

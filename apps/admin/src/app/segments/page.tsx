@@ -7,6 +7,7 @@ import { cityService } from '@tricigo/api';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Users } from 'lucide-react';
 import { formatAdminDate } from '@/lib/formatDate';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
@@ -428,7 +429,7 @@ export default function SegmentsPage() {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={6}><AdminEmptyState icon="👥" title={t('segments.no_users')} /></td>
+                    <td colSpan={6}><AdminEmptyState icon={<Users className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('segments.no_users')} /></td>
                   </tr>
                 ) : (
                   users.map((user) => (

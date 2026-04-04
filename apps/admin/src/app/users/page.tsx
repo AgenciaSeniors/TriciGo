@@ -142,7 +142,7 @@ export default function UsersPage() {
       {error && (
         <AdminErrorBanner
           message={error}
-          onRetry={() => { setError(null); setPage(p => p); }}
+          onRetry={() => { setError(null); setPage(0); }}
           onDismiss={() => setError(null)}
         />
       )}

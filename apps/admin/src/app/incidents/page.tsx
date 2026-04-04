@@ -9,6 +9,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { formatAdminDate } from '@/lib/formatDate';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { AlertTriangle } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 
@@ -143,7 +144,7 @@ export default function IncidentsPage() {
               </tr>
             ) : incidents.length === 0 ? (
               <tr>
-                <td colSpan={7}><AdminEmptyState icon="🚨" title={t('incidents.no_incidents')} /></td>
+                <td colSpan={7}><AdminEmptyState icon={<AlertTriangle className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('incidents.no_incidents')} /></td>
               </tr>
             ) : (
               incidents.map((incident) => (

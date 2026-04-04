@@ -6,7 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
@@ -168,7 +168,9 @@ export default function DriverSettingsScreen() {
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+            hitSlop={8}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: driverDarkColors.hover }}
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
           >
@@ -257,7 +259,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={soundNewRequest}
               onValueChange={handleToggle(SOUND_NEW_REQUEST_KEY, setSoundNewRequest)}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
             />
           </View>
           <View className="flex-row items-center justify-between min-h-[48px] mt-1 pt-2 border-t border-[#2a2a2a]">
@@ -272,7 +274,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={soundMessage}
               onValueChange={handleToggle(SOUND_MESSAGE_KEY, setSoundMessage)}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
             />
           </View>
         </Card>
@@ -299,7 +301,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={nightModeEnabled}
               onValueChange={handleToggle(NIGHT_MODE_KEY, setNightModeEnabled)}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
             />
           </View>
         </Card>
@@ -358,7 +360,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={silentModeEnabled}
               onValueChange={handleToggle(SILENT_MODE_KEY, setSilentModeEnabled)}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
             />
           </View>
           {silentModeEnabled && (
@@ -397,7 +399,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
               accessibilityLabel={t('profile.notifications_toggle')}
             />
           </View>
@@ -421,7 +423,7 @@ export default function DriverSettingsScreen() {
                   <Switch
                     value={categoryPrefs[cat.key] !== false}
                     onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                    trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+                    trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
                     style={{ transform: [{ scale: 0.85 }] }}
                     accessibilityLabel={t(cat.labelKey)}
                   />
@@ -475,7 +477,7 @@ export default function DriverSettingsScreen() {
                   setAutoAcceptLoading(false);
                 }
               }}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
               accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
             />
           </View>
@@ -510,7 +512,7 @@ export default function DriverSettingsScreen() {
                   setSmsLoading(false);
                 }
               }}
-              trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
+              trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
               accessibilityLabel={t('profile.notif_sms')}
             />
           </View>

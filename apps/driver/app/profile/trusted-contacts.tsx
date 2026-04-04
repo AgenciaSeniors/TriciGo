@@ -10,15 +10,14 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
+import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { TrustedContact } from '@tricigo/types';
 
 const MAX_CONTACTS = 5;
-const CARD_BG = '#141414';
-const BORDER = '#2a2a2a';
 
 export default function TrustedContactsScreen() {
   const { t } = useTranslation('common');
@@ -96,7 +95,11 @@ export default function TrustedContactsScreen() {
           <View className="flex-row items-center mb-4">
             <Pressable
               onPress={() => router.back()}
-              className="mr-3 w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+              className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+              style={{ backgroundColor: driverDarkColors.hover }}
             >
               <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
             </Pressable>
@@ -114,52 +117,56 @@ export default function TrustedContactsScreen() {
             </View>
           )}
 
-          {contacts.map((contact) => (
-            <View
-              key={contact.id}
-              className="rounded-2xl p-4 mb-3"
-              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
-            >
-              <View className="flex-row items-start">
-                <View className="w-10 h-10 rounded-full items-center justify-center mr-3 mt-1" style={{ backgroundColor: `${colors.brand.orange}20` }}>
-                  <Ionicons name="person-outline" size={20} color={colors.brand.orange} />
-                </View>
-                <View className="flex-1">
-                  <View className="flex-row items-center">
-                    <Text variant="body" color="inverse" className="font-semibold flex-1">
-                      {contact.name}
-                    </Text>
-                    {contact.is_emergency && (
-                      <View className="bg-error px-2 py-0.5 rounded-full ml-2">
-                        <Text variant="caption" color="inverse" className="text-xs">
-                          {t('trusted_contacts.emergency_badge')}
+          {contacts.length > 0 && (
+            <StaggeredList staggerDelay={80}>
+              {contacts.map((contact) => (
+                <View
+                  key={contact.id}
+                  className="rounded-2xl p-4 mb-3"
+                  style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+                >
+                  <View className="flex-row items-start">
+                    <View className="w-10 h-10 rounded-full items-center justify-center mr-3 mt-1" style={{ backgroundColor: `${colors.brand.orange}20` }}>
+                      <Ionicons name="person-outline" size={20} color={colors.brand.orange} />
+                    </View>
+                    <View className="flex-1">
+                      <View className="flex-row items-center">
+                        <Text variant="body" color="inverse" className="font-semibold flex-1">
+                          {contact.name}
                         </Text>
+                        {contact.is_emergency && (
+                          <View className="bg-error px-2 py-0.5 rounded-full ml-2">
+                            <Text variant="caption" color="inverse" className="text-xs">
+                              {t('trusted_contacts.emergency_badge')}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                  <Text variant="caption" color="secondary">{contact.phone}</Text>
-                  {contact.relationship && (
-                    <Text variant="caption" color="secondary">{contact.relationship}</Text>
-                  )}
+                      <Text variant="caption" color="secondary">{contact.phone}</Text>
+                      {contact.relationship && (
+                        <Text variant="caption" color="secondary">{contact.relationship}</Text>
+                      )}
 
-                  <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: BORDER }}>
-                    <Text variant="caption" color="secondary">
-                      {t('trusted_contacts.auto_share')}
-                    </Text>
-                    <Switch
-                      value={contact.auto_share}
-                      onValueChange={() => handleToggleAutoShare(contact)}
-                      trackColor={{ false: '#1e1e1e', true: colors.brand.orange }}
-                    />
+                      <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: driverDarkColors.border.default }}>
+                        <Text variant="caption" color="secondary">
+                          {t('trusted_contacts.auto_share')}
+                        </Text>
+                        <Switch
+                          value={contact.auto_share}
+                          onValueChange={() => handleToggleAutoShare(contact)}
+                          trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
+                        />
+                      </View>
+                    </View>
+
+                    <Pressable className="ml-2 p-2" onPress={() => handleDelete(contact)} hitSlop={8}>
+                      <Ionicons name="trash-outline" size={18} color={colors.neutral[500]} />
+                    </Pressable>
                   </View>
                 </View>
-
-                <Pressable className="ml-2 p-2" onPress={() => handleDelete(contact)} hitSlop={8}>
-                  <Ionicons name="trash-outline" size={18} color={colors.neutral[500]} />
-                </Pressable>
-              </View>
-            </View>
-          ))}
+              ))}
+            </StaggeredList>
+          )}}
 
           {!loading && contacts.length === 0 && (
             <EmptyState

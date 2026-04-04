@@ -22,7 +22,7 @@ export default function TabLayout() {
         },
         tabBarLabelStyle: {
           fontFamily: 'Montserrat',
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: '600',
         },
       }}

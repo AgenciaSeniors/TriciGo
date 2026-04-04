@@ -6,11 +6,10 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
+import { StaggeredList } from '@tricigo/ui/AnimatedCard';
+import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const CARD_BG = '#141414';
-const BORDER = '#2a2a2a';
 const SAVED_ZONES_KEY = '@tricigo/saved_zones';
 
 type SavedZone = {
@@ -62,7 +61,11 @@ export default function SavedZonesScreen() {
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: driverDarkColors.hover }}
           >
             <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
           </Pressable>
@@ -75,6 +78,14 @@ export default function SavedZonesScreen() {
           {t('profile.saved_zones_desc', { defaultValue: 'Selecciona tu zona base para priorizar solicitudes cercanas.' })}
         </Text>
 
+        {loading && (
+          <View className="gap-3">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </View>
+        )}
+
         {!loading && zones.length === 0 && (
           <EmptyState
             icon="location-outline"
@@ -83,42 +94,46 @@ export default function SavedZonesScreen() {
           />
         )}
 
-        {zones.map((zone) => (
-          <Pressable
-            key={zone.id}
-            onPress={() => togglePrimary(zone.id)}
-            className="rounded-2xl p-4 mb-3 flex-row items-center"
-            style={{
-              backgroundColor: CARD_BG,
-              borderWidth: 1,
-              borderColor: zone.is_primary ? colors.brand.orange : BORDER,
-            }}
-          >
-            <View
-              className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-              style={{ backgroundColor: zone.is_primary ? `${colors.brand.orange}20` : '#1e1e1e' }}
-            >
-              <Ionicons
-                name={zone.is_primary ? 'location' : 'location-outline'}
-                size={20}
-                color={zone.is_primary ? colors.brand.orange : colors.neutral[500]}
-              />
-            </View>
-            <View className="flex-1">
-              <Text variant="body" color="inverse" className="font-semibold">{zone.name}</Text>
-              <Text variant="caption" style={{ color: colors.neutral[500] }}>
-                {t('profile.zone_radius', { defaultValue: 'Radio' })}: {zone.radius_km} km
-              </Text>
-            </View>
-            {zone.is_primary && (
-              <View className="px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.brand.orange}20` }}>
-                <Text variant="caption" color="accent">
-                  {t('profile.zone_primary', { defaultValue: 'Principal' })}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        ))}
+        {!loading && zones.length > 0 && (
+          <StaggeredList staggerDelay={80}>
+            {zones.map((zone) => (
+              <Pressable
+                key={zone.id}
+                onPress={() => togglePrimary(zone.id)}
+                className="rounded-2xl p-4 mb-3 flex-row items-center"
+                style={{
+                  backgroundColor: driverDarkColors.card,
+                  borderWidth: 1,
+                  borderColor: zone.is_primary ? colors.brand.orange : driverDarkColors.border.default,
+                }}
+              >
+                <View
+                  className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+                  style={{ backgroundColor: zone.is_primary ? `${colors.brand.orange}20` : driverDarkColors.hover }}
+                >
+                  <Ionicons
+                    name={zone.is_primary ? 'location' : 'location-outline'}
+                    size={20}
+                    color={zone.is_primary ? colors.brand.orange : colors.neutral[500]}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text variant="body" color="inverse" className="font-semibold">{zone.name}</Text>
+                  <Text variant="caption" style={{ color: colors.neutral[500] }}>
+                    {t('profile.zone_radius', { defaultValue: 'Radio' })}: {zone.radius_km} km
+                  </Text>
+                </View>
+                {zone.is_primary && (
+                  <View className="px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.brand.orange}20` }}>
+                    <Text variant="caption" color="accent">
+                      {t('profile.zone_primary', { defaultValue: 'Principal' })}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </StaggeredList>
+        )}
       </View>
     </Screen>
   );

@@ -7,11 +7,9 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
+import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { getSupabaseClient } from '@tricigo/api';
-
-const CARD_BG = '#141414';
-const BORDER = '#2a2a2a';
 
 type BlogPost = {
   id: string;
@@ -62,7 +60,11 @@ export default function BlogScreen() {
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#1e1e1e] items-center justify-center"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: driverDarkColors.hover }}
           >
             <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
           </Pressable>
@@ -85,25 +87,29 @@ export default function BlogScreen() {
           />
         )}
 
-        {posts.map((post) => (
-          <Pressable
-            key={post.id}
-            onPress={() => Linking.openURL(post.url)}
-            className="rounded-2xl p-4 mb-3"
-            style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER }}
-          >
-            <View className="flex-row items-center mb-2">
-              <View className="px-2 py-0.5 rounded-full mr-2" style={{ backgroundColor: `${colors.brand.orange}20` }}>
-                <Text variant="caption" color="accent">{post.category}</Text>
-              </View>
-              <Text variant="caption" style={{ color: colors.neutral[500] }}>
-                {new Date(post.published_at).toLocaleDateString()}
-              </Text>
-            </View>
-            <Text variant="body" color="inverse" className="font-semibold mb-1">{post.title}</Text>
-            <Text variant="bodySmall" color="secondary" numberOfLines={2}>{post.summary}</Text>
-          </Pressable>
-        ))}
+        {posts.length > 0 && (
+          <StaggeredList staggerDelay={80}>
+            {posts.map((post) => (
+              <Pressable
+                key={post.id}
+                onPress={() => Linking.openURL(post.url)}
+                className="rounded-2xl p-4 mb-3"
+                style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+              >
+                <View className="flex-row items-center mb-2">
+                  <View className="px-2 py-0.5 rounded-full mr-2" style={{ backgroundColor: `${colors.brand.orange}20` }}>
+                    <Text variant="caption" color="accent">{post.category}</Text>
+                  </View>
+                  <Text variant="caption" style={{ color: colors.neutral[500] }}>
+                    {new Date(post.published_at).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Text variant="body" color="inverse" className="font-semibold mb-1">{post.title}</Text>
+                <Text variant="bodySmall" color="secondary" numberOfLines={2}>{post.summary}</Text>
+              </Pressable>
+            ))}
+          </StaggeredList>
+        )}
       </View>
     </Screen>
   );
