@@ -107,6 +107,10 @@ function WebRidesScreen() {
   }, [userId]);
 
   useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setPage(0);
     fetchRides(0, activeTab, false);
   }, [userId, activeTab, fetchRides]);
@@ -179,7 +183,7 @@ function WebRidesScreen() {
         {/* Empty */}
         {!loading && rides.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🚗</div>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2.7-3.6A2 2 0 0013.7 5H10l-2.7 1.4L5 10 2.5 11.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a', marginBottom: 8 }}>
               {activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
             </div>

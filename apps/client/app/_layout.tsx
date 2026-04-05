@@ -121,6 +121,7 @@ function RootNavigator() {
       <Stack.Screen name="refer" />
       <Stack.Screen name="promo" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="support" />
       <Stack.Screen name="notifications" />
       <Stack.Screen name="+not-found" />
     </Stack>

@@ -34,7 +34,7 @@ export default function TrustedContactsScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
   const loadContacts = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     try {
       const data = await trustedContactService.getContacts(user.id);
       setContacts(data);

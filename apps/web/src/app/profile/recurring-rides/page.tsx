@@ -40,7 +40,7 @@ export default function RecurringRidesPage() {
       const data = await recurringRideService.getRecurringRides(userId);
       setRides(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('web.recurring_load_error', { defaultValue: 'No se pudieron cargar los viajes recurrentes' }));
+      setError(err instanceof Error ? err.message : t('recurring_load_error', { defaultValue: 'No se pudieron cargar los viajes recurrentes' }));
     } finally {
       setLoading(false);
     }

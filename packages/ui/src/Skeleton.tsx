@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, ViewStyle } from 'react-native';
+import { View, Animated, ViewStyle, useColorScheme } from 'react-native';
 
 interface SkeletonProps {
   width?: number | string;
@@ -20,6 +20,7 @@ export function Skeleton({
   className,
   style,
 }: SkeletonProps) {
+  const colorScheme = useColorScheme();
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius,
-          backgroundColor: '#252540',
+          backgroundColor: colorScheme === 'dark' ? '#252540' : '#D1D5DB',
           opacity,
         },
         style,

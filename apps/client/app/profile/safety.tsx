@@ -35,7 +35,7 @@ export default function SafetyCenterScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadSafetyData = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     setLoading(true);
 
     await Promise.allSettled([

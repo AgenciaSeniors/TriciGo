@@ -150,7 +150,10 @@ function WebWalletScreen() {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -458,7 +461,7 @@ function WebWalletScreen() {
               }}
               keyboardType="numeric"
             />
-            {rechargeAmount && parseInt(rechargeAmount, 10) > 0 && (
+            {parseInt(rechargeAmount, 10) > 0 && (
               <Text variant="caption" color="tertiary" className="mb-2 -mt-1">
                 {t('wallet.tropipay_amount_usd', {
                   defaultValue: 'Aprox. ${{usd}} USD',
@@ -734,7 +737,10 @@ function NativeWalletScreen() {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     async function load() {
@@ -1273,7 +1279,7 @@ function NativeWalletScreen() {
             onChangeText={setTropipayAmount}
             keyboardType="numeric"
           />
-          {tropipayAmount && parseInt(tropipayAmount, 10) > 0 && (
+          {parseInt(tropipayAmount, 10) > 0 && (
             <Text variant="caption" color="tertiary" className="mb-2 -mt-1">
               {t('wallet.tropipay_amount_usd', {
                 usd: (parseInt(tropipayAmount, 10) / exchangeRate).toFixed(2),

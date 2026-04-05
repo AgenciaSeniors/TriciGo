@@ -122,7 +122,7 @@ function NativeTripsScreen() {
   }), [t]);
 
   useEffect(() => {
-    if (!driverProfileId) return;
+    if (!driverProfileId) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
 

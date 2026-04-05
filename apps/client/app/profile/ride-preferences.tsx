@@ -43,7 +43,7 @@ export default function RidePreferencesScreen() {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { setLoading(false); return; }
     customerService.ensureProfile(userId).then((profile) => {
       setProfileId(profile.id);
       setPrefs(profile.ride_preferences ?? {});

@@ -44,7 +44,7 @@ export default function ReferralScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) { setLoading(false); return; }
     try {
       const [code, history, referred] = await Promise.all([
         referralService.getOrCreateReferralCode(userId),
@@ -187,7 +187,6 @@ export default function ReferralScreen() {
                     {t('profile.referral_have_code')}
                   </Text>
                   <Input
-                    label=""
                     placeholder={t('profile.referral_enter_code')}
                     value={inputCode}
                     onChangeText={setInputCode}

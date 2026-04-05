@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Alert, Pressable, RefreshControl } from 'react-native';
+import { View, FlatList, Alert, Pressable, RefreshControl, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,21 @@ import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CustomerProfile, SavedLocation } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 
+// Lazy-load map component (web only)
+let SavedLocationsMapWeb: React.ComponentType<{
+  locations: { label: string; address: string; latitude: number; longitude: number }[];
+  selectMode?: boolean;
+  onMapClick?: (lat: number, lng: number, address: string) => void;
+  selectedIndex?: number | null;
+  height?: number;
+}> | null = null;
+
+if (Platform.OS === 'web') {
+  try {
+    SavedLocationsMapWeb = require('@/components/SavedLocationsMapWeb').default;
+  } catch { /* map not available */ }
+}
+
 export default function SavedLocationsScreen() {
   const { t } = useTranslation('common');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -39,10 +54,13 @@ export default function SavedLocationsScreen() {
   const [newLabel, setNewLabel] = useState('');
   const [selectedAddress, setSelectedAddress] = useState<{ address: string; location: GeoPoint } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mapSelectMode, setMapSelectMode] = useState(false);
   const { recentAddresses } = useRecentAddresses();
 
+  const isWeb = Platform.OS === 'web';
+
   const loadLocations = useCallback(() => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     setLoading(true);
     customerService.ensureProfile(user.id).then((cp) => {
       setProfile(cp);
@@ -76,10 +94,8 @@ export default function SavedLocationsScreen() {
 
       let updated: SavedLocation[];
       if (editingIndex !== null) {
-        // Edit existing
         updated = locations.map((loc, i) => (i === editingIndex ? entry : loc));
       } else {
-        // Add new
         updated = [...locations, entry];
       }
 
@@ -89,7 +105,8 @@ export default function SavedLocationsScreen() {
       setNewLabel('');
       setSelectedAddress(null);
       setEditingIndex(null);
-      Toast.show({ type: 'success', text1: t('profile.location_saved', { defaultValue: 'Ubicación guardada' }) });
+      setMapSelectMode(false);
+      Toast.show({ type: 'success', text1: t('profile.location_saved', { defaultValue: 'Ubicacion guardada' }) });
       triggerHaptic('success');
     } catch {
       Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
@@ -120,7 +137,6 @@ export default function SavedLocationsScreen() {
 
   const handleOpenSheet = (index?: number) => {
     if (index !== undefined && locations[index]) {
-      // Edit mode — pre-populate
       const loc = locations[index]!;
       setEditingIndex(index);
       setNewLabel(loc.label);
@@ -129,13 +145,18 @@ export default function SavedLocationsScreen() {
         location: { latitude: loc.latitude, longitude: loc.longitude },
       });
     } else {
-      // Add mode
       setEditingIndex(null);
       setNewLabel('');
       setSelectedAddress(null);
     }
+    setMapSelectMode(false);
     setSheetVisible(true);
   };
+
+  const handleMapClick = useCallback((lat: number, lng: number, address: string) => {
+    setSelectedAddress({ address, location: { latitude: lat, longitude: lng } });
+    setMapSelectMode(false);
+  }, []);
 
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadLocations(); }} />;
 
@@ -143,6 +164,21 @@ export default function SavedLocationsScreen() {
     <Screen bg="white" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader title={t('profile.saved_locations_title')} onBack={() => router.back()} />
+
+        {/* Map (web only) */}
+        {isWeb && SavedLocationsMapWeb && !loading && (
+          <SavedLocationsMapWeb
+            locations={locations.map((l) => ({
+              label: l.label,
+              address: l.address,
+              latitude: l.latitude,
+              longitude: l.longitude,
+            }))}
+            selectMode={mapSelectMode}
+            onMapClick={handleMapClick}
+            selectedIndex={editingIndex}
+          />
+        )}
 
         <FlatList
           data={locations}
@@ -162,7 +198,7 @@ export default function SavedLocationsScreen() {
                     onPress={() => handleOpenSheet(index)}
                     hitSlop={8}
                     accessibilityRole="button"
-                    accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
+                    accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicacion' })}
                   >
                     <Ionicons name="pencil-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
                   </Pressable>
@@ -189,7 +225,7 @@ export default function SavedLocationsScreen() {
               <EmptyState
                 icon="location-outline"
                 title={t('profile.no_saved_locations')}
-                description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar más rápido.' })}
+                description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar mas rapido.' })}
                 action={{ label: t('profile.add_location'), onPress: () => handleOpenSheet() }}
               />
             )
@@ -206,10 +242,10 @@ export default function SavedLocationsScreen() {
         />
       </View>
 
-      <BottomSheet visible={sheetVisible} onClose={() => { setSheetVisible(false); setEditingIndex(null); }}>
+      <BottomSheet visible={sheetVisible} onClose={() => { setSheetVisible(false); setEditingIndex(null); setMapSelectMode(false); }}>
         <Text className="text-lg font-bold mb-4">
           {editingIndex !== null
-            ? t('profile.edit_location', { defaultValue: 'Editar ubicación' })
+            ? t('profile.edit_location', { defaultValue: 'Editar ubicacion' })
             : t('profile.add_location')}
         </Text>
         <Input
@@ -222,22 +258,72 @@ export default function SavedLocationsScreen() {
           {t('profile.location_address')}
         </Text>
         <AddressSearchInput
-          placeholder={t('profile.location_address_placeholder', { defaultValue: 'Buscar dirección...' })}
+          placeholder={t('profile.location_address_placeholder', { defaultValue: 'Buscar direccion...' })}
           selectedAddress={selectedAddress?.address ?? null}
           onSelect={(address, location) => setSelectedAddress({ address, location })}
           recentAddresses={recentAddresses}
           showUseMyLocation
         />
-        <View className="mt-4">
-          <Button
-            title={t('save')}
-            variant="primary"
-            size="lg"
-            fullWidth
-            loading={saving}
-            disabled={saving || !newLabel.trim() || !selectedAddress}
-            onPress={handleSave}
-          />
+
+        {/* Pick from map button (web only) */}
+        {isWeb && SavedLocationsMapWeb && (
+          <Pressable
+            onPress={() => {
+              setMapSelectMode(!mapSelectMode);
+              setSheetVisible(false);
+            }}
+            className="flex-row items-center justify-center py-3 mt-3 rounded-lg border"
+            style={{
+              borderColor: mapSelectMode ? colors.primary.DEFAULT : colors.neutral[200],
+              backgroundColor: mapSelectMode ? `${colors.primary.DEFAULT}10` : 'transparent',
+            }}
+          >
+            <Ionicons
+              name="location-outline"
+              size={18}
+              color={mapSelectMode ? colors.primary.DEFAULT : colors.neutral[600]}
+            />
+            <Text
+              variant="bodySmall"
+              className="ml-2 font-medium"
+              style={{ color: mapSelectMode ? colors.primary.DEFAULT : colors.neutral[600] }}
+            >
+              {t('profile.pick_from_map', { defaultValue: 'Elegir en el mapa' })}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Selected address from map */}
+        {selectedAddress && (
+          <View className="flex-row items-center mt-3 p-3 rounded-lg bg-green-50">
+            <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+            <Text variant="bodySmall" className="ml-2 flex-1 text-green-700" numberOfLines={2}>
+              {selectedAddress.address}
+            </Text>
+          </View>
+        )}
+
+        <View className="flex-row gap-3 mt-4">
+          <View className="flex-1">
+            <Button
+              title={t('cancel')}
+              variant="outline"
+              size="lg"
+              fullWidth
+              onPress={() => { setSheetVisible(false); setEditingIndex(null); setMapSelectMode(false); }}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              title={t('save')}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={saving}
+              disabled={saving || !newLabel.trim() || !selectedAddress}
+              onPress={handleSave}
+            />
+          </View>
         </View>
       </BottomSheet>
     </Screen>

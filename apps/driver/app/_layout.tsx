@@ -19,27 +19,34 @@ import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
-import MapboxGL from '@rnmapbox/maps';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { Platform } from 'react-native';
 import '../global.css';
 
-// Initialize Sentry as early as possible
-initSentry();
+// Initialize Sentry as early as possible (safe for web)
+try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
 
-// Register sound assets for ride events
-registerSoundAssets({
-  ride_accepted: require('../assets/sounds/ride_accepted.wav'),
-  trip_completed: require('../assets/sounds/trip_completed.wav'),
-  new_request: require('../assets/sounds/new_request.wav'),
-});
+// Register sound assets for ride events (native only — .wav files don't resolve on web)
+if (Platform.OS !== 'web') {
+  try {
+    registerSoundAssets({
+      ride_accepted: require('../assets/sounds/ride_accepted.wav'),
+      trip_completed: require('../assets/sounds/trip_completed.wav'),
+      new_request: require('../assets/sounds/new_request.wav'),
+    });
+  } catch { /* Sound registration failed — non-fatal */ }
+}
 
-// Initialize Mapbox (try-catch to prevent crash if token is missing)
-try {
-  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
-} catch {
-  // Mapbox will fail on map screens but app won't crash on startup
+// Initialize Mapbox (native only — @rnmapbox/maps has no web support)
+if (Platform.OS !== 'web') {
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+  } catch {
+    // Mapbox will fail on map screens but app won't crash on startup
+  }
 }
 
 function RootNavigator() {

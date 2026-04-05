@@ -46,22 +46,33 @@ function WebProfileScreen() {
       title: t('profile.section_account', { defaultValue: 'Cuenta' }),
       items: [
         { icon: 'person-outline' as const, label: t('profile.edit_profile'), href: '/profile/edit' },
+        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), href: '/profile/settings' },
         { icon: 'location-outline' as const, label: t('profile.saved_locations'), href: '/profile/saved-locations' },
       ],
     },
     {
-      title: t('profile.section_activity', { defaultValue: 'Actividad' }),
+      title: t('profile.section_safety', { defaultValue: 'Seguridad' }),
       items: [
-        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), href: '/profile/settings' },
-        { icon: 'gift-outline' as const, label: t('profile.referral_title'), href: '/profile/referral' },
+        { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety' },
+        { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts' },
+        { icon: 'car-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), href: '/profile/ride-preferences' },
+      ],
+    },
+    {
+      title: t('profile.section_business', { defaultValue: 'Negocios' }),
+      items: [
+        { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Cuentas corporativas' }), href: '/profile/corporate' },
+        { icon: 'repeat-outline' as const, label: t('profile.recurring_rides', { defaultValue: 'Viajes recurrentes' }), href: '/profile/recurring-rides' },
       ],
     },
     {
       title: t('profile.section_more', { defaultValue: 'Más' }),
       items: [
+        { icon: 'gift-outline' as const, label: t('profile.referral_title'), href: '/profile/referral' },
+        { icon: 'chatbubble-outline' as const, label: t('profile.support', { defaultValue: 'Soporte' }), href: '/support' },
         { icon: 'help-circle-outline' as const, label: t('profile.help'), href: '/profile/help' },
-        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), href: '/profile/blog' },
         { icon: 'information-circle-outline' as const, label: t('profile.about'), href: '/profile/about' },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), href: '/profile/blog' },
       ],
     },
   ];
