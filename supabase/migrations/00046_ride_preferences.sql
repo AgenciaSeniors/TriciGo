@@ -11,6 +11,6 @@ ALTER TABLE rides
 ADD COLUMN IF NOT EXISTS rider_preferences JSONB DEFAULT NULL;
 
 -- Feature flag
-INSERT INTO feature_flags (key, enabled, description)
-VALUES ('ride_preferences_enabled', false, 'Allow riders to set trip preferences (quiet mode, temperature, etc.)')
+INSERT INTO feature_flags (key, value, description)
+VALUES ('ride_preferences_enabled', true, 'Allow riders to set trip preferences (quiet mode, temperature, etc.)')
 ON CONFLICT (key) DO NOTHING;
