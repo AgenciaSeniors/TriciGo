@@ -51,6 +51,10 @@ import { reverseGeocode } from '@tricigo/utils';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
+import { useSearchingDrivers } from '@/hooks/useSearchingDrivers';
+import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
+import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
+import { WebActiveRideView } from '@/components/WebActiveRideView';
 // Surge is calculated backend-side but not shown to users
 // import { useSurgeZones } from '@/hooks/useSurgeZones';
 
@@ -149,6 +153,10 @@ function WebSearchingState({
   const [searchPhase, setSearchPhase] = useState(0);
   const [searchTimedOut, setSearchTimedOut] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
+
+  // ── Interactive searching: real-time driver presence ──
+  const activeRideId = useRideStore((s) => s.activeRide?.id ?? null);
+  const { searchingDrivers, acceptedDriver } = useSearchingDrivers(activeRideId);
 
   // Progressive messages
   useEffect(() => {
@@ -283,15 +291,98 @@ function WebSearchingState({
                 </div>
               </div>
 
+              {/* Driver accepted — celebration overlay */}
+              {acceptedDriver && (
+                <div style={{
+                  animation: 'ws-fadeIn 0.4s ease both',
+                  background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+                  borderRadius: 14, padding: 20, width: '100%',
+                  border: '2px solid #22c55e', textAlign: 'center' as const,
+                  marginBottom: 12,
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>&#10003;</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#15803d', marginBottom: 4 }}>
+                    Conductor encontrado!
+                  </div>
+                  <div style={{ fontSize: 14, color: '#16a34a', marginBottom: 12 }}>
+                    {acceptedDriver.name} va en camino
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: '#fff', borderRadius: 12, padding: '10px 14px',
+                  }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: '50%',
+                      background: colors.brand.orange,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontWeight: 700, fontSize: 16,
+                      border: '2px solid #22c55e',
+                    }}>
+                      {acceptedDriver.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left' as const }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{acceptedDriver.name}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>{acceptedDriver.rating.toFixed(1)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Searching drivers count + chips */}
+              {!acceptedDriver && searchingDrivers.length > 0 && (
+                <div style={{
+                  width: '100%', background: '#fafafa',
+                  border: '1px solid #f0f0f0', borderRadius: 12,
+                  padding: '12px 14px', marginBottom: 12,
+                  animation: 'ws-fadeIn 0.3s ease both',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: colors.brand.orange,
+                      animation: 'ws-pulse 2s ease-in-out infinite',
+                    }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>
+                      {searchingDrivers.length} {searchingDrivers.length === 1 ? 'conductor revisando' : 'conductores revisando'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    {searchingDrivers.map((d) => (
+                      <div key={d.driverId} style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        background: '#fff', borderRadius: 20,
+                        padding: '5px 10px', border: '1px solid #e5e5e5',
+                        animation: 'ws-fadeIn 0.3s ease both',
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: colors.brand.orange,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontWeight: 700, fontSize: 9,
+                        }}>
+                          {d.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: '#1a1a1a' }}>
+                          {d.name.split(' ')[0]}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{d.rating.toFixed(1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 4 }}>
-                Buscando conductor
+                {acceptedDriver ? '' : 'Buscando conductor'}
               </div>
+              {!acceptedDriver && (
               <div key={searchPhase} style={{
                 fontSize: 13, color: '#6b7280', textAlign: 'center' as const,
                 animation: 'ws-fadeIn 0.3s ease both',
               }}>
                 {searchMessage}
               </div>
+              )}
 
               {/* Progress bar */}
               <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
@@ -802,6 +893,13 @@ function WebHomeScreen() {
 
   // Format CUP helper
   const fmtCUP = (cup: number) => `${Math.round(cup).toLocaleString('es-CU')} CUP`;
+
+  // ── Phase 5: Web active ride view ──
+  const flowStep = useRideStore((s) => s.flowStep);
+
+  if (flowStep === 'active') {
+    return <WebActiveRideView onReset={handleReset} />;
+  }
 
   // Success state — Premium searching UI
   if (requestSuccess) {
@@ -1504,6 +1602,15 @@ function IdleView() {
 
   return (
     <View className="pt-4">
+      {/* Logo */}
+      <View className="mb-4">
+        <Image
+          source={require('../../assets/logo-wordmark.png')}
+          style={{ width: 90, height: 24 }}
+          resizeMode="contain"
+        />
+      </View>
+
       {/* Location permission denied banner */}
       {locationDenied && (
         <Pressable
@@ -3172,6 +3279,13 @@ function SearchingView() {
     activeRide?.dropoff_location ?? null,
   );
 
+  // ── Interactive searching: real-time driver presence ──
+  const {
+    searchingDrivers,
+    acceptedDriver,
+    isAcceptAnimating,
+  } = useSearchingDrivers(activeRide?.id ?? null);
+
   // UBER-2.1: 5-phase progressive search messages with fade transitions
   const [searchPhase, setSearchPhase] = useState(0);
   const searchFadeAnim = useRef(new Animated.Value(1)).current;
@@ -3241,23 +3355,45 @@ function SearchingView() {
 
   return (
     <View className="pt-4 flex-1 items-center">
-      {/* Map showing pickup + dropoff with route */}
+      {/* Map showing pickup + dropoff with route + searching drivers */}
       {activeRide && (
         <>
           <RideMapView
             pickupLocation={activeRide.pickup_location}
             dropoffLocation={activeRide.dropoff_location}
             routeCoordinates={routeCoordinates}
-            height={isTablet ? 300 : 180}
+            searchingDrivers={searchingDrivers}
+            acceptedDriverId={acceptedDriver?.driverId ?? null}
+            isAcceptAnimating={isAcceptAnimating}
+            acceptedDriverLocation={acceptedDriver?.location ?? null}
+            height={isTablet ? 300 : 220}
           />
-          <View className="h-4" />
+          <View className="h-3" />
         </>
+      )}
+
+      {/* Driver accepted — celebration card overlay */}
+      {acceptedDriver && isAcceptAnimating && (
+        <AcceptedDriverCard
+          driver={acceptedDriver}
+          onAnimationComplete={() => {
+            // The normal ride status update flow will transition to 'active'
+          }}
+        />
+      )}
+
+      {/* Interactive driver presence mini-card (replaces static ActivityIndicator) */}
+      {!acceptedDriver && (
+        <DriverInfoMiniCard
+          drivers={searchingDrivers}
+          isSearching={!searchTimedOut}
+        />
       )}
 
       <StatusStepper
         steps={searchSteps}
         currentStep="searching"
-        className="w-full mb-8"
+        className="w-full mb-6"
       />
 
       {/* I3.2: Timeout UI vs active search UI */}
@@ -3277,13 +3413,8 @@ function SearchingView() {
             onPress={handleRetrySearch}
           />
         </View>
-      ) : (
+      ) : !acceptedDriver ? (
         <>
-          <ActivityIndicator size="large" color={colors.brand.orange} className="mb-4" />
-
-          <Text variant="h4" className="mb-2 text-center">
-            {t('ride.searching_driver')}
-          </Text>
           <Animated.View style={{ opacity: searchFadeAnim }}>
             <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
               {searchMessage}
@@ -3291,7 +3422,7 @@ function SearchingView() {
           </Animated.View>
 
           {/* UBER-2.1: Thin progress bar showing search timeout */}
-          <View className="w-full px-8 mb-8">
+          <View className="w-full px-8 mb-6">
             <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
               <Animated.View
                 style={{
@@ -3310,7 +3441,7 @@ function SearchingView() {
             </Text>
           )}
         </>
-      )}
+      ) : null}
 
       <Button
         title={t('ride.cancel_ride')}

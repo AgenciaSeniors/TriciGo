@@ -263,6 +263,10 @@
     "sos_activated": "SOS activated. Your contacts were notified.",
     "other_options": "Other options",
     "driver_arrived_banner": "Your driver has arrived!",
+    "driver_here_title": "Your driver is here!",
+    "driver_here_subtitle": "Head to the pickup point",
+    "plate_label": "Plate",
+    "tap_to_dismiss": "Tap to dismiss",
     "distance_eta_clock": "{{distance}} km · {{eta}} min · arrives ~{{time}}",
     "eta_destination_clock": "{{minutes}} min · arriving ~{{time}}",
     "no_driver_found_title": "No driver found",
@@ -275,7 +279,12 @@
     "cancel_driver_waiting": "Your driver is waiting for you",
     "driver_assigned_body": "Your driver is on the way",
     "trip_completed_notif": "Trip completed",
-    "driver_canceled_notif": "Your driver canceled the trip"
+    "driver_canceled_notif": "Your driver canceled the trip",
+    "share_trip": "Share trip",
+    "share_message": "Follow my ride live on TriciGo: {{url}}",
+    "share_failed": "Could not share trip",
+    "trip_shared": "Trip shared",
+    "realtime_tracking": "Real-time tracking"
   },
 
   "dispute": {
@@ -549,6 +558,17 @@
     "skip": "Skip",
     "next": "Next",
     "start": "Get started"
+  },
+
+  "searching": {
+    "drivers_viewing": "{{count}} driver reviewing your request",
+    "drivers_viewing_plural": "{{count}} drivers reviewing your request",
+    "no_drivers_yet": "Looking for nearby drivers...",
+    "accepted_title": "Driver found!",
+    "accepted_subtitle": "{{name}} is on their way",
+    "driver_rating": "{{rating}}",
+    "driver_vehicle": "{{make}} {{model}} - {{color}}",
+    "tip": "Drivers nearby are reviewing your trip"
   },
 
   "common": {

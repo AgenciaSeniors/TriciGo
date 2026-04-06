@@ -357,7 +357,9 @@ export function useRideActions() {
           triggerHaptic('light');
         }
         if (updated.status === 'arrived_at_pickup') {
-          triggerHaptic('heavy');
+          triggerHaptic('success');
+          setTimeout(() => triggerHaptic('medium'), 300);
+          setTimeout(() => triggerHaptic('light'), 600);
           playSound('driver_arrived');
           scheduleLocalNotification(
             i18next.t('ride.driver_arrived_banner', { ns: 'rider' }),

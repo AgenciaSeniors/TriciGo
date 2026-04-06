@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -18,6 +18,7 @@ import { RideMapView } from '@/components/RideMapView';
 import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
 import { formatTimeAgo } from '@tricigo/utils/offlineLabels';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
+import { useDriverToPickupRoute } from '@/hooks/useDriverToPickupRoute';
 import { useETA } from '@/hooks/useETA';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { ETABadge } from '@tricigo/ui/ETABadge';
@@ -27,6 +28,8 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { CancelRideSheet } from '@/components/CancelRideSheet';
 import { SafetySheet } from '@/components/SafetySheet';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
+import { ConfettiOverlay } from '@/components/ConfettiOverlay';
+import { ArrivalCard } from '@/components/ArrivalCard';
 import type { GeoPoint } from '@tricigo/utils';
 import { getRouteETA } from '@/services/mapbox.service';
 
@@ -54,6 +57,11 @@ export function RideActiveView() {
   const routeCoordinates = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
+  );
+  const driverToPickupRoute = useDriverToPickupRoute(
+    driverPosition,
+    activeRide?.pickup_location ?? null,
+    activeRide?.status ?? null,
   );
   const { etaMinutes, isCalculating } = useETA({
     driverLocation: driverPosition,
@@ -320,8 +328,47 @@ export function RideActiveView() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [cancellationFeePreview, setCancellationFeePreview] = useState<import('@tricigo/types').CancellationFeePreview | null>(null);
 
+  // Phase 6: Arrival card dismissed state
+  const [arrivalCardDismissed, setArrivalCardDismissed] = useState(false);
+
+  // Reset arrival card when status changes away from arrived
+  useEffect(() => {
+    if (activeRide?.status !== 'arrived_at_pickup') {
+      setArrivalCardDismissed(false);
+    }
+  }, [activeRide?.status]);
+
   // I4.1: Driver card expanded state
   const [driverExpanded, setDriverExpanded] = useState(false);
+
+  // ── Phase 4: Share trip live ──
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShareTrip = useCallback(async () => {
+    if (!activeRide) return;
+    setIsSharing(true);
+    try {
+      let token = activeRide.share_token;
+      if (!token) {
+        token = await rideService.generateShareToken(activeRide.id);
+        // Update local ride with new token
+        useRideStore.getState().setActiveRide({ ...activeRide, share_token: token });
+      }
+      const url = `https://tricigo.com/track/share/${token}`;
+
+      await Share.share({
+        message: t('ride.share_message', { url }),
+        url, // iOS uses this field
+      });
+    } catch (err: any) {
+      // Share.share rejects on iOS if user cancels — ignore that
+      if (err?.message !== 'User did not share') {
+        Toast.show({ type: 'error', text1: t('ride.share_failed') });
+      }
+    } finally {
+      setIsSharing(false);
+    }
+  }, [activeRide, t]);
 
   // Safety sheet state
   const [safetySheetVisible, setSafetySheetVisible] = useState(false);
@@ -484,6 +531,7 @@ export function RideActiveView() {
           driverLocation={driverPosition}
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
           routeCoordinates={routeCoordinates}
+          driverToPickupRoute={driverToPickupRoute}
           height={mapHeight}
         />
         {!driverPosition && (
@@ -549,22 +597,22 @@ export function RideActiveView() {
         className="mb-6"
       />
 
-      {/* I2: Green arrival banner */}
-      {activeRide.status === 'arrived_at_pickup' && (
-        <Animated.View style={{
-          transform: [{ scale: bannerScaleAnim }],
-          backgroundColor: '#16A34A',
-          borderRadius: 12,
-          paddingVertical: 16,
-          paddingHorizontal: 24,
-          marginHorizontal: 16,
-          marginBottom: 12,
-          alignItems: 'center',
-        }}>
-          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
-            {t('ride.driver_arrived_banner', { ns: 'rider' })}
-          </Text>
-        </Animated.View>
+      {/* Enhanced arrival animation (Phase 6) */}
+      {activeRide.status === 'arrived_at_pickup' && !arrivalCardDismissed && (
+        <>
+          <ConfettiOverlay />
+          <ArrivalCard
+            driverName={rideWithDriver?.driver_name ?? ''}
+            driverAvatarUrl={rideWithDriver?.driver_avatar_url}
+            vehiclePlate={rideWithDriver?.vehicle_plate}
+            vehicleDescription={
+              [rideWithDriver?.vehicle_color, rideWithDriver?.vehicle_make, rideWithDriver?.vehicle_model]
+                .filter(Boolean)
+                .join(' ')
+            }
+            onDismiss={() => setArrivalCardDismissed(true)}
+          />
+        </>
       )}
 
       {/* Status message */}
@@ -667,6 +715,48 @@ export function RideActiveView() {
             </Text>
           </Pressable>
         </Animated.View>
+      )}
+
+      {/* Share trip button */}
+      <Pressable
+        onPress={handleShareTrip}
+        disabled={isSharing}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 12,
+          paddingHorizontal: 16,
+          marginHorizontal: 16,
+          marginBottom: 12,
+          borderRadius: 12,
+          backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.08)',
+          opacity: isSharing ? 0.6 : 1,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={t('ride.share_trip')}
+      >
+        <Ionicons name="share-outline" size={18} color={isDark ? '#93C5FD' : '#3B82F6'} />
+        <Text style={{
+          color: isDark ? '#93C5FD' : '#3B82F6',
+          fontSize: 14,
+          fontWeight: '600',
+          marginLeft: 8,
+        }}>
+          {t('ride.share_trip')}
+        </Text>
+      </Pressable>
+
+      {/* Shared trip indicator */}
+      {activeRide.share_token && (
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{
+            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+            fontSize: 11,
+          }}>
+            <Ionicons name="link-outline" size={11} /> {t('ride.trip_shared')}
+          </Text>
+        </View>
       )}
 
       {/* Route info */}

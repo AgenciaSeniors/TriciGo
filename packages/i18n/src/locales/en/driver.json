@@ -139,7 +139,9 @@
     "hide_route": "Hide route",
     "done": "Done",
     "arriving_waypoint": "Arriving at Stop {{n}}...",
-    "auto_arriving": "Auto-marking arrival..."
+    "auto_arriving": "Auto-marking arrival...",
+    "nav_auto_started": "Navigation started",
+    "restart_nav": "Restart navigation"
   },
 
   "ride": {
@@ -521,6 +523,37 @@
     "verify_phone": "Verify phone"
   },
 
+  "wallet": {
+    "title": "Wallet",
+    "available_balance": "Available balance",
+    "hold_balance": "On hold",
+    "earning_goals": "Earning goals",
+    "goal_daily": "Daily goal",
+    "goal_weekly": "Weekly goal",
+    "goal_monthly": "Monthly goal",
+    "goal_of": "of",
+    "commission_history": "Commission history",
+    "filter_all": "All",
+    "type_ride": "Ride",
+    "type_tip": "Tip",
+    "type_bonus": "Bonus",
+    "type_referral": "Referral",
+    "type_surge": "Surge",
+    "no_commissions": "No commissions yet",
+    "no_commissions_desc": "Your commissions will appear here",
+    "quota_title": "Work quota",
+    "quota_balance": "Quota balance",
+    "recharge_quota": "Recharge quota",
+    "quota_low_warning": "Your quota is running low. Recharge soon to keep working.",
+    "quota_grace": "Quota depleted. You have {count} grace trips remaining.",
+    "quota_blocked": "Quota depleted. Recharge to continue accepting rides.",
+    "quota_deduction_info": "{pct} of each trip's value is deducted."
+  },
+
+  "map": {
+    "recenter": "Recenter"
+  },
+
   "common": {
     "error": "Error",
     "cash": "Cash",
@@ -533,6 +566,11 @@
     "profile_tab": "Profile",
     "status_label": "Status",
     "map_unavailable": "Map not available",
-    "my_location": "My location"
+    "my_location": "My location",
+    "active": "Active",
+    "status_approved": "Active",
+    "status_under_review": "Under review",
+    "status_suspended": "Suspended",
+    "status_rejected": "Rejected"
   }
 }

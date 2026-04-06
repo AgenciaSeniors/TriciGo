@@ -135,6 +135,33 @@ export function DriverTripView() {
     : null;
   const inAppNav = useInAppNavigation(driverLocation);
 
+  // ── Phase 3: Camera follow-mode ──
+  const [followMode, setFollowMode] = useState(false);
+  const heading = useLocationStore((s) => s.heading);
+
+  // Enable follow mode when navigation activates
+  useEffect(() => {
+    setFollowMode(inAppNav.isNavigating);
+  }, [inAppNav.isNavigating]);
+
+  // ── Phase 2: Auto-start navigation when ride is accepted ──
+  const autoNavStartedRef = useRef(false);
+
+  useEffect(() => {
+    autoNavStartedRef.current = false;
+  }, [activeTrip?.id]);
+
+  useEffect(() => {
+    if (!activeTrip || !driverLocation || inAppNav.isNavigating || inAppNav.isLoading) return;
+    if (autoNavStartedRef.current) return;
+
+    const status = activeTrip.status;
+    if ((status === 'accepted' || status === 'driver_en_route') && activeTrip.pickup_location) {
+      autoNavStartedRef.current = true;
+      inAppNav.startNavigation(activeTrip.pickup_location);
+    }
+  }, [activeTrip?.id, activeTrip?.status, !!driverLocation, inAppNav.isNavigating, inAppNav.isLoading]);
+
   // Fetch delivery details for cargo rides
   useEffect(() => {
     if (!isDeliveryRide || !activeTrip?.id) return;
@@ -188,6 +215,28 @@ export function DriverTripView() {
   // Next incomplete waypoint (not yet departed)
   const nextWaypoint = waypoints.find((wp) => !wp.departed_at);
   const isAtWaypoint = nextWaypoint?.arrived_at && !nextWaypoint?.departed_at;
+
+  // ── Phase 2: Auto-retarget navigation to dropoff when trip starts ──
+  const autoRetargetRef = useRef(false);
+
+  useEffect(() => {
+    autoRetargetRef.current = false;
+  }, [activeTrip?.id]);
+
+  useEffect(() => {
+    if (!activeTrip || activeTrip.status !== 'in_progress' || !driverLocation) return;
+    if (inAppNav.isNavigating || inAppNav.isLoading) return;
+    if (autoRetargetRef.current) return;
+
+    const target = (nextWaypoint && !nextWaypoint.arrived_at)
+      ? { latitude: nextWaypoint.latitude, longitude: nextWaypoint.longitude }
+      : activeTrip.dropoff_location;
+
+    if (target) {
+      autoRetargetRef.current = true;
+      inAppNav.startNavigation(target);
+    }
+  }, [activeTrip?.status, !!driverLocation, inAppNav.isNavigating, inAppNav.isLoading, nextWaypoint?.id]);
 
   const handleArriveAtWaypoint = async () => {
     if (!nextWaypoint) return;
@@ -447,6 +496,10 @@ export function DriverTripView() {
             : routeCoordinates}
           height={inAppNav.isNavigating ? (isTablet ? 400 : 260) : (isTablet ? 300 : 180)}
           vehicleType="triciclo"
+          followMode={followMode}
+          driverHeading={heading}
+          onUserInteraction={() => setFollowMode(false)}
+          onRecenter={() => setFollowMode(true)}
         />
 
         {/* Scheduled ride banner */}
@@ -545,7 +598,7 @@ export function DriverTripView() {
 
         {/* Delivery details (recipient, package info, instructions) */}
         {isDeliveryRide && deliveryDetails && (
-          <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-3 rounded-2xl border border-white/[0.06]">
+          <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-3 rounded-2xl border border-white/[0.06]">
             {/* Recipient */}
             <View className="flex-row items-center mb-2">
               <Ionicons name="person" size={16} color="#FF4D00" />
@@ -723,7 +776,7 @@ export function DriverTripView() {
               </Text>
             </Pressable>
             {routeExpanded && (
-              <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 mt-2 rounded-2xl border border-white/[0.06]">
+              <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 mt-2 rounded-2xl border border-white/[0.06]">
                 <View className="flex-row items-start mb-3">
                   <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
                   <View className="flex-1">
@@ -771,7 +824,7 @@ export function DriverTripView() {
             )}
           </>
         ) : (
-          <Card variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
+          <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
             <View className="flex-row items-start mb-3">
               <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
               <View className="flex-1">
@@ -874,7 +927,7 @@ export function DriverTripView() {
               }}
               style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
               accessibilityRole="button"
-              accessibilityLabel={t('trip.navigate_inapp', { defaultValue: 'Navegar en app' })}
+              accessibilityLabel={t('trip.restart_nav', { defaultValue: 'Restart navigation' })}
             >
               <Ionicons name="compass" size={22} color="#FF4D00" />
             </Pressable>
@@ -905,6 +958,7 @@ export function DriverTripView() {
             variant="outline"
             size="lg"
             fullWidth
+            forceDark
             onPress={handleArriveAtWaypoint}
             loading={waypointLoading === nextWaypoint.id}
             className="mb-2"
@@ -972,6 +1026,7 @@ export function DriverTripView() {
             variant="outline"
             size="lg"
             fullWidth
+            forceDark
             onPress={handleCancel}
           />
         )}
@@ -1090,7 +1145,7 @@ function TripCompleteView() {
       </Text>
 
       {/* Commission breakdown */}
-      <Card variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
+      <Card forceDark variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" style={{ color: '#9CA3AF' }}>
             {t('trip.total_fare', { defaultValue: 'Tarifa total' })}
@@ -1125,7 +1180,7 @@ function TripCompleteView() {
 
       {/* Tip received */}
       {(activeTrip.tip_amount ?? 0) > 0 && (
-        <Card variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
+        <Card forceDark variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
           <View className="flex-row justify-between items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
             <View className="flex-row items-center gap-1">
               <Ionicons name="gift-outline" size={16} color="white" />
@@ -1150,6 +1205,7 @@ function TripCompleteView() {
         variant="outline"
         size="lg"
         fullWidth
+        forceDark
         onPress={handleDownloadReceipt}
         className="mb-3"
       />

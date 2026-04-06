@@ -259,6 +259,10 @@
     "sos_activated": "SOS ativado. Seus contatos foram notificados.",
     "other_options": "Outras opções",
     "driver_arrived_banner": "Seu motorista chegou!",
+    "driver_here_title": "Seu motorista chegou!",
+    "driver_here_subtitle": "Dirija-se ao ponto de embarque",
+    "plate_label": "Placa",
+    "tap_to_dismiss": "Toque para fechar",
     "distance_eta_clock": "{{distance}} km · {{eta}} min · chega ~{{time}}",
     "eta_destination_clock": "{{minutes}} min · chega ~{{time}}",
     "no_driver_found_title": "Nenhum motorista encontrado",
@@ -271,7 +275,12 @@
     "cancel_driver_waiting": "Seu motorista está esperando",
     "driver_assigned_body": "Seu motorista está a caminho",
     "trip_completed_notif": "Viagem concluída",
-    "driver_canceled_notif": "Seu motorista cancelou a viagem"
+    "driver_canceled_notif": "Seu motorista cancelou a viagem",
+    "share_trip": "Compartilhar viagem",
+    "share_message": "Acompanhe minha viagem ao vivo no TriciGo: {{url}}",
+    "share_failed": "Não foi possível compartilhar a viagem",
+    "trip_shared": "Viagem compartilhada",
+    "realtime_tracking": "Rastreamento em tempo real"
   },
 
   "dispute": {
@@ -545,6 +554,17 @@
     "skip": "Pular",
     "next": "Próximo",
     "start": "Começar"
+  },
+
+  "searching": {
+    "drivers_viewing": "{{count}} motorista analisando sua solicita\u00e7\u00e3o",
+    "drivers_viewing_plural": "{{count}} motoristas analisando sua solicita\u00e7\u00e3o",
+    "no_drivers_yet": "Procurando motoristas pr\u00f3ximos...",
+    "accepted_title": "Motorista encontrado!",
+    "accepted_subtitle": "{{name}} est\u00e1 a caminho",
+    "driver_rating": "{{rating}}",
+    "driver_vehicle": "{{make}} {{model}} - {{color}}",
+    "tip": "Motoristas pr\u00f3ximos est\u00e3o analisando sua viagem"
   },
 
   "common": {

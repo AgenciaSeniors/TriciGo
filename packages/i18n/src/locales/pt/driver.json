@@ -139,7 +139,9 @@
     "hide_route": "Ocultar rota",
     "done": "Pronto",
     "arriving_waypoint": "Chegando na Parada {{n}}...",
-    "auto_arriving": "Marcando chegada automaticamente..."
+    "auto_arriving": "Marcando chegada automaticamente...",
+    "nav_auto_started": "Navegação iniciada",
+    "restart_nav": "Reiniciar navegação"
   },
 
   "ride": {
@@ -520,6 +522,37 @@
     "verify_phone": "Verificar telefone"
   },
 
+  "wallet": {
+    "title": "Carteira",
+    "available_balance": "Saldo disponível",
+    "hold_balance": "Em retenção",
+    "earning_goals": "Metas de ganho",
+    "goal_daily": "Meta diária",
+    "goal_weekly": "Meta semanal",
+    "goal_monthly": "Meta mensal",
+    "goal_of": "de",
+    "commission_history": "Histórico de comissões",
+    "filter_all": "Todos",
+    "type_ride": "Viagem",
+    "type_tip": "Gorjeta",
+    "type_bonus": "Bônus",
+    "type_referral": "Indicação",
+    "type_surge": "Tarifa dinâmica",
+    "no_commissions": "Sem comissões ainda",
+    "no_commissions_desc": "Suas comissões aparecerão aqui",
+    "quota_title": "Cota de trabalho",
+    "quota_balance": "Saldo da cota",
+    "recharge_quota": "Recarregar cota",
+    "quota_low_warning": "Sua cota está baixa. Recarregue em breve para continuar trabalhando.",
+    "quota_grace": "Cota esgotada. Você tem {count} viagens de cortesia restantes.",
+    "quota_blocked": "Cota esgotada. Recarregue para continuar aceitando viagens.",
+    "quota_deduction_info": "{pct} do valor de cada viagem é deduzido."
+  },
+
+  "map": {
+    "recenter": "Recentralizar"
+  },
+
   "common": {
     "error": "Erro",
     "cash": "Dinheiro",
@@ -532,6 +565,11 @@
     "profile_tab": "Perfil",
     "status_label": "Status",
     "map_unavailable": "Mapa não disponível",
-    "my_location": "Minha localização"
+    "my_location": "Minha localização",
+    "active": "Ativo",
+    "status_approved": "Ativo",
+    "status_under_review": "Em análise",
+    "status_suspended": "Suspenso",
+    "status_rejected": "Rejeitado"
   }
 }

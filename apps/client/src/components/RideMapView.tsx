@@ -4,6 +4,8 @@ import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
+import { SearchingDriverMarkers } from './SearchingDriverMarkers';
+import type { SearchingDriverPresence } from '@tricigo/types';
 
 let MapboxGL: any;
 try {
@@ -45,6 +47,16 @@ interface RideMapViewProps {
   onPickupDrag?: (location: GeoPoint) => void;
   /** Callback when dropoff pin is dragged to a new location */
   onDropoffDrag?: (location: GeoPoint) => void;
+  /** Drivers currently reviewing the ride request (searching phase) */
+  searchingDrivers?: SearchingDriverPresence[];
+  /** Highlight a specific driver (e.g. the one who accepted) */
+  acceptedDriverId?: string | null;
+  /** Whether the accept animation is playing (camera flyTo) */
+  isAcceptAnimating?: boolean;
+  /** Location to fly the camera to on accept */
+  acceptedDriverLocation?: GeoPoint | null;
+  /** Route from driver's current position to pickup (blue dashed line) */
+  driverToPickupRoute?: GeoPoint[] | null;
   height?: number;
 }
 
@@ -84,6 +96,11 @@ function RideMapViewInner({
   driverMarkerOpacity = 1,
   onPickupDrag,
   onDropoffDrag,
+  searchingDrivers,
+  acceptedDriverId,
+  isAcceptAnimating,
+  acceptedDriverLocation,
+  driverToPickupRoute,
   height = 200,
 }: RideMapViewProps) {
   const { t } = useTranslation('rider');
@@ -150,6 +167,19 @@ function RideMapViewInner({
     };
   }, [animatedRouteCoords]);
 
+  // Build driver-to-pickup route GeoJSON
+  const driverRouteGeoJSON = useMemo(() => {
+    if (!driverToPickupRoute || driverToPickupRoute.length < 2) return null;
+    return {
+      type: 'Feature' as const,
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: driverToPickupRoute.map(toCoord),
+      },
+      properties: {},
+    };
+  }, [driverToPickupRoute]);
+
   // Build nearby vehicles GeoJSON FeatureCollection
   const nearbyGeoJSON = useMemo(() => {
     if (!nearbyVehicles || nearbyVehicles.length === 0) return null;
@@ -169,8 +199,11 @@ function RideMapViewInner({
     };
   }, [nearbyVehicles]);
 
-  // Compute camera bounds
+  // Compute camera bounds (includes searching driver positions)
   const bounds = useMemo(() => {
+    // During accept animation, don't recompute bounds — let the Camera flyTo handle it
+    if (isAcceptAnimating) return null;
+
     const allCoords: [number, number][] = [];
     if (routeCoordinates && routeCoordinates.length > 0) {
       routeCoordinates.forEach((c) => allCoords.push(toCoord(c)));
@@ -180,8 +213,12 @@ function RideMapViewInner({
     }
     if (animatedDriver) allCoords.push([animatedDriver.longitude, animatedDriver.latitude]);
     waypointLocations?.forEach((wp) => allCoords.push(toCoord(wp)));
+    // Include searching driver positions so map fits them
+    searchingDrivers?.forEach((d) => allCoords.push(toCoord(d.location)));
+    // Include driver-to-pickup route in bounds
+    driverToPickupRoute?.forEach((c) => allCoords.push(toCoord(c)));
     return computeBounds(allCoords);
-  }, [pickupLocation, dropoffLocation, animatedDriver, routeCoordinates, waypointLocations]);
+  }, [pickupLocation, dropoffLocation, animatedDriver, routeCoordinates, waypointLocations, searchingDrivers, isAcceptAnimating, driverToPickupRoute]);
 
   if (!MapboxGL) {
     // On web, use WebMapView with mapbox-gl instead of native @rnmapbox/maps
@@ -191,6 +228,7 @@ function RideMapViewInner({
           pickup={pickupLocation ? { latitude: pickupLocation[1], longitude: pickupLocation[0] } : null}
           dropoff={dropoffLocation ? { latitude: dropoffLocation[1], longitude: dropoffLocation[0] } : null}
           routeCoords={routeCoordinates as [number, number][] | undefined}
+          driverRoute={driverToPickupRoute?.map(c => [c.latitude, c.longitude] as [number, number])}
           style={{ height, borderRadius: 12, overflow: 'hidden' } as any}
         />
       );
@@ -219,26 +257,50 @@ function RideMapViewInner({
         logoEnabled={false}
         compassEnabled={false}
       >
-        {/* Camera — fit to bounds or default to Havana */}
+        {/* Camera — fit to bounds, or flyTo accepted driver, or default to Havana */}
         <MapboxGL.Camera
           defaultSettings={{
             centerCoordinate: HAVANA_CENTER,
             zoomLevel: 14,
           }}
-          bounds={
-            bounds
+          {...(isAcceptAnimating && acceptedDriverLocation
+            ? {
+                centerCoordinate: toCoord(acceptedDriverLocation),
+                zoomLevel: 15,
+                pitch: 45,
+                animationDuration: 1500,
+                animationMode: 'flyTo',
+              }
+            : bounds
               ? {
-                  ne: bounds.ne,
-                  sw: bounds.sw,
-                  paddingTop: 50,
-                  paddingRight: 50,
-                  paddingBottom: 50,
-                  paddingLeft: 50,
+                  bounds: {
+                    ne: bounds.ne,
+                    sw: bounds.sw,
+                    paddingTop: 50,
+                    paddingRight: 50,
+                    paddingBottom: 50,
+                    paddingLeft: 50,
+                  },
+                  animationDuration: 500,
                 }
-              : undefined
-          }
-          animationDuration={500}
+              : {})}
         />
+
+        {/* Driver-to-pickup route (blue dashed) */}
+        {driverRouteGeoJSON && (
+          <MapboxGL.ShapeSource id="driver-to-pickup-route" shape={driverRouteGeoJSON}>
+            <MapboxGL.LineLayer
+              id="driverRouteLine"
+              style={{
+                lineColor: '#3b82f6',
+                lineWidth: 3,
+                lineDasharray: [6, 4],
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </MapboxGL.ShapeSource>
+        )}
 
         {/* Route polyline */}
         {routeGeoJSON && (
@@ -383,6 +445,14 @@ function RideMapViewInner({
               />
             </MapboxGL.ShapeSource>
           </>
+        )}
+
+        {/* Searching driver avatar markers (Presence-based) */}
+        {searchingDrivers && searchingDrivers.length > 0 && (
+          <SearchingDriverMarkers
+            drivers={searchingDrivers}
+            acceptedDriverId={acceptedDriverId ?? null}
+          />
         )}
       </MapboxGL.MapView>
     </View>

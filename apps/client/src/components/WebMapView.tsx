@@ -30,6 +30,7 @@ interface WebMapViewProps {
   pickup?: { latitude: number; longitude: number } | null;
   dropoff?: { latitude: number; longitude: number } | null;
   routeCoords?: [number, number][]; // [[lng, lat], ...]
+  driverRoute?: [number, number][] | null; // [[lat, lng], ...] driver-to-pickup route
   style?: Record<string, unknown>;
   interactive?: boolean;
   onMapClick?: (lngLat: { lng: number; lat: number }) => void;
@@ -52,6 +53,7 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
   pickup,
   dropoff,
   routeCoords,
+  driverRoute,
   style: containerStyle,
   interactive = true,
   onMapClick,
@@ -273,6 +275,60 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
       }
     };
   }, [routeCoords]);
+
+  // Update driver-to-pickup route (blue dashed)
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    // Cleanup function
+    const cleanup = () => {
+      try {
+        if (map.getLayer('driverRouteLine')) map.removeLayer('driverRouteLine');
+        if (map.getSource('driver-route')) map.removeSource('driver-route');
+      } catch { /* ignore */ }
+    };
+
+    if (!driverRoute?.length) {
+      cleanup();
+      return;
+    }
+
+    function addDriverRoute() {
+      cleanup();
+
+      const coords = driverRoute!.map(([lat, lng]) => [lng, lat] as [number, number]);
+
+      map.addSource('driver-route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: {},
+        },
+      });
+
+      map.addLayer({
+        id: 'driverRouteLine',
+        type: 'line',
+        source: 'driver-route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 3,
+          'line-dasharray': [6, 4],
+        },
+      });
+    }
+
+    if (map.isStyleLoaded()) {
+      addDriverRoute();
+    } else {
+      map.once('style.load', addDriverRoute);
+    }
+
+    return cleanup;
+  }, [driverRoute]);
 
   if (Platform.OS !== 'web' || !mapboxgl) {
     return <View style={[{ flex: 1, backgroundColor: isDark ? darkColors.background.secondary : '#e5e5e5' }, containerStyle as any]} />;

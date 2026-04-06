@@ -52,6 +52,12 @@ interface RideMapViewProps {
   onRecenter?: () => void;
   /** Vehicle type for the driver marker icon */
   vehicleType?: 'triciclo' | 'moto' | 'auto' | 'confort' | string;
+  /** When true, camera follows driver position with heading rotation */
+  followMode?: boolean;
+  /** Heading in degrees for camera rotation (from GPS compass) */
+  driverHeading?: number | null;
+  /** Callback when user interacts with map (disables follow mode) */
+  onUserInteraction?: () => void;
 }
 
 const vehicleMarkerImages: Record<string, any> = {
@@ -100,6 +106,9 @@ function WebMapboxView({
   darkStyle = false,
   onRecenter,
   vehicleType,
+  followMode,
+  driverHeading,
+  onUserInteraction,
 }: RideMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -195,9 +204,11 @@ function WebMapboxView({
       interactive: true,
     });
 
-    // Disable rotation for simpler UX
-    map.dragRotate.disable();
-    map.touchZoomRotate.disableRotation();
+    // Disable rotation unless follow mode is active
+    if (!followMode) {
+      map.dragRotate.disable();
+      map.touchZoomRotate.disableRotation();
+    }
 
     mapRef.current = map;
 
@@ -457,23 +468,49 @@ function WebMapboxView({
     else map.on('load', addSurgeLayer);
   }, [surgeZones]);
 
+  // Follow mode for web map
+  useEffect(() => {
+    if (!followMode || !driverLocation || !mapRef.current) return;
+    mapRef.current.easeTo({
+      center: [driverLocation.longitude, driverLocation.latitude],
+      zoom: 16.5,
+      pitch: 45,
+      bearing: driverHeading ?? 0,
+      duration: 1000,
+    });
+  }, [driverLocation?.latitude, driverLocation?.longitude, driverHeading, followMode]);
+
   return (
     <View style={{ flex: 1, height, position: 'relative' }}>
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
-      {/* Recenter button */}
-      {(onRecenter || driverLocation) && (
+      {/* Recenter button — prominent orange when follow mode is off */}
+      {!followMode && driverLocation && (
         <Pressable
-          style={({ pressed }) => [styles.recenterBtn, pressed && { opacity: 0.7 }]}
           onPress={() => {
             if (mapRef.current && driverLocation) {
               mapRef.current.flyTo({ center: [driverLocation.longitude, driverLocation.latitude], zoom: 15 });
             }
             onRecenter?.();
           }}
-          accessibilityLabel="Centrar en mi posición"
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: '#FF4D00',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 4,
+          }}
           accessibilityRole="button"
+          accessibilityLabel="Recenter"
         >
-          <Ionicons name="locate" size={20} color="#fff" />
+          <Ionicons name="navigate" size={20} color="#fff" />
         </Pressable>
       )}
     </View>
@@ -494,6 +531,9 @@ function RideMapViewInner(
     darkStyle = false,
     onRecenter,
     vehicleType,
+    followMode,
+    driverHeading,
+    onUserInteraction,
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
@@ -637,6 +677,9 @@ function RideMapViewInner(
           darkStyle={darkStyle}
           onRecenter={onRecenter}
           vehicleType={vehicleType}
+          followMode={followMode}
+          driverHeading={driverHeading}
+          onUserInteraction={onUserInteraction}
         />
       );
     }
@@ -691,16 +734,38 @@ function RideMapViewInner(
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        onRegionWillChange={(feature: any) => {
+          if (feature?.properties?.isUserInteraction && followMode) {
+            onUserInteraction?.();
+          }
+        }}
       >
         <MapboxGL.Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
-          bounds={
-            bounds
-              ? { ne: bounds.ne, sw: bounds.sw, paddingTop: 60, paddingRight: 60, paddingBottom: 120, paddingLeft: 60 }
-              : undefined
-          }
-          animationDuration={600}
+          {...(followMode && driverLocation
+            ? {
+                centerCoordinate: toCoord(driverLocation),
+                zoomLevel: 16.5,
+                pitch: 45,
+                heading: driverHeading ?? 0,
+                animationDuration: 1000,
+                animationMode: 'easeTo',
+              }
+            : bounds
+              ? {
+                  bounds: {
+                    ne: bounds.ne,
+                    sw: bounds.sw,
+                    paddingTop: 60,
+                    paddingRight: 60,
+                    paddingBottom: 120,
+                    paddingLeft: 60,
+                  },
+                  animationDuration: 600,
+                }
+              : {}
+          )}
         />
         {routeGeoJSON && (
           <MapboxGL.ShapeSource id="route" shape={routeGeoJSON}>
@@ -781,14 +846,28 @@ function RideMapViewInner(
           </MapboxGL.ShapeSource>
         )}
       </MapboxGL.MapView>
-      {(onRecenter || driverLocation) && (
+      {!followMode && driverLocation && (
         <Pressable
-          style={({ pressed }) => [styles.recenterBtn, pressed && { opacity: 0.7 }]}
           onPress={onRecenter}
-          accessibilityLabel="Centrar en mi posición"
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: '#FF4D00',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 4,
+          }}
           accessibilityRole="button"
+          accessibilityLabel={t('map.recenter', { defaultValue: 'Recentrar' })}
         >
-          <Ionicons name="locate" size={20} color="#fff" />
+          <Ionicons name="navigate" size={20} color="#fff" />
         </Pressable>
       )}
     </View>
