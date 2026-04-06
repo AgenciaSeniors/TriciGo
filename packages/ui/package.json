@@ -30,7 +30,10 @@
     "./AnimatedCard": "./src/AnimatedCard.tsx",
     "./hooks/useResponsive": "./src/hooks/useResponsive.ts",
     "./StatCard": "./src/StatCard.tsx",
-    "./Toast": "./src/Toast.tsx"
+    "./Toast": "./src/Toast.tsx",
+    "./MenuRow": "./src/MenuRow.tsx",
+    "./MultiCurrencyPrice": "./src/MultiCurrencyPrice.tsx",
+    "./QuotaCard": "./src/QuotaCard.tsx"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",

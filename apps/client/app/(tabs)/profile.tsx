@@ -6,6 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Avatar } from '@tricigo/ui/Avatar';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@tricigo/api';
@@ -45,34 +46,34 @@ function WebProfileScreen() {
     {
       title: t('profile.section_account', { defaultValue: 'Cuenta' }),
       items: [
-        { icon: 'person-outline' as const, label: t('profile.edit_profile'), href: '/profile/edit' },
-        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), href: '/profile/settings' },
-        { icon: 'location-outline' as const, label: t('profile.saved_locations'), href: '/profile/saved-locations' },
+        { icon: 'person-outline' as const, label: t('profile.edit_profile'), href: '/profile/edit', iconBg: 'primary' as const },
+        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), href: '/profile/settings', iconBg: 'neutral' as const },
+        { icon: 'location-outline' as const, label: t('profile.saved_locations'), href: '/profile/saved-locations', iconBg: 'info' as const },
       ],
     },
     {
       title: t('profile.section_safety', { defaultValue: 'Seguridad' }),
       items: [
-        { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety' },
-        { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts' },
-        { icon: 'car-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), href: '/profile/ride-preferences' },
+        { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety', iconBg: 'success' as const },
+        { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts', iconBg: 'info' as const },
+        { icon: 'car-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), href: '/profile/ride-preferences', iconBg: 'warning' as const },
       ],
     },
     {
       title: t('profile.section_business', { defaultValue: 'Negocios' }),
       items: [
-        { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Cuentas corporativas' }), href: '/profile/corporate' },
-        { icon: 'repeat-outline' as const, label: t('profile.recurring_rides', { defaultValue: 'Viajes recurrentes' }), href: '/profile/recurring-rides' },
+        { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Cuentas corporativas' }), href: '/profile/corporate', iconBg: 'neutral' as const },
+        { icon: 'repeat-outline' as const, label: t('profile.recurring_rides', { defaultValue: 'Viajes recurrentes' }), href: '/profile/recurring-rides', iconBg: 'info' as const },
       ],
     },
     {
       title: t('profile.section_more', { defaultValue: 'Más' }),
       items: [
-        { icon: 'gift-outline' as const, label: t('profile.referral_title'), href: '/profile/referral' },
-        { icon: 'chatbubble-outline' as const, label: t('profile.support', { defaultValue: 'Soporte' }), href: '/support' },
-        { icon: 'help-circle-outline' as const, label: t('profile.help'), href: '/profile/help' },
-        { icon: 'information-circle-outline' as const, label: t('profile.about'), href: '/profile/about' },
-        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), href: '/profile/blog' },
+        { icon: 'gift-outline' as const, label: t('profile.referral_title'), href: '/profile/referral', iconBg: 'warning' as const },
+        { icon: 'chatbubble-outline' as const, label: t('profile.support', { defaultValue: 'Soporte' }), href: '/support', iconBg: 'primary' as const },
+        { icon: 'help-circle-outline' as const, label: t('profile.help'), href: '/profile/help', iconBg: 'neutral' as const },
+        { icon: 'information-circle-outline' as const, label: t('profile.about'), href: '/profile/about', iconBg: 'neutral' as const },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), href: '/profile/blog', iconBg: 'info' as const },
       ],
     },
   ];
@@ -110,22 +111,29 @@ function WebProfileScreen() {
               {section.title}
             </Text>
             {section.items.map((item, i) => (
-              <Pressable key={i} className="flex-row items-center py-4 border-b border-neutral-100 dark:border-neutral-800"
-                onPress={() => router.push(item.href as string)}>
-                <Ionicons name={item.icon} size={22} color={colors.neutral[500]} />
-                <Text variant="body" className="flex-1 ml-4">{item.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
-              </Pressable>
+              <MenuRow
+                key={i}
+                icon={item.icon}
+                label={item.label}
+                iconBg={item.iconBg}
+                onPress={() => router.push(item.href as string)}
+                showBorder={i < section.items.length - 1}
+              />
             ))}
           </View>
         ))}
 
-        <Pressable className="flex-row items-center py-4 mt-6" onPress={handleLogout} disabled={loggingOut}>
-          <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
-          <Text variant="body" className="flex-1 ml-4 text-red-500">
-            {loggingOut ? t('common.processing') : t('profile.logout', { defaultValue: 'Cerrar sesión' })}
-          </Text>
-        </Pressable>
+        <View className="mt-8 mb-4">
+          <MenuRow
+            icon="log-out-outline"
+            label={loggingOut ? t('common.processing') : t('profile.logout', { defaultValue: 'Cerrar sesión' })}
+            onPress={handleLogout}
+            destructive
+            showChevron={false}
+            showBorder={false}
+            disabled={loggingOut}
+          />
+        </View>
       </View>
     </Screen>
   );
@@ -190,34 +198,34 @@ function NativeProfileScreen() {
     {
       title: t('profile.section_account', { defaultValue: 'Cuenta' }),
       items: [
-        { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-        { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations') },
-        { icon: 'options-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/ride-preferences') },
+        { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
+        { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations'), iconBg: 'info' as const },
+        { icon: 'options-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/ride-preferences'), iconBg: 'warning' as const },
       ],
     },
     {
       title: t('profile.section_safety', { defaultValue: 'Seguridad' }),
       items: [
-        { icon: 'call-outline' as const, label: t('profile.emergency_contact'), onPress: () => router.push('/profile/emergency-contact') },
-        { icon: 'people-outline' as const, label: t('trusted_contacts.title'), onPress: () => router.push('/profile/trusted-contacts') },
-        { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
+        { icon: 'call-outline' as const, label: t('profile.emergency_contact'), onPress: () => router.push('/profile/emergency-contact'), iconBg: 'error' as const },
+        { icon: 'people-outline' as const, label: t('trusted_contacts.title'), onPress: () => router.push('/profile/trusted-contacts'), iconBg: 'info' as const },
+        { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety'), iconBg: 'success' as const },
       ],
     },
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        { icon: 'repeat-outline' as const, label: t('recurring_rides'), onPress: () => router.push('/profile/recurring-rides') },
-        { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate') },
+        { icon: 'repeat-outline' as const, label: t('recurring_rides'), onPress: () => router.push('/profile/recurring-rides'), iconBg: 'info' as const },
+        { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
       ],
     },
     {
       title: t('profile.section_more', { defaultValue: 'Más' }),
       items: [
-        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), onPress: () => router.push('/profile/settings') },
-        { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
-        { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
-        { icon: 'newspaper-outline' as const, label: t('profile.blog_title', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog') },
-        { icon: 'information-circle-outline' as const, label: t('profile.about'), onPress: () => router.push('/profile/about') },
+        { icon: 'settings-outline' as const, label: t('profile.settings', { defaultValue: 'Configuración' }), onPress: () => router.push('/profile/settings'), iconBg: 'neutral' as const },
+        { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },
+        { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help'), iconBg: 'neutral' as const },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog_title', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog'), iconBg: 'info' as const },
+        { icon: 'information-circle-outline' as const, label: t('profile.about'), onPress: () => router.push('/profile/about'), iconBg: 'neutral' as const },
       ],
     },
   ];
@@ -246,7 +254,7 @@ function NativeProfileScreen() {
             <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
               <View className="mr-4">
                 <LinearGradient
-                  colors={['#FF4D00', '#FF8A5C']}
+                  colors={[colors.primary[500], colors.primary[300]]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{ borderRadius: 32, padding: 3 }}
@@ -286,34 +294,32 @@ function NativeProfileScreen() {
                 <Text variant="caption" color="tertiary" className="mt-5 mb-2 uppercase tracking-wider font-semibold">
                   {section.title}
                 </Text>
-                {section.items.map((item) => (
-                  <Pressable
+                {section.items.map((item, idx) => (
+                  <MenuRow
                     key={item.label}
-                    className="flex-row items-center py-4 border-b border-neutral-100 dark:border-neutral-800"
+                    icon={item.icon}
+                    label={item.label}
+                    iconBg={item.iconBg}
                     onPress={item.onPress}
-                  >
-                    <Ionicons name={item.icon} size={22} color={isDark ? darkColors.text.secondary : colors.neutral[600]} />
-                    <Text variant="body" className="ml-3 flex-1">
-                      {item.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={20} color={isDark ? darkColors.text.tertiary : colors.neutral[400]} />
-                  </Pressable>
+                    showBorder={idx < section.items.length - 1}
+                  />
                 ))}
               </View>
             ))}
           </StaggeredList>
 
           {/* Logout */}
-          <Pressable
-            className="flex-row items-center py-4 mt-4"
-            onPress={handleLogout}
-            disabled={loggingOut}
-          >
-            <Ionicons name="log-out-outline" size={22} color={colors.error.DEFAULT} />
-            <Text variant="body" color="error" className="ml-3">
-              {loggingOut ? t('auth.logging_out') : t('auth.logout')}
-            </Text>
-          </Pressable>
+          <View className="mt-8 mb-6">
+            <MenuRow
+              icon="log-out-outline"
+              label={loggingOut ? t('auth.logging_out') : t('auth.logout')}
+              onPress={handleLogout}
+              destructive
+              showChevron={false}
+              showBorder={false}
+              disabled={loggingOut}
+            />
+          </View>
         </View>
       </ScrollView>
     </Screen>

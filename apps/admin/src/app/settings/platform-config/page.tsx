@@ -14,6 +14,9 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   default_per_km_rate_cup: { type: 'number', helpKey: 'platform_config.default_per_km_rate_cup_help' },
   commission_rate: { type: 'number', helpKey: 'platform_config.commission_rate_help' },
   exchange_rate_fallback_cup: { type: 'number', helpKey: 'platform_config.exchange_rate_fallback_cup_help' },
+  quota_deduction_rate: { type: 'number', helpKey: 'platform_config.quota_deduction_rate_help' },
+  quota_warning_threshold_pct: { type: 'number', helpKey: 'platform_config.quota_warning_threshold_pct_help' },
+  quota_grace_trips: { type: 'number', helpKey: 'platform_config.quota_grace_trips_help' },
   openweather_api_key: { type: 'text', helpKey: 'platform_config.openweather_api_key_help' },
   weather_surge_enabled: { type: 'text', helpKey: 'platform_config.weather_surge_enabled_help' },
 };

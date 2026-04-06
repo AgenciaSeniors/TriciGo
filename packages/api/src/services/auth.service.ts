@@ -76,6 +76,7 @@ export const authService = {
 
   /**
    * Get the current user profile from the users table.
+   * Uses getUser() to verify the token with the server, then fetches the DB profile.
    */
   async getCurrentUser(): Promise<User | null> {
     const supabase = getSupabaseClient();
@@ -88,6 +89,21 @@ export const authService = {
       .from('users')
       .select('*')
       .eq('id', authUser.id)
+      .single();
+    if (error) throw error;
+    return data as User;
+  },
+
+  /**
+   * Fast user profile fetch using a known user ID (skips auth.getUser() verification).
+   * Use this for session restoration when you already have a valid session.
+   */
+  async getUserById(userId: string): Promise<User | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
       .single();
     if (error) throw error;
     return data as User;

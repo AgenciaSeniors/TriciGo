@@ -24,7 +24,7 @@ export function useChatInit(rideId: string) {
     chatService
       .getMessages(rideId)
       .then(setMessages)
-      .catch((err) => logger.warn('[Chat] Failed to load messages:', err));
+      .catch((err) => logger.warn('[Chat] Failed to load messages:', { error: String(err) }));
 
     msgChannel = chatService.subscribeToMessages(rideId, addMessage);
 

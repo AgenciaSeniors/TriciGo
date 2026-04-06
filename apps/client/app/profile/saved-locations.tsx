@@ -274,19 +274,19 @@ export default function SavedLocationsScreen() {
             }}
             className="flex-row items-center justify-center py-3 mt-3 rounded-lg border"
             style={{
-              borderColor: mapSelectMode ? colors.primary.DEFAULT : colors.neutral[200],
-              backgroundColor: mapSelectMode ? `${colors.primary.DEFAULT}10` : 'transparent',
+              borderColor: mapSelectMode ? colors.primary[500] : colors.neutral[200],
+              backgroundColor: mapSelectMode ? `${colors.primary[500]}10` : 'transparent',
             }}
           >
             <Ionicons
               name="location-outline"
               size={18}
-              color={mapSelectMode ? colors.primary.DEFAULT : colors.neutral[600]}
+              color={mapSelectMode ? colors.primary[500] : colors.neutral[600]}
             />
             <Text
               variant="bodySmall"
               className="ml-2 font-medium"
-              style={{ color: mapSelectMode ? colors.primary.DEFAULT : colors.neutral[600] }}
+              style={{ color: mapSelectMode ? colors.primary[500] : colors.neutral[600] }}
             >
               {t('profile.pick_from_map', { defaultValue: 'Elegir en el mapa' })}
             </Text>

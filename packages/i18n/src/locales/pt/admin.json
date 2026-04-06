@@ -526,7 +526,8 @@
     "revenue_forecast": "Previsão de Receita",
     "prediction_next_7_days": "Previsão próximos 7 dias",
     "actual": "Real",
-    "predicted": "Projetado"
+    "predicted": "Projetado",
+    "export_csv": "Exportar CSV"
   },
 
   "funnel": {

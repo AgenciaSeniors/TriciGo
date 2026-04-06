@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatTriciCoin, formatTRCasUSD, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
+import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -100,7 +100,7 @@ function WebWalletScreen() {
   const PAGE_SIZE = 20;
 
   // Recharge (TropiPay) state
-  const [exchangeRate, setExchangeRate] = useState(520);
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
   const [rechargeError, setRechargeError] = useState('');
@@ -328,11 +328,11 @@ function WebWalletScreen() {
               </Text>
             </View>
             <Text variant="caption" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              {loading ? '' : formatTRCasUSD(balance.available)}
+              {loading ? '' : `\u2248 ${formatUSD(trcToUsd(balance.available, exchangeRate))}`}
             </Text>
             {balance.held > 0 && (
               <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)} ({formatTRCasUSD(balance.held)})
+                {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)} ({`\u2248 ${formatUSD(trcToUsd(balance.held, exchangeRate))}`})
               </Text>
             )}
           </View>
@@ -399,7 +399,7 @@ function WebWalletScreen() {
                       {tx.description ? (
                         <Text variant="caption" color="tertiary" numberOfLines={1}>{tx.description}</Text>
                       ) : null}
-                      <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at)}</Text>
+                      <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at, t('today'), t('yesterday'))}</Text>
                     </View>
                     <Text
                       variant="body"
@@ -417,7 +417,7 @@ function WebWalletScreen() {
                   disabled={loadingMore}
                 >
                   {loadingMore ? (
-                    <ActivityIndicator size="small" color={colors.primary.DEFAULT} />
+                    <ActivityIndicator size="small" color={colors.primary[500]} />
                   ) : (
                     <Text variant="bodySmall" color="primary" className="font-medium">
                       {t('wallet.load_more', { defaultValue: 'Cargar mas' })}
@@ -628,7 +628,7 @@ function TropiPayWebView({ url }: { url: string }) {
       startInLoadingState
       renderLoading={() => (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary.DEFAULT} />
+          <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
       )}
     />
@@ -699,7 +699,7 @@ function NativeWalletScreen() {
   const [tropipaySheetVisible, setTropipaySheetVisible] = useState(false);
   const [tropipayAmount, setTropipayAmount] = useState('');
   const [tropipaySubmitting, setTropipaySubmitting] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState(520);
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
   const [exchangeRateStale, setExchangeRateStale] = useState(false);
   const [tropipayWebViewUrl, setTropipayWebViewUrl] = useState<string | null>(null);
 

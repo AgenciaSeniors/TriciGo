@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, driverDarkColors } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
@@ -118,7 +119,7 @@ export default function DriverSettingsScreen() {
   const toggleLanguage = () => {
     const cycle = ['es', 'en', 'pt'] as const;
     const idx = cycle.indexOf(currentLang as typeof cycle[number]);
-    const next = cycle[(idx + 1) % cycle.length];
+    const next = cycle[(idx + 1) % cycle.length]!;
     i18n.changeLanguage(next);
     AsyncStorage.setItem('tricigo_language', next);
   };
@@ -149,14 +150,14 @@ export default function DriverSettingsScreen() {
 
   const handleZoneChange = () => {
     const idx = ZONE_OPTIONS.findIndex((z) => z.key === preferredZone);
-    const next = ZONE_OPTIONS[(idx + 1) % ZONE_OPTIONS.length].key;
+    const next = ZONE_OPTIONS[(idx + 1) % ZONE_OPTIONS.length]!.key;
     setPreferredZone(next);
     AsyncStorage.setItem(PREFERRED_ZONE_KEY, next);
   };
 
   const handleSilentTimerChange = () => {
     const idx = SILENT_TIMER_OPTIONS.findIndex((o) => o.minutes === silentModeTimer);
-    const next = SILENT_TIMER_OPTIONS[(idx + 1) % SILENT_TIMER_OPTIONS.length].minutes;
+    const next = SILENT_TIMER_OPTIONS[(idx + 1) % SILENT_TIMER_OPTIONS.length]!.minutes;
     setSilentModeTimer(next);
     AsyncStorage.setItem(SILENT_MODE_TIMER_KEY, String(next));
   };
@@ -183,7 +184,7 @@ export default function DriverSettingsScreen() {
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_appearance', { defaultValue: 'Apariencia' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card forceDark variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center mb-3">
             <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
               <Ionicons name="color-palette-outline" size={18} color={colors.brand.orange} />
@@ -220,33 +221,23 @@ export default function DriverSettingsScreen() {
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_language', { defaultValue: 'Idioma' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
-          <Pressable
+        <Card forceDark variant="surface" padding="md" className="mb-5">
+          <MenuRow
+            icon="language-outline"
+            label={t('profile.preferred_language')}
+            value={LANG_LABELS[currentLang] ?? currentLang}
+            iconBg="info"
             onPress={toggleLanguage}
-            className="flex-row items-center justify-between min-h-[48px]"
-            accessibilityRole="button"
-            accessibilityLabel={`${t('profile.preferred_language')}: ${LANG_LABELS[currentLang] ?? currentLang}`}
-          >
-            <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
-                <Ionicons name="language-outline" size={18} color={colors.brand.orange} />
-              </View>
-              <Text variant="body" color="inverse">{t('profile.preferred_language')}</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Text variant="bodySmall" color="accent" className="mr-1">
-                {LANG_LABELS[currentLang] ?? currentLang}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[500]} />
-            </View>
-          </Pressable>
+            showBorder={false}
+            forceDark
+          />
         </Card>
 
         {/* ── Sounds ── */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_sounds', { defaultValue: 'Sonidos' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card forceDark variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -283,7 +274,7 @@ export default function DriverSettingsScreen() {
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_night_mode', { defaultValue: 'Modo nocturno' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card forceDark variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -310,39 +301,24 @@ export default function DriverSettingsScreen() {
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_zone', { defaultValue: 'Zona preferida' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
-          <Pressable
+        <Card forceDark variant="surface" padding="md" className="mb-5">
+          <MenuRow
+            icon="location-outline"
+            label={t('profile.preferred_zone', { defaultValue: 'Zona de trabajo' })}
+            subtitle={t('profile.preferred_zone_desc', { defaultValue: 'Prioriza viajes en esta zona' })}
+            value={t(ZONE_OPTIONS.find((z) => z.key === preferredZone)?.labelKey ?? 'profile.zone_any', { defaultValue: preferredZone })}
+            iconBg="warning"
             onPress={handleZoneChange}
-            className="flex-row items-center justify-between min-h-[48px]"
-            accessibilityRole="button"
-          >
-            <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
-                <Ionicons name="location-outline" size={18} color={colors.brand.orange} />
-              </View>
-              <View className="flex-1">
-                <Text variant="body" color="inverse">
-                  {t('profile.preferred_zone', { defaultValue: 'Zona de trabajo' })}
-                </Text>
-                <Text variant="caption" color="secondary" className="mt-0.5">
-                  {t('profile.preferred_zone_desc', { defaultValue: 'Prioriza viajes en esta zona' })}
-                </Text>
-              </View>
-            </View>
-            <View className="flex-row items-center">
-              <Text variant="bodySmall" color="accent" className="mr-1">
-                {t(ZONE_OPTIONS.find((z) => z.key === preferredZone)?.labelKey ?? 'profile.zone_any', { defaultValue: preferredZone })}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[500]} />
-            </View>
-          </Pressable>
+            showBorder={false}
+            forceDark
+          />
         </Card>
 
         {/* ── Silent Mode ── */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_silent', { defaultValue: 'Modo silencioso' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card forceDark variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -364,23 +340,16 @@ export default function DriverSettingsScreen() {
             />
           </View>
           {silentModeEnabled && (
-            <Pressable
-              onPress={handleSilentTimerChange}
-              className="flex-row items-center justify-between mt-2 pt-2 border-t border-[#2a2a2a] min-h-[40px]"
-            >
-              <View className="flex-row items-center">
-                <Ionicons name="timer-outline" size={16} color={colors.neutral[500]} />
-                <Text variant="bodySmall" color="inverse" className="ml-2">
-                  {t('profile.silent_timer', { defaultValue: 'Duración' })}
-                </Text>
-              </View>
-              <View className="flex-row items-center">
-                <Text variant="bodySmall" color="accent" className="mr-1">
-                  {t(SILENT_TIMER_OPTIONS.find((o) => o.minutes === silentModeTimer)?.labelKey ?? 'profile.silent_indefinite', { defaultValue: 'Indefinido' })}
-                </Text>
-                <Ionicons name="chevron-forward" size={14} color={colors.neutral[500]} />
-              </View>
-            </Pressable>
+            <View className="mt-2 pt-2 border-t border-[#2a2a2a]">
+              <MenuRow
+                icon="timer-outline"
+                label={t('profile.silent_timer', { defaultValue: 'Duración' })}
+                value={t(SILENT_TIMER_OPTIONS.find((o) => o.minutes === silentModeTimer)?.labelKey ?? 'profile.silent_indefinite', { defaultValue: 'Indefinido' })}
+                onPress={handleSilentTimerChange}
+                showBorder={false}
+                forceDark
+              />
+            </View>
           )}
         </Card>
 
@@ -388,7 +357,7 @@ export default function DriverSettingsScreen() {
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_notifications', { defaultValue: 'Notificaciones' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card forceDark variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -439,7 +408,7 @@ export default function DriverSettingsScreen() {
         </Text>
 
         {/* Auto-accept rides */}
-        <Card variant="surface" padding="md" className="mb-3">
+        <Card forceDark variant="surface" padding="md" className="mb-3">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -484,7 +453,7 @@ export default function DriverSettingsScreen() {
         </Card>
 
         {/* SMS Alerts */}
-        <Card variant="surface" padding="md" className="mb-8">
+        <Card forceDark variant="surface" padding="md" className="mb-8">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
               <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
@@ -523,7 +492,7 @@ export default function DriverSettingsScreen() {
           <Text variant="h4" color="inverse" className="mb-3 px-1">
             {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
           </Text>
-          <Card variant="surface" padding="md">
+          <Card forceDark variant="surface" padding="md">
             <Text variant="bodySmall" color="secondary" className="mb-3">
               {t('profile.delete_account_desc', {
                 defaultValue: 'Eliminar tu cuenta es permanente. Se perderan todos tus datos, historial de viajes y balance.',

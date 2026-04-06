@@ -69,6 +69,35 @@ export const CUBA_CENTER: GeoPoint = { latitude: 21.5, longitude: -79.5 };
 export const CUBA_DEFAULT_ZOOM = 7;
 
 /**
+ * Offset a coordinate by a random amount within the given radius.
+ * Used to protect driver privacy during ride search — passengers
+ * see an approximate position (~200 m) rather than exact location.
+ *
+ * @param lat  — latitude in degrees
+ * @param lng  — longitude in degrees
+ * @param radiusMeters — maximum offset (default 200 m)
+ * @returns jittered { latitude, longitude }
+ */
+export function jitterLocation(
+  lat: number,
+  lng: number,
+  radiusMeters = 200,
+): GeoPoint {
+  // Random angle in radians (0 – 2 PI)
+  const angle = Math.random() * 2 * Math.PI;
+  // Random distance between 50 % and 100 % of radius
+  const dist = radiusMeters * (0.5 + Math.random() * 0.5);
+  // 1 degree ≈ 111 320 m at the equator
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng = 111_320 * Math.cos((lat * Math.PI) / 180);
+
+  return {
+    latitude: lat + (dist * Math.sin(angle)) / metersPerDegreeLat,
+    longitude: lng + (dist * Math.cos(angle)) / (metersPerDegreeLng || 1),
+  };
+}
+
+/**
  * Haversine distance between two points in meters.
  */
 export function haversineDistance(from: GeoPoint, to: GeoPoint): number {

@@ -6,11 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent } from '@tricigo/utils';
+import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent, jitterLocation } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { presenceService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { useLocationStore } from '@/stores/location.store';
-import type { Ride } from '@tricigo/types';
+import { useDriverStore } from '@/stores/driver.store';
+import { useAuthStore } from '@/stores/auth.store';
+import type { Ride, SearchingDriverPresence } from '@tricigo/types';
 
 interface ServiceConfig {
   base_fare_cup: number;
@@ -49,6 +52,31 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   // ── Distance + ETA to pickup ──
   const driverLat = useLocationStore((s) => s.latitude);
   const driverLng = useLocationStore((s) => s.longitude);
+
+  // ── Presence: announce this driver is reviewing the offer ──
+  const driverProfile = useDriverStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (!driverLat || !driverLng || !driverProfile || !user) return;
+
+    const jittered = jitterLocation(driverLat, driverLng, 200);
+    const presence: SearchingDriverPresence = {
+      driverId: driverProfile.id,
+      name: user.full_name,
+      avatarUrl: user.avatar_url,
+      vehicleType: ride.service_type,
+      rating: driverProfile.rating_avg,
+      location: jittered,
+      joinedAt: Date.now(),
+    };
+
+    presenceService.joinRideSearch(ride.id, presence);
+
+    return () => {
+      presenceService.leaveRideSearch(ride.id);
+    };
+  }, [ride.id, driverLat, driverLng, driverProfile?.id, user?.full_name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const distanceKm = useMemo(() => {
     if (!driverLat || !driverLng || !ride.pickup_location?.latitude || !ride.pickup_location?.longitude) return null;
@@ -161,6 +189,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   return (
     <AnimatedCard delay={0} duration={300}>
     <Card
+      forceDark
       variant="surface"
       padding="md"
       className="mb-3"

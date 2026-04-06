@@ -6,6 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
@@ -101,29 +102,42 @@ export default function SettingsScreen() {
     }
   }, [userId]);
 
+  const languageLabel =
+    currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Portugues' });
+
   return (
     <Screen scroll bg="white" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.settings_title')} onBack={() => router.back()} />
 
-        <Card variant="outlined" padding="md" className="mb-4">
-          <Pressable onPress={toggleLanguage} className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Ionicons name="language-outline" size={22} color={colors.neutral[600]} />
-              <Text variant="body" className="ml-3">{t('profile.preferred_language')}</Text>
-            </View>
-            <Text variant="body" color="primary">
-              {currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Português' })}
-            </Text>
-          </Pressable>
+        {/* General section */}
+        <Text variant="caption" color="tertiary" className="mb-2 mt-2 uppercase tracking-wider font-semibold px-1">
+          {t('profile.section_general', { defaultValue: 'General' })}
+        </Text>
+        <Card variant="outlined" padding="md" className="mb-6">
+          <MenuRow
+            icon="language-outline"
+            iconBg="info"
+            label={t('profile.preferred_language')}
+            value={languageLabel}
+            onPress={toggleLanguage}
+            showBorder={true}
+          />
+          <MenuRow
+            icon="card-outline"
+            iconBg="success"
+            label={t('profile.payment_method')}
+            value={t('profile.payment_cash')}
+            showChevron={true}
+            showBorder={false}
+          />
         </Card>
 
-        {/* Appearance / Dark mode section */}
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center mb-3">
-            <Ionicons name="color-palette-outline" size={22} color={colors.neutral[600]} />
-            <Text variant="body" className="ml-3">{t('profile.appearance')}</Text>
-          </View>
+        {/* Appearance section */}
+        <Text variant="caption" color="tertiary" className="mb-2 uppercase tracking-wider font-semibold px-1">
+          {t('profile.appearance')}
+        </Text>
+        <Card variant="outlined" padding="md" className="mb-6">
           <View className="flex-row rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700">
             {THEME_OPTIONS.map((option) => (
               <Pressable
@@ -153,139 +167,144 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Notifications section */}
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Ionicons name="notifications-outline" size={22} color={colors.neutral[600]} />
-              <Text variant="body" className="ml-3">{t('profile.notifications_toggle')}</Text>
-            </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={handleNotificationToggle}
-              trackColor={{ true: colors.brand.orange }}
-            />
-          </View>
+        <Text variant="caption" color="tertiary" className="mb-2 uppercase tracking-wider font-semibold px-1">
+          {t('profile.notifications_toggle')}
+        </Text>
+        <Card variant="outlined" padding="md" className="mb-6">
+          <MenuRow
+            icon="notifications-outline"
+            iconBg="warning"
+            label={t('profile.notifications_toggle')}
+            showChevron={false}
+            showBorder={notificationsEnabled}
+            right={
+              <Switch
+                value={notificationsEnabled}
+                onValueChange={handleNotificationToggle}
+                trackColor={{ true: colors.brand.orange }}
+              />
+            }
+          />
 
           {/* Granular category toggles */}
           {notificationsEnabled && (
-            <View className="mt-3 pt-3 border-t border-neutral-100">
-              <Text variant="caption" color="secondary" className="mb-2">
+            <View className="pt-1">
+              <Text variant="caption" color="secondary" className="mb-1 mt-1 px-1">
                 {t('profile.notif_section_title')}
               </Text>
-              {NOTIF_CATEGORIES.map((cat) => (
-                <View
+              {NOTIF_CATEGORIES.map((cat, idx) => (
+                <MenuRow
                   key={cat.key}
-                  className="flex-row items-center justify-between py-2"
-                >
-                  <View className="flex-row items-center">
-                    <Ionicons name={cat.icon} size={18} color={colors.neutral[400]} />
-                    <Text variant="bodySmall" className="ml-2.5">
-                      {t(cat.labelKey)}
-                    </Text>
-                  </View>
-                  <Switch
-                    value={categoryPrefs[cat.key] !== false}
-                    onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                    trackColor={{ true: colors.brand.orange }}
-                    style={{ transform: [{ scale: 0.85 }] }}
-                  />
-                </View>
+                  icon={cat.icon}
+                  iconBg="neutral"
+                  label={t(cat.labelKey)}
+                  showChevron={false}
+                  showBorder={idx < NOTIF_CATEGORIES.length - 1}
+                  right={
+                    <Switch
+                      value={categoryPrefs[cat.key] !== false}
+                      onValueChange={(v) => handleCategoryToggle(cat.key, v)}
+                      trackColor={{ true: colors.brand.orange }}
+                      style={{ transform: [{ scale: 0.85 }] }}
+                    />
+                  }
+                />
               ))}
             </View>
           )}
         </Card>
 
         {/* SMS Alerts section */}
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center flex-1 mr-3">
-              <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.neutral[600]} />
-              <View className="ml-3 flex-1">
-                <Text variant="body">{t('profile.notif_sms')}</Text>
-                <Text variant="caption" color="secondary">
-                  {t('profile.notif_sms_desc')}
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={smsEnabled}
-              disabled={smsLoading}
-              onValueChange={async (enabled) => {
-                if (!userId) return;
-                setSmsEnabled(enabled);
-                setSmsLoading(true);
-                try {
-                  await notificationService.updateSmsPreference(userId, enabled);
-                } catch {
-                  setSmsEnabled(!enabled); // revert on error
-                } finally {
-                  setSmsLoading(false);
-                }
-              }}
-              trackColor={{ true: colors.brand.orange }}
-            />
-          </View>
+        <Card variant="outlined" padding="md" className="mb-6">
+          <MenuRow
+            icon="chatbubble-ellipses-outline"
+            iconBg="primary"
+            label={t('profile.notif_sms')}
+            subtitle={t('profile.notif_sms_desc')}
+            showChevron={false}
+            showBorder={false}
+            right={
+              <Switch
+                value={smsEnabled}
+                disabled={smsLoading}
+                onValueChange={async (enabled) => {
+                  if (!userId) return;
+                  setSmsEnabled(enabled);
+                  setSmsLoading(true);
+                  try {
+                    await notificationService.updateSmsPreference(userId, enabled);
+                  } catch {
+                    setSmsEnabled(!enabled); // revert on error
+                  } finally {
+                    setSmsLoading(false);
+                  }
+                }}
+                trackColor={{ true: colors.brand.orange }}
+              />
+            }
+          />
         </Card>
 
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Ionicons name="card-outline" size={22} color={colors.neutral[600]} />
-              <Text variant="body" className="ml-3">{t('profile.payment_method')}</Text>
-            </View>
-            <Text variant="body" color="secondary">{t('profile.payment_cash')}</Text>
-          </View>
-        </Card>
-
-        {/* Account deletion */}
-        <View className="mt-8 mb-8">
-          <Text variant="caption" color="tertiary" className="mb-2 uppercase tracking-wider font-semibold">
-            {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
-          </Text>
-          <Card variant="outlined" padding="md" className="border-red-200 dark:border-red-900">
-            <View className="flex-row items-center mb-2">
-              <Ionicons name="warning-outline" size={20} color={colors.error.DEFAULT} />
-              <Text variant="body" className="ml-2 font-semibold text-red-600 dark:text-red-400">
-                {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
-              </Text>
-            </View>
-            <Text variant="caption" color="secondary" className="mb-3">
-              {t('profile.delete_account_desc', { defaultValue: 'Esta acción es irreversible. Se eliminarán todos tus datos, historial de viajes y saldo.' })}
-            </Text>
-            <Pressable
-              className="bg-red-500 rounded-xl py-3 items-center"
-              onPress={() => {
-                Alert.alert(
-                  t('profile.delete_account_confirm_title', { defaultValue: '¿Eliminar cuenta?' }),
-                  t('profile.delete_account_confirm_msg', { defaultValue: 'Esta acción no se puede deshacer. Se perderán todos tus datos, saldo y historial.' }),
-                  [
-                    { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
-                    {
-                      text: t('profile.delete_account', { defaultValue: 'Eliminar cuenta' }),
-                      style: 'destructive',
-                      onPress: async () => {
-                        if (!userId) return;
-                        try {
-                          await authService.deleteAccount(userId);
-                          reset();
-                        } catch {
-                          Alert.alert(
-                            t('errors.generic_title', { defaultValue: 'Error' }),
-                            t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo más tarde.' }),
-                          );
-                        }
-                      },
-                    },
-                  ],
-                );
+        {/* Account deletion - Danger Zone */}
+        <Text variant="caption" className="mb-2 uppercase tracking-wider font-semibold px-1 text-red-500">
+          {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
+        </Text>
+        <Card variant="outlined" padding="md" className="mb-8 border-red-200 dark:border-red-900">
+          <View className="flex-row items-center mb-3">
+            <View
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              <Text variant="body" className="text-white font-semibold">
+              <Ionicons name="warning-outline" size={20} color={colors.error.DEFAULT} />
+            </View>
+            <View className="ml-3 flex-1">
+              <Text variant="body" className="font-semibold text-red-600 dark:text-red-400">
                 {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
               </Text>
-            </Pressable>
-          </Card>
-        </View>
+              <Text variant="caption" color="tertiary" className="mt-0.5">
+                {t('profile.delete_account_desc', { defaultValue: 'Esta accion es irreversible. Se eliminaran todos tus datos, historial de viajes y saldo.' })}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            className="bg-red-500 rounded-xl py-3 items-center"
+            onPress={() => {
+              Alert.alert(
+                t('profile.delete_account_confirm_title', { defaultValue: '¿Eliminar cuenta?' }),
+                t('profile.delete_account_confirm_msg', { defaultValue: 'Esta accion no se puede deshacer. Se perderan todos tus datos, saldo y historial.' }),
+                [
+                  { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+                  {
+                    text: t('profile.delete_account', { defaultValue: 'Eliminar cuenta' }),
+                    style: 'destructive',
+                    onPress: async () => {
+                      if (!userId) return;
+                      try {
+                        await authService.deleteAccount(userId);
+                        reset();
+                      } catch {
+                        Alert.alert(
+                          t('errors.generic_title', { defaultValue: 'Error' }),
+                          t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo mas tarde.' }),
+                        );
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            <Text variant="body" className="text-white font-semibold">
+              {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
+            </Text>
+          </Pressable>
+        </Card>
       </View>
     </Screen>
   );

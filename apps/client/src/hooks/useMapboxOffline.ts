@@ -102,7 +102,7 @@ export function useMapboxOffline(): OfflinePackState {
         await AsyncStorage.setItem(OFFLINE_SYNC_KEY, String(Date.now()));
         setState({ progress: 100, isDownloading: false, error: null });
       } catch (err) {
-        logger.warn('[MapboxOffline] Failed to create pack:', err);
+        logger.warn('[MapboxOffline] Failed to create pack:', { error: String(err) });
         setState((s) => ({
           ...s,
           isDownloading: false,

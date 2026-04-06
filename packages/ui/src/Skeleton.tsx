@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, ViewStyle, useColorScheme } from 'react-native';
+import { colors } from '@tricigo/theme';
 
 interface SkeletonProps {
   width?: number | string;
@@ -11,7 +12,7 @@ interface SkeletonProps {
 
 /**
  * Animated skeleton placeholder for loading states.
- * Pulses between 30% and 70% opacity.
+ * Smooth pulse animation between low and high opacity.
  */
 export function Skeleton({
   width = '100%',
@@ -21,13 +22,14 @@ export function Skeleton({
   style,
 }: SkeletonProps) {
   const colorScheme = useColorScheme();
-  const opacity = useRef(new Animated.Value(0.3)).current;
+  const isDark = colorScheme === 'dark';
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.8, duration: 900, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 900, useNativeDriver: true }),
       ]),
     );
     anim.start();
@@ -42,7 +44,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius,
-          backgroundColor: colorScheme === 'dark' ? '#252540' : '#D1D5DB',
+          backgroundColor: isDark ? colors.neutral[800] : colors.neutral[200],
           opacity,
         },
         style,

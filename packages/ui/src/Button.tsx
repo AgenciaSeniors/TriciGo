@@ -4,6 +4,7 @@ import {
   Text,
   ActivityIndicator,
   type PressableProps,
+  type ViewStyle,
 } from 'react-native';
 import { colors } from '@tricigo/theme';
 
@@ -13,6 +14,8 @@ export interface ButtonProps extends Omit<PressableProps, 'children'> {
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   fullWidth?: boolean;
+  /** Force dark-background styling (dark active states, light text for ghost) */
+  forceDark?: boolean;
 }
 
 const variantStyles = {
@@ -38,6 +41,18 @@ const variantStyles = {
   },
 } as const;
 
+/** Dark-mode overrides for variants that have light active states */
+const forceDarkVariantStyles: Partial<Record<string, { container: string; text: string }>> = {
+  outline: {
+    container: 'border-2 border-primary-500 bg-transparent active:bg-primary-500/20',
+    text: 'text-primary-500',
+  },
+  ghost: {
+    container: 'bg-transparent active:bg-white/10',
+    text: 'text-white',
+  },
+};
+
 const sizeStyles = {
   sm: { container: 'px-4 py-2.5 rounded-lg min-h-[40px]', text: 'text-sm font-semibold' },
   md: { container: 'px-6 py-3.5 rounded-xl min-h-[48px]', text: 'text-base font-bold' },
@@ -50,11 +65,13 @@ export function Button({
   size = 'md',
   loading = false,
   fullWidth = false,
+  forceDark = false,
   disabled,
   className,
+  style,
   ...props
 }: ButtonProps & { className?: string }) {
-  const v = variantStyles[variant];
+  const v = (forceDark && forceDarkVariantStyles[variant]) || variantStyles[variant];
   const s = sizeStyles[size];
   const isDisabled = disabled || loading;
 
@@ -71,6 +88,7 @@ export function Button({
         ${className ?? ''}
       `}
       disabled={isDisabled}
+      style={style as ViewStyle}
       {...props}
     >
       {loading ? (

@@ -526,7 +526,8 @@
     "revenue_forecast": "Revenue Forecast",
     "prediction_next_7_days": "Prediction next 7 days",
     "actual": "Actual",
-    "predicted": "Predicted"
+    "predicted": "Predicted",
+    "export_csv": "Export CSV"
   },
 
   "funnel": {
@@ -875,6 +876,12 @@
     "commission_rate_help": "Platform fee percentage per ride (e.g., 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Exchange rate fallback (CUP)",
     "exchange_rate_fallback_cup_help": "Fallback USD/CUP rate if no current rate is set",
+    "quota_deduction_rate": "Quota deduction rate",
+    "quota_deduction_rate_help": "Percentage of ride fare deducted from driver's quota (e.g., 0.15 = 15%)",
+    "quota_warning_threshold_pct": "Low quota warning threshold",
+    "quota_warning_threshold_pct_help": "Remaining quota percentage that triggers a warning (e.g., 0.20 = 20%)",
+    "quota_grace_trips": "Grace trips",
+    "quota_grace_trips_help": "Number of trips allowed after quota is depleted before blocking",
     "openweather_api_key": "OpenWeatherMap API Key",
     "openweather_api_key_help": "API key for weather queries. Get one at openweathermap.org",
     "weather_surge_enabled": "Weather surge enabled",

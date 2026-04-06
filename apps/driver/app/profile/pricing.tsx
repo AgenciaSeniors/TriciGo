@@ -123,7 +123,7 @@ export default function DriverPricingScreen() {
         </View>
 
         {/* Explanation */}
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
           <Text variant="body" color="inverse" className="opacity-70 mb-2">
             {t('pricing.explanation')}
           </Text>
@@ -151,7 +151,7 @@ export default function DriverPricingScreen() {
         </Card>
 
         {/* Current rate display */}
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
           <Text variant="bodySmall" color="inverse" className="opacity-50 mb-1">
             {t('pricing.current_rate')}
           </Text>
@@ -173,7 +173,7 @@ export default function DriverPricingScreen() {
         </Card>
 
         {/* Rate input */}
-        <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
           <Text variant="bodySmall" color="inverse" className="opacity-50 mb-2">
             {t('pricing.set_rate')}
           </Text>
@@ -234,6 +234,7 @@ export default function DriverPricingScreen() {
             variant="outline"
             size="lg"
             fullWidth
+            forceDark
             onPress={handleReset}
             disabled={saving}
           />

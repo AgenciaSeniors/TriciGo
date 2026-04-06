@@ -51,7 +51,7 @@ export default function DriverSafetyCenterScreen() {
         </Text>
 
         {/* Emergency Services */}
-        <Card variant="filled" padding="md" className="mb-3 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-3 bg-neutral-800">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-full bg-error items-center justify-center mr-3">
               <Ionicons name="warning" size={20} color="white" />
@@ -75,7 +75,7 @@ export default function DriverSafetyCenterScreen() {
         </Card>
 
         {/* Report Safety Issue */}
-        <Card variant="filled" padding="md" className="mb-3 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-3 bg-neutral-800">
           <Pressable
             className="flex-row items-center"
             onPress={() => router.push('/profile/help')}
@@ -96,7 +96,7 @@ export default function DriverSafetyCenterScreen() {
         </Card>
 
         {/* Safety Tips for Drivers */}
-        <Card variant="filled" padding="md" className="mb-3 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-3 bg-neutral-800">
           <Pressable
             className="flex-row items-center justify-between"
             onPress={() => setTipsExpanded(!tipsExpanded)}
@@ -132,7 +132,7 @@ export default function DriverSafetyCenterScreen() {
         </Card>
 
         {/* My Safety Reports */}
-        <Card variant="filled" padding="md" className="mb-6 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-full bg-neutral-700 items-center justify-center mr-3">
               <Ionicons name="document-text-outline" size={20} color={colors.neutral[400]} />

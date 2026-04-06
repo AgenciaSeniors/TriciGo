@@ -10,7 +10,8 @@ import { createThemeStore, type ThemeMode } from '@tricigo/theme';
 
 const THEME_STORAGE_KEY = '@tricigo/theme_mode';
 
-// Singleton store instance
+// Singleton store instance — driver uses forced dark backgrounds via Screen bg="dark"
+// but NativeWind stays in light mode so color="inverse" gives white text.
 const themeStore = createThemeStore('light');
 
 // Load persisted theme on startup

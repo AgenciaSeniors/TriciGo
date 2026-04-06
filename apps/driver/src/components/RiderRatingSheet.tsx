@@ -101,7 +101,7 @@ export function RiderRatingSheet({
   }
 
   return (
-    <Card variant="filled" padding="md" className="w-full bg-neutral-800">
+    <Card forceDark variant="filled" padding="md" className="w-full bg-neutral-800">
       {/* Rider avatar + name */}
       <View className="items-center mb-4">
         <Avatar uri={riderAvatarUrl} size={64} name={riderName} />
@@ -192,6 +192,7 @@ export function RiderRatingSheet({
             multiline
             numberOfLines={2}
             style={{ minHeight: 60 }}
+            variant="dark"
           />
         </View>
       )}
@@ -212,6 +213,7 @@ export function RiderRatingSheet({
           variant="outline"
           size="md"
           fullWidth
+          forceDark
           onPress={onSkip}
         />
       </View>

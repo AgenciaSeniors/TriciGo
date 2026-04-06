@@ -27,7 +27,21 @@ export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from
 export { logger, setLogContext, clearLogContext } from './logger';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
+
+/**
+ * Extract initials from a name (e.g. "Carlos Garcia" → "CG").
+ * Returns up to 2 characters, uppercase.
+ */
+export function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('');
+}
 export { CUBAN_CITY_PACKS } from './mapboxOffline';
 export type { SearchBoxResult } from './geo';
 export type { CubanParsed } from './geo';
+export { jitterLocation } from './geo';
 export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, computeSpecificity, enrichWithCrossStreets, isGenericStreetAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';

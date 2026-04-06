@@ -3,6 +3,7 @@ import { View, Pressable, Share, Animated, useColorScheme, type GestureResponder
 import { useRouter } from 'expo-router';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -200,6 +201,13 @@ export function RideCompleteView() {
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
+
+      // Cancel rating reminder if it was scheduled
+      const reminderId = useRideStore.getState().ratingReminderId;
+      if (reminderId) {
+        Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
+        useRideStore.getState().setRatingReminderId(null);
+      }
       setTimeout(() => resetAll(), 5000);
     } catch (err) {
       logger.error('Error submitting review', { error: String(err) });

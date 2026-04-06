@@ -12,7 +12,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, cupToTrcCentavos, triggerHaptic, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -254,9 +254,14 @@ export default function RideDetailScreen() {
           )}
 
           <View className="h-px bg-neutral-200 my-2" />
-          <View className="flex-row justify-between">
+          <View className="flex-row justify-between items-end">
             <Text variant="h4">{ride.final_fare_trc != null ? t('ride.final_fare') : t('ride.estimated_fare')}</Text>
-            <Text variant="h3" color="accent">{fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}</Text>
+            <View className="items-end">
+              <Text variant="h3" color="accent">{fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}</Text>
+              <Text variant="caption" color="secondary">
+                {'\u2248'} {formatUSD(trcToUsd(fareTrc ?? fareCup, ride.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE))}
+              </Text>
+            </View>
           </View>
         </Card>
 

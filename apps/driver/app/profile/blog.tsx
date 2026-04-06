@@ -81,9 +81,10 @@ export default function BlogScreen() {
 
         {!loading && posts.length === 0 && (
           <EmptyState
+            forceDark
             icon="newspaper-outline"
             title={t('profile.no_posts', { defaultValue: 'Sin artículos aún' })}
-            message={t('profile.no_posts_desc', { defaultValue: 'Próximamente encontrarás noticias y consejos aquí.' })}
+            description={t('profile.no_posts_desc', { defaultValue: 'Próximamente encontrarás noticias y consejos aquí.' })}
           />
         )}
 

@@ -8,6 +8,7 @@ import {
   Dimensions,
   StyleSheet,
   Platform,
+  ScrollView,
   Text as RNText,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,8 +60,9 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 function WebDriverHomeScreen() {
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
   return (
-    <View style={{ flex: 1, backgroundColor: '#111111', paddingHorizontal: 16 }}>
-      <View style={{ paddingTop: 16, flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#111111' }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+      <View style={{ paddingTop: 16 }}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Conductor</Text>
@@ -127,6 +129,7 @@ function WebDriverHomeScreen() {
           </View>
         </View>
       </View>
+      </ScrollView>
     </View>
   );
 }
@@ -953,8 +956,11 @@ function FloatingHeader({ isOnline, unreadCount, notifEnabled, t }: FloatingHead
     <View style={styles.floatingHeader} pointerEvents="box-none">
       {/* Logo */}
       <View style={[styles.logoCard, Platform.OS === 'web' && { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } as any]}>
-        <RNText style={styles.logoTrici}>Trici</RNText>
-        <RNText style={styles.logoGo}>Go</RNText>
+        <Image
+          source={require('../../assets/logo-wordmark-white.png')}
+          style={{ width: 90, height: 24 }}
+          resizeMode="contain"
+        />
         <View style={styles.logoDivider} />
         <RNText style={styles.logoSub}>{t('common.driver_label', { defaultValue: 'conductor' })}</RNText>
       </View>
@@ -1026,7 +1032,7 @@ const styles = StyleSheet.create({
   },
   logoCard: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     backgroundColor: 'rgba(14,14,26,0.9)',
     paddingHorizontal: 14,
     paddingVertical: 8,

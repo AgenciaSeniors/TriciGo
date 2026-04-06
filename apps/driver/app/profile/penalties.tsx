@@ -48,7 +48,7 @@ export default function PenaltiesScreen() {
   const totalAmount = penalties.reduce((sum, p) => sum + p.amount, 0);
 
   const renderPenalty = ({ item }: { item: CancellationPenalty }) => (
-    <Card variant="filled" padding="md" className="mb-2 bg-neutral-800">
+    <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
       <View className="flex-row items-center justify-between">
         <View className="flex-1 mr-3">
           <Text variant="bodySmall" color="inverse">
@@ -81,11 +81,12 @@ export default function PenaltiesScreen() {
         <ScreenHeader
           title={t('penalties.title', { defaultValue: 'Penalidades' })}
           onBack={() => router.back()}
+          light
         />
 
         {/* Summary */}
         {penalties.length > 0 && (
-          <Card variant="filled" padding="md" className="bg-red-900/30 mb-4 mt-2">
+          <Card forceDark variant="filled" padding="md" className="bg-red-900/30 mb-4 mt-2">
             <View className="flex-row items-center gap-2">
               <Ionicons name="warning-outline" size={20} color="#EF4444" />
               <View>

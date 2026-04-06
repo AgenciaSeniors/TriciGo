@@ -152,17 +152,17 @@ export default function ReviewsPage() {
         if (tags) {
           tagsMap = tags.reduce((acc: Record<string, string[]>, tag: { review_id: string; tag_key: string }) => {
             if (!acc[tag.review_id]) acc[tag.review_id] = [];
-            acc[tag.review_id].push(tag.tag_key);
+            acc[tag.review_id]!.push(tag.tag_key);
             return acc;
           }, {});
         }
       }
 
       const rows: ReviewRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
-        ...(r as Review),
+        ...(r as unknown as Review),
         reviewer_name: (r.reviewer as { full_name?: string } | null)?.full_name ?? undefined,
         reviewee_name: (r.reviewee as { full_name?: string } | null)?.full_name ?? undefined,
-        tag_keys: tagsMap[(r as Review).id] ?? [],
+        tag_keys: tagsMap[(r as unknown as Review).id] ?? [],
         is_featured: (r as Record<string, unknown>).is_featured as boolean | undefined,
       }));
 

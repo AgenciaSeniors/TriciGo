@@ -141,7 +141,9 @@
     "arriving_waypoint": "Chegando na Parada {{n}}...",
     "auto_arriving": "Marcando chegada automaticamente...",
     "nav_auto_started": "Navegação iniciada",
-    "restart_nav": "Reiniciar navegação"
+    "restart_nav": "Reiniciar navegação",
+    "approaching_pickup": "Chegando ao ponto de embarque",
+    "approaching_pickup_body": "Você está a ~2 minutos do ponto de embarque"
   },
 
   "ride": {

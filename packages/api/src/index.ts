@@ -25,6 +25,7 @@ export { deliveryService } from './services/delivery.service';
 export type { DeliveryDetails } from './services/delivery.service';
 export { nearbyService } from './services/nearby.service';
 export { exchangeRateService } from './services/exchange-rate.service';
+export { presenceService } from './services/presence.service';
 export {
   initOfflineQueue,
   registerOfflineMutation,

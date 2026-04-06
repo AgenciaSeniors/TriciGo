@@ -1,13 +1,14 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, FlatList, Pressable, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { Skeleton } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
-import { colors } from '@tricigo/theme';
+import { colors, driverDarkColors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -39,15 +40,32 @@ function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown
   return `${days}${t('notifications.days_short', { defaultValue: 'd' })}`;
 }
 
-function getDateGroup(dateStr: string, t: (key: string) => string): string {
+function getDateGroup(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const d = new Date(dateStr);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);
 
-  if (d >= today) return t('notifications.today');
-  if (d >= yesterday) return t('notifications.yesterday');
-  return t('notifications.older');
+  if (d >= today) return t('notifications.today', { defaultValue: 'Hoy' });
+  if (d >= yesterday) return t('notifications.yesterday', { defaultValue: 'Ayer' });
+  return t('notifications.older', { defaultValue: 'Anteriores' });
+}
+
+type GroupedNotification = { type: 'header'; title: string } | { type: 'item'; data: AppNotification };
+
+function SkeletonNotification() {
+  return (
+    <View className="flex-row px-4 py-3.5 items-center">
+      <View className="mr-3">
+        <Skeleton width={40} height={40} borderRadius={20} style={{ backgroundColor: colors.neutral[800] }} />
+      </View>
+      <View className="flex-1">
+        <Skeleton width="70%" height={14} className="mb-2" style={{ backgroundColor: colors.neutral[800] }} />
+        <Skeleton width="90%" height={11} style={{ backgroundColor: colors.neutral[800] }} />
+      </View>
+      <Skeleton width={24} height={10} style={{ backgroundColor: colors.neutral[800] }} />
+    </View>
+  );
 }
 
 export default function NotificationsScreen() {
@@ -131,80 +149,175 @@ export default function NotificationsScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: AppNotification }) => {
-    const icon = ICON_MAP[item.type] ?? ICON_MAP.system;
+  // Group notifications by date
+  const groupedData = useMemo((): GroupedNotification[] => {
+    const filtered = notifications;
+    if (filtered.length === 0) return [];
+
+    const groups: GroupedNotification[] = [];
+    let lastGroup = '';
+
+    for (const notif of filtered) {
+      const group = getDateGroup(notif.created_at, t);
+      if (group !== lastGroup) {
+        groups.push({ type: 'header', title: group });
+        lastGroup = group;
+      }
+      groups.push({ type: 'item', data: notif });
+    }
+
+    return groups;
+  }, [notifications, t]);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const renderItem = ({ item }: { item: GroupedNotification }) => {
+    if (item.type === 'header') {
+      return (
+        <View className="px-4 pt-4 pb-2">
+          <Text variant="caption" style={{ color: colors.neutral[500] }} className="uppercase tracking-wider font-semibold">
+            {item.title}
+          </Text>
+        </View>
+      );
+    }
+
+    const notif = item.data;
+    const icon = ICON_MAP[notif.type] ?? ICON_MAP.system;
+
     return (
       <Pressable
-        onPress={() => handleTap(item)}
-        className={`flex-row px-4 py-3 border-b border-neutral-800 ${!item.read ? 'bg-neutral-800/50' : ''}`}
+        onPress={() => handleTap(notif)}
+        className="flex-row mx-3 px-3 py-3.5 rounded-xl mb-1"
+        style={{
+          backgroundColor: !notif.read ? `${driverDarkColors.card}` : 'transparent',
+          borderWidth: !notif.read ? 1 : 0,
+          borderColor: !notif.read ? driverDarkColors.border.default : 'transparent',
+        }}
         accessibilityRole="button"
-        accessibilityLabel={`${item.title}: ${item.body}`}
+        accessibilityLabel={`${notif.title}: ${notif.body}`}
       >
-        <View className="w-10 h-10 rounded-full items-center justify-center mr-3" style={{ backgroundColor: icon.color + '20' }}>
+        <View
+          className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+          style={{ backgroundColor: icon.color + '18' }}
+        >
           <Ionicons name={icon.name} size={20} color={icon.color} />
         </View>
         <View className="flex-1 mr-2">
-          <Text variant="bodySmall" color="inverse" className={`font-semibold ${!item.read ? '' : 'opacity-60'}`}>
-            {item.title}
+          <Text
+            variant="bodySmall"
+            style={{ color: !notif.read ? '#f5f5f5' : colors.neutral[400], fontWeight: !notif.read ? '600' : '400' }}
+          >
+            {notif.title}
           </Text>
-          <Text variant="caption" color="inverse" className="opacity-50" numberOfLines={2}>
-            {item.body}
+          <Text
+            variant="caption"
+            style={{ color: colors.neutral[500] }}
+            numberOfLines={2}
+            className="mt-0.5"
+          >
+            {notif.body}
           </Text>
         </View>
-        <View className="items-end">
-          <Text variant="caption" color="inverse" className="opacity-40">{timeAgo(item.created_at, t)}</Text>
-          {!item.read && (
-            <View className="w-2 h-2 rounded-full bg-primary-500 mt-1" />
+        <View className="items-end pt-0.5">
+          <Text variant="caption" style={{ color: colors.neutral[600] }}>
+            {timeAgo(notif.created_at, t)}
+          </Text>
+          {!notif.read && (
+            <View
+              className="w-2 h-2 rounded-full mt-2"
+              style={{ backgroundColor: colors.brand.orange }}
+            />
           )}
         </View>
       </Pressable>
     );
   };
 
+  // Skeleton loading state
+  if (isLoading && notifications.length === 0) {
+    return (
+      <Screen bg="dark" statusBarStyle="light-content" padded={false}>
+        <ScreenHeader
+          title={t('notifications.title')}
+          onBack={() => router.back()}
+          light
+        />
+        <View className="px-4 pt-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonNotification key={i} />
+          ))}
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen bg="dark" statusBarStyle="light-content" padded={false}>
       <ScreenHeader
         title={t('notifications.title')}
         onBack={() => router.back()}
+        light
         rightAction={
-          <Pressable onPress={handleMarkAllRead} className="px-2">
-            <Text variant="caption" color="accent" className="font-semibold">
-              {t('notifications.mark_all_read')}
-            </Text>
-          </Pressable>
+          unreadCount > 0 ? (
+            <Pressable onPress={handleMarkAllRead} className="px-2" hitSlop={8}>
+              <Text variant="caption" style={{ color: colors.brand.orange }} className="font-semibold">
+                {t('notifications.mark_all_read')}
+              </Text>
+            </Pressable>
+          ) : undefined
         }
       />
 
       {/* Filter tabs */}
-      <View className="flex-row px-4 pb-2 gap-2">
-        {(['all', 'unread'] as const).map((f) => (
-          <Pressable
-            key={f}
-            onPress={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-full ${
-              filter === f ? 'bg-primary-500' : 'bg-neutral-800'
-            }`}
-          >
-            <Text
-              variant="caption"
-              className={`font-medium ${filter === f ? 'text-white' : 'text-neutral-400'}`}
+      <View className="flex-row px-4 pb-3 gap-2">
+        {(['all', 'unread'] as const).map((f) => {
+          const isActive = filter === f;
+          return (
+            <Pressable
+              key={f}
+              onPress={() => setFilter(f)}
+              className="px-4 py-2 rounded-full flex-row items-center gap-1.5"
+              style={{
+                backgroundColor: isActive ? colors.brand.orange : driverDarkColors.card,
+                borderWidth: 1,
+                borderColor: isActive ? colors.brand.orange : driverDarkColors.border.default,
+              }}
             >
-              {t(`notifications.${f}`)}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                variant="caption"
+                style={{ color: isActive ? '#FFFFFF' : colors.neutral[400], fontWeight: '600' }}
+              >
+                {t(`notifications.${f}`)}
+              </Text>
+              {f === 'unread' && unreadCount > 0 && (
+                <View
+                  className="min-w-[18px] h-[18px] rounded-full items-center justify-center px-1"
+                  style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : colors.brand.orange }}
+                >
+                  <Text variant="badge" style={{ color: '#FFFFFF', fontSize: 10 }}>
+                    {unreadCount > 99 ? '99+' : String(unreadCount)}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </View>
 
       {notifications.length === 0 && !isLoading ? (
         <EmptyState
+          forceDark
           icon="notifications-off-outline"
           title={t('notifications.empty')}
           description={t('notifications.empty_desc')}
         />
       ) : (
         <FlatList
-          data={notifications}
-          keyExtractor={(item) => item.id}
+          data={groupedData}
+          keyExtractor={(item, index) =>
+            item.type === 'header' ? `header-${item.title}` : `notif-${item.data.id}`
+          }
           renderItem={renderItem}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />

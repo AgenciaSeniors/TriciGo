@@ -131,6 +131,7 @@ export default function DocumentsScreen() {
           </View>
         ) : documents.length === 0 ? (
           <EmptyState
+            forceDark
             icon="document-text-outline"
             title={t('verification.no_documents', { defaultValue: 'No hay documentos' })}
             description={t('verification.no_documents_desc', { defaultValue: 'Aún no has cargado documentos de verificación' })}
@@ -142,7 +143,7 @@ export default function DocumentsScreen() {
               const isRejected = !doc.is_verified && !!doc.rejection_reason;
 
               return (
-                <Card key={doc.id} variant="surface" padding="md" className="mb-3">
+                <Card forceDark key={doc.id} variant="surface" padding="md" className="mb-3">
                   <View className="flex-row items-center">
                     <View className="w-10 h-10 rounded-xl bg-[#252540] items-center justify-center mr-3">
                       <Ionicons
@@ -180,6 +181,7 @@ export default function DocumentsScreen() {
                       title={t('verification.reupload')}
                       variant="outline"
                       size="sm"
+                      forceDark
                       className="mt-3"
                       onPress={() => handleReupload(doc.document_type)}
                       loading={reuploading === doc.document_type}
@@ -218,7 +220,7 @@ export default function DocumentsScreen() {
                 {selfieChecks.map((check) => {
                   const badgeProps = getSelfieStatusProps(check);
                   return (
-                    <Card key={check.id} variant="surface" padding="sm" className="mb-2">
+                    <Card forceDark key={check.id} variant="surface" padding="sm" className="mb-2">
                       <View className="flex-row items-center">
                         <View className="w-8 h-8 rounded-lg bg-[#252540] items-center justify-center mr-3">
                           <Ionicons name="camera-outline" size={16} color={colors.neutral[400]} />

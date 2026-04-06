@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Alert, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
-import { formatCUP, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
+import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
@@ -34,57 +34,59 @@ function WebTripsScreen() {
     { id: '5', date: '12 mar', status: 'completed', pickup: 'Playa, 3ra y 70', dropoff: 'Nuevo Vedado, 26 y Boyeros', fare: 'T$ 110.00', payment: 'TriciCoin' },
   ];
   return (
-    <View style={{ flex: 1, backgroundColor: '#111111', paddingHorizontal: 16 }}>
-      <View style={{ paddingTop: 16, flex: 1 }}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Historial de viajes</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#262626' }}>
-            <Ionicons name="download-outline" size={14} color="#9ca3af" />
-            <Text style={{ fontSize: 12, color: '#9ca3af', fontWeight: '500', ...font }}>CSV</Text>
+    <View style={{ flex: 1, backgroundColor: '#111111' }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+        <View style={{ paddingTop: 16 }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Historial de viajes</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#262626' }}>
+              <Ionicons name="download-outline" size={14} color="#9ca3af" />
+              <Text style={{ fontSize: 12, color: '#9ca3af', fontWeight: '500', ...font }}>CSV</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Filter tabs */}
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-          {['Todos', 'Completados', 'Cancelados'].map((f, i) => (
-            <View key={i} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: i === 0 ? '#F97316' : '#262626' }}>
-              <Text style={{ fontSize: 12, color: i === 0 ? '#fff' : '#9ca3af', fontWeight: i === 0 ? '600' : '500', ...font }}>{f}</Text>
+          {/* Filter tabs */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+            {['Todos', 'Completados', 'Cancelados'].map((f, i) => (
+              <View key={i} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: i === 0 ? '#F97316' : '#262626' }}>
+                <Text style={{ fontSize: 12, color: i === 0 ? '#fff' : '#9ca3af', fontWeight: i === 0 ? '600' : '500', ...font }}>{f}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Trip cards */}
+          {mockTrips.map((trip) => (
+            <View key={trip.id} style={{ backgroundColor: '#1f1f1f', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              {/* Date + status badge */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>{trip.date}</Text>
+                <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, backgroundColor: trip.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: trip.status === 'completed' ? '#4ade80' : '#f87171', ...font }}>
+                    {trip.status === 'completed' ? 'Completado' : 'Cancelado'}
+                  </Text>
+                </View>
+              </View>
+              {/* Origin + Destination */}
+              <View style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', marginTop: 4, marginRight: 8 }} />
+                  <Text style={{ fontSize: 14, color: '#fff', flex: 1, ...font }} numberOfLines={1}>{trip.pickup}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F97316', marginTop: 4, marginRight: 8 }} />
+                  <Text style={{ fontSize: 14, color: '#d1d5db', flex: 1, ...font }} numberOfLines={1}>{trip.dropoff}</Text>
+                </View>
+              </View>
+              {/* Fare + payment */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>{trip.fare}</Text>
+                <Text style={{ fontSize: 12, color: '#6b7280', ...font }}>{trip.payment}</Text>
+              </View>
             </View>
           ))}
         </View>
-
-        {/* Trip cards */}
-        {mockTrips.map((trip) => (
-          <View key={trip.id} style={{ backgroundColor: '#1f1f1f', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-            {/* Date + status badge */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>{trip.date}</Text>
-              <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, backgroundColor: trip.status === 'completed' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: trip.status === 'completed' ? '#4ade80' : '#f87171', ...font }}>
-                  {trip.status === 'completed' ? 'Completado' : 'Cancelado'}
-                </Text>
-              </View>
-            </View>
-            {/* Origin + Destination */}
-            <View style={{ marginBottom: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', marginTop: 4, marginRight: 8 }} />
-                <Text style={{ fontSize: 14, color: '#fff', flex: 1, ...font }} numberOfLines={1}>{trip.pickup}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#F97316', marginTop: 4, marginRight: 8 }} />
-                <Text style={{ fontSize: 14, color: '#d1d5db', flex: 1, ...font }} numberOfLines={1}>{trip.dropoff}</Text>
-              </View>
-            </View>
-            {/* Fare + payment */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: '#fff', ...font }}>{trip.fare}</Text>
-              <Text style={{ fontSize: 12, color: '#6b7280', ...font }}>{trip.payment}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -208,11 +210,14 @@ function NativeTripsScreen() {
 
   const renderItem = useCallback(({ item }: { item: Ride }) => {
     const isCompleted = item.status === 'completed';
-    const fare = item.final_fare_cup ?? item.estimated_fare_cup ?? 0;
+    const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.final_fare_cup ?? item.estimated_fare_cup ?? 0;
+    const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
+    const fareUsd = trcToUsd(fare, rate);
+    const deduction = item.quota_deduction_amount ?? 0;
 
     return (
-      <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${formatCUP(fare)}`}>
-        <Card variant="filled" padding="md" className="mb-3 bg-neutral-800">
+      <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}>
+        <Card forceDark variant="filled" padding="md" className="mb-3 bg-neutral-800">
           <View className="flex-row items-center justify-between mb-2">
             <Text variant="caption" color="inverse" className="opacity-60">
               {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
@@ -238,8 +243,16 @@ function NativeTripsScreen() {
           </View>
 
           <View className="flex-row justify-between items-center">
-            <Text variant="body" color="inverse" className="font-semibold">{formatCUP(fare)}</Text>
-            <Text variant="caption" color="inverse" className="opacity-40">{item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}</Text>
+            <View>
+              <Text variant="body" color="inverse" className="font-semibold">{formatTRC(fare)}</Text>
+              <Text variant="caption" color="inverse" className="opacity-40">{'\u2248'} {formatUSD(fareUsd)}</Text>
+            </View>
+            <View className="items-end">
+              {deduction > 0 && (
+                <Text variant="caption" className="text-red-400">-{formatTRC(deduction)}</Text>
+              )}
+              <Text variant="caption" color="inverse" className="opacity-40">{item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}</Text>
+            </View>
           </View>
 
         </Card>
@@ -300,6 +313,7 @@ function NativeTripsScreen() {
             }
             ListEmptyComponent={
               <EmptyState
+                forceDark
                 icon="car-outline"
                 title={t('trips_history.no_trips')}
               />
@@ -310,6 +324,7 @@ function NativeTripsScreen() {
                   title={t('trips_history.load_more')}
                   variant="outline"
                   size="sm"
+                  forceDark
                   onPress={loadMore}
                   loading={loading && page > 0}
                   className="mb-6"

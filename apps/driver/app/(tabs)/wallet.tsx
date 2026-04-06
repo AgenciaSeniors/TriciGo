@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, RefreshControl, Pressable } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -7,7 +8,10 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
-import { formatCUP } from '@tricigo/utils';
+import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
+import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
+import { QuotaCard } from '@tricigo/ui/QuotaCard';
+import type { DriverQuotaStatus } from '@tricigo/types';
 import { colors, driverDarkColors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -58,6 +62,8 @@ export default function WalletScreen() {
   const [holdBalance, setHoldBalance] = useState(0);
   const [commissions, setCommissions] = useState<CommissionEntry[]>([]);
   const [filter, setFilter] = useState<string | null>(null);
+  const [quotaStatus, setQuotaStatus] = useState<DriverQuotaStatus | null>(null);
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
   const [goals, setGoals] = useState<EarningGoal[]>([
     { label: t('wallet.goal_daily', { defaultValue: 'Meta diaria' }), target: 5000, current: 0 },
     { label: t('wallet.goal_weekly', { defaultValue: 'Meta semanal' }), target: 25000, current: 0 },
@@ -67,20 +73,24 @@ export default function WalletScreen() {
   const fetchData = useCallback(async () => {
     if (!driverProfile?.id || !userId) return;
     try {
-      const [balanceData, txData] = await Promise.all([
+      const [balanceData, txData, quotaData, rateData] = await Promise.all([
         walletService.getBalance(userId),
-        walletService.getTransactions(userId, { limit: 50 }),
+        walletService.getTransactions(userId, 0, 50),
+        walletService.getQuotaStatus(userId).catch(() => null),
+        exchangeRateService.getUsdCupRate().catch(() => DEFAULT_EXCHANGE_RATE),
       ]);
       setBalance(balanceData?.available ?? 0);
-      setHoldBalance(balanceData?.hold ?? 0);
+      setHoldBalance(balanceData?.held ?? 0);
+      if (quotaData) setQuotaStatus(quotaData);
+      setExchangeRate(rateData);
 
       // Map transactions to commission entries
-      const mapped: CommissionEntry[] = (txData ?? []).map((tx: Record<string, unknown>) => ({
-        id: tx.id as string,
-        ride_id: (tx.ride_id as string) ?? '',
-        amount: (tx.amount as number) ?? 0,
-        commission_rate: (tx.commission_rate as number) ?? 0.15,
-        created_at: tx.created_at as string,
+      const mapped: CommissionEntry[] = (txData ?? []).map((tx) => ({
+        id: tx.id,
+        ride_id: (tx as unknown as Record<string, unknown>).ride_id as string ?? '',
+        amount: tx.amount ?? 0,
+        commission_rate: ((tx as unknown as Record<string, unknown>).commission_rate as number) ?? 0.15,
+        created_at: tx.created_at,
         type: (tx.type as CommissionEntry['type']) ?? 'ride',
       }));
       setCommissions(mapped);
@@ -155,17 +165,45 @@ export default function WalletScreen() {
           {t('wallet.title', { defaultValue: 'Billetera' })}
         </Text>
 
-        {/* Balance Card */}
-        <AnimatedCard delay={0} className="rounded-2xl p-5 mb-6"
+        {/* Quota Card */}
+        {quotaStatus && (
+          <AnimatedCard delay={0} className="mb-4">
+            <QuotaCard
+              balance={quotaStatus.balance}
+              totalRecharged={quotaStatus.total_recharged}
+              exchangeRate={exchangeRate}
+              deductionRate={quotaStatus.deduction_rate}
+              warningActive={quotaStatus.warning_active}
+              graceTripsRemaining={quotaStatus.grace_trips_remaining}
+              blocked={quotaStatus.blocked}
+              onRecharge={() => router.push('/wallet/recharge')}
+              labels={{
+                title: t('wallet.quota_title', { defaultValue: 'Cuota de trabajo' }),
+                balance: t('wallet.quota_balance', { defaultValue: 'Balance de cuota' }),
+                recharge: t('wallet.recharge_quota', { defaultValue: 'Recargar cuota' }),
+                lowWarning: t('wallet.quota_low_warning', { defaultValue: 'Tu cuota esta baja. Recarga pronto para seguir trabajando.' }),
+                graceMessage: t('wallet.quota_grace', { defaultValue: 'Cuota agotada. Te quedan {count} viajes de gracia.' }),
+                blockedMessage: t('wallet.quota_blocked', { defaultValue: 'Cuota agotada. Recarga para seguir aceptando viajes.' }),
+                deductionInfo: t('wallet.quota_deduction_info', { defaultValue: 'Se descuenta {pct} del valor de cada viaje.' }),
+              }}
+            />
+          </AnimatedCard>
+        )}
+
+        {/* Earnings Balance Card */}
+        <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
           style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
         >
           <Text variant="caption" style={{ color: colors.neutral[400] }} className="mb-1">
             {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
           </Text>
-          <Text variant="stat" className="text-white">{formatCUP(balance)}</Text>
+          <Text variant="stat" className="text-white">{formatTRC(balance)}</Text>
+          <Text variant="caption" style={{ color: colors.neutral[500] }} className="mt-0.5">
+            {'\u2248'} {formatUSD(trcToUsd(balance, exchangeRate))}
+          </Text>
           {holdBalance > 0 && (
             <Text variant="caption" style={{ color: colors.neutral[400] }} className="mt-1">
-              {t('wallet.hold_balance', { defaultValue: 'En retención' })}: {formatCUP(holdBalance)}
+              {t('wallet.hold_balance', { defaultValue: 'En retencion' })}: {formatTRC(holdBalance)}
             </Text>
           )}
         </AnimatedCard>
@@ -189,7 +227,7 @@ export default function WalletScreen() {
                   {goal.label}
                 </Text>
                 <Text variant="metric" className="text-white mb-2">
-                  {formatCUP(goal.current)}
+                  {formatTRC(goal.current)}
                 </Text>
                 {/* Progress bar */}
                 <View className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: driverDarkColors.border.default }}>
@@ -202,7 +240,7 @@ export default function WalletScreen() {
                   />
                 </View>
                 <Text variant="caption" style={{ color: colors.neutral[500] }} className="mt-1">
-                  {t('wallet.goal_of', { defaultValue: 'de' })} {formatCUP(goal.target)}
+                  {t('wallet.goal_of', { defaultValue: 'de' })} {formatTRC(goal.target)}
                 </Text>
               </AnimatedCard>
             );
@@ -256,9 +294,10 @@ export default function WalletScreen() {
 
         {filteredCommissions.length === 0 ? (
           <EmptyState
+            forceDark
             icon="receipt-outline"
             title={t('wallet.no_commissions', { defaultValue: 'Sin comisiones aún' })}
-            message={t('wallet.no_commissions_desc', { defaultValue: 'Tus comisiones aparecerán aquí' })}
+            description={t('wallet.no_commissions_desc', { defaultValue: 'Tus comisiones aparecerán aquí' })}
           />
         ) : (
           <StaggeredList staggerDelay={60}>
@@ -287,7 +326,7 @@ export default function WalletScreen() {
                   </Text>
                 </View>
                 <Text variant="body" style={{ color: colors.success.DEFAULT, fontWeight: '700' }}>
-                  +{formatCUP(entry.amount)}
+                  +{formatTRC(entry.amount)}
                 </Text>
               </View>
             ))}

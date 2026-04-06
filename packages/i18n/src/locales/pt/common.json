@@ -218,6 +218,7 @@
     "notif_chat": "Mensagens de chat",
     "notif_wallet": "Carteira e pagamentos",
     "notif_promos": "Promoções e ofertas",
+    "notif_driver_approval": "Aprovação de motorista",
     "notif_trip_requests": "Solicitações de viagem",
     "notif_sms": "Alertas por SMS",
     "notif_sms_desc": "Receba alertas de viagem por SMS quando estiver sem conexão. Pode gerar cobranças da operadora.",

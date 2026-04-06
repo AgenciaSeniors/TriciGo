@@ -143,9 +143,10 @@ export default function CorporateScreen() {
 
         {!loading && !fleet && (
           <EmptyState
+            forceDark
             icon="business-outline"
             title={t('corporate.no_fleet', { defaultValue: 'Sin flota asignada' })}
-            message={t('corporate.no_fleet_desc', { defaultValue: 'No perteneces a ninguna flota corporativa. Contacta a tu administrador para unirte.' })}
+            description={t('corporate.no_fleet_desc', { defaultValue: 'No perteneces a ninguna flota corporativa. Contacta a tu administrador para unirte.' })}
           />
         )}
 
@@ -202,9 +203,10 @@ export default function CorporateScreen() {
             </Text>
             {rides.length === 0 ? (
               <EmptyState
+                forceDark
                 icon="car-outline"
                 title={t('corporate.no_rides', { defaultValue: 'Sin viajes corporativos' })}
-                message={t('corporate.no_rides_desc', { defaultValue: 'Tus viajes corporativos aparecerán aquí.' })}
+                description={t('corporate.no_rides_desc', { defaultValue: 'Tus viajes corporativos aparecerán aquí.' })}
               />
             ) : (
               <StaggeredList staggerDelay={70}>

@@ -3,6 +3,9 @@
 // Double-entry ledger model: every financial operation creates
 // immutable entries (debit + credit pairs). Balance is derived,
 // never directly mutated.
+//
+// Currency: 1 TRC = 1 CUP (whole units, no centavos).
+// USD conversion via eltoque exchange rate.
 // ============================================================
 
 import type {
@@ -15,7 +18,7 @@ export interface WalletAccount {
   id: string;
   user_id: string;
   account_type: WalletAccountType;
-  /** Current available balance in centavos (100 = 1 TriciCoin) */
+  /** Current available balance in TRC whole units (1 TRC = 1 CUP) */
   balance: number;
   /** Amount currently held/locked (e.g., during active ride) */
   held_balance: number;
@@ -49,7 +52,7 @@ export interface LedgerEntry {
   id: string;
   transaction_id: string;
   account_id: string;
-  /** Positive = credit, Negative = debit. In centavos. */
+  /** Positive = credit, Negative = debit. In TRC whole units. */
   amount: number;
   /** Account balance after this entry was applied */
   balance_after: number;
@@ -60,7 +63,7 @@ export interface WalletTransfer {
   id: string;
   from_user_id: string;
   to_user_id: string;
-  /** Amount in centavos */
+  /** Amount in TRC whole units */
   amount: number;
   transaction_id: string;
   note: string | null;
@@ -75,6 +78,18 @@ export interface WalletRechargeRequest {
   processed_by: string | null;
   processed_at: string | null;
   rejection_reason: string | null;
+  created_at: string;
+}
+
+export interface WalletRedemption {
+  id: string;
+  driver_id: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  processed_by: string | null;
+  processed_at: string | null;
+  rejection_reason: string | null;
+  requested_at: string;
   created_at: string;
 }
 
@@ -106,4 +121,20 @@ export interface WalletSummary {
   total_earned: number;
   total_spent: number;
   currency: 'TRC';
+}
+
+/** Driver quota status for the quota system */
+export interface DriverQuotaStatus {
+  /** Current quota balance in TRC (= CUP) */
+  balance: number;
+  /** Total amount ever recharged into quota */
+  total_recharged: number;
+  /** Whether the low-quota warning is active */
+  warning_active: boolean;
+  /** Remaining grace trips (when quota = 0) */
+  grace_trips_remaining: number;
+  /** Whether the driver is blocked from accepting trips */
+  blocked: boolean;
+  /** The deduction rate (e.g., 0.15 = 15%) */
+  deduction_rate: number;
 }

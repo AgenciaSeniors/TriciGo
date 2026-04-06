@@ -159,14 +159,14 @@ export default function ReferralScreen() {
                     <Skeleton width={160} height={32} />
                   </View>
                 ) : (
-                <Pressable onPress={handleCopyCode} className="flex-row items-center mb-3">
-                  <Text variant="h2" color="primary" className="tracking-widest">
-                    {myCode || '...'}
-                  </Text>
-                  {myCode ? (
-                    <Ionicons name="copy-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} style={{ marginLeft: 8 }} />
-                  ) : null}
-                </Pressable>
+                  <Pressable onPress={handleCopyCode} className="flex-row items-center mb-3">
+                    <Text variant="h2" color="primary" className="tracking-widest">
+                      {myCode || '...'}
+                    </Text>
+                    {myCode ? (
+                      <Ionicons name="copy-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} style={{ marginLeft: 8 }} />
+                    ) : null}
+                  </Pressable>
                 )}
                 <Button
                   title={t('profile.referral_share')}
@@ -180,8 +180,7 @@ export default function ReferralScreen() {
                 </Text>
               </Card>
 
-              {/* Apply Code Section */}
-              {!hasBeenReferred && (
+              {!hasBeenReferred ? (
                 <Card variant="outlined" padding="md" className="mb-6">
                   <Text variant="body" className="font-semibold mb-3">
                     {t('profile.referral_have_code')}
@@ -203,9 +202,7 @@ export default function ReferralScreen() {
                     className="mt-2"
                   />
                 </Card>
-              )}
-
-              {hasBeenReferred && (
+              ) : (
                 <Card variant="outlined" padding="md" className="mb-6">
                   <View className="flex-row items-center">
                     <Ionicons name="checkmark-circle" size={20} color={colors.success.DEFAULT} />
@@ -215,11 +212,9 @@ export default function ReferralScreen() {
                   </View>
                 </Card>
               )}
-
-              {/* History header */}
-              {referrals.length > 0 && (
+              {referrals.length > 0 ? (
                 <Text variant="h4" className="mb-3">{t('profile.referral_history')}</Text>
-              )}
+              ) : null}
             </View>
           }
           ListEmptyComponent={

@@ -12,6 +12,8 @@ import type {
   RidePreferences,
   PackageCategory,
   VehicleType,
+  SearchingDriverPresence,
+  DriverAcceptedBroadcast,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 import { logger } from '@tricigo/utils';
@@ -132,6 +134,14 @@ interface RideState {
   // Fare splitting
   splits: RideSplit[];
 
+  // ── Interactive searching state ──
+  searchingDrivers: SearchingDriverPresence[];
+  acceptedDriverBroadcast: DriverAcceptedBroadcast | null;
+  isAcceptAnimating: boolean;
+
+  // ── Rating reminder ──
+  ratingReminderId: string | null;
+
   setFlowStep: (step: RideFlowStep) => void;
   setPickup: (address: string, location: GeoPoint) => void;
   setDropoff: (address: string, location: GeoPoint) => void;
@@ -162,6 +172,11 @@ interface RideState {
   addSplit: (split: RideSplit) => void;
   removeSplit: (splitId: string) => void;
   updateSplit: (split: RideSplit) => void;
+  setSearchingDrivers: (drivers: SearchingDriverPresence[]) => void;
+  setAcceptedDriver: (data: DriverAcceptedBroadcast | null) => void;
+  setAcceptAnimating: (val: boolean) => void;
+  clearSearchState: () => void;
+  setRatingReminderId: (id: string | null) => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -181,6 +196,10 @@ export const useRideStore = create<RideState>((set, get) => ({
   promoResult: null,
   allFareEstimates: null,
   splits: [],
+  searchingDrivers: [],
+  acceptedDriverBroadcast: null,
+  isAcceptAnimating: false,
+  ratingReminderId: null,
 
   setFlowStep: (flowStep) => set({ flowStep }),
 
@@ -310,10 +329,21 @@ export const useRideStore = create<RideState>((set, get) => ({
   removeSplit: (splitId) => set((s) => ({ splits: s.splits.filter((sp) => sp.id !== splitId) })),
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 
+  setSearchingDrivers: (searchingDrivers) => set({ searchingDrivers }),
+  setAcceptedDriver: (acceptedDriverBroadcast) => set({ acceptedDriverBroadcast }),
+  setAcceptAnimating: (isAcceptAnimating) => set({ isAcceptAnimating }),
+  clearSearchState: () => set({ searchingDrivers: [], acceptedDriverBroadcast: null, isAcceptAnimating: false }),
+
+  setRatingReminderId: (ratingReminderId) => set({ ratingReminderId }),
+
   resetDraft: () =>
     set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, allFareEstimates: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
 
-  resetAll: () =>
+  resetAll: () => {
+    const { ratingReminderId } = get();
+    if (ratingReminderId) {
+      Notifications.cancelScheduledNotificationAsync(ratingReminderId).catch(() => {});
+    }
     set({
       flowStep: 'idle',
       draft: { ...defaultDraft },
@@ -329,5 +359,10 @@ export const useRideStore = create<RideState>((set, get) => ({
       promoResult: null,
       splits: [],
       prefetchedPickup: null,
-    }),
+      searchingDrivers: [],
+      acceptedDriverBroadcast: null,
+      isAcceptAnimating: false,
+      ratingReminderId: null,
+    });
+  },
 }));

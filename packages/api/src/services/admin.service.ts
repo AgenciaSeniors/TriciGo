@@ -24,6 +24,7 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
+  WalletRedemption,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
@@ -1167,6 +1168,63 @@ export const adminService = {
       driverInfo,
       customerInfo,
     };
+  },
+
+  // ==================== WALLET REDEMPTIONS ====================
+
+  async getPendingRedemptions(
+    page = 0,
+    pageSize = 20,
+  ): Promise<(WalletRedemption & { driver_name: string })[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    // TODO: replace table name / join columns when the wallet_redemptions table is created
+    const { data, error } = await supabase
+      .from('wallet_redemptions')
+      .select('*, driver_profiles!inner(users!inner(full_name))')
+      .eq('status', 'pending')
+      .order('requested_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const profile = row.driver_profiles as Record<string, unknown> | undefined;
+      const usr = profile?.users as Record<string, string> | undefined;
+      return {
+        ...(row as unknown as WalletRedemption),
+        driver_name: usr?.full_name ?? 'Desconocido',
+      };
+    });
+  },
+
+  async processRedemption(
+    redemptionId: string,
+    adminId: string,
+    action: 'approved' | 'rejected',
+    reason?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+
+    // TODO: implement full ledger debit when wallet_redemptions table is ready
+    await supabase
+      .from('wallet_redemptions')
+      .update({
+        status: action,
+        processed_by: adminId,
+        processed_at: new Date().toISOString(),
+        ...(action === 'rejected' ? { rejection_reason: reason ?? null } : {}),
+      })
+      .eq('id', redemptionId);
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: action === 'approved' ? 'approve_redemption' : 'reject_redemption',
+      target_type: 'wallet_redemption',
+      target_id: redemptionId,
+      reason: reason ?? null,
+    });
   },
 
   // ==================== WALLET RECHARGES ====================

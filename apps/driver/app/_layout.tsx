@@ -58,12 +58,18 @@ function RootNavigator() {
   const segments = useSegments();
 
   // Dark mode: sync NativeWind color scheme with theme store
+  // Driver app uses forced dark backgrounds (Screen bg="dark") with light NativeWind
+  // so that color="inverse" gives white text on dark bg.
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const { setColorScheme } = useColorScheme();
   useSystemThemeSync();
 
   useEffect(() => {
     setColorScheme(resolvedScheme);
+    // Remove dark class if it was previously set, to avoid conflicts
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.documentElement.classList.remove('dark');
+    }
   }, [resolvedScheme, setColorScheme]);
 
   // Download Havana offline map tiles (runs once per week)

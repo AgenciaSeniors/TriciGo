@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors, driverDarkColors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -56,13 +58,19 @@ export default function VehicleScreen() {
   return (
     <Screen scroll bg="dark" padded>
       <View className="pt-4">
-        <Pressable onPress={() => router.back()} className="mb-2">
-          <Text variant="body" color="accent">{t('back')}</Text>
-        </Pressable>
-
-        <Text variant="h3" color="inverse" className="mb-6">
-          {t('profile.vehicle_info')}
-        </Text>
+        <View className="flex-row items-center mb-6">
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: driverDarkColors.hover }}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+          </Pressable>
+          <Text variant="h3" color="inverse">{t('profile.vehicle_info')}</Text>
+        </View>
 
         {loading ? (
           <ActivityIndicator color="#22C55E" className="mt-8" />
@@ -71,7 +79,7 @@ export default function VehicleScreen() {
             No hay vehículo registrado
           </Text>
         ) : (
-          <Card variant="filled" padding="md" className="bg-neutral-800">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800">
             {infoRows.map((row) => (
               <View
                 key={row.label}

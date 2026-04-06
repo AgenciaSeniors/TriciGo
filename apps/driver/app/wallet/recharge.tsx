@@ -185,32 +185,40 @@ export default function RechargeScreen() {
           </Text>
 
           {/* Preset amounts */}
-          <View className="flex-row flex-wrap gap-3 mb-6">
-            {PRESET_AMOUNTS.map((preset) => (
-              <Pressable
-                key={preset}
-                onPress={() => { setAmount(String(preset)); setCustomAmount(''); }}
-                className="flex-1 min-w-[45%] items-center justify-center py-4 rounded-2xl"
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: amount === String(preset) ? 'rgba(255,77,0,0.15)' : '#1a1a2e',
-                    borderWidth: 1,
-                    borderColor: amount === String(preset) ? colors.brand.orange : 'rgba(255,255,255,0.06)',
-                    minHeight: 48,
-                  },
-                  pressed && { transform: [{ scale: 0.97 }] },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`${formatCUP(preset)}`}
-              >
-                <Text
-                  variant="metric"
-                  style={{ color: amount === String(preset) ? colors.brand.orange : '#fff' }}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+            {PRESET_AMOUNTS.map((preset) => {
+              const isSelected = amount === String(preset);
+              return (
+                <Pressable
+                  key={preset}
+                  onPress={() => { setAmount(String(preset)); setCustomAmount(''); }}
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      minWidth: '45%',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 16,
+                      backgroundColor: isSelected ? 'rgba(249,115,22,0.15)' : '#1a1a2e',
+                      borderWidth: isSelected ? 2 : 1.5,
+                      borderColor: isSelected ? colors.brand.orange : 'rgba(255,255,255,0.15)',
+                      borderRadius: 16,
+                      minHeight: 60,
+                    },
+                    pressed && { transform: [{ scale: 0.97 }] },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${formatCUP(preset)}`}
                 >
-                  {formatCUP(preset)}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    variant="metric"
+                    style={{ color: isSelected ? colors.brand.orange : '#fff' }}
+                  >
+                    {formatCUP(preset)}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* Custom amount */}
@@ -223,6 +231,7 @@ export default function RechargeScreen() {
             value={customAmount}
             onChangeText={(v) => { setCustomAmount(v); setAmount(''); }}
             keyboardType="numeric"
+            variant="dark"
           />
 
           <Button

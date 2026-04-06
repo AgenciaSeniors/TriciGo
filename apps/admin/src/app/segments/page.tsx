@@ -73,7 +73,7 @@ export default function SegmentsPage() {
       // Power users (>10 rides) — count profiles that have more than 10 rides
       const { data: powerData } = await supabase.rpc('count_power_users', {}).maybeSingle();
       // Fallback: query rides grouped by customer_id
-      let powerCount = powerData?.count ?? 0;
+      let powerCount = (powerData as { count?: number } | null)?.count ?? 0;
       if (!powerData) {
         const { data: rideGroups } = await supabase
           .from('rides')
@@ -197,12 +197,10 @@ export default function SegmentsPage() {
           if (!rideStats[ride.customer_id]) {
             rideStats[ride.customer_id] = { count: 0, lastRide: null };
           }
-          rideStats[ride.customer_id].count++;
-          if (
-            !rideStats[ride.customer_id].lastRide ||
-            ride.created_at > rideStats[ride.customer_id].lastRide!
-          ) {
-            rideStats[ride.customer_id].lastRide = ride.created_at;
+          const stat = rideStats[ride.customer_id]!;
+          stat.count++;
+          if (!stat.lastRide || ride.created_at > stat.lastRide) {
+            stat.lastRide = ride.created_at;
           }
         }
 

@@ -10,6 +10,7 @@ import type {
   WalletSummary,
   WalletRechargeRequest,
   WalletTransfer,
+  DriverQuotaStatus,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { validate, rechargeSchema, transferP2PSchema } from '../schemas';
@@ -238,6 +239,80 @@ export const walletService = {
     return account as WalletAccount;
   },
 
+  // ==================== DRIVER QUOTA ====================
+
+  /**
+   * Get the driver's quota account.
+   */
+  async getDriverQuotaAccount(driverUserId: string): Promise<WalletAccount | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_accounts')
+      .select('*')
+      .eq('user_id', driverUserId)
+      .eq('account_type', 'driver_quota')
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data as WalletAccount | null;
+  },
+
+  /**
+   * Get full quota status for a driver (balance, warnings, grace, block).
+   * Calls the get_driver_quota_status RPC.
+   */
+  async getQuotaStatus(driverUserId: string): Promise<DriverQuotaStatus> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_quota_status', {
+      p_driver_user_id: driverUserId,
+    });
+    if (error) throw error;
+    const result = data as Record<string, unknown>;
+    return {
+      balance: Number(result.balance ?? 0),
+      total_recharged: Number(result.total_recharged ?? 0),
+      warning_active: Boolean(result.warning_active),
+      grace_trips_remaining: Number(result.grace_trips_remaining ?? 0),
+      blocked: Boolean(result.blocked),
+      deduction_rate: Number(result.deduction_rate ?? 0.15),
+    };
+  },
+
+  /**
+   * Get quota balance only (lightweight read).
+   */
+  async getQuotaBalance(driverUserId: string): Promise<number> {
+    const account = await this.getDriverQuotaAccount(driverUserId);
+    return account?.balance ?? 0;
+  },
+
+  /**
+   * Recharge driver quota via RPC.
+   * Called after TropiPay payment confirmation.
+   *
+   * @param driverUserId - Driver's user ID
+   * @param amount - Amount in TRC whole units (= CUP)
+   * @param idempotencyKey - Optional key to prevent duplicate recharges
+   */
+  async rechargeQuota(
+    driverUserId: string,
+    amount: number,
+    idempotencyKey?: string,
+  ): Promise<{ balance: number; recharged: number }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('recharge_driver_quota', {
+      p_driver_user_id: driverUserId,
+      p_amount: amount,
+      p_idempotency_key: idempotencyKey ?? null,
+    });
+    if (error) throw error;
+    const result = data as Record<string, unknown>;
+    logger.info('quota_recharged', { driverUserId, amount, newBalance: result.balance });
+    return {
+      balance: Number(result.balance ?? 0),
+      recharged: Number(result.recharged ?? amount),
+    };
+  },
+
   // ==================== PLATFORM CONFIG ====================
 
   /**
@@ -252,5 +327,17 @@ export const walletService = {
       .maybeSingle();
     if (error) throw error;
     return data?.value != null ? String(data.value) : null;
+  },
+
+  /**
+   * Set a value in the platform_config table (admin only).
+   */
+  async setConfigValue(key: string, value: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('platform_config')
+      .upsert({ key, value }, { onConflict: 'key' });
+    if (error) throw error;
+    logger.info('config_updated', { key, value });
   },
 };

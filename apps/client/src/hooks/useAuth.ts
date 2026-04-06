@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import type { User } from '@tricigo/types';
 
 // Use SecureStore on native, localStorage on web
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,6 +37,37 @@ const storageOps =
 const adapter = createStorageAdapter(storageOps);
 configureStorage(adapter);
 
+/** Wrap a promise with a timeout */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/**
+ * On web, fetch the user profile directly via REST API, bypassing the
+ * Supabase JS SDK which can hang due to internal lock contention.
+ */
+async function fetchUserDirectWeb(userId: string, accessToken: string, anonKey: string): Promise<User | null> {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return null;
+
+  const res = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=*`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'apikey': anonKey,
+      'Accept': 'application/json',
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return rows?.[0] ?? null;
+}
+
 export function useAuthInit() {
   const setUser = useAuthStore((s) => s.setUser);
   const reset = useAuthStore((s) => s.reset);
@@ -43,50 +75,85 @@ export function useAuthInit() {
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout: if auth init takes >15s, stop loading spinner
-    // Use setLoading(false) instead of reset() to avoid clearing a valid session
-    const setLoading = useAuthStore.getState().setLoading;
-    const safetyTimeout = setTimeout(() => {
-      if (mounted && useAuthStore.getState().isLoading) {
-        logger.warn('[Auth] Safety timeout: forcing isLoading=false after 15s');
-        setLoading(false);
-      }
-    }, 15000);
-
     async function init() {
+      // ── WEB FAST PATH ──
+      // On web, the Supabase JS SDK's getSession() frequently hangs due to
+      // internal lock contention with navigator.locks. Bypass it entirely:
+      // read the session from localStorage, then fetch the user via REST.
+      if (Platform.OS === 'web') {
+        try {
+          const raw = localStorage.getItem('sb-tricigo-auth');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const expiresAt = parsed.expires_at ?? 0;
+            const now = Math.floor(Date.now() / 1000);
+
+            if (expiresAt > now && parsed.user?.id && parsed.access_token) {
+              const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+              const user = await withTimeout(
+                fetchUserDirectWeb(parsed.user.id, parsed.access_token, anonKey),
+                5000,
+                'fetchUserDirectWeb',
+              );
+              if (mounted && user) {
+                logger.info('[Auth] Web fast-path: session restored from localStorage');
+                setUser(user);
+                identifyUser(user.id, { email: user.email });
+                customerService.ensureProfile(user.id).catch((err) =>
+                  logger.warn('[Auth] Failed to ensure profile:', { error: String(err) }),
+                );
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn('[Auth] Web fast-path failed, falling back to SDK:', { error: String(err) });
+        }
+      }
+
+      // ── STANDARD PATH (native + web fallback) ──
       try {
-        const session = await authService.getSession();
+        const session = await withTimeout(authService.getSession(), 8000, 'getSession');
         if (session && mounted) {
-          const user = await authService.getCurrentUser();
+          const userId = session.user?.id;
+          const user = userId
+            ? await withTimeout(authService.getUserById(userId), 8000, 'getUserById')
+            : await withTimeout(authService.getCurrentUser(), 8000, 'getCurrentUser');
           if (mounted) setUser(user);
           if (user) {
             identifyUser(user.id, { email: user.email });
-            customerService.ensureProfile(user.id).catch((err) => logger.warn('[Auth] Failed to ensure profile:', err));
+            customerService.ensureProfile(user.id).catch((err) =>
+              logger.warn('[Auth] Failed to ensure profile:', { error: String(err) }),
+            );
           }
         } else if (mounted) {
           reset();
         }
       } catch (err) {
-        // On web, "Lock broken" errors happen during remounts — don't reset auth
-        const isLockError = err instanceof Error && err.message?.includes('Lock broken');
-        if (isLockError) {
-          logger.warn('[Auth] Lock contention during init, retrying...');
-          // Retry once after a short delay
-          setTimeout(async () => {
-            if (!mounted) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes('Lock broken') || errMsg.includes('timed out')) {
+          logger.warn(`[Auth] SDK init failed (${errMsg}), trying direct fetch...`);
+          // Last resort on web: direct REST fetch
+          if (Platform.OS === 'web') {
             try {
-              const session = await authService.getSession();
-              if (session && mounted) {
-                const user = await authService.getCurrentUser();
-                if (mounted) setUser(user);
-              } else if (mounted) {
-                reset();
+              const raw = localStorage.getItem('sb-tricigo-auth');
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed.user?.id && parsed.access_token) {
+                  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+                  const user = await withTimeout(
+                    fetchUserDirectWeb(parsed.user.id, parsed.access_token, anonKey),
+                    5000,
+                    'fetchUserDirectWeb-fallback',
+                  );
+                  if (mounted && user) {
+                    setUser(user);
+                    return;
+                  }
+                }
               }
-            } catch {
-              if (mounted) reset();
-            }
-          }, 500);
-          return;
+            } catch { /* exhausted all options */ }
+          }
         }
         if (mounted) reset();
       }
@@ -94,8 +161,11 @@ export function useAuthInit() {
 
     init();
 
+    // ── AUTH STATE LISTENER ──
+    // Still register the Supabase listener for sign-in/sign-out events.
+    // This handles OAuth redirects, token refresh, and sign-out.
     const { data: { subscription } } = authService.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (!mounted) return;
         if (event === 'SIGNED_OUT' || !session) {
           resetAnalytics();
@@ -104,20 +174,30 @@ export function useAuthInit() {
           useChatStore.getState().reset();
           useNotificationStore.getState().reset();
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          try {
-            const user = await authService.getCurrentUser();
-            if (mounted) setUser(user);
-            if (user) identifyUser(user.id, { email: user.email });
-          } catch {
-            reset();
-          }
+          // IMPORTANT: Defer SDK calls to avoid deadlock.
+          // _notifyAllSubscribers awaits this callback. If we call
+          // supabase.from(...) here, it awaits initializePromise which
+          // waits for _notifyAllSubscribers → circular deadlock.
+          setTimeout(async () => {
+            if (!mounted) return;
+            try {
+              const userId = (session as any).user?.id;
+              const user = userId
+                ? await authService.getUserById(userId)
+                : await authService.getCurrentUser();
+              if (mounted) setUser(user);
+              if (user) identifyUser(user.id, { email: user.email });
+            } catch {
+              // Don't reset on token refresh failures — session may still be valid
+              if (event === 'SIGNED_IN' && mounted) reset();
+            }
+          }, 0);
         }
       },
     );
 
     return () => {
       mounted = false;
-      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, [setUser, reset]);

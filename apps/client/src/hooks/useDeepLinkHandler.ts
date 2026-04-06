@@ -45,7 +45,7 @@ export function useDeepLinkHandler() {
             });
           } catch (err) {
             // Silently fail — user can apply manually later
-            logger.warn('[DeepLink] Failed to apply referral:', err);
+            logger.warn('[DeepLink] Failed to apply referral:', { error: String(err) });
           }
         }
       } catch {

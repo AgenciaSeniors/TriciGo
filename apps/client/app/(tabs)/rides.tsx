@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
@@ -492,7 +492,9 @@ function NativeRidesScreen() {
   }, [userId, filters]);
 
   const renderItem = useCallback(({ item, index }: { item: Ride; index: number }) => {
-    const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.estimated_fare_cup;
+    const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.estimated_fare_cup ?? 0;
+    const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
+    const fareUsd = trcToUsd(fare, rate);
 
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
@@ -529,7 +531,10 @@ function NativeRidesScreen() {
             />
 
             <View className="flex-row justify-between items-center">
-              <Text variant="body" className="font-semibold">{formatTRC(fare)}</Text>
+              <View>
+                <Text variant="body" className="font-semibold">{formatTRC(fare)}</Text>
+                <Text variant="caption" color="tertiary">{'\u2248'} {formatUSD(fareUsd)}</Text>
+              </View>
               <Text variant="caption" color="tertiary">{item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}</Text>
             </View>
 

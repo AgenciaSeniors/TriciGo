@@ -141,7 +141,9 @@
     "arriving_waypoint": "Arriving at Stop {{n}}...",
     "auto_arriving": "Auto-marking arrival...",
     "nav_auto_started": "Navigation started",
-    "restart_nav": "Restart navigation"
+    "restart_nav": "Restart navigation",
+    "approaching_pickup": "Approaching pickup point",
+    "approaching_pickup_body": "You're ~2 minutes from the pickup point"
   },
 
   "ride": {

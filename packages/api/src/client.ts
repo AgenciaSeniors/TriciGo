@@ -59,39 +59,78 @@ function getEnvVar(name: string): string {
   );
 }
 
+// ── Web Lock Fix ──
+// Expo Web + Supabase's GoTrueClient = deadlock. The SDK uses navigator.locks
+// internally, which hangs in Metro's web environment. We permanently disable
+// navigator.locks on web BEFORE any Supabase client is created so the
+// GoTrueClient constructor falls back to its internal lockNoOp.
+const _isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+if (_isWeb && typeof globalThis !== 'undefined') {
+  try {
+    if ((globalThis as any).navigator?.locks) {
+      Object.defineProperty((globalThis as any).navigator, 'locks', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    }
+  } catch { /* non-fatal */ }
+}
+
+/** No-op lock that simply executes the callback without any locking. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lockNoOp = async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn();
+
+/**
+ * Monkey-patch an existing Supabase client's GoTrueClient to use no-op locks.
+ * This fixes clients that were created before navigator.locks was removed
+ * (e.g., surviving a Metro HMR reload).
+ */
+function patchClientLocks(client: SupabaseClient): void {
+  try {
+    const auth = client.auth as any;
+    if (!auth) return;
+    // Force the lock function to no-op
+    auth.lock = lockNoOp;
+    // If initializePromise is stuck, replace it with a resolved one
+    // so getSession() and other methods don't wait forever.
+    if (auth.initializePromise) {
+      const testPromise = Promise.race([
+        auth.initializePromise,
+        new Promise((_, rej) => setTimeout(() => rej('stuck'), 50)),
+      ]);
+      testPromise.catch(() => {
+        // The initializePromise is stuck — resolve it manually
+        auth.initializePromise = Promise.resolve();
+      });
+    }
+  } catch { /* non-fatal */ }
+}
+
 /**
  * Get or create the shared Supabase client.
  * Uses singleton pattern for client-side usage.
  */
 export function getSupabaseClient(): SupabaseClient {
   const existing = getClientInstance();
-  if (existing) return existing;
+  if (existing) {
+    // Always patch locks on web — the singleton may predate the navigator.locks fix
+    if (_isWeb) patchClientLocks(existing);
+    return existing;
+  }
 
   const supabaseUrl = getEnvVar('SUPABASE_URL');
   const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
-
-  // Expo Web (Metro bundler) has issues with Supabase's navigator.locks usage,
-  // causing "this.lock is not a function" or "Lock broken" errors.
-  // Provide a simple no-op lock on web to avoid these issues entirely.
-  const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lockConfig: any = isWeb
-    ? {
-        lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
-          return await fn();
-        },
-      }
-    : {};
 
   const clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: isWeb, // Enable on web for OAuth redirects, disable on native
-      ...(isWeb ? { flowType: 'implicit' as const } : {}), // Implicit flow for web (no server to exchange PKCE code)
+      detectSessionInUrl: _isWeb, // Enable on web for OAuth redirects, disable on native
+      ...(_isWeb ? { flowType: 'implicit' as const } : {}),
       storageKey: 'sb-tricigo-auth',
-      ...lockConfig,
+      // On web, provide no-op lock to prevent navigator.locks deadlock
+      ...(_isWeb ? { lock: lockNoOp } : {}),
       ...(storageAdapter ? { storage: storageAdapter } : {}),
     },
     realtime: {
@@ -100,6 +139,9 @@ export function getSupabaseClient(): SupabaseClient {
       },
     },
   });
+
+  // Patch locks as a safety net (belt + suspenders)
+  if (_isWeb) patchClientLocks(clientInstance);
 
   setClientInstance(clientInstance);
   return clientInstance;

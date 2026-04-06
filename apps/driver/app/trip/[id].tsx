@@ -139,7 +139,7 @@ export default function TripDetailScreen() {
         <View className="h-4" />
 
         {/* Route */}
-        <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+        <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
           <View className="flex-row items-start mb-3" accessible={true} accessibilityLabel={t('a11y.pickup_address', { ns: 'common', address: ride.pickup_address })}>
             <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
             <View className="flex-1">
@@ -157,7 +157,7 @@ export default function TripDetailScreen() {
         </Card>
 
         {/* Fare + Commission */}
-        <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(fare) })}>
+        <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(fare) })}>
           <Text variant="h2" color="accent" className="text-center mb-4">{formatCUP(fare)}</Text>
 
           {/* Fare breakdown */}
@@ -235,7 +235,7 @@ export default function TripDetailScreen() {
 
         {/* Trip stats */}
         {(ride.actual_distance_m != null || ride.estimated_distance_m > 0) && (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
             <View className="flex-row gap-6">
               <View accessible={true} accessibilityLabel={t('a11y.stat_distance', { ns: 'common', value: `${((ride.actual_distance_m ?? ride.estimated_distance_m) / 1000).toFixed(1)} km` })}>
                 <Text variant="caption" color="inverse" className="opacity-50">{t('trip.distance')}</Text>
@@ -267,7 +267,7 @@ export default function TripDetailScreen() {
             accessibilityRole="button"
             accessibilityHint={t('a11y.dispute_action', { ns: 'common' })}
           >
-            <Card variant="filled" padding="md" className="bg-orange-900/40 border border-orange-500/30">
+            <Card forceDark variant="filled" padding="md" className="bg-orange-900/40 border border-orange-500/30">
               <Text variant="body" color="inverse" className="font-semibold mb-1">
                 ⚠️ {t('dispute.incoming')}
               </Text>
@@ -283,7 +283,7 @@ export default function TripDetailScreen() {
 
         {/* Dispute status (already responded) */}
         {dispute && dispute.respondent_replied_at && (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4 border border-neutral-700">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4 border border-neutral-700">
             <Text variant="label" color="inverse" className="mb-1">
               {t('dispute.status_' + dispute.status)}
             </Text>
@@ -301,7 +301,7 @@ export default function TripDetailScreen() {
             accessibilityRole="button"
             accessibilityHint={t('a11y.lost_item_action', { ns: 'common' })}
           >
-            <Card variant="filled" padding="md" className="bg-amber-900/40 border border-amber-500/30">
+            <Card forceDark variant="filled" padding="md" className="bg-amber-900/40 border border-amber-500/30">
               <Text variant="body" color="inverse" className="font-semibold mb-1">
                 📦 {t('lost_found.rider_reported')}
               </Text>
@@ -323,7 +323,7 @@ export default function TripDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t(`lost_found.status_${lostItem.status}`)}
           >
-            <Card variant="filled" padding="md" className="bg-neutral-800 border border-neutral-700">
+            <Card forceDark variant="filled" padding="md" className="bg-neutral-800 border border-neutral-700">
               <Text variant="label" color="inverse" className="mb-1">
                 📦 {t(`lost_found.status_${lostItem.status}`)}
               </Text>
@@ -335,7 +335,7 @@ export default function TripDetailScreen() {
         )}
 
         {/* Timestamps */}
-        <Card variant="filled" padding="md" className="bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="bg-neutral-800">
           <View className="flex-row justify-between mb-1">
             <Text variant="caption" color="inverse" className="opacity-50">{t('trip.created')}</Text>
             <Text variant="caption" color="inverse">{new Date(ride.created_at).toLocaleString('es-CU')}</Text>

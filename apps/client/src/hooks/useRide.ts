@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import i18next from 'i18next';
+import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug } from '@tricigo/utils';
@@ -368,6 +369,11 @@ export function useRideActions() {
         }
         if (updated.status === 'in_progress' && prevRide?.status === 'arrived_at_pickup') {
           triggerHaptic('medium');
+          playSound('ride_accepted');
+          scheduleLocalNotification(
+            i18next.t('ride.trip_started_notif', { ns: 'rider' }),
+            i18next.t('ride.trip_started_body', { ns: 'rider' }),
+          );
         }
         if (updated.status === 'completed') {
           triggerHaptic('success');
@@ -379,6 +385,35 @@ export function useRideActions() {
           );
           // Invalidate prediction cache so next load recalculates with new ride
           invalidatePredictionCache().catch(() => {});
+
+          // Payment confirmation toast
+          const fare = updated.final_fare_cup ?? updated.final_fare_trc;
+          if (fare && fare > 0) {
+            const methodKey = `ride.payment_method_${updated.payment_method ?? 'cash'}`;
+            Toast.show({
+              type: 'success',
+              text1: i18next.t('ride.payment_confirmed_title', { ns: 'rider' }),
+              text2: i18next.t('ride.payment_confirmed_body', {
+                ns: 'rider',
+                amount: fare,
+                method: i18next.t(methodKey, { ns: 'rider', defaultValue: updated.payment_method ?? 'cash' }),
+              }),
+              visibilityTime: 5000,
+            });
+          }
+
+          // Schedule rating reminder 5 min after completion
+          Notifications.scheduleNotificationAsync({
+            content: {
+              title: i18next.t('ride.rate_reminder_title', { ns: 'rider' }),
+              body: i18next.t('ride.rate_reminder_body', { ns: 'rider' }),
+              data: { type: 'ride', ride_id: updated.id, action: 'rate' },
+              sound: 'default',
+            },
+            trigger: { seconds: 300, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
+          }).then((reminderId) => {
+            useRideStore.getState().setRatingReminderId(reminderId);
+          }).catch(() => {});
 
           // Notify auto-share trusted contacts that the trip ended safely (fire-and-forget)
           const currentUserId = useAuthStore.getState().user?.id;

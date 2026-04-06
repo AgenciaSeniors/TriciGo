@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, driverDarkColors } from '@tricigo/theme';
 
@@ -12,10 +13,10 @@ const APP_VERSION = '1.0.0';
 export default function AboutScreen() {
   const { t } = useTranslation('common');
 
-  const links = [
-    { label: t('profile.terms_of_service'), icon: 'document-text-outline' as const, route: '/profile/terms' },
-    { label: t('profile.privacy_policy'), icon: 'shield-outline' as const, route: '/profile/privacy' },
-    { label: t('profile.blog', { defaultValue: 'Blog' }), icon: 'newspaper-outline' as const, route: '/profile/blog' },
+  const links: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; route: string; iconBg: 'primary' | 'info' | 'success' }[] = [
+    { label: t('profile.terms_of_service'), icon: 'document-text-outline', route: '/profile/terms', iconBg: 'primary' },
+    { label: t('profile.privacy_policy'), icon: 'shield-outline', route: '/profile/privacy', iconBg: 'info' },
+    { label: t('profile.blog', { defaultValue: 'Blog' }), icon: 'newspaper-outline', route: '/profile/blog', iconBg: 'success' },
   ];
 
   return (
@@ -60,18 +61,15 @@ export default function AboutScreen() {
         </View>
 
         {links.map((link, i) => (
-          <Pressable
+          <MenuRow
             key={link.route}
+            icon={link.icon}
+            label={link.label}
+            iconBg={link.iconBg}
             onPress={() => router.push(link.route as never)}
-            className="flex-row items-center py-4"
-            style={{ borderBottomWidth: i < links.length - 1 ? 1 : 0, borderBottomColor: driverDarkColors.border.default }}
-          >
-            <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
-              <Ionicons name={link.icon} size={18} color={colors.brand.orange} />
-            </View>
-            <Text variant="body" color="inverse" className="flex-1">{link.label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.neutral[500]} />
-          </Pressable>
+            showBorder={i < links.length - 1}
+            forceDark
+          />
         ))}
       </View>
     </Screen>

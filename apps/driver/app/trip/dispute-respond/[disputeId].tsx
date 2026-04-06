@@ -89,7 +89,7 @@ export default function DisputeRespondScreen() {
         <Text variant="h3" color="inverse" className="mb-6">{t('dispute.respond')}</Text>
 
         {/* Info banner */}
-        <Card variant="filled" padding="md" className="bg-orange-900/30 mb-6">
+        <Card forceDark variant="filled" padding="md" className="bg-orange-900/30 mb-6">
           <Text variant="bodySmall" color="inverse" className="opacity-80">
             {t('dispute.incoming')}
           </Text>

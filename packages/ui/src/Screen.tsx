@@ -16,6 +16,9 @@ export interface ScreenProps extends ViewProps {
   bg?: 'white' | 'neutral' | 'dark';
   /** Add horizontal padding */
   padded?: boolean;
+  /** Optional RefreshControl for pull-to-refresh (requires scroll=true) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  refreshControl?: React.ReactElement<any>;
 }
 
 const bgClasses = {
@@ -29,6 +32,7 @@ export function Screen({
   statusBarStyle = 'dark-content',
   bg = 'white',
   padded = true,
+  refreshControl,
   className,
   children,
   ...props
@@ -53,6 +57,7 @@ export function Screen({
           contentContainerStyle={{ flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
         >
           {content}
         </ScrollView>

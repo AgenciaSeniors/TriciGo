@@ -30,6 +30,8 @@ import { SafetySheet } from '@/components/SafetySheet';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfettiOverlay } from '@/components/ConfettiOverlay';
 import { ArrivalCard } from '@/components/ArrivalCard';
+import { ProximityBanner } from '@/components/ProximityBanner';
+import { useProximityAlert } from '@/hooks/useProximityAlert';
 import type { GeoPoint } from '@tricigo/utils';
 import { getRouteETA } from '@/services/mapbox.service';
 
@@ -96,6 +98,14 @@ export function RideActiveView() {
       ? (haversineDistance(driverPosition, activeRide.pickup_location) / 1000)
       : null
   );
+
+  // Proximity alerts (driver ~2 min from pickup / approaching destination)
+  const proximityAlert = useProximityAlert({
+    rideId: activeRide?.id ?? null,
+    rideStatus: activeRide?.status ?? null,
+    etaMinutes: displayEtaMinutes,
+    driverName: rideWithDriver?.driver_name ?? null,
+  });
 
   // X3.2: Dynamic map height — 40% of screen
   const mapHeight = Math.round(Dimensions.get('window').height * 0.4);
@@ -522,6 +532,23 @@ export function RideActiveView() {
       >
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>SOS</Text>
       </Pressable>
+
+      {/* Proximity banners */}
+      {proximityAlert.showPickupBanner && (
+        <ProximityBanner
+          type="pickup"
+          driverName={rideWithDriver?.driver_name}
+          etaMinutes={displayEtaMinutes ?? 2}
+          onDismiss={proximityAlert.dismissPickupBanner}
+        />
+      )}
+      {proximityAlert.showDropoffBanner && (
+        <ProximityBanner
+          type="dropoff"
+          etaMinutes={displayEtaMinutes ?? 2}
+          onDismiss={proximityAlert.dismissDropoffBanner}
+        />
+      )}
 
       {/* Live map with route polyline */}
       <View style={{ position: 'relative' }}>

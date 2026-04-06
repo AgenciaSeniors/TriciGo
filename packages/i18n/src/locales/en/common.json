@@ -218,6 +218,7 @@
     "notif_chat": "Chat messages",
     "notif_wallet": "Wallet & payments",
     "notif_promos": "Promotions & offers",
+    "notif_driver_approval": "Driver approval",
     "notif_trip_requests": "Trip requests",
     "notif_sms": "SMS Alerts",
     "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply.",

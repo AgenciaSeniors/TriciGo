@@ -717,6 +717,7 @@ function NativeEarningsScreen() {
           {/* Empty state when no earnings data */}
           {hasNoEarningsData ? (
             <EmptyState
+              forceDark
               icon="wallet-outline"
               title={t('earnings.no_earnings_title', { defaultValue: 'Sin ganancias' })}
               description={t('earnings.no_earnings_yet', { defaultValue: 'Aún no tienes ganancias en este periodo. Completa viajes para ver tus estadísticas aquí.' })}
@@ -731,6 +732,7 @@ function NativeEarningsScreen() {
           {/* Period Stats */}
           <View className="flex-row gap-3 mb-2">
             <Card
+              forceDark
               variant="filled"
               padding="md"
               className="flex-1"
@@ -760,6 +762,7 @@ function NativeEarningsScreen() {
               )}
             </Card>
             <Card
+              forceDark
               variant="filled"
               padding="md"
               className="flex-1"
@@ -777,6 +780,7 @@ function NativeEarningsScreen() {
           {/* Avg per trip */}
           <View className="flex-row gap-3 mb-4">
             <Card
+              forceDark
               variant="filled"
               padding="md"
               className="flex-1"
@@ -795,6 +799,7 @@ function NativeEarningsScreen() {
               accessibilityLabel={t('earnings.see_reviews', { defaultValue: 'Ver reseñas' })}
             >
               <Card
+                forceDark
                 variant="filled"
                 padding="md"
                 className="flex-1"
@@ -847,6 +852,7 @@ function NativeEarningsScreen() {
 
                 return (
                   <Card
+                    forceDark
                     key={q.id}
                     variant="filled"
                     padding="md"
@@ -903,6 +909,7 @@ function NativeEarningsScreen() {
               </Text>
               <View className="flex-row gap-3 mb-3">
                 <Card
+                  forceDark
                   variant="filled"
                   padding="md"
                   className="flex-1"
@@ -918,6 +925,7 @@ function NativeEarningsScreen() {
                   </Text>
                 </Card>
                 <Card
+                  forceDark
                   variant="filled"
                   padding="md"
                   className="flex-1"
@@ -941,6 +949,7 @@ function NativeEarningsScreen() {
                   accessibilityLabel={t('earnings.see_penalties', { defaultValue: 'Ver penalidades' })}
                 >
                   <Card
+                    forceDark
                     variant="filled"
                     padding="md"
                     style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
@@ -959,6 +968,7 @@ function NativeEarningsScreen() {
                   </Card>
                 </Pressable>
                 <Card
+                  forceDark
                   variant="filled"
                   padding="md"
                   className="flex-1"
@@ -976,6 +986,7 @@ function NativeEarningsScreen() {
               </View>
               <View className="flex-row gap-3">
                 <Card
+                  forceDark
                   variant="filled"
                   padding="md"
                   className="flex-1"
@@ -991,6 +1002,7 @@ function NativeEarningsScreen() {
                   </Text>
                 </Card>
                 <Card
+                  forceDark
                   variant="filled"
                   padding="md"
                   className="flex-1"
@@ -1012,6 +1024,7 @@ function NativeEarningsScreen() {
           {/* Recent Wallet Activity */}
           <View className="mt-8 mb-4">
             <Card
+              forceDark
               variant="filled"
               padding="md"
               style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}

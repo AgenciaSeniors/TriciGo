@@ -107,7 +107,7 @@ export default function CargoSettingsScreen() {
         ) : (
           <>
             {/* Max weight */}
-            <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="scale-outline" size={20} color={colors.brand.orange} />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">
@@ -119,6 +119,7 @@ export default function CargoSettingsScreen() {
                 onChangeText={(v) => { setMaxWeight(v); setWeightError(''); }}
                 keyboardType="numeric"
                 placeholder="100"
+                variant="dark"
               />
               {weightError ? (
                 <Text variant="caption" className="text-red-400 mt-1">{weightError}</Text>
@@ -126,7 +127,7 @@ export default function CargoSettingsScreen() {
             </Card>
 
             {/* Dimensions */}
-            <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">
@@ -143,6 +144,7 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxLength}
                     keyboardType="numeric"
                     placeholder="L (cm)"
+                    variant="dark"
                   />
                 </View>
                 <View className="flex-1">
@@ -151,6 +153,7 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxWidth}
                     keyboardType="numeric"
                     placeholder="A (cm)"
+                    variant="dark"
                   />
                 </View>
                 <View className="flex-1">
@@ -159,13 +162,14 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxHeight}
                     keyboardType="numeric"
                     placeholder="H (cm)"
+                    variant="dark"
                   />
                 </View>
               </View>
             </Card>
 
             {/* Categories */}
-            <Card variant="filled" padding="md" className="mb-6 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="pricetags-outline" size={20} color={colors.brand.orange} />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">

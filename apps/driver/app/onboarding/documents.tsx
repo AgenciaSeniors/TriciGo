@@ -162,7 +162,7 @@ export default function DocumentsScreen() {
             accessibilityRole="button"
             accessibilityLabel={t(DOC_LABELS[doc.document_type])}
           >
-            <Card variant="surface" padding="md" className="mb-3 flex-row items-center">
+            <Card forceDark variant="surface" padding="md" className="mb-3 flex-row items-center">
               {doc.uploading ? (
                 <ActivityIndicator size="small" color={colors.brand.orange} />
               ) : (

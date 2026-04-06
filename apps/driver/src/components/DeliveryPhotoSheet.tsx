@@ -84,7 +84,7 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
   }, [photoUri, rideId, onPhotoUploaded, t]);
 
   return (
-    <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4">
+    <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4">
       {/* Delivery context */}
       {(recipientName || specialInstructions) && (
         <View className="mb-3">
@@ -134,6 +134,7 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
             title={t('trip.retake_photo', { defaultValue: 'Tomar otra foto' })}
             variant="outline"
             size="sm"
+            forceDark
             onPress={takePhoto}
             className="mt-2"
           />

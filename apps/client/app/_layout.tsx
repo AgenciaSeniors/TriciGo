@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
@@ -17,7 +17,6 @@ import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
-import MapboxGL from '@rnmapbox/maps';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
@@ -25,21 +24,28 @@ import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
 import '../global.css';
 
-// Initialize Sentry as early as possible
-initSentry();
+// Initialize Sentry as early as possible (safe for web)
+try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
 
-// Register sound assets for ride events
-registerSoundAssets({
-  ride_accepted: require('../assets/sounds/ride_accepted.wav'),
-  driver_arrived: require('../assets/sounds/driver_arrived.wav'),
-  trip_completed: require('../assets/sounds/trip_completed.wav'),
-});
+// Register sound assets for ride events (native only — .wav files don't resolve on web)
+if (Platform.OS !== 'web') {
+  try {
+    registerSoundAssets({
+      ride_accepted: require('../assets/sounds/ride_accepted.wav'),
+      driver_arrived: require('../assets/sounds/driver_arrived.wav'),
+      trip_completed: require('../assets/sounds/trip_completed.wav'),
+    });
+  } catch { /* Sound registration failed — non-fatal */ }
+}
 
-// Initialize Mapbox (try-catch to prevent crash if token is missing)
-try {
-  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
-} catch {
-  // Mapbox will fail on map screens but app won't crash on startup
+// Initialize Mapbox (native only — @rnmapbox/maps has no web support)
+if (Platform.OS !== 'web') {
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+  } catch {
+    // Mapbox will fail on map screens but app won't crash on startup
+  }
 }
 
 function RootNavigator() {

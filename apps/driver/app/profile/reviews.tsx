@@ -86,7 +86,7 @@ export default function DriverReviewsScreen() {
   }, [hasMore, loading, page, fetchReviews]);
 
   const renderReview = ({ item }: { item: Review }) => (
-    <Card variant="filled" padding="md" className="mb-2 bg-neutral-800">
+    <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
       <View className="flex-row items-center justify-between mb-1">
         <StarRow rating={item.rating} />
         <Text variant="caption" color="inverse" className="opacity-50">
@@ -124,11 +124,12 @@ export default function DriverReviewsScreen() {
         <ScreenHeader
           title={t('reviews.title', { defaultValue: 'Mis Reseñas' })}
           onBack={() => router.back()}
+          light
         />
 
         {/* Summary header */}
         {summary && (
-          <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4 mt-2">
+          <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4 mt-2">
             <View className="flex-row items-center justify-between">
               <View className="items-center">
                 <Text variant="h1" color="inverse" className="font-bold">

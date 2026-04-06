@@ -129,7 +129,7 @@ export default function ReviewScreen() {
         </Text>
 
         {/* Personal Info */}
-        <Card variant="surface" padding="md" className="mb-4">
+        <Card forceDark variant="surface" padding="md" className="mb-4">
           <Text variant="label" color="secondary" className="mb-2">
             {t('onboarding.personal_info_summary')}
           </Text>
@@ -141,7 +141,7 @@ export default function ReviewScreen() {
         </Card>
 
         {/* Vehicle — Visual card with image */}
-        <Card variant="surface" padding="md" className="mb-4">
+        <Card forceDark variant="surface" padding="md" className="mb-4">
           <Text variant="label" color="secondary" className="mb-3">
             {t('onboarding.vehicle_summary')}
           </Text>
@@ -185,7 +185,7 @@ export default function ReviewScreen() {
         </Card>
 
         {/* Documents */}
-        <Card variant="surface" padding="md" className="mb-6">
+        <Card forceDark variant="surface" padding="md" className="mb-6">
           <Text variant="label" color="secondary" className="mb-2">
             {t('onboarding.documents_summary')}
           </Text>

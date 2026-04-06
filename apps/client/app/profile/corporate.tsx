@@ -8,6 +8,7 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
+import { EmptyState } from '@tricigo/ui/EmptyState';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useRouter } from 'expo-router';
@@ -355,12 +356,19 @@ export default function CorporateProfileScreen() {
       )}
 
       {!loading && accounts.length === 0 && (
-        <View className="items-center mt-12">
-          <Ionicons name="business-outline" size={48} color={colors.neutral[300]} />
-          <Text variant="body" color="secondary" className="mt-4 text-center">
-            {t('corporate.no_membership')}
-          </Text>
-        </View>
+        <EmptyState
+          icon="business-outline"
+          title={t('corporate.no_membership', { defaultValue: 'No perteneces a ninguna empresa' })}
+          description={t('corporate.no_membership_description', {
+            defaultValue:
+              'Las cuentas corporativas permiten que tu empresa gestione y pague tus viajes. Solicita acceso a tu administrador o conoce más sobre este beneficio.',
+          })}
+          action={{
+            label: t('corporate.request_access', { defaultValue: 'Solicitar acceso corporativo' }),
+            onPress: () => Linking.openURL('https://tricigo.com/corporate'),
+          }}
+          className="mt-8"
+        />
       )}
 
       {accounts.map((acc) => {

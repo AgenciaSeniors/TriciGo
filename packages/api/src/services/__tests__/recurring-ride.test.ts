@@ -14,7 +14,7 @@ import { recurringRideService } from '../recurring-ride.service';
 
 const MOCK_RECURRING = {
   id: 'rr-1',
-  user_id: 'u-1',
+  customer_id: 'u-1',
   pickup_address: 'Casa',
   dropoff_address: 'Oficina',
   service_type: 'triciclo_basico',
@@ -47,7 +47,7 @@ describe('recurringRideService', () => {
       const result = await recurringRideService.getRecurringRides('u-1');
 
       expect(mockFrom).toHaveBeenCalledWith('recurring_rides');
-      expect(mockEq).toHaveBeenCalledWith('user_id', 'u-1');
+      expect(mockEq).toHaveBeenCalledWith('customer_id', 'u-1');
       expect(mockNeq).toHaveBeenCalledWith('status', 'deleted');
       expect(result).toEqual([MOCK_RECURRING]);
     });

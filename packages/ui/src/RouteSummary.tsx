@@ -38,8 +38,8 @@ export function RouteSummary({
       {/* Pickup */}
       <View className="flex-row items-start">
         <View className="items-center mr-3 pt-1">
-          <View className="w-3 h-3 rounded-full bg-green-500" />
-          <View className="w-0.5 h-5 bg-neutral-300 my-0.5" style={{ borderStyle: 'dashed' }} />
+          <View className="w-3 h-3 rounded-full bg-success" />
+          <View className="w-0.5 h-5 bg-neutral-300 dark:bg-neutral-600 my-0.5" style={{ borderStyle: 'dashed' }} />
         </View>
         <View className="flex-1">
           {pickupLabel && !compact && (
@@ -55,7 +55,7 @@ export function RouteSummary({
         <View key={`wp-${index}`} className="flex-row items-start">
           <View className="items-center mr-3 pt-1">
             <View className="w-2.5 h-2.5 rounded-full bg-primary-400 ml-[1px]" />
-            <View className="w-0.5 h-5 bg-neutral-300 my-0.5 ml-[1px]" />
+            <View className="w-0.5 h-5 bg-neutral-300 dark:bg-neutral-600 my-0.5 ml-[1px]" />
           </View>
           <View className="flex-1">
             {wp.label && !compact && (
@@ -69,7 +69,7 @@ export function RouteSummary({
       {/* Dropoff */}
       <View className="flex-row items-start">
         <View className="items-center mr-3 pt-1">
-          <View className="w-3 h-3 rounded-full bg-red-500" />
+          <View className="w-3 h-3 rounded-full bg-error" />
         </View>
         <View className="flex-1">
           {dropoffLabel && !compact && (

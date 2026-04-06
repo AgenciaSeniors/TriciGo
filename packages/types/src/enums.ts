@@ -49,6 +49,7 @@ export type WalletAccountType =
   | 'customer_cash'
   | 'driver_cash'
   | 'driver_hold'
+  | 'driver_quota'
   | 'platform_revenue'
   | 'platform_promotions'
   | 'corporate_cash';
@@ -59,6 +60,8 @@ export type LedgerEntryType =
   | 'ride_hold'
   | 'ride_hold_release'
   | 'commission'
+  | 'quota_deduction'
+  | 'quota_recharge'
   | 'transfer_in'
   | 'transfer_out'
   | 'promo_credit'

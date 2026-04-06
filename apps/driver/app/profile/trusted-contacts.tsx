@@ -166,10 +166,11 @@ export default function TrustedContactsScreen() {
                 </View>
               ))}
             </StaggeredList>
-          )}}
+          )}
 
           {!loading && contacts.length === 0 && (
             <EmptyState
+              forceDark
               icon="people-outline"
               title={t('trusted_contacts.no_contacts')}
               description={t('trusted_contacts.no_contacts_desc')}
@@ -182,11 +183,11 @@ export default function TrustedContactsScreen() {
               variant="outline"
               size="lg"
               fullWidth
+              forceDark
               onPress={() => {
                 // TODO: Open add contact sheet
                 Toast.show({ type: 'info', text1: t('common.coming_soon', { defaultValue: 'Próximamente' }) });
               }}
-              icon="add-outline"
             />
           )}
         </View>

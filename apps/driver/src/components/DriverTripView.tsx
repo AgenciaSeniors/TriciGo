@@ -27,6 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInAppNavigation } from '@/hooks/useInAppNavigation';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
+import { useDriverProximityAlert } from '@/hooks/useDriverProximityAlert';
 import { RiderRatingSheet } from './RiderRatingSheet';
 import { DeliveryPhotoSheet } from './DeliveryPhotoSheet';
 import { rideService, getSupabaseClient } from '@tricigo/api';
@@ -134,6 +135,12 @@ export function DriverTripView() {
     ? { latitude: driverLat, longitude: driverLng }
     : null;
   const inAppNav = useInAppNavigation(driverLocation);
+
+  // ── Driver proximity haptic alert ──
+  useDriverProximityAlert(
+    activeTrip?.pickup_location ?? null,
+    activeTrip?.status ?? null,
+  );
 
   // ── Phase 3: Camera follow-mode ──
   const [followMode, setFollowMode] = useState(false);

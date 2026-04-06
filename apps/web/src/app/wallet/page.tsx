@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -67,7 +67,7 @@ export default function WalletPage() {
   const [rechargeLoading, setRechargeLoading] = useState(false);
   const [rechargeSuccess, setRechargeSuccess] = useState<string | null>(null);
   const [rechargeError, setRechargeError] = useState<string | null>(null);
-  const [exchangeRate, setExchangeRate] = useState<number>(520);
+  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
 
   // ── TropiPay iframe state ──
   const [tropipayUrl, setTropipayUrl] = useState<string | null>(null);

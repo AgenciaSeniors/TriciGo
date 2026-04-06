@@ -96,7 +96,7 @@ export default function DriverHelpScreen() {
     const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' };
     return (
       <Pressable onPress={() => router.push(`/profile/ticket-detail?ticketId=${item.id}`)}>
-        <Card variant="filled" padding="md" className="mb-2 bg-neutral-800">
+        <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 mr-2">
               <Text variant="body" color="inverse" className="font-semibold" numberOfLines={1}>
@@ -141,7 +141,7 @@ export default function DriverHelpScreen() {
                 const answerKey = key.replace('_q', '_a') as `faq_a${1 | 2 | 3}`;
                 const isExpanded = expandedIdx === idx;
                 return (
-                  <Card key={key} variant="filled" padding="md" className="mb-3 bg-neutral-800">
+                  <Card forceDark key={key} variant="filled" padding="md" className="mb-3 bg-neutral-800">
                     <Pressable
                       onPress={() => setExpandedIdx(isExpanded ? null : idx)}
                       className="flex-row items-center justify-between"
@@ -165,7 +165,7 @@ export default function DriverHelpScreen() {
               })}
 
               {/* Contact info */}
-              <Card variant="filled" padding="md" className="mt-1 mb-6 bg-neutral-800">
+              <Card forceDark variant="filled" padding="md" className="mt-1 mb-6 bg-neutral-800">
                 <Text variant="body" color="inverse" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="mail-outline" size={18} color="#A3A3A3" />

@@ -124,7 +124,7 @@ export default function DriverLostItemScreen() {
     return (
       <Screen bg="dark" statusBarStyle="light-content" padded>
         <View className="pt-4">
-          <ScreenHeader title="" onBack={() => router.back()} />
+          <ScreenHeader title="" onBack={() => router.back()} light />
           <Text variant="body" color="inverse" className="opacity-50">
             {t('lost_found.no_items')}
           </Text>
@@ -145,10 +145,11 @@ export default function DriverLostItemScreen() {
         <ScreenHeader
           title={t('lost_found.title')}
           onBack={() => router.back()}
+          light
         />
 
         {/* Item info */}
-        <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+        <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-full bg-amber-900/50 items-center justify-center mr-3">
               <Ionicons
@@ -173,7 +174,7 @@ export default function DriverLostItemScreen() {
 
         {/* Driver response section (not yet responded) */}
         {!hasResponded && (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
             <Text variant="label" color="inverse" className="mb-3">
               {t('lost_found.respond')}
             </Text>
@@ -205,6 +206,7 @@ export default function DriverLostItemScreen() {
                   variant="outline"
                   size="md"
                   fullWidth
+                  forceDark
                   onPress={() => handleRespond(false)}
                   disabled={submitting}
                 />
@@ -215,7 +217,7 @@ export default function DriverLostItemScreen() {
 
         {/* Arrange return (item found, not yet arranged) */}
         {canArrangeReturn && (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
             <Text variant="label" color="inverse" className="mb-3">
               {t('lost_found.arrange_return')}
             </Text>
@@ -269,7 +271,7 @@ export default function DriverLostItemScreen() {
 
         {/* Mark returned button */}
         {canMarkReturned && (
-          <Card variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
             {item.return_location && (
               <View className="mb-3">
                 <Text variant="caption" color="inverse" className="opacity-50">
@@ -299,7 +301,7 @@ export default function DriverLostItemScreen() {
 
         {/* Resolved status */}
         {isResolved && (
-          <Card variant="filled" padding="md" className="bg-green-900/30 border border-green-500/30 mb-4">
+          <Card forceDark variant="filled" padding="md" className="bg-green-900/30 border border-green-500/30 mb-4">
             <Text variant="body" color="inverse" className="font-semibold">
               ✓ {t(`lost_found.status_${item.status}`)}
             </Text>

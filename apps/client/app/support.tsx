@@ -34,7 +34,7 @@ export default function SupportScreen() {
       icon: 'mail-outline' as const,
       label: t('support.email', { defaultValue: 'Correo electrónico' }),
       description: 'soporte@tricigo.com',
-      color: colors.primary.DEFAULT,
+      color: colors.primary[500],
       onPress: () => Linking.openURL('mailto:soporte@tricigo.com?subject=Soporte%20TriciGo'),
     },
   ];
@@ -83,11 +83,11 @@ export default function SupportScreen() {
             <View
               style={{
                 width: 40, height: 40, borderRadius: 12,
-                backgroundColor: `${colors.primary.DEFAULT}15`,
+                backgroundColor: `${colors.primary[500]}15`,
                 justifyContent: 'center', alignItems: 'center',
               }}
             >
-              <Ionicons name="ticket-outline" size={22} color={colors.primary.DEFAULT} />
+              <Ionicons name="ticket-outline" size={22} color={colors.primary[500]} />
             </View>
             <View className="flex-1 ml-3">
               <Text variant="body" className="font-medium">

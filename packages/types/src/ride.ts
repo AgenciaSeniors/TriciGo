@@ -95,9 +95,9 @@ export interface Ride {
   canceled_at: string | null;
   canceled_by: string | null;
   cancellation_reason: string | null;
-  /** Fee charged for cancellation based on ride state (CUP centavos) */
+  /** Fee charged for cancellation based on ride state (CUP/TRC whole units) */
   cancellation_fee_cup: number;
-  /** Fee charged for cancellation in TRC centavos */
+  /** Fee charged for cancellation in TRC whole units (= CUP) */
   cancellation_fee_trc: number;
 
   // Safety
@@ -111,13 +111,18 @@ export interface Ride {
   surge_multiplier: number;
   tip_amount: number;
 
-  // Exchange rate snapshot (1 USD = X CUP at ride creation)
+  // Exchange rate snapshot (1 USD = X CUP/TRC at ride creation, from eltoque)
   exchange_rate_usd_cup: number | null;
-  // Fare in TRC centavos
+  // Fare in TRC whole units (= CUP since 1:1 peg)
   estimated_fare_trc: number | null;
   final_fare_trc: number | null;
-  // Driver custom rate at time of assignment (CUP whole pesos)
+  // Fare in USD (derived from exchange rate)
+  estimated_fare_usd: number | null;
+  final_fare_usd: number | null;
+  // Driver custom rate at time of assignment (CUP/TRC whole units)
   driver_custom_rate_cup: number | null;
+  // Quota deduction for this ride (TRC whole units, driver-side)
+  quota_deduction_amount: number | null;
 
   // TropiPay direct payment tracking
   payment_status: PaymentStatus;
@@ -230,7 +235,9 @@ export interface RideValidTransition {
 export interface CompleteRideResult {
   final_fare_cup: number;
   final_fare_trc: number;
+  final_fare_usd: number;
   exchange_rate_usd_cup: number;
+  /** @deprecated Use quota_deduction_amount instead */
   commission_amount: number;
   driver_earnings: number;
   payment_method: string;
@@ -241,6 +248,10 @@ export interface CompleteRideResult {
   insurance_selected?: boolean;
   insurance_premium_cup?: number;
   insurance_premium_trc?: number;
+  /** Amount deducted from driver's quota for this ride */
+  quota_deduction_amount: number;
+  /** Driver's remaining quota balance after deduction */
+  quota_balance_after: number;
 }
 
 /** Ride with joined rider info for driver display */
@@ -270,6 +281,34 @@ export interface RideWithRider extends Ride {
   rider_name: string;
   rider_avatar_url: string | null;
   rider_rating: number;
+}
+
+// ── Realtime Searching Types ──────────────────────────────
+
+/** Driver presence state during ride search (Supabase Presence) */
+export interface SearchingDriverPresence {
+  driverId: string;
+  name: string;
+  avatarUrl: string | null;
+  vehicleType: string;
+  rating: number;
+  location: GeoPoint; // jittered ~200m for privacy
+  joinedAt: number; // Date.now() timestamp
+}
+
+/** Broadcast payload when a driver accepts (fast path before DB RPC) */
+export interface DriverAcceptedBroadcast {
+  type: 'driver_accepted';
+  driverId: string;
+  name: string;
+  avatarUrl: string | null;
+  vehicleType: string;
+  rating: number;
+  location: GeoPoint; // real location (no jitter)
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
 }
 
 /** Ride with joined driver info for client display */

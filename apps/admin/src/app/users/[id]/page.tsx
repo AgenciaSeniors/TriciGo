@@ -36,8 +36,8 @@ const roleBadgeClasses: Record<string, string> = {
   super_admin: 'bg-red-50 text-red-700',
 };
 
-function formatCurrency(centavos: number): string {
-  return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
+function formatCurrency(amount: number): string {
+  return `${Math.round(amount).toLocaleString('es-CU')} TRC`;
 }
 
 export default function UserDetailPage() {

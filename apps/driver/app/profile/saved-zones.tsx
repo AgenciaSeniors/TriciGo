@@ -88,9 +88,10 @@ export default function SavedZonesScreen() {
 
         {!loading && zones.length === 0 && (
           <EmptyState
+            forceDark
             icon="location-outline"
             title={t('profile.no_zones', { defaultValue: 'Sin zonas guardadas' })}
-            message={t('profile.no_zones_desc', { defaultValue: 'Agrega zonas donde prefieres trabajar.' })}
+            description={t('profile.no_zones_desc', { defaultValue: 'Agrega zonas donde prefieres trabajar.' })}
           />
         )}
 

@@ -269,7 +269,7 @@ export default function EditProfileScreen() {
         </View>
 
         {/* Name */}
-        <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} />
+        <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} variant="dark" />
 
         {/* Email with validation */}
         <Input
@@ -278,6 +278,7 @@ export default function EditProfileScreen() {
           onChangeText={(v) => { setEmail(v); setEmailError(''); }}
           keyboardType="email-address"
           autoCapitalize="none"
+          variant="dark"
         />
         {emailError ? (
           <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{emailError}</Text>
@@ -289,6 +290,7 @@ export default function EditProfileScreen() {
           value={phone}
           onChangeText={(v) => { setPhone(v); setPhoneError(''); setOtpStep(false); setOtpCode(''); }}
           keyboardType="phone-pad"
+          variant="dark"
         />
         {phoneError ? (
           <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{phoneError}</Text>
@@ -307,13 +309,14 @@ export default function EditProfileScreen() {
               keyboardType="number-pad"
               maxLength={6}
               placeholder="000000"
+              variant="dark"
             />
           </View>
         )}
 
         {/* ── Driver Stats ──────────────────────────────────────────────────── */}
         {driverProfile && (
-          <Card variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
+          <Card forceDark variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">
@@ -326,7 +329,7 @@ export default function EditProfileScreen() {
                 </Text>
               </View>
               <View className="items-center flex-1">
-                <Text variant="h4" color="accent">{driverProfile.status ?? '--'}</Text>
+                <Text variant="h4" color="accent">{driverProfile.status ? td(`common.status_${driverProfile.status}`, { defaultValue: driverProfile.status }) : '--'}</Text>
                 <Text variant="caption" color="inverse" className="opacity-50">
                   {td('common.status_label', { defaultValue: 'Estado' })}
                 </Text>
@@ -343,7 +346,7 @@ export default function EditProfileScreen() {
 
         {/* ── Vehicle Card ──────────────────────────────────────────────────── */}
         {vehicle && (
-          <Card variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
+          <Card forceDark variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
             {/* Header with edit link */}
             <View className="flex-row items-center justify-between mb-3">
               <Text variant="label" color="inverse" className="opacity-70">

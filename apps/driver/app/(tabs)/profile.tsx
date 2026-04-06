@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { View, Pressable, Alert } from 'react-native';
+import { View, Pressable, Alert, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { StatCard } from '@tricigo/ui/StatCard';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
+import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -77,33 +78,33 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_account', { defaultValue: 'Cuenta' }),
       items: [
-        { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit') },
-        { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents') },
-        { icon: 'location-outline' as const, label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones') },
-        { icon: 'car-outline' as const, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle') },
+        { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
+        { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents'), iconBg: 'warning' as const },
+        { icon: 'location-outline' as const, label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones'), iconBg: 'info' as const },
+        { icon: 'car-outline' as const, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), iconBg: 'neutral' as const },
       ],
     },
     {
       title: t('profile.section_security', { defaultValue: 'Seguridad' }),
       items: [
-        { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety') },
-        { icon: 'people-outline' as const, label: t('trusted_contacts.title', { defaultValue: 'Contactos de confianza' }), onPress: () => router.push('/profile/trusted-contacts') },
+        { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety'), iconBg: 'success' as const },
+        { icon: 'people-outline' as const, label: t('trusted_contacts.title', { defaultValue: 'Contactos de confianza' }), onPress: () => router.push('/profile/trusted-contacts'), iconBg: 'info' as const },
       ],
     },
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate') },
-        { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral') },
+        { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
+        { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },
       ],
     },
     {
       title: t('profile.section_more', { defaultValue: 'Más' }),
       items: [
-        { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings') },
-        { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help') },
-        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog') },
-        { icon: 'information-circle-outline' as const, label: t('profile.about_title', { defaultValue: 'Acerca de' }), onPress: () => router.push('/profile/about') },
+        { icon: 'settings-outline' as const, label: t('profile.settings'), onPress: () => router.push('/profile/settings'), iconBg: 'neutral' as const },
+        { icon: 'help-circle-outline' as const, label: t('profile.help'), onPress: () => router.push('/profile/help'), iconBg: 'neutral' as const },
+        { icon: 'newspaper-outline' as const, label: t('profile.blog', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog'), iconBg: 'info' as const },
+        { icon: 'information-circle-outline' as const, label: t('profile.about_title', { defaultValue: 'Acerca de' }), onPress: () => router.push('/profile/about'), iconBg: 'neutral' as const },
       ],
     },
   ];
@@ -116,7 +117,7 @@ function NativeDriverProfileScreen() {
         </Text>
 
         {/* ── Profile header card ── */}
-        <Card variant="surface" padding="md" className="mb-4">
+        <Card variant="surface" padding="md" className="mb-4" forceDark>
           <View className="flex-row items-center">
             <View
               className="w-16 h-16 rounded-full items-center justify-center mr-4"
@@ -136,7 +137,7 @@ function NativeDriverProfileScreen() {
               {driverProfile?.status && (
                 <View className="mt-2">
                   <StatusBadge
-                    label={driverProfile.status === 'approved' ? td('common.active') : driverProfile.status}
+                    label={td(`common.status_${driverProfile.status}`, { defaultValue: driverProfile.status })}
                     variant={statusVariant}
                     icon={statusVariant === 'success' ? 'checkmark-circle' : statusVariant === 'warning' ? 'time-outline' : 'alert-circle'}
                   />
@@ -165,6 +166,7 @@ function NativeDriverProfileScreen() {
                   ? driverProfile.rating_avg.toFixed(1) : '--'}
                 label={td('earnings.rating')}
                 iconColor="#FBBF24"
+                forceDark
               />
             </View>
             <View className="flex-1">
@@ -172,57 +174,165 @@ function NativeDriverProfileScreen() {
                 icon="car-outline"
                 value={String(driverProfile.total_rides ?? 0)}
                 label={td('trips_history.title')}
+                forceDark
               />
             </View>
           </View>
         )}
 
         {/* ── Menu sections ── */}
-        {menuSections.map((section, sectionIdx) => (
-          <AnimatedCard key={section.title} delay={sectionIdx * 100} className="mb-4">
-            <Text variant="label" color="secondary" className="mb-2 ml-1">
-              {section.title}
-            </Text>
-            <Card variant="surface" padding="none">
-              {section.items.map((item, index) => (
-                <Pressable
-                  key={item.label}
-                  className={`flex-row items-center px-4 min-h-[48px] ${index < section.items.length - 1 ? 'border-b border-white/6' : ''}`}
-                  onPress={item.onPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.label}
-                >
-                  <View className="w-9 h-9 rounded-xl bg-[#1e1e1e] items-center justify-center mr-3">
-                    <Ionicons name={item.icon} size={18} color={colors.brand.orange} />
-                  </View>
-                  <Text variant="body" color="inverse" className="flex-1">
-                    {item.label}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={18} color={colors.neutral[600]} />
-                </Pressable>
-              ))}
-            </Card>
-          </AnimatedCard>
-        ))}
+        <StaggeredList staggerDelay={60}>
+          {menuSections.map((section) => (
+            <View key={section.title} className="mb-4">
+              <Text variant="caption" style={{ color: colors.neutral[500] }} className="mb-2 ml-1 uppercase tracking-wider font-semibold">
+                {section.title}
+              </Text>
+              <Card variant="surface" padding="none" className="px-3" forceDark>
+                {section.items.map((item, index) => (
+                  <MenuRow
+                    key={item.label}
+                    icon={item.icon}
+                    label={item.label}
+                    iconBg={item.iconBg}
+                    onPress={item.onPress}
+                    showBorder={index < section.items.length - 1}
+                    forceDark
+                  />
+                ))}
+              </Card>
+            </View>
+          ))}
+        </StaggeredList>
 
         {/* ── Logout ── */}
-        <Pressable
-          className="flex-row items-center justify-center py-4 mt-2 mb-8 rounded-2xl bg-red-500/10 min-h-[48px]"
-          onPress={handleLogout}
-          disabled={loggingOut}
-          accessibilityRole="button"
-          accessibilityLabel={loggingOut ? t('auth.logging_out') : t('auth.logout')}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.error.DEFAULT} />
-          <Text variant="body" color="error" className="ml-2 font-semibold">
-            {loggingOut ? t('auth.logging_out') : t('auth.logout')}
-          </Text>
-        </Pressable>
+        <View className="mt-2 mb-8 px-3">
+          <MenuRow
+            icon="log-out-outline"
+            label={loggingOut ? t('auth.logging_out') : t('auth.logout')}
+            onPress={handleLogout}
+            destructive
+            showChevron={false}
+            showBorder={false}
+            disabled={loggingOut}
+            forceDark
+          />
+        </View>
       </View>
     </Screen>
   );
 }
 
+// TEMP: Static web version for Play Store screenshots (all inline styles to bypass NativeWind web issues)
+function WebDriverProfileScreen() {
+  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+  const CARD_BG = '#1a1a2e';
+  const BORDER = '#2a2a3e';
+
+  const menuSections = [
+    {
+      title: 'Cuenta',
+      items: [
+        { icon: 'person-outline' as const, label: 'Editar perfil', color: '#F97316' },
+        { icon: 'document-text-outline' as const, label: 'Documentos', color: '#FBBF24' },
+        { icon: 'location-outline' as const, label: 'Zonas guardadas', color: '#3B82F6' },
+        { icon: 'car-outline' as const, label: 'Vehículo', color: '#9ca3af' },
+      ],
+    },
+    {
+      title: 'Seguridad',
+      items: [
+        { icon: 'shield-checkmark-outline' as const, label: 'Centro de Seguridad', color: '#22C55E' },
+        { icon: 'people-outline' as const, label: 'Contactos de Confianza', color: '#3B82F6' },
+      ],
+    },
+    {
+      title: 'Actividad',
+      items: [
+        { icon: 'business-outline' as const, label: 'Corporativo', color: '#9ca3af' },
+        { icon: 'gift-outline' as const, label: 'Referidos', color: '#FBBF24' },
+      ],
+    },
+    {
+      title: 'Más',
+      items: [
+        { icon: 'settings-outline' as const, label: 'Configuración', color: '#9ca3af' },
+        { icon: 'help-circle-outline' as const, label: 'Ayuda', color: '#9ca3af' },
+        { icon: 'newspaper-outline' as const, label: 'Blog', color: '#3B82F6' },
+        { icon: 'information-circle-outline' as const, label: 'Acerca de TriciGo', color: '#9ca3af' },
+      ],
+    },
+  ];
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#111111' }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+        <View style={{ paddingTop: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 20, ...font }}>Perfil</Text>
+
+          {/* Profile header card */}
+          <View style={{ backgroundColor: CARD_BG, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: BORDER, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#F97316', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#fff', ...font }}>E</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 17, fontWeight: '600', color: '#fff', ...font }}>Eduardo Admin</Text>
+              <Text style={{ fontSize: 13, color: '#9ca3af', marginTop: 2, ...font }}>+5356621636</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                <View style={{ backgroundColor: 'rgba(34,197,94,0.15)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="checkmark-circle" size={12} color="#4ade80" />
+                  <Text style={{ fontSize: 11, color: '#4ade80', fontWeight: '600', ...font }}>Activo</Text>
+                </View>
+              </View>
+            </View>
+            <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#1e1e1e', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="pencil" size={14} color="#9ca3af" />
+            </View>
+          </View>
+
+          {/* Stats row */}
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+            <View style={{ flex: 1, backgroundColor: CARD_BG, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER, alignItems: 'center' }}>
+              <Ionicons name="star" size={20} color="#FBBF24" />
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#fff', marginTop: 4, ...font }}>5.0</Text>
+              <Text style={{ fontSize: 11, color: '#9ca3af', ...font }}>Tu calificación</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: CARD_BG, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: BORDER, alignItems: 'center' }}>
+              <Ionicons name="car-outline" size={20} color="#F97316" />
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#fff', marginTop: 4, ...font }}>0</Text>
+              <Text style={{ fontSize: 11, color: '#9ca3af', ...font }}>Mis viajes</Text>
+            </View>
+          </View>
+
+          {/* Menu sections */}
+          {menuSections.map((section) => (
+            <View key={section.title} style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 11, color: '#6b7280', fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, marginLeft: 4, ...font }}>{section.title}</Text>
+              <View style={{ backgroundColor: CARD_BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER, paddingHorizontal: 12 }}>
+                {section.items.map((item, index) => (
+                  <Pressable key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: index < section.items.length - 1 ? 1 : 0, borderBottomColor: BORDER }}>
+                    <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: `${item.color}15`, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <Ionicons name={item.icon} size={18} color={item.color} />
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 14, color: '#f5f5f5', ...font }}>{item.label}</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#6b7280" />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {/* Logout */}
+          <Pressable style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, marginTop: 4, marginBottom: 16 }}>
+            <Ionicons name="log-out-outline" size={20} color="#EF4444" style={{ marginRight: 12 }} />
+            <Text style={{ fontSize: 14, color: '#EF4444', fontWeight: '500', ...font }}>Cerrar sesión</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function DriverProfileScreen() {
+  if (Platform.OS === 'web') return <WebDriverProfileScreen />;
   return <NativeDriverProfileScreen />;
 }

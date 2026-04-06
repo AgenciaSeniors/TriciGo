@@ -284,7 +284,21 @@
     "share_message": "Sigue mi viaje en vivo en TriciGo: {{url}}",
     "share_failed": "No se pudo compartir el viaje",
     "trip_shared": "Viaje compartido",
-    "realtime_tracking": "Seguimiento en tiempo real"
+    "realtime_tracking": "Seguimiento en tiempo real",
+    "driver_approaching_title": "Conductor cerca",
+    "driver_approaching_body": "{{name}} está a ~2 minutos del punto de recogida",
+    "approaching_destination_title": "Llegando a destino",
+    "approaching_destination_body": "Estás a ~2 minutos de tu destino",
+    "trip_started_notif": "Viaje iniciado",
+    "trip_started_body": "Tu viaje ha comenzado. ¡Disfruta el trayecto!",
+    "payment_confirmed_title": "Pago confirmado",
+    "payment_confirmed_body": "${{amount}} CUP — {{method}}",
+    "payment_method_cash": "Efectivo",
+    "payment_method_tricicoin": "Tricicoin",
+    "payment_method_tropipay": "TropiPay",
+    "payment_method_corporate": "Corporativo",
+    "rate_reminder_title": "¿Cómo fue tu viaje?",
+    "rate_reminder_body": "Tu opinión nos ayuda a mejorar. ¡Califica al conductor!"
   },
 
   "dispute": {

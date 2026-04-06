@@ -526,7 +526,8 @@
     "revenue_forecast": "Pronóstico de Ingresos",
     "prediction_next_7_days": "Predicción próximos 7 días",
     "actual": "Real",
-    "predicted": "Proyectado"
+    "predicted": "Proyectado",
+    "export_csv": "Exportar CSV"
   },
 
   "funnel": {
@@ -875,6 +876,12 @@
     "commission_rate_help": "Porcentaje que cobra la plataforma por viaje (ej: 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Tasa de cambio de respaldo (CUP)",
     "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada",
+    "quota_deduction_rate": "Tasa de deduccion de cuota",
+    "quota_deduction_rate_help": "Porcentaje del valor del viaje que se descuenta de la cuota del conductor (ej: 0.15 = 15%)",
+    "quota_warning_threshold_pct": "Umbral de alerta de cuota baja",
+    "quota_warning_threshold_pct_help": "Porcentaje restante de cuota que activa la alerta (ej: 0.20 = 20%)",
+    "quota_grace_trips": "Viajes de gracia",
+    "quota_grace_trips_help": "Numero de viajes permitidos despues de agotar la cuota antes del bloqueo",
     "openweather_api_key": "API Key de OpenWeatherMap",
     "openweather_api_key_help": "Clave para consultas de clima. Obtener en openweathermap.org",
     "weather_surge_enabled": "Surge por clima activo",

@@ -2,13 +2,17 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
-import { rideService, driverService, locationService, notificationService } from '@tricigo/api';
+import { rideService, driverService, locationService, notificationService, presenceService } from '@tricigo/api';
 import { triggerHaptic, playSound, logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
-import type { RideStatus } from '@tricigo/types';
+import { useLocationStore } from '@/stores/location.store';
+import type { RideStatus, DriverAcceptedBroadcast, Vehicle } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+/** Cached vehicle info for broadcast — loaded once per session */
+let cachedVehicle: Vehicle | null = null;
 
 /** Next status in the ride FSM for driver actions. */
 const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
@@ -36,6 +40,13 @@ export function useDriverRideInit() {
 
     async function checkActive() {
       try {
+        // Pre-cache vehicle info for broadcast on accept
+        if (!cachedVehicle) {
+          driverService.getVehicle(profile!.id).then((v) => {
+            cachedVehicle = v;
+          }).catch(() => { /* non-critical */ });
+        }
+
         const trip = await driverService.getActiveTrip(profile!.id);
         if (!mounted) return;
 
@@ -219,6 +230,27 @@ export function useDriverRideActions() {
     }
 
     try {
+      // Fast-path broadcast: notify client immediately so they can
+      // start the accept animation before the DB RPC completes.
+      const user = useAuthStore.getState().user;
+      const loc = useLocationStore.getState();
+      if (user && loc.latitude && loc.longitude) {
+        const broadcastData: DriverAcceptedBroadcast = {
+          type: 'driver_accepted',
+          driverId: profile.id,
+          name: user.full_name,
+          avatarUrl: user.avatar_url,
+          vehicleType: cachedVehicle?.type ?? '',
+          rating: profile.rating_avg,
+          location: { latitude: loc.latitude, longitude: loc.longitude },
+          vehicleMake: cachedVehicle?.make ?? null,
+          vehicleModel: cachedVehicle?.model ?? null,
+          vehicleColor: cachedVehicle?.color ?? null,
+          vehiclePlate: cachedVehicle?.plate_number ?? null,
+        };
+        presenceService.broadcastDriverAccepted(rideId, broadcastData);
+      }
+
       const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
       setActiveTrip(ride);
       removeRequest(rideId);

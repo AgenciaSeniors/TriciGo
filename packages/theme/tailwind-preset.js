@@ -59,6 +59,10 @@ module.exports = {
           DEFAULT: '#3B82F6',
           dark: '#1E40AF',
         },
+        surface: {
+          card: '#1a1a2e',
+          elevated: '#252540',
+        },
       },
       fontFamily: {
         sans: ['var(--font-montserrat)', 'Montserrat', 'Inter', 'system-ui', 'sans-serif'],

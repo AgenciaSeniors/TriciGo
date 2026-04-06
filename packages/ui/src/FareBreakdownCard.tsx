@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { formatCUP, formatTRC } from '@tricigo/utils';
+import { formatCUP, formatTRC, formatUSD, trcToUsd } from '@tricigo/utils';
 import { Text } from './Text';
 import { Card } from './Card';
 
@@ -24,11 +24,13 @@ export interface FareBreakdownCardProps {
   surgeLabel?: string;
   /** Total fare in CUP */
   totalCup: number;
-  /** Total fare in TRC centavos */
+  /** Total fare in TRC whole units (= CUP, 1:1 peg) */
   totalTrc: number;
   /** Total label (e.g. "Estimated total") */
   totalLabel: string;
-  /** Discount in TRC centavos */
+  /** Exchange rate: 1 USD = X CUP/TRC (for USD display) */
+  exchangeRate?: number;
+  /** Discount in TRC whole units */
   discountTrc?: number;
   /** Discount label */
   discountLabel?: string;
@@ -36,13 +38,13 @@ export interface FareBreakdownCardProps {
   minFareApplied?: boolean;
   /** Min fare note text */
   minFareNote?: string;
-  /** Fare range min in TRC centavos */
+  /** Fare range min in TRC whole units */
   fareRangeMinTrc?: number;
-  /** Fare range max in TRC centavos */
+  /** Fare range max in TRC whole units */
   fareRangeMaxTrc?: number;
   /** Fare range label (e.g. "Rango estimado") */
   fareRangeLabel?: string;
-  /** Insurance premium in TRC centavos (shown if > 0) */
+  /** Insurance premium in TRC whole units (shown if > 0) */
   insurancePremiumTrc?: number;
   /** Insurance label (e.g. "Seguro de viaje") */
   insuranceLabel?: string;
@@ -84,6 +86,7 @@ export function FareBreakdownCard({
   totalCup,
   totalTrc,
   totalLabel,
+  exchangeRate = 0,
   discountTrc = 0,
   discountLabel,
   minFareApplied = false,
@@ -102,8 +105,9 @@ export function FareBreakdownCard({
   const timeCharge = Math.round(durationMin * perMinRateCup);
   const subtotal = baseFareCup + distanceCharge + timeCharge;
   const finalTrc = totalTrc - discountTrc + insurancePremiumTrc;
-  const showTrc = paymentMethod === 'tricicoin';
-  const totalDisplay = showTrc ? formatTRC(finalTrc) : formatCUP(totalCup);
+  // Since TRC = CUP (1:1), always show TRC as primary
+  const totalDisplay = formatTRC(finalTrc);
+  const totalUsdDisplay = exchangeRate > 0 ? formatUSD(trcToUsd(finalTrc, exchangeRate)) : null;
 
   return (
     <Card variant="elevated" padding="lg">
@@ -173,7 +177,7 @@ export function FareBreakdownCard({
       )}
 
       {/* Discount */}
-      {discountTrc > 0 && discountLabel && showTrc && (
+      {discountTrc > 0 && discountLabel && (
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" className="text-green-600">{discountLabel}</Text>
           <Text variant="bodySmall" className="text-green-600">-{formatTRC(discountTrc)}</Text>
@@ -181,7 +185,7 @@ export function FareBreakdownCard({
       )}
 
       {/* Insurance premium */}
-      {insurancePremiumTrc > 0 && insuranceLabel && showTrc && (
+      {insurancePremiumTrc > 0 && insuranceLabel && (
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
             <Ionicons name="shield-checkmark-outline" size={14} color="#3b82f6" />
@@ -195,11 +199,16 @@ export function FareBreakdownCard({
       <View className="h-px bg-neutral-200 my-3" />
       <View accessible accessibilityLabel={`${totalLabel}: ${totalDisplay}`} className="flex-row justify-between items-center">
         <Text variant="h4">{totalLabel}</Text>
-        <Text variant="h3" color="accent">{totalDisplay}</Text>
+        <View className="items-end">
+          <Text variant="h3" color="accent">{totalDisplay}</Text>
+          {totalUsdDisplay && (
+            <Text variant="caption" color="secondary">{'\u2248'} {totalUsdDisplay}</Text>
+          )}
+        </View>
       </View>
 
       {/* Fare range */}
-      {fareRangeMinTrc != null && fareRangeMaxTrc != null && fareRangeMinTrc !== fareRangeMaxTrc && showTrc && (
+      {fareRangeMinTrc != null && fareRangeMaxTrc != null && fareRangeMinTrc !== fareRangeMaxTrc && (
         <View className="flex-row items-center mt-2">
           <Ionicons name="swap-horizontal-outline" size={14} color="#9ca3af" />
           <Text variant="caption" color="secondary" className="ml-1">

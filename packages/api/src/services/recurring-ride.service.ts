@@ -23,7 +23,7 @@ export const recurringRideService = {
     const { data, error } = await supabase
       .from('recurring_rides')
       .select('*')
-      .eq('user_id', userId)
+      .eq('customer_id', userId)
       .neq('status', 'deleted')
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -37,7 +37,7 @@ export const recurringRideService = {
     const { count, error: countError } = await supabase
       .from('recurring_rides')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', params.user_id)
+      .eq('customer_id', params.user_id)
       .neq('status', 'deleted');
     if (countError) throw countError;
     if ((count ?? 0) >= MAX_RECURRING) {
@@ -58,7 +58,7 @@ export const recurringRideService = {
     const { data, error } = await supabase
       .from('recurring_rides')
       .insert({
-        user_id: params.user_id,
+        customer_id: params.user_id,
         pickup_location: `POINT(${params.pickup_longitude} ${params.pickup_latitude})`,
         pickup_address: params.pickup_address,
         dropoff_location: `POINT(${params.dropoff_longitude} ${params.dropoff_latitude})`,

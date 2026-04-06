@@ -228,7 +228,7 @@ export default function EditVehicleScreen() {
         ) : (
           <>
             {/* ── Vehicle Type Selector ── */}
-            <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="car-sport" size={20} color={colors.brand.orange} />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">
@@ -278,7 +278,7 @@ export default function EditVehicleScreen() {
             </Card>
 
             {/* ── Vehicle Details ── */}
-            <Card variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="information-circle" size={20} color="#3B82F6" />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">
@@ -290,6 +290,7 @@ export default function EditVehicleScreen() {
                 value={make}
                 onChangeText={setMake}
                 placeholder="Custom"
+                variant="dark"
               />
               {errors.make ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.make}</Text> : null}
 
@@ -298,6 +299,7 @@ export default function EditVehicleScreen() {
                 value={model}
                 onChangeText={setModel}
                 placeholder="Triciclo Eléctrico"
+                variant="dark"
               />
               {errors.model ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.model}</Text> : null}
 
@@ -309,6 +311,7 @@ export default function EditVehicleScreen() {
                     onChangeText={setYear}
                     keyboardType="number-pad"
                     placeholder="2024"
+                    variant="dark"
                   />
                   {errors.year ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.year}</Text> : null}
                 </View>
@@ -318,6 +321,7 @@ export default function EditVehicleScreen() {
                     value={color}
                     onChangeText={setColor}
                     placeholder="Azul"
+                    variant="dark"
                   />
                   {errors.color ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.color}</Text> : null}
                 </View>
@@ -329,6 +333,7 @@ export default function EditVehicleScreen() {
                 onChangeText={setPlateNumber}
                 autoCapitalize="characters"
                 placeholder="P123456"
+                variant="dark"
               />
               {errors.plate ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.plate}</Text> : null}
 
@@ -339,12 +344,13 @@ export default function EditVehicleScreen() {
                 keyboardType="number-pad"
                 placeholder="4"
                 editable={vehicleType !== 'moto'}
+                variant="dark"
               />
               {errors.capacity ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.capacity}</Text> : null}
             </Card>
 
             {/* ── Verification Photos ── */}
-            <Card variant="filled" padding="md" className="mb-6 bg-neutral-800">
+            <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
               <View className="flex-row items-center mb-2">
                 <Ionicons name="camera-outline" size={20} color={colors.brand.orange} />
                 <Text variant="body" color="inverse" className="ml-2 font-semibold">

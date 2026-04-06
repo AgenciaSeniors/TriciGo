@@ -7,7 +7,7 @@
 
 CREATE TABLE IF NOT EXISTS recurring_rides (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   pickup_location geography(POINT, 4326) NOT NULL,
   pickup_address TEXT NOT NULL,
   dropoff_location geography(POINT, 4326) NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS recurring_rides (
 
 -- Indices
 CREATE INDEX IF NOT EXISTS idx_recurring_rides_user
-  ON recurring_rides(user_id) WHERE status != 'deleted';
+  ON recurring_rides(customer_id) WHERE status != 'deleted';
 CREATE INDEX IF NOT EXISTS idx_recurring_rides_next
   ON recurring_rides(next_occurrence_at) WHERE status = 'active';
 
@@ -40,16 +40,16 @@ CREATE TRIGGER set_recurring_rides_updated_at
 ALTER TABLE recurring_rides ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY recurring_rides_owner_select ON recurring_rides
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (auth.uid() = customer_id);
 
 CREATE POLICY recurring_rides_owner_insert ON recurring_rides
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (auth.uid() = customer_id);
 
 CREATE POLICY recurring_rides_owner_update ON recurring_rides
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = customer_id);
 
 CREATE POLICY recurring_rides_owner_delete ON recurring_rides
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING (auth.uid() = customer_id);
 
 -- ── compute_next_occurrence ──────────────────────────────────
 -- Given days-of-week array, time, and timezone, find the next
@@ -130,7 +130,7 @@ BEGIN
       is_scheduled, scheduled_at, status,
       discount_amount_cup, surge_multiplier, tip_amount
     ) VALUES (
-      v_rec.user_id, v_rec.service_type, v_rec.payment_method,
+      v_rec.customer_id, v_rec.service_type, v_rec.payment_method,
       v_rec.pickup_location, v_rec.pickup_address,
       v_rec.dropoff_location, v_rec.dropoff_address,
       0, 0,

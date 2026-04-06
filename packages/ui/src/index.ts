@@ -64,3 +64,9 @@ export type { StatCardProps } from './StatCard';
 
 export { Toast, useToast, ToastProvider } from './Toast';
 export type { ToastProps } from './Toast';
+
+export { QuotaCard } from './QuotaCard';
+export type { QuotaCardProps } from './QuotaCard';
+
+export { MultiCurrencyPrice } from './MultiCurrencyPrice';
+export type { MultiCurrencyPriceProps } from './MultiCurrencyPrice';
