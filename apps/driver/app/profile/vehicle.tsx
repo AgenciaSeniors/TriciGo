@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -12,6 +12,12 @@ import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Vehicle } from '@tricigo/types';
 import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
+
+const VEHICLE_IMAGES: Record<string, any> = {
+  triciclo: require('../../assets/vehicles/selection/triciclo.png'),
+  moto: require('../../assets/vehicles/selection/moto.png'),
+  auto: require('../../assets/vehicles/selection/auto.png'),
+};
 
 export default function VehicleScreen() {
   const { t } = useTranslation('common');
@@ -79,6 +85,17 @@ export default function VehicleScreen() {
             No hay vehículo registrado
           </Text>
         ) : (
+          {/* Vehicle type image */}
+          {vehicle.type && VEHICLE_IMAGES[vehicle.type] && (
+            <View className="items-center mb-4">
+              <Image
+                source={VEHICLE_IMAGES[vehicle.type]}
+                style={{ width: 160, height: 120, resizeMode: 'contain' }}
+                accessibilityLabel={vehicle.type}
+              />
+            </View>
+          )}
+
           <Card theme="light" variant="filled" padding="md" className="bg-white">
             {infoRows.map((row) => (
               <View
