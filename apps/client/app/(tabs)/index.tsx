@@ -138,7 +138,7 @@ const WEB_SEARCH_MESSAGES = [
 /* ── Premium Web Searching State ── */
 function WebSearchingState({
   pickup, dropoff, pickupAddress, dropoffAddress, routeCoords,
-  selectedEstimate, serviceType, onReset, font,
+  selectedEstimate, serviceType, onReset, font, paymentMethod,
 }: {
   pickup: LocationPreset | null;
   dropoff: LocationPreset | null;
@@ -149,6 +149,7 @@ function WebSearchingState({
   serviceType: string;
   onReset: () => void;
   font: { fontFamily: string };
+  paymentMethod: string;
 }) {
   const [searchPhase, setSearchPhase] = useState(0);
   const [searchTimedOut, setSearchTimedOut] = useState(false);
@@ -814,7 +815,7 @@ function WebHomeScreen() {
         }
       } catch { /* proceed with original */ }
 
-      await rideService.createRide({
+      const ride = await rideService.createRide({
         service_type: activeSlug,
         payment_method: paymentMethod,
         pickup_latitude: pickup.latitude,
@@ -841,6 +842,17 @@ function WebHomeScreen() {
           },
         }),
       });
+      // Store the ride and subscribe to realtime updates so status changes propagate
+      useRideStore.getState().setActiveRide(ride);
+      useRideStore.getState().setFlowStep('searching');
+
+      // Subscribe to ride updates for status transitions (searching → accepted → etc)
+      const channel = rideService.subscribeToRide(ride.id, (updated) => {
+        useRideStore.getState().updateRideFromRealtime(updated);
+      });
+      // Store channel ref for cleanup (best-effort — cleanup on unmount handled by useRideInit)
+      (window as any).__tricigo_web_ride_channel = channel;
+
       setRequestSuccess(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -920,6 +932,18 @@ function WebHomeScreen() {
   // ── Phase 5: Web active ride view ──
   const flowStep = useRideStore((s) => s.flowStep);
 
+  // Reset requestSuccess when ride completes or is canceled
+  useEffect(() => {
+    if (requestSuccess && (flowStep === 'completed' || flowStep === 'idle')) {
+      setRequestSuccess(false);
+    }
+  }, [flowStep, requestSuccess]);
+
+  // Show completed view (rating)
+  if (flowStep === 'completed') {
+    return <WebActiveRideView onReset={handleReset} />;
+  }
+
   if (flowStep === 'active') {
     return <WebActiveRideView onReset={handleReset} />;
   }
@@ -936,6 +960,7 @@ function WebHomeScreen() {
       serviceType={serviceType}
       onReset={handleReset}
       font={font}
+      paymentMethod={paymentMethod}
     />;
   }
 

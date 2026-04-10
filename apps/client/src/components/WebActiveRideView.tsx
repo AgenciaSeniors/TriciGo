@@ -33,14 +33,26 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const activeRideId = activeRide?.id ?? null;
 
+  // Normalize pickup/dropoff — ride from createRide may have lat/lng fields instead of GeoPoint
+  const pickupLocation = activeRide?.pickup_location?.latitude
+    ? activeRide.pickup_location
+    : activeRide?.pickup_lat && activeRide?.pickup_lng
+      ? { latitude: activeRide.pickup_lat as number, longitude: activeRide.pickup_lng as number }
+      : null;
+  const dropoffLocation = activeRide?.dropoff_location?.latitude
+    ? activeRide.dropoff_location
+    : activeRide?.dropoff_lat && activeRide?.dropoff_lng
+      ? { latitude: activeRide.dropoff_lat as number, longitude: activeRide.dropoff_lng as number }
+      : null;
+
   // Live driver position
   const driverPosState = useDriverPositionWithCache(activeRideId);
   const driverPosition = driverPosState.position;
 
   // Route polylines
   const routeData = useRoutePolyline(
-    activeRide?.pickup_location,
-    activeRide?.dropoff_location,
+    pickupLocation,
+    dropoffLocation,
   );
   const routeGeoPoints = routeData.coordinates;
 
@@ -51,7 +63,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
 
   const driverToPickupGeoPoints = useDriverToPickupRoute(
     driverPosition,
-    activeRide?.pickup_location ?? null,
+    pickupLocation,
     activeRide?.status ?? null,
   );
 
@@ -63,8 +75,8 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
   // ETA
   const { etaMinutes } = useETA({
     driverLocation: driverPosition,
-    pickupLocation: activeRide?.pickup_location ?? null,
-    dropoffLocation: activeRide?.dropoff_location ?? null,
+    pickupLocation: pickupLocation,
+    dropoffLocation: dropoffLocation,
     rideStatus: activeRide?.status ?? null,
   });
 
@@ -117,8 +129,8 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
         {/* ═══ LEFT: Map ═══ */}
         <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
           <WebMapView
-            pickup={activeRide?.pickup_location ?? null}
-            dropoff={activeRide?.dropoff_location ?? null}
+            pickup={pickupLocation}
+            dropoff={dropoffLocation}
             routeCoords={routeCoords}
             driverRoute={driverRoute}
             style={{ width: '100%', height: '100%' }}

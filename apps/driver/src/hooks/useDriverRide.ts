@@ -53,17 +53,23 @@ export function useDriverRideInit() {
 
         if (!trip) {
           const localTrip = useDriverRideStore.getState().activeTrip;
-          if (localTrip) {
+          // Don't clear a completed trip — let TripCompleteView show the earnings summary
+          if (localTrip && localTrip.status !== 'completed') {
             logger.info('[Reconcile] Clearing stale local trip', { ride_id: localTrip.id });
             useDriverRideStore.getState().setActiveTrip(null);
           }
-          logger.info('[Reconcile] Result', { had_local_trip: !!localTrip, server_trip: false, action: 'cleared' });
+          logger.info('[Reconcile] Result', { had_local_trip: !!localTrip, server_trip: false, action: localTrip?.status === 'completed' ? 'kept_completed' : 'cleared' });
           return;
         }
 
-        // If trip already completed/canceled, don't set as active
-        if (trip.status === 'completed' || trip.status === 'canceled') {
+        // If trip canceled, clear it. If completed, KEEP it so TripCompleteView can render.
+        if (trip.status === 'canceled') {
           useDriverRideStore.getState().reset();
+          return;
+        }
+        if (trip.status === 'completed') {
+          // Don't reset — let TripCompleteView show the earnings summary
+          useDriverRideStore.getState().setActiveTrip(trip);
           return;
         }
 
