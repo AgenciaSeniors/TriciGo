@@ -58,9 +58,20 @@ export function useChatInit(rideId: string) {
       });
     }
 
+    // F607: Polling fallback — refetch messages every 30s in case realtime silently disconnects
+    const pollInterval = setInterval(() => {
+      chatService.getMessages(rideId).then((msgs) => {
+        const newMsgs = msgs.filter((m) => !seenIds.has(m.id));
+        if (newMsgs.length > 0) {
+          newMsgs.forEach((m) => { seenIds.add(m.id); addMessage(m); });
+        }
+      }).catch(() => { /* best-effort polling */ });
+    }, 30_000);
+
     return () => {
       msgChannel?.unsubscribe();
       typingChannel?.unsubscribe();
+      clearInterval(pollInterval);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       reset();
     };

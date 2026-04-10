@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import i18next from 'i18next';
 import type {
@@ -267,6 +268,8 @@ export const useRideStore = create<RideState>((set, get) => ({
       set({ flowStep: 'active' });
     } else if (ride.status === 'completed') {
       set({ flowStep: 'completed' });
+      // F009: Persist ride ID so review screen survives app restart
+      AsyncStorage.setItem('@tricigo/pending_review_ride_id', ride.id).catch(() => {});
     } else if (ride.status === 'canceled') {
       set({ flowStep: 'idle', activeRide: null, rideWithDriver: null, error: null });
     }
@@ -352,6 +355,8 @@ export const useRideStore = create<RideState>((set, get) => ({
     if (ratingReminderId) {
       Notifications.cancelScheduledNotificationAsync(ratingReminderId).catch(() => {});
     }
+    // F009: Clear pending review on reset
+    AsyncStorage.removeItem('@tricigo/pending_review_ride_id').catch(() => {});
     set({
       flowStep: 'idle',
       draft: { ...defaultDraft },

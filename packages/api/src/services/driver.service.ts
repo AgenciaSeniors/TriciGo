@@ -271,6 +271,21 @@ export const driverService = {
       })
       .eq('id', driverId);
     if (error) throw error;
+
+    // Broadcast location to web tracking clients listening on driver-location-{driverId}
+    supabase.channel(`driver-location-${driverId}`)
+      .send({ type: 'broadcast', event: 'location', payload: { latitude, longitude, heading } })
+      .catch(() => { /* best-effort: web tracking broadcast */ });
+  },
+
+  /**
+   * Send heartbeat to keep driver marked as online.
+   * Called every 60s by the driver app. Stale drivers (no heartbeat for 3min)
+   * are marked offline by the mark_stale_drivers_offline() pg_cron function.
+   */
+  async sendHeartbeat(driverId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    await supabase.rpc('driver_heartbeat', { p_driver_id: driverId });
   },
 
   /**

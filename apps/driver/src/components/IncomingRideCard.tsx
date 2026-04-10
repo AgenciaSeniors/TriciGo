@@ -133,11 +133,14 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   }, [netEarnings, distanceKm]);
 
   // ── Auto-accept preference ──
-  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(true);
+  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false); // false until loaded
+  const [autoAcceptLoaded, setAutoAcceptLoaded] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('@tricigo/auto_accept_enabled').then((val) => {
       if (val !== null) setAutoAcceptEnabled(val === 'true');
+      else setAutoAcceptEnabled(true); // default to true if never set
+      setAutoAcceptLoaded(true);
     });
   }, []);
 
@@ -148,7 +151,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   }, [autoAcceptEnabled]);
 
   // ── Auto-accept countdown ──
-  const autoAcceptDuration = profitLevel === 'great' ? 2 : profitLevel === 'good' ? 5 : 8;
+  const autoAcceptDuration = profitLevel === 'great' ? 8 : profitLevel === 'good' ? 12 : 15;
   const countdownProgress = useRef(new Animated.Value(1)).current;
   const [autoAcceptSecondsLeft, setAutoAcceptSecondsLeft] = useState(autoAcceptDuration);
 
@@ -174,9 +177,14 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     onReject?.(ride.id);
   }, [onReject, ride.id, profitLevel, autoAcceptSecondsLeft, distanceKm, netEarnings]);
 
-  useEffect(() => {
-    if (!autoAcceptEnabled) return;
+  const autoAcceptFiredRef = useRef(false);
 
+  useEffect(() => {
+    if (!autoAcceptEnabled || !autoAcceptLoaded) return;
+    autoAcceptFiredRef.current = false;
+    setAutoAcceptSecondsLeft(autoAcceptDuration);
+
+    countdownProgress.setValue(1);
     Animated.timing(countdownProgress, {
       toValue: 0,
       duration: autoAcceptDuration * 1000,
@@ -187,14 +195,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       setAutoAcceptSecondsLeft(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          trackValidationEvent('driver_ride_auto_accepted', {
-            profit_level: profitLevel,
-            countdown_duration: autoAcceptDuration,
-            distance_km: distanceKm,
-            net_earnings: netEarnings,
-          }, ride.id);
-          Toast.show({ type: 'success', text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }), visibilityTime: 1500 });
-          onAccept(ride.id);
+          autoAcceptFiredRef.current = true;
           return 0;
         }
         return prev - 1;
@@ -203,7 +204,23 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
 
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoAcceptDuration, onAccept, autoAcceptEnabled]);
+  }, [autoAcceptDuration, autoAcceptEnabled, autoAcceptLoaded, ride.id]);
+
+  // Side effects when auto-accept fires (outside setState to avoid render-cycle violations)
+  useEffect(() => {
+    if (autoAcceptFiredRef.current && autoAcceptSecondsLeft === 0) {
+      autoAcceptFiredRef.current = false;
+      trackValidationEvent('driver_ride_auto_accepted', {
+        profit_level: profitLevel,
+        countdown_duration: autoAcceptDuration,
+        distance_km: distanceKm,
+        net_earnings: netEarnings,
+      }, ride.id);
+      Toast.show({ type: 'success', text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }), visibilityTime: 1500 });
+      onAccept(ride.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAcceptSecondsLeft]);
 
   const profitColor = PROFIT_COLORS[profitLevel];
   const profitIcon = PROFIT_ICONS[profitLevel];
@@ -373,7 +390,10 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       </View>
 
       {/* ── Auto-accept countdown ── */}
-      {autoAcceptEnabled ? (
+      {!autoAcceptLoaded ? (
+        /* Shimmer placeholder while AsyncStorage loads auto-accept preference */
+        <View style={{ marginBottom: 12, marginTop: 8, height: 30, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8 }} />
+      ) : autoAcceptEnabled ? (
         <View style={{ marginBottom: 12, marginTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <Text variant="caption" color="secondary">
@@ -394,7 +414,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
             }} />
           </View>
         </View>
-      ) : (
+      ) : autoAcceptLoaded && !autoAcceptEnabled ? (
         <View style={{ marginBottom: 12, marginTop: 8 }}>
           <Pressable
             onPress={toggleAutoAccept}
@@ -407,7 +427,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
             </Text>
           </Pressable>
         </View>
-      )}
+      ) : null}
 
       {/* ── Action buttons ── */}
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>

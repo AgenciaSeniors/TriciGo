@@ -23,10 +23,22 @@ export function OfflineBanner() {
     total: 0,
   });
   const [expanded, setExpanded] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   useEffect(() => {
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     const interval = setInterval(() => {
-      setIsOnline(getOnlineStatus());
+      const currentStatus = getOnlineStatus();
+
+      // Detect offline → online transition
+      setIsOnline((prev) => {
+        if (!prev && currentStatus) {
+          setIsReconnecting(true);
+          reconnectTimer = setTimeout(() => setIsReconnecting(false), 3000);
+        }
+        return currentStatus;
+      });
     }, 2000);
 
     const unsubscribe = onQueueChange((queue, status) => {
@@ -37,12 +49,13 @@ export function OfflineBanner() {
     return () => {
       clearInterval(interval);
       unsubscribe();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, []);
 
   const pending = mutations.length;
 
-  if (isOnline && pending === 0) return null;
+  if (isOnline && pending === 0 && !isReconnecting) return null;
 
   const progressPct = processing.isProcessing && processing.total > 0
     ? Math.round((processing.currentIndex / processing.total) * 100)
@@ -57,7 +70,7 @@ export function OfflineBanner() {
       >
         <View className="flex-row items-center gap-2 flex-1">
           <Ionicons
-            name={!isOnline ? 'cloud-offline-outline' : 'sync-outline'}
+            name={!isOnline ? 'cloud-offline-outline' : isReconnecting ? 'reload-outline' : 'sync-outline'}
             size={14}
             color="#1a1a1a"
           />
@@ -66,7 +79,9 @@ export function OfflineBanner() {
               ? `Sincronizando ${processing.currentIndex}/${processing.total}: ${getOfflineActionLabel(processing.currentAction)}...`
               : !isOnline
                 ? `Sin conexión${pending > 0 ? ` · ${pending} pendiente${pending > 1 ? 's' : ''}` : ''}`
-                : `Sincronizando ${pending} cambio${pending > 1 ? 's' : ''}...`}
+                : isReconnecting
+                  ? 'Reconectando...'
+                  : `Sincronizando ${pending} cambio${pending > 1 ? 's' : ''}...`}
           </Text>
         </View>
         {pending > 0 && (

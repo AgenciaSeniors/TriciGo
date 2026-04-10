@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Pressable, Share, Animated, useColorScheme, type GestureResponderEvent } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -201,6 +202,9 @@ export function RideCompleteView() {
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
+
+      // F009: Clear pending review — review submitted successfully
+      AsyncStorage.removeItem('@tricigo/pending_review_ride_id').catch(() => {});
 
       // Cancel rating reminder if it was scheduled
       const reminderId = useRideStore.getState().ratingReminderId;

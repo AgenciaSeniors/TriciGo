@@ -3,6 +3,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import i18next from 'i18next';
 import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
@@ -62,6 +63,24 @@ export function useRideInit() {
       } catch (err) {
         logger.warn('No active ride or failed to check', { error: String(err) });
       }
+
+      // F009: Check for pending review from a previous completed ride
+      try {
+        const pendingReviewId = await AsyncStorage.getItem('@tricigo/pending_review_ride_id');
+        if (pendingReviewId && mounted) {
+          const rwd = await rideService.getRideWithDriver(pendingReviewId);
+          if (rwd && rwd.status === 'completed' && mounted) {
+            setActiveRide(rwd);
+            setRideWithDriver(rwd);
+            setFlowStep('completed');
+          } else {
+            // Ride no longer exists or not completed — clean up
+            await AsyncStorage.removeItem('@tricigo/pending_review_ride_id');
+          }
+        }
+      } catch {
+        // Best-effort: don't block app startup
+      }
     }
 
     checkActive();
@@ -80,6 +99,8 @@ export function useRideActions() {
   const user = useAuthStore((s) => s.user);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRetryCountRef = useRef(0);
+  const searchStartTimeRef = useRef(0);
 
   const {
     draft,
@@ -566,19 +587,43 @@ export function useRideActions() {
         logger.error('Failed to subscribe to ride updates', { error: String(subErr), rideId: ride.id });
       }
 
-      // Search timeout — actually cancel the ride
+      // Search timeout — retry with "expanding search" before cancelling
+      searchRetryCountRef.current = 0;
+      searchStartTimeRef.current = Date.now();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(async () => {
-        const { flowStep, activeRide: ar } = useRideStore.getState();
-        if (flowStep === 'searching' && ar) {
-          // X1.2: Check if ride was accepted during search before resetting
-          const currentRide = useRideStore.getState().activeRide;
-          if (currentRide && currentRide.status !== 'searching') {
-            // Ride was accepted during search — don't reset!
+
+      const scheduleSearchTimeout = () => {
+        timeoutRef.current = setTimeout(async () => {
+          const { flowStep, activeRide: ar } = useRideStore.getState();
+          if (flowStep !== 'searching' || !ar) return;
+
+          // Check if ride was accepted during search
+          if (ar.status !== 'searching') {
             useRideStore.getState().setFlowStep('active');
             return;
           }
 
+          searchRetryCountRef.current += 1;
+          const totalElapsed = Date.now() - searchStartTimeRef.current;
+
+          // If under max total time and still have retry rounds, show "expanding" toast and retry
+          if (
+            searchRetryCountRef.current <= RIDE_CONFIG.SEARCH_RETRY_ROUNDS &&
+            totalElapsed < RIDE_CONFIG.SEARCH_MAX_TOTAL_MS
+          ) {
+            Toast.show({
+              type: 'info',
+              text1: i18next.t('rider:ride.expanding_search', {
+                defaultValue: 'Ampliando la busqueda de conductores...',
+              }),
+              visibilityTime: 3000,
+            });
+            // Schedule next timeout round
+            scheduleSearchTimeout();
+            return;
+          }
+
+          // Max retries exhausted — cancel the ride
           try {
             await rideService.cancelRide(ar.id, user?.id, 'search_timeout');
           } catch {
@@ -586,16 +631,17 @@ export function useRideActions() {
           }
           channelRef.current?.unsubscribe();
           channelRef.current = null;
-          const noDriverMsg = i18next.t('rider:ride.no_driver_found');
           resetAll();
-          // Show Toast instead of state error (resetAll sets flowStep to 'idle'
-          // where state error is not visible)
           Toast.show({
             type: 'error',
-            text1: noDriverMsg,
+            text1: i18next.t('rider:ride.no_driver_found', {
+              defaultValue: 'No se encontro conductor disponible',
+            }),
           });
-        }
-      }, SEARCH_TIMEOUT_MS);
+        }, SEARCH_TIMEOUT_MS);
+      };
+
+      scheduleSearchTimeout();
     } catch (err) {
       setError(getErrorMessage(err));
       setFlowStep('reviewing');

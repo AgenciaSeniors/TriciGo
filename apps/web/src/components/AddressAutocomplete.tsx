@@ -290,6 +290,11 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     if (q.length < 1) { setResults([]); setIsOpen(false); return; }
 
     const thisSearchId = ++searchIdRef.current; // Track this search
+    // Abort any in-flight requests from previous searches
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
 
     try {
@@ -339,10 +344,6 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       }
 
       // ─── PATH 3: NORMAL SEARCH — Search Box + Supabase + Nominatim in parallel ───
-      if (abortRef.current) abortRef.current.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
       // All 3 sources in parallel (Supabase replaces Overpass — instant, any query)
       const [searchBoxSettled, supabaseSettled, nominatimSettled] = await Promise.allSettled([
         fetchSearchBox(q, controller.signal),

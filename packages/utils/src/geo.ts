@@ -483,7 +483,7 @@ async function throttledFetch(url: string, headers?: Record<string, string>): Pr
     await new Promise<void>((r) => setTimeout(r, wait));
   }
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
   try {
     return await fetch(url, { headers, signal: controller.signal });
   } finally {

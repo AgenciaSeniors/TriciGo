@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService, deliveryService } from '@tricigo/api';
+import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import './track.css';
@@ -135,6 +135,34 @@ export default function TrackRidePage() {
   } | null>(null);
   const statusSteps = useStatusSteps();
 
+  // Nearby vehicles (shown during searching)
+  const [nearbyVehicles, setNearbyVehicles] = useState<Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>>([]);
+
+  // Review form state
+  const [rating, setRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  const handleSubmitReview = async () => {
+    if (!rating || !ride?.driver_id || !userId) return;
+    setReviewSubmitting(true);
+    try {
+      await reviewService.submitReview({
+        ride_id: rideId,
+        reviewer_id: userId,
+        reviewee_id: ride.driver_id,
+        rating: rating as 1 | 2 | 3 | 4 | 5,
+        comment: reviewComment.trim() || undefined,
+      });
+      setReviewSubmitted(true);
+    } catch (err) {
+      console.error('Review submission failed:', err);
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   const fetchRide = useCallback(async () => {
     if (!userId) return;
     try {
@@ -147,6 +175,9 @@ export default function TrackRidePage() {
       setLoading(false);
     }
   }, [rideId, t, userId]);
+
+  const rideStatusRef = useRef(ride?.status);
+  rideStatusRef.current = ride?.status;
 
   useEffect(() => {
     fetchRide();
@@ -162,15 +193,39 @@ export default function TrackRidePage() {
       }
     });
     const interval = setInterval(() => {
-      // Stop polling when ride reaches a terminal status
-      if (['completed', 'cancelled', 'canceled', 'failed', 'no_driver_found', 'disputed'].includes(ride?.status ?? '')) {
+      // Stop polling when ride reaches a terminal status (read from ref to avoid stale closure)
+      const TERMINAL = ['completed', 'canceled', 'failed', 'no_driver_found', 'disputed'];
+      if (TERMINAL.includes(rideStatusRef.current ?? '')) {
         clearInterval(interval);
         return;
       }
       fetchRide();
     }, 10_000);
     return () => { channel.unsubscribe(); clearInterval(interval); };
-  }, [rideId, fetchRide, ride?.status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rideId, fetchRide]);
+
+  // Poll nearby vehicles during searching status
+  useEffect(() => {
+    if (ride?.status !== 'searching') {
+      setNearbyVehicles([]);
+      return;
+    }
+    const lat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+    const lng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+    if (!lat || !lng) return;
+
+    const fetchNearby = async () => {
+      try {
+        const vehicles = await nearbyService.findNearbyVehicles({ lat, lng, radiusM: 5000, limit: 20 });
+        setNearbyVehicles(vehicles);
+      } catch { /* non-critical */ }
+    };
+
+    fetchNearby();
+    const interval = setInterval(fetchNearby, 5000);
+    return () => clearInterval(interval);
+  }, [ride?.status, ride?.pickup_location]);
 
   useEffect(() => {
     if (!ride || ride.ride_mode !== 'cargo') return;
@@ -265,6 +320,7 @@ export default function TrackRidePage() {
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
             vehicleType={ride.vehicle_type ?? undefined}
+            nearbyVehicles={nearbyVehicles}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 
@@ -273,6 +329,16 @@ export default function TrackRidePage() {
             <div className="track-eta-badge">
               <IconClock />
               <span>~{Math.ceil(ride.estimated_duration_s / 60)} min</span>
+            </div>
+          )}
+
+          {/* Nearby drivers count during searching */}
+          {ride.status === 'searching' && (
+            <div style={{ position: 'absolute', bottom: 16, left: 16, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '6px 12px', borderRadius: 20, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: nearbyVehicles.length > 0 ? '#00C853' : '#EF4444', display: 'inline-block' }} />
+              {nearbyVehicles.length > 0
+                ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
+                : 'Sin conductores cercanos'}
             </div>
           )}
         </div>
@@ -313,6 +379,108 @@ export default function TrackRidePage() {
           ) : (
             <div className="track-card">
               <StatusStepper steps={statusSteps} currentIdx={currentStepIdx} />
+            </div>
+          )}
+
+          {/* Ride Completion + Rating */}
+          {ride.status === 'completed' && !reviewSubmitted && ride.driver_id && (
+            <div className="track-card" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎉</div>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                {t('track.ride_completed', { defaultValue: '¡Viaje completado!' })}
+              </h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                {t('track.rate_driver', { defaultValue: '¿Cómo fue tu experiencia con el conductor?' })}
+              </p>
+
+              {/* Star Rating */}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '2rem',
+                      color: star <= rating ? '#F59E0B' : '#D1D5DB',
+                      transition: 'color 0.15s',
+                      padding: '0.25rem',
+                    }}
+                    aria-label={`${star} estrellas`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              {/* Comment + Submit */}
+              {rating > 0 && (
+                <>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder={t('track.review_placeholder', { defaultValue: 'Comentario opcional...' })}
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-md, 8px)',
+                      border: '1px solid var(--border-light, #e5e7eb)',
+                      fontSize: '0.875rem',
+                      resize: 'none',
+                      marginBottom: '0.75rem',
+                    }}
+                  />
+                  <button
+                    onClick={handleSubmitReview}
+                    disabled={reviewSubmitting}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-md, 8px)',
+                      background: 'var(--primary, #00C853)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '0.9375rem',
+                      border: 'none',
+                      cursor: reviewSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: reviewSubmitting ? 0.6 : 1,
+                    }}
+                  >
+                    {reviewSubmitting
+                      ? t('track.submitting_review', { defaultValue: 'Enviando...' })
+                      : t('track.submit_review', { defaultValue: 'Enviar calificación' })}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Thank you after review */}
+          {ride.status === 'completed' && reviewSubmitted && (
+            <div className="track-card" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                {t('track.review_thanks', { defaultValue: '¡Gracias por tu calificación!' })}
+              </h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                {t('track.review_helps', { defaultValue: 'Tu opinión ayuda a mejorar la experiencia.' })}
+              </p>
+            </div>
+          )}
+
+          {/* Post-completion links */}
+          {ride.status === 'completed' && (
+            <div className="track-card" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <a href={`/rides/${ride.id}/dispute`} style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                {t('track.report_problem', { defaultValue: 'Reportar problema' })}
+              </a>
+              <span style={{ color: 'var(--border-light)' }}>|</span>
+              <a href={`/rides/${ride.id}/lost-item`} style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                {t('track.lost_item', { defaultValue: 'Objeto perdido' })}
+              </a>
             </div>
           )}
 
@@ -458,8 +626,10 @@ export default function TrackRidePage() {
                     if (!confirm(t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje?' }))) return;
                     setCanceling(true);
                     try {
-                      await rideService.cancelRide(rideId, undefined, 'rider_canceled');
+                      await rideService.cancelRide(rideId, userId ?? undefined, 'rider_canceled');
                     } catch {
+                      // Reset on error so user can retry
+                    } finally {
                       setCanceling(false);
                     }
                   }}

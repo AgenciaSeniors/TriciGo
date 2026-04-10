@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Pressable, Linking, Alert, Animated } from 'react-native';
+import { View, Pressable, Linking, Alert, Animated, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -452,6 +452,23 @@ export function DriverTripView() {
         : activeTrip.dropoff_location;
 
   const handleSOS = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `${t('trip.sos_title')}\n\n${t('trip.sos_body')}`,
+      );
+      if (confirmed) {
+        if (driverProfile?.user_id) {
+          incidentService.createSOSReport({
+            ride_id: activeTrip.id,
+            reported_by: driverProfile.user_id,
+            against_user_id: activeTrip.customer_id,
+            description: 'SOS activado por conductor durante viaje',
+          }).catch(() => {});
+        }
+        Linking.openURL('tel:106');
+      }
+      return;
+    }
     Alert.alert(
       t('trip.sos_title'),
       t('trip.sos_body'),
@@ -477,6 +494,14 @@ export function DriverTripView() {
   };
 
   const handleCancel = () => {
+    if (Platform.OS === 'web') {
+      // Alert.alert buttons don't work on web — use window.confirm
+      const confirmed = window.confirm(
+        `${t('trip.cancel_title')}\n\n${t('trip.cancel_body')}`,
+      );
+      if (confirmed) cancelTrip('Cancelado por el conductor');
+      return;
+    }
     Alert.alert(
       t('trip.cancel_title'),
       t('trip.cancel_body'),
@@ -1086,15 +1111,8 @@ function TripCompleteView() {
       .catch(() => { /* best-effort: rating still works without rider info */ });
   }, [activeTrip?.id]);
 
-  // DT-6: Auto-advance to home after 5s on completion
-  useEffect(() => {
-    if (activeTrip?.status === 'completed') {
-      const timeout = setTimeout(() => {
-        clearCompletedTrip();
-      }, 5000);
-      return () => clearTimeout(timeout);
-    }
-  }, [activeTrip?.status, clearCompletedTrip]);
+  // Driver must tap "Listo" manually to dismiss — no auto-advance.
+  // This ensures they have time to see earnings, rate the rider, and download receipt.
 
   if (!activeTrip) return null;
 

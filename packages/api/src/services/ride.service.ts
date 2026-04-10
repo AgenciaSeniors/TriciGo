@@ -103,6 +103,15 @@ export const rideService = {
     dropoff_lat: number;
     dropoff_lng: number;
   }): Promise<FareEstimate> {
+    // Validate ride distance is within reasonable bounds (50km max)
+    const directDistance = haversineDistance(
+      { latitude: params.pickup_lat, longitude: params.pickup_lng },
+      { latitude: params.dropoff_lat, longitude: params.dropoff_lng },
+    );
+    if (directDistance > 50_000) {
+      throw new ValidationError('Ride distance exceeds maximum allowed (50km)');
+    }
+
     const supabase = getSupabaseClient();
 
     const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };

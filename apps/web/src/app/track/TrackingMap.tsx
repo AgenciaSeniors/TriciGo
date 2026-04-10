@@ -16,6 +16,7 @@ export interface TrackingMapProps {
   driverLng?: number;
   driverHeading?: number;
   vehicleType?: string;
+  nearbyVehicles?: Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -100,6 +101,7 @@ export default function TrackingMap({
   driverLng,
   driverHeading,
   vehicleType,
+  nearbyVehicles,
   className,
   style: styleProp,
 }: TrackingMapProps) {
@@ -108,6 +110,7 @@ export default function TrackingMap({
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
   // Validate coordinates to prevent Mapbox NaN crash
@@ -315,6 +318,25 @@ export default function TrackingMap({
       </div>
     );
   }
+
+  // ── Nearby vehicle markers (green dots during search) ──
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    vehicleMarkersRef.current.forEach(m => m.remove());
+    vehicleMarkersRef.current = [];
+
+    if (!nearbyVehicles?.length) return;
+
+    nearbyVehicles.forEach(v => {
+      const el = document.createElement('div');
+      el.style.cssText = 'width:12px;height:12px;background:#00C853;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);';
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([v.longitude, v.latitude])
+        .addTo(mapRef.current!);
+      vehicleMarkersRef.current.push(marker);
+    });
+  }, [nearbyVehicles, mapReady]);
 
   return (
     <>

@@ -59,17 +59,27 @@ export const locationService = {
       longitude: number;
       heading?: number;
       speed?: number;
+      accuracy?: number | null;
       recorded_at: string;
     }>,
   ): Promise<void> {
     if (events.length === 0) return;
     const supabase = getSupabaseClient();
-    const rows = events.map((e) => ({
+    // Deduplicate by (ride_id, recorded_at) — prevents double-flush on reconnect
+    const seen = new Set<string>();
+    const dedupedEvents = events.filter((e) => {
+      const key = `${e.ride_id}:${e.recorded_at}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const rows = dedupedEvents.map((e) => ({
       ride_id: e.ride_id,
       driver_id: e.driver_id,
       location: `POINT(${e.longitude} ${e.latitude})`,
       heading: e.heading ?? null,
       speed: e.speed ?? null,
+      accuracy: e.accuracy ?? null,
       recorded_at: e.recorded_at,
     }));
     const { error } = await supabase.from('ride_location_events').insert(rows);

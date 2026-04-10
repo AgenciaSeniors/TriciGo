@@ -9,6 +9,8 @@ const BUFFER_KEY = '@tricigo/location-buffer';
 const MAX_BUFFER_SIZE = 500; // ~80 min at 10s intervals
 const PERSIST_DEBOUNCE_MS = 5000;
 const BATCH_SIZE = 20;
+const RETRY_DELAY_MS = 3000;
+const MAX_RETRIES = 2;
 
 export interface BufferedLocation {
   latitude: number;
@@ -80,10 +82,22 @@ export async function flushBuffer(
 
   while (buffer.length > 0) {
     const batch = buffer.splice(0, BATCH_SIZE);
-    try {
-      await sendBatch(batch);
-    } catch {
-      // Put batch back at the front and stop
+    let sent = false;
+
+    for (let attempt = 0; attempt < MAX_RETRIES + 1; attempt++) {
+      try {
+        await sendBatch(batch);
+        sent = true;
+        break;
+      } catch {
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        }
+      }
+    }
+
+    if (!sent) {
+      // All retries exhausted — put batch back and stop
       buffer.unshift(...batch);
       break;
     }
