@@ -85,18 +85,19 @@ export default function VehicleScreen() {
             No hay vehículo registrado
           </Text>
         ) : (
-          {/* Vehicle type image */}
-          {vehicle.type && VEHICLE_IMAGES[vehicle.type] && (
-            <View className="items-center mb-4">
-              <Image
-                source={VEHICLE_IMAGES[vehicle.type]}
-                style={{ width: 160, height: 120, resizeMode: 'contain' }}
-                accessibilityLabel={vehicle.type}
-              />
-            </View>
-          )}
+          <>
+            {/* Vehicle type image */}
+            {vehicle.type && VEHICLE_IMAGES[vehicle.type] && (
+              <View className="items-center mb-4">
+                <Image
+                  source={VEHICLE_IMAGES[vehicle.type]}
+                  style={{ width: 160, height: 120, resizeMode: 'contain' }}
+                  accessibilityLabel={vehicle.type}
+                />
+              </View>
+            )}
 
-          <Card theme="light" variant="filled" padding="md" className="bg-white">
+            <Card theme="light" variant="filled" padding="md" className="bg-white">
             {infoRows.map((row) => (
               <View
                 key={row.label}
@@ -111,6 +112,7 @@ export default function VehicleScreen() {
               </View>
             ))}
           </Card>
+          </>
         )}
       </View>
     </Screen>
