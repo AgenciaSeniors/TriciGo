@@ -350,7 +350,9 @@ function WebSearchingState({
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    {searchingDrivers.map((d) => (
+                    {searchingDrivers
+                      .filter((d, i, arr) => arr.findIndex(x => x.driverId === d.driverId) === i)
+                      .map((d) => (
                       <div key={d.driverId} style={{
                         display: 'flex', alignItems: 'center', gap: 6,
                         background: '#fff', borderRadius: 20,
