@@ -12,7 +12,7 @@ import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
 import { QuotaCard } from '@tricigo/ui/QuotaCard';
 import type { DriverQuotaStatus } from '@tricigo/types';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors, driverStandardLightColors } from '@tricigo/theme';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +52,9 @@ const COMMISSION_TYPE_COLORS: Record<string, string> = {
   surge: '#a855f7',
 };
 
+const lt = driverStandardLightColors;
+const CARD_SHADOW = { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 };
+
 export default function WalletScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
@@ -73,14 +76,16 @@ export default function WalletScreen() {
   const fetchData = useCallback(async () => {
     if (!driverProfile?.id || !userId) return;
     try {
-      const [balanceData, txData, quotaData, rateData] = await Promise.all([
-        walletService.getBalance(userId),
+      // BUG-081: Sequential fetch — balance first, then transactions to avoid stale values
+      const balanceData = await walletService.getBalance(userId);
+      setBalance(balanceData?.available ?? 0);
+      setHoldBalance(balanceData?.held ?? 0);
+
+      const [txData, quotaData, rateData] = await Promise.all([
         walletService.getTransactions(userId, 0, 50),
         walletService.getQuotaStatus(userId).catch(() => null),
         exchangeRateService.getUsdCupRate().catch(() => DEFAULT_EXCHANGE_RATE),
       ]);
-      setBalance(balanceData?.available ?? 0);
-      setHoldBalance(balanceData?.held ?? 0);
       if (quotaData) setQuotaStatus(quotaData);
       setExchangeRate(rateData);
 
@@ -139,9 +144,9 @@ export default function WalletScreen() {
 
   if (loading) {
     return (
-      <Screen bg="dark" statusBarStyle="light-content" padded scroll>
+      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded scroll>
         <View className="pt-4">
-          <Text variant="h3" color="inverse" className="mb-4">
+          <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
             {t('wallet.title', { defaultValue: 'Billetera' })}
           </Text>
           <SkeletonBalance />
@@ -154,14 +159,14 @@ export default function WalletScreen() {
 
   return (
     <Screen
-      bg="dark"
-      statusBarStyle="light-content"
+      bg="lightPrimary"
+      statusBarStyle="dark-content"
       padded
       scroll
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />}
     >
       <View className="pt-4 pb-8">
-        <Text variant="h3" color="inverse" className="mb-4">
+        <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
           {t('wallet.title', { defaultValue: 'Billetera' })}
         </Text>
 
@@ -192,24 +197,24 @@ export default function WalletScreen() {
 
         {/* Earnings Balance Card */}
         <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
-          style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+          style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
         >
-          <Text variant="caption" style={{ color: colors.neutral[400] }} className="mb-1">
+          <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
             {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
           </Text>
-          <Text variant="stat" className="text-white">{formatTRC(balance)}</Text>
-          <Text variant="caption" style={{ color: colors.neutral[500] }} className="mt-0.5">
+          <Text variant="stat" style={{ color: lt.text.primary }}>{formatTRC(balance)}</Text>
+          <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-0.5">
             {'\u2248'} {formatUSD(trcToUsd(balance, exchangeRate))}
           </Text>
           {holdBalance > 0 && (
-            <Text variant="caption" style={{ color: colors.neutral[400] }} className="mt-1">
+            <Text variant="caption" style={{ color: lt.text.secondary }} className="mt-1">
               {t('wallet.hold_balance', { defaultValue: 'En retencion' })}: {formatTRC(holdBalance)}
             </Text>
           )}
         </AnimatedCard>
 
         {/* Earning Goals */}
-        <Text variant="label" color="secondary" className="mb-2 ml-1">
+        <Text variant="label" style={{ color: lt.text.secondary }} className="mb-2 ml-1">
           {t('wallet.earning_goals', { defaultValue: 'Metas de ganancia' })}
         </Text>
         <View className="flex-row gap-2 mb-6">
@@ -221,16 +226,16 @@ export default function WalletScreen() {
                 key={goal.label}
                 delay={100 + goalIdx * 80}
                 className="flex-1 rounded-2xl p-3"
-                style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: isComplete ? colors.success.DEFAULT : driverDarkColors.border.default }}
+                style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: isComplete ? colors.success.DEFAULT : lt.border.default, ...CARD_SHADOW }}
               >
-                <Text variant="caption" style={{ color: colors.neutral[400] }} className="mb-1">
+                <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
                   {goal.label}
                 </Text>
-                <Text variant="metric" className="text-white mb-2">
+                <Text variant="metric" style={{ color: lt.text.primary }} className="mb-2">
                   {formatTRC(goal.current)}
                 </Text>
                 {/* Progress bar */}
-                <View className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: driverDarkColors.border.default }}>
+                <View className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: lt.border.subtle }}>
                   <View
                     className="h-full rounded-full"
                     style={{
@@ -239,7 +244,7 @@ export default function WalletScreen() {
                     }}
                   />
                 </View>
-                <Text variant="caption" style={{ color: colors.neutral[500] }} className="mt-1">
+                <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-1">
                   {t('wallet.goal_of', { defaultValue: 'de' })} {formatTRC(goal.target)}
                 </Text>
               </AnimatedCard>
@@ -248,7 +253,7 @@ export default function WalletScreen() {
         </View>
 
         {/* Commission History */}
-        <Text variant="label" color="secondary" className="mb-2 ml-1">
+        <Text variant="label" style={{ color: lt.text.secondary }} className="mb-2 ml-1">
           {t('wallet.commission_history', { defaultValue: 'Historial de comisiones' })}
         </Text>
 
@@ -259,12 +264,12 @@ export default function WalletScreen() {
             hitSlop={4}
             className="px-4 py-2.5 rounded-full"
             style={{
-              backgroundColor: filter === null ? colors.brand.orange : driverDarkColors.hover,
+              backgroundColor: filter === null ? colors.brand.orange : lt.background.tertiary,
               borderWidth: 1,
-              borderColor: filter === null ? colors.brand.orange : driverDarkColors.border.default,
+              borderColor: filter === null ? colors.brand.orange : lt.border.default,
             }}
           >
-            <Text variant="caption" color={filter === null ? 'inverse' : 'secondary'}>
+            <Text variant="caption" style={{ color: filter === null ? '#FFFFFF' : lt.text.secondary }}>
               {t('wallet.filter_all', { defaultValue: 'Todos' })}
             </Text>
           </Pressable>
@@ -275,9 +280,9 @@ export default function WalletScreen() {
               hitSlop={4}
               className="px-4 py-2.5 rounded-full flex-row items-center gap-1"
               style={{
-                backgroundColor: filter === type ? COMMISSION_TYPE_COLORS[type] : driverDarkColors.hover,
+                backgroundColor: filter === type ? COMMISSION_TYPE_COLORS[type] : lt.background.tertiary,
                 borderWidth: 1,
-                borderColor: filter === type ? COMMISSION_TYPE_COLORS[type] : driverDarkColors.border.default,
+                borderColor: filter === type ? COMMISSION_TYPE_COLORS[type] : lt.border.default,
               }}
             >
               <Ionicons
@@ -285,7 +290,7 @@ export default function WalletScreen() {
                 size={12}
                 color={filter === type ? '#FFFFFF' : COMMISSION_TYPE_COLORS[type]}
               />
-              <Text variant="caption" color={filter === type ? 'inverse' : 'secondary'}>
+              <Text variant="caption" style={{ color: filter === type ? '#FFFFFF' : lt.text.secondary }}>
                 {t(`wallet.type_${type}`, { defaultValue: type })}
               </Text>
             </Pressable>
@@ -294,7 +299,6 @@ export default function WalletScreen() {
 
         {filteredCommissions.length === 0 ? (
           <EmptyState
-            forceDark
             icon="receipt-outline"
             title={t('wallet.no_commissions', { defaultValue: 'Sin comisiones aún' })}
             description={t('wallet.no_commissions_desc', { defaultValue: 'Tus comisiones aparecerán aquí' })}
@@ -305,11 +309,11 @@ export default function WalletScreen() {
               <View
                 key={entry.id}
                 className="rounded-xl p-4 flex-row items-center mb-2"
-                style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+                style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
               >
                 <View
                   className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-                  style={{ backgroundColor: `${COMMISSION_TYPE_COLORS[entry.type]}20` }}
+                  style={{ backgroundColor: `${COMMISSION_TYPE_COLORS[entry.type]}15` }}
                 >
                   <Ionicons
                     name={COMMISSION_TYPE_ICONS[entry.type] ?? 'cash'}
@@ -318,10 +322,10 @@ export default function WalletScreen() {
                   />
                 </View>
                 <View className="flex-1">
-                  <Text variant="body" color="inverse">
+                  <Text variant="body" style={{ color: lt.text.primary }}>
                     {t(`wallet.type_${entry.type}`, { defaultValue: entry.type })}
                   </Text>
-                  <Text variant="caption" style={{ color: colors.neutral[500] }}>
+                  <Text variant="caption" style={{ color: lt.text.secondary }}>
                     {new Date(entry.created_at).toLocaleDateString()}
                   </Text>
                 </View>

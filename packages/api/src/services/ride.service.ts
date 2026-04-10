@@ -21,13 +21,16 @@ import type {
   CancellationFeePreview,
   Waypoint,
   RideSplit,
+  SharedRideView,
 } from '@tricigo/types';
-import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
+import type { PackageCategory, PaymentMethod, RideStatus, ServiceTypeSlug, VehicleType } from '@tricigo/types';
 import {
   haversineDistance,
   estimateRoadDistance,
   estimateDuration,
-  cupToTrcCentavos,
+  adjustRouteDuration,
+  calculateTripDuration,
+  cupToTrc,
   calculateBaseFare,
   calculateCargoFare,
   applySurge,
@@ -128,7 +131,10 @@ export const rideService = {
           p_lat: params.pickup_lat,
           p_lng: params.pickup_lng,
           p_radius_m: 3000,
-        })).catch(() => ({ data: 1.0 as number, error: null })),
+        })).catch(() => {
+          console.warn('[ride.service] Surge RPC failed, falling back to multiplier 1.0');
+          return { data: 1.0 as number, error: null };
+        }),
         supabase
           .from('pricing_experiments')
           .select('*')
@@ -139,7 +145,8 @@ export const rideService = {
       ]);
 
     if (configResult.error) throw configResult.error;
-    const svcConfig = configResult.data as ServiceTypeConfig;
+    const svcConfig = configResult.data as ServiceTypeConfig | null;
+    if (!svcConfig) throw new Error(`Service type config not found for ${params.service_type}`);
     const pricingRules = rulesResult.data;
 
     // Find matching time-based rule (using pure function)
@@ -174,7 +181,7 @@ export const rideService = {
     let duration: number;
     if (routeResult) {
       roadDistance = routeResult.distance_m;
-      duration = routeResult.duration_s;
+      duration = calculateTripDuration(routeResult.distance_m, params.service_type);
     } else {
       const straightLine = haversineDistance(pickup, dropoff);
       roadDistance = estimateRoadDistance(straightLine);
@@ -259,7 +266,7 @@ export const rideService = {
     } catch { /* experiments are optional, don't break pricing */ }
 
     // ─── Exchange Rate: convert CUP → TRC ───
-    const estimatedFareTrc = cupToTrcCentavos(surgedFare, exchangeRate);
+    const estimatedFareTrc = cupToTrc(surgedFare);
 
     // ─── Fare Range (min-max considering traffic variance) ───
     const fareRange = calculateFareRange({
@@ -280,7 +287,7 @@ export const rideService = {
         insuranceAvailable = true;
         const premium = this.calculateInsurancePremium(surgedFare, insuranceConfig);
         insurancePremiumCup = premium;
-        insurancePremiumTrc = cupToTrcCentavos(premium, exchangeRate);
+        insurancePremiumTrc = cupToTrc(premium);
         insuranceCoverageDesc = insuranceConfig.coverage_description_es;
       }
     } catch {
@@ -349,7 +356,7 @@ export const rideService = {
     // Snapshot exchange rate at ride creation for consistent pricing
     const exchangeRate = await exchangeRateService.getUsdCupRate();
     const estimatedFareTrc = validParams.estimated_fare_cup
-      ? cupToTrcCentavos(validParams.estimated_fare_cup, exchangeRate)
+      ? cupToTrc(validParams.estimated_fare_cup)
       : 0;
 
     // Corporate ride validation
@@ -442,12 +449,12 @@ export const rideService = {
           recipient_phone: validParams.delivery_details.recipient_phone,
           estimated_weight_kg: validParams.delivery_details.estimated_weight_kg ?? undefined,
           special_instructions: validParams.delivery_details.special_instructions ?? undefined,
-          package_category: validParams.delivery_details.package_category as any,
+          package_category: (validParams.delivery_details.package_category ?? 'paquete_pequeno') as PackageCategory,
           package_length_cm: validParams.delivery_details.package_length_cm ?? undefined,
           package_width_cm: validParams.delivery_details.package_width_cm ?? undefined,
           package_height_cm: validParams.delivery_details.package_height_cm ?? undefined,
           client_accompanies: validParams.delivery_details.client_accompanies,
-          delivery_vehicle_type: validParams.delivery_details.delivery_vehicle_type as any,
+          delivery_vehicle_type: validParams.delivery_details.delivery_vehicle_type as unknown as VehicleType,
         });
       } catch (err) {
         logger.error('delivery_details_creation_failed', { error: (err as Error).message, rideId: rideData.id });
@@ -570,6 +577,7 @@ export const rideService = {
       vehicle_plate: null,
       vehicle_photo_url: null,
       vehicle_year: null,
+      vehicle_type: null,
     };
 
     // If driver assigned, fetch details
@@ -1086,6 +1094,10 @@ export const rideService = {
 
   /**
    * Get a ride by its public share token (no auth required).
+   * Returns full RideWithDriver — use getPublicRideByShareToken() for
+   * unauthenticated consumers (web tracking page) to avoid leaking
+   * private fields like driver phone, fare amounts, and addresses.
+   * @deprecated Use getPublicRideByShareToken() for public endpoints.
    */
   async getRideByShareToken(token: string): Promise<RideWithDriver | null> {
     const supabase = getSupabaseClient();
@@ -1097,8 +1109,115 @@ export const rideService = {
     if (error) throw error;
     if (!ride) return null;
 
-    // Reuse getRideWithDriver logic for driver details
     return this.getRideWithDriver((ride as Ride).id);
+  },
+
+  /**
+   * Privacy-safe public lookup by share token.
+   * Returns only fields safe for unauthenticated viewers:
+   * - Status, coordinates (NOT addresses), timing
+   * - Driver first name, avatar, rating, vehicle info
+   * - NO: phone, fare, payment, promo, customer_id
+   *
+   * Also enforces token expiration (24h after completion).
+   */
+  async getPublicRideByShareToken(token: string): Promise<SharedRideView | null> {
+    const supabase = getSupabaseClient();
+
+    // Single query — no redundant re-fetch
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('id, status, service_type, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, estimated_duration_s, accepted_at, pickup_at, arrived_at_destination_at, completed_at, canceled_at, driver_id, share_token_expires_at')
+      .eq('share_token', token)
+      .maybeSingle();
+    if (error) throw error;
+    if (!ride) return null;
+
+    // Enforce token expiration
+    if (ride.share_token_expires_at && new Date(ride.share_token_expires_at) < new Date()) {
+      return null;
+    }
+
+    const result: SharedRideView = {
+      id: ride.id,
+      status: ride.status as SharedRideView['status'],
+      service_type: ride.service_type as SharedRideView['service_type'],
+      pickup_location: { latitude: ride.pickup_lat ?? 0, longitude: ride.pickup_lng ?? 0 },
+      dropoff_location: { latitude: ride.dropoff_lat ?? 0, longitude: ride.dropoff_lng ?? 0 },
+      estimated_duration_s: ride.estimated_duration_s ?? 0,
+      accepted_at: ride.accepted_at ?? null,
+      pickup_at: ride.pickup_at ?? null,
+      arrived_at_destination_at: ride.arrived_at_destination_at ?? null,
+      completed_at: ride.completed_at ?? null,
+      canceled_at: ride.canceled_at ?? null,
+      driver_first_name: null,
+      driver_avatar_url: null,
+      driver_rating: null,
+      vehicle_make: null,
+      vehicle_model: null,
+      vehicle_color: null,
+      vehicle_plate: null,
+      vehicle_photo_url: null,
+      vehicle_type: null,
+    };
+
+    // Fetch driver safe fields (first name only — no phone)
+    if (ride.driver_id) {
+      const { data: driverProfile } = await supabase
+        .from('driver_profiles')
+        .select('user_id, rating_avg')
+        .eq('id', ride.driver_id)
+        .single();
+
+      if (driverProfile) {
+        result.driver_rating = driverProfile.rating_avg;
+
+        const { data: driverUser } = await supabase
+          .from('users')
+          .select('full_name, avatar_url')
+          .eq('id', driverProfile.user_id)
+          .single();
+
+        if (driverUser) {
+          // Only expose first name for privacy
+          result.driver_first_name = driverUser.full_name?.split(' ')[0] ?? null;
+          result.driver_avatar_url = driverUser.avatar_url;
+        }
+
+        const { data: vehicle } = await supabase
+          .from('vehicles')
+          .select('make, model, color, plate_number, photo_url, vehicle_type')
+          .eq('driver_id', ride.driver_id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (vehicle) {
+          result.vehicle_make = vehicle.make;
+          result.vehicle_model = vehicle.model;
+          result.vehicle_color = vehicle.color;
+          result.vehicle_plate = vehicle.plate_number;
+          result.vehicle_photo_url = vehicle.photo_url ?? null;
+          result.vehicle_type = vehicle.vehicle_type ?? null;
+        }
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Revoke sharing — sets share_token to null.
+   * Only the ride's customer can revoke.
+   */
+  async revokeShareToken(rideId: string, userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('rides')
+      .update({ share_token: null, share_token_expires_at: null })
+      .eq('id', rideId)
+      .eq('customer_id', userId);
+    if (error) throw error;
   },
 
   /**
@@ -1120,12 +1239,10 @@ export const rideService = {
    * Fallback for rides accepted before the trigger migration.
    */
   async generateShareToken(rideId: string): Promise<string> {
-    // Generate 24-char hex token (same format as DB trigger)
-    const chars = '0123456789abcdef';
-    let token = '';
-    for (let i = 0; i < 24; i++) {
-      token += chars[Math.floor(Math.random() * 16)];
-    }
+    // Generate 24-char hex token using cryptographically secure RNG
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    const token = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('rides')

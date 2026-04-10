@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { Platform, View, useColorScheme } from 'react-native';
-import { logger } from '@tricigo/utils';
+import { logger, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import { darkColors } from '@tricigo/theme';
 
 // Only import mapbox-gl on web
@@ -22,6 +22,22 @@ function ensureMapboxCSS() {
   link.rel = 'stylesheet';
   link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css';
   document.head.appendChild(link);
+
+  // Inject premium marker animation keyframes
+  if (!document.getElementById('tricigo-map-keyframes')) {
+    const style = document.createElement('style');
+    style.id = 'tricigo-map-keyframes';
+    style.textContent = `
+      @keyframes pulse-pickup { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(2.5);opacity:0} }
+      @keyframes pulse-driver { 0%{transform:scale(1);opacity:0.5} 100%{transform:scale(2);opacity:0} }
+      @keyframes drop-in { 0%{transform:scale(0.3);opacity:0} 60%{transform:scale(1.05)} 100%{transform:scale(1);opacity:1} }
+      @media (prefers-reduced-motion: reduce) {
+        .tricigo-pulse-pickup, .tricigo-pulse-driver { animation: none !important; }
+        .tricigo-drop-in { animation: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
 }
 
 interface WebMapViewProps {
@@ -38,9 +54,12 @@ interface WebMapViewProps {
   showCenterPin?: boolean;
 }
 
+// BUG-070: Run CSS injection once at module load instead of on every component mount
+ensureMapboxCSS();
+
 const HAVANA_CENTER: [number, number] = [-82.38, 23.13];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-const MAP_STYLE = 'mapbox://styles/mapbox/streets-v12';
+const MAP_STYLE = MAP_STYLE_LIGHT;
 
 export interface WebMapViewRef {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
@@ -70,9 +89,6 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
   // Initialize map
   useEffect(() => {
     if (!mapboxgl || !mapContainerRef.current || !MAPBOX_TOKEN) return;
-
-    // Ensure CSS is loaded before creating map
-    ensureMapboxCSS();
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -148,21 +164,33 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Pickup marker (orange)
+    // Pickup marker — premium with pulsing ring
     if (pickup) {
       const el = document.createElement('div');
-      el.style.cssText = 'width:16px;height:16px;border-radius:50%;background:#FF6B00;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-      const marker = new mapboxgl.Marker({ element: el })
+      el.innerHTML = `
+        <div style="position:relative;width:${MARKER.pickup.size}px;height:${MARKER.pickup.size}px;">
+          <div style="position:absolute;inset:0;border-radius:50%;background:${MAP_COLORS.pickup};opacity:0.3;animation:pulse-pickup 2s ease-out infinite;"></div>
+          <div style="position:relative;width:${MARKER.pickup.size}px;height:${MARKER.pickup.size}px;border-radius:50%;background:${MAP_COLORS.pickup};border:3px solid white;box-shadow:${MARKER.pickup.shadow};display:flex;align-items:center;justify-content:center;">
+            <div style="width:${MARKER.pickup.innerDot}px;height:${MARKER.pickup.innerDot}px;border-radius:50%;background:white;"></div>
+          </div>
+        </div>`;
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pickup.longitude, pickup.latitude])
         .addTo(map);
       markersRef.current.push(marker);
     }
 
-    // Dropoff marker (green)
+    // Dropoff marker — premium pin with tail + bounce-in
     if (dropoff) {
       const el = document.createElement('div');
-      el.style.cssText = 'width:16px;height:16px;border-radius:50%;background:#22c55e;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-      const marker = new mapboxgl.Marker({ element: el })
+      el.innerHTML = `
+        <div style="position:relative;width:${MARKER.dropoff.size}px;height:${MARKER.dropoff.size + MARKER.dropoff.tailH}px;animation:drop-in 0.4s ease-out both;">
+          <div style="width:${MARKER.dropoff.size}px;height:${MARKER.dropoff.size}px;border-radius:50%;background:${MAP_COLORS.dropoff};border:3px solid white;box-shadow:${MARKER.dropoff.shadow};position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
+            <div style="width:${MARKER.dropoff.innerDot}px;height:${MARKER.dropoff.innerDot}px;border-radius:50%;background:white;"></div>
+          </div>
+          <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:${MARKER.dropoff.tailH}px solid ${MAP_COLORS.dropoff};"></div>
+        </div>`;
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([dropoff.longitude, dropoff.latitude])
         .addTo(map);
       markersRef.current.push(marker);
@@ -206,29 +234,30 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
         },
       });
 
-      // Base route line (thicker, semi-transparent)
+      // Route shadow
       map.addLayer({
         id: 'route-line',
         type: 'line',
         source: 'route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#FF6B00',
-          'line-width': 6,
-          'line-opacity': 0.3,
+          'line-color': ROUTE.shadow.color,
+          'line-width': ROUTE.shadow.width,
+          'line-opacity': ROUTE.shadow.opacity,
+          'line-blur': ROUTE.shadow.blur,
         },
       });
 
-      // Animated route overlay (dashed, animated)
+      // Animated route overlay (dashed, blue)
       map.addLayer({
         id: 'route-line-animated',
         type: 'line',
         source: 'route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#FF6B00',
-          'line-width': 4,
-          'line-opacity': 0.9,
+          'line-color': ROUTE.main.color,
+          'line-width': ROUTE.main.width,
+          'line-opacity': ROUTE.main.opacity,
           'line-dasharray': [0, 4, 3],
         },
       });
@@ -314,9 +343,9 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
         source: 'driver-route',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': '#3b82f6',
-          'line-width': 3,
-          'line-dasharray': [6, 4],
+          'line-color': ROUTE.driverTo.color,
+          'line-width': ROUTE.driverTo.width,
+          'line-dasharray': ROUTE.driverTo.dashArray as number[],
         },
       });
     }
@@ -356,7 +385,7 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
               width: 20,
               height: 20,
               borderRadius: '50%',
-              background: '#FF6B00',
+              background: MAP_COLORS.brand,
               border: '3px solid white',
               boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
             }}
@@ -365,7 +394,7 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
             style={{
               width: 2,
               height: 12,
-              background: '#FF6B00',
+              background: MAP_COLORS.brand,
               margin: '0 auto',
               borderRadius: 1,
             }}

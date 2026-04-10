@@ -143,7 +143,10 @@
     "nav_auto_started": "Navegación iniciada",
     "restart_nav": "Reiniciar navegación",
     "approaching_pickup": "Llegando al punto de recogida",
-    "approaching_pickup_body": "Estás a ~2 minutos del punto de recogida"
+    "approaching_pickup_body": "Estás a ~2 minutos del punto de recogida",
+    "step_at_destination": "En destino",
+    "action_arrived_destination": "Llegue al destino",
+    "action_finish": "Finalizar viaje"
   },
 
   "ride": {

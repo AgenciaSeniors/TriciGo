@@ -103,7 +103,7 @@ export default function DriverPricingScreen() {
 
   if (loading) {
     return (
-      <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+      <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
         <View className="flex-1 items-center justify-center pt-20">
           <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
@@ -112,23 +112,23 @@ export default function DriverPricingScreen() {
   }
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
         <View className="flex-row items-center mb-6">
           <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={24} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('pricing.title')}</Text>
+          <Text variant="h3" color="primary">{t('pricing.title')}</Text>
         </View>
 
         {/* Explanation */}
-        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <Text variant="body" color="inverse" className="opacity-70 mb-2">
+        <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
+          <Text variant="body" color="primary" className="opacity-70 mb-2">
             {t('pricing.explanation')}
           </Text>
           <View className="flex-row justify-between mb-1">
-            <Text variant="bodySmall" color="inverse" className="opacity-50">
+            <Text variant="bodySmall" color="primary" className="opacity-50">
               {t('pricing.default_rate')}
             </Text>
             <Text variant="bodySmall" color="accent">
@@ -136,7 +136,7 @@ export default function DriverPricingScreen() {
             </Text>
           </View>
           <View className="flex-row justify-between mb-1">
-            <Text variant="bodySmall" color="inverse" className="opacity-50">
+            <Text variant="bodySmall" color="primary" className="opacity-50">
               {t('pricing.max_rate')}
             </Text>
             <Text variant="bodySmall" color="accent">
@@ -144,22 +144,22 @@ export default function DriverPricingScreen() {
             </Text>
           </View>
           <View className="flex-row justify-between">
-            <Text variant="bodySmall" color="inverse" className="opacity-50">
+            <Text variant="bodySmall" color="primary" className="opacity-50">
               1 USD = {exchangeRate} CUP
             </Text>
           </View>
         </Card>
 
         {/* Current rate display */}
-        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <Text variant="bodySmall" color="inverse" className="opacity-50 mb-1">
+        <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
+          <Text variant="bodySmall" color="primary" className="opacity-50 mb-1">
             {t('pricing.current_rate')}
           </Text>
           <View className="flex-row items-baseline gap-2">
             <Text variant="h2" color="accent">
               {formatCUP(activeRate)}
             </Text>
-            <Text variant="bodySmall" color="inverse" className="opacity-40">
+            <Text variant="bodySmall" color="primary" className="opacity-40">
               /km (~{(activeRate / exchangeRate).toFixed(2)} TRC/km)
             </Text>
           </View>
@@ -173,8 +173,8 @@ export default function DriverPricingScreen() {
         </Card>
 
         {/* Rate input */}
-        <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
-          <Text variant="bodySmall" color="inverse" className="opacity-50 mb-2">
+        <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
+          <Text variant="bodySmall" color="primary" className="opacity-50 mb-2">
             {t('pricing.set_rate')}
           </Text>
           <View className="flex-row items-center gap-3">
@@ -183,21 +183,21 @@ export default function DriverPricingScreen() {
               onChangeText={setInputValue}
               keyboardType="number-pad"
               placeholder={String(defaultRate)}
-              placeholderTextColor="#666"
+              placeholderTextColor="#94A3B8"
               style={{
                 flex: 1,
-                backgroundColor: '#262626',
-                color: '#FAFAFA',
+                backgroundColor: '#F8FAFC',
+                color: '#0F172A',
                 borderRadius: 12,
                 paddingHorizontal: 16,
                 paddingVertical: 14,
                 fontSize: 18,
                 fontWeight: '700',
                 borderWidth: 1,
-                borderColor: error ? '#ef4444' : '#404040',
+                borderColor: error ? '#ef4444' : '#E2E8F0',
               }}
             />
-            <Text variant="body" color="inverse" className="opacity-50">
+            <Text variant="body" color="primary" className="opacity-50">
               CUP/km
             </Text>
           </View>
@@ -234,7 +234,6 @@ export default function DriverPricingScreen() {
             variant="outline"
             size="lg"
             fullWidth
-            forceDark
             onPress={handleReset}
             disabled={saving}
           />

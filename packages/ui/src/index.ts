@@ -70,3 +70,9 @@ export type { QuotaCardProps } from './QuotaCard';
 
 export { MultiCurrencyPrice } from './MultiCurrencyPrice';
 export type { MultiCurrencyPriceProps } from './MultiCurrencyPrice';
+
+export { TripProgressBar } from './TripProgressBar';
+export type { TripProgressBarProps } from './TripProgressBar';
+
+export { DraggableSheet } from './DraggableSheet';
+export type { DraggableSheetProps } from './DraggableSheet';

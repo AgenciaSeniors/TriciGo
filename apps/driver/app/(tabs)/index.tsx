@@ -8,15 +8,12 @@ import {
   Dimensions,
   StyleSheet,
   Platform,
-  ScrollView,
   Text as RNText,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text } from '@tricigo/ui/Text';
-import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService } from '@tricigo/api';
 import {
@@ -39,7 +36,8 @@ import {
   useDriverRideActions,
 } from '@/hooks/useDriverRide';
 import { IncomingRideCard } from '@/components/IncomingRideCard';
-import { DriverTripView } from '@/components/DriverTripView';
+import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripView';
+import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import * as Location from 'expo-location';
 import { useDemandHeatmap } from '@/hooks/useDemandHeatmap';
@@ -47,94 +45,14 @@ import { useSurgeZones } from '@/hooks/useSurgeZones';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewRef } from '@/components/RideMapView';
-import { AddressSearchBar } from '@/components/AddressSearchBar';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@tricigo/theme';
 import type { Ride } from '@tricigo/types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Static web screen (Play Store screenshots) ───────────────────────────────
-function WebDriverHomeScreen() {
-  const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
-  return (
-    <View style={{ flex: 1, backgroundColor: '#111111' }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
-      <View style={{ paddingTop: 16 }}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>Conductor</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(34,197,94,0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}>
-            <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' }} />
-            <Text style={{ fontSize: 14, color: '#4ade80', fontWeight: '600', ...font }}>En línea</Text>
-          </View>
-        </View>
-        <View style={{ height: 200, borderRadius: 16, overflow: 'hidden', position: 'relative', marginBottom: 12 }}>
-          <Image
-            source={require('../../assets/screenshots/map-havana-dark.png')}
-            style={{ width: '100%', height: '100%' }}
-            resizeMode="cover"
-          />
-          <View style={{ position: 'absolute', top: 80, left: 170 }}>
-            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(30,136,229,0.25)', alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#1e88e5', borderWidth: 3, borderColor: '#fff' }} />
-            </View>
-          </View>
-          <View style={{ position: 'absolute', top: 25, left: 70, width: 60, height: 50, borderRadius: 25, backgroundColor: 'rgba(249,115,22,0.15)' }} />
-          <View style={{ position: 'absolute', top: 110, left: 260, width: 80, height: 55, borderRadius: 30, backgroundColor: 'rgba(249,115,22,0.2)' }} />
-          <View style={{ position: 'absolute', top: 8, right: 12, backgroundColor: 'rgba(249,115,22,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="flame" size={12} color={colors.brand.orange} />
-            <Text style={{ color: colors.brand.orange, fontSize: 11, fontWeight: '600', ...font }}>Alta demanda</Text>
-          </View>
-        </View>
-        <View style={{ backgroundColor: '#1f1f1f', borderRadius: 16, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>Ganancias de hoy</Text>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', ...font }}>T$ 1,250.00</Text>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>Viajes</Text>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: '#fff', ...font }}>8</Text>
-          </View>
-        </View>
-        <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff', marginBottom: 12, ...font }}>Solicitud entrante</Text>
-        <View style={{ backgroundColor: '#1f1f1f', borderRadius: 12, padding: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
-            <View style={{ alignItems: 'center', marginRight: 12, marginTop: 4 }}>
-              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e' }} />
-              <View style={{ width: 2, height: 24, backgroundColor: '#4b5563', marginVertical: 4 }} />
-              <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, color: '#fff', marginBottom: 8, ...font }}>Calle 23 esq. L, Vedado</Text>
-              <Text style={{ fontSize: 14, color: '#d1d5db', ...font }}>Parque Central, Habana Vieja</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#252540' }}>
-            <Text style={{ fontSize: 16, color: '#fff', fontWeight: '700', ...font }}>T$ 85.00</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>3.2 km</Text>
-              <Text style={{ fontSize: 12, color: '#9ca3af', ...font }}>12 min</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-            <Pressable style={{ flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#6b7280', alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, color: '#d1d5db', fontWeight: '600', ...font }}>Rechazar</Text>
-            </Pressable>
-            <Pressable style={{ flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.brand.orange, alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600', ...font }}>Aceptar</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-// ─── Native home screen ────────────────────────────────────────────────────────
+// ─── Home screen ─────────────────────────────────────────────────────────────
 function NativeDriverHomeScreen() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
@@ -358,14 +276,18 @@ function NativeDriverHomeScreen() {
   useEffect(() => {
     if (!user?.id || !notifCenterEnabled) return;
     let cancelled = false;
+    // BUG-080: Record fetch time to avoid counting notifications that arrived between fetch and subscribe
+    const fetchTime = new Date().toISOString();
     (async () => {
       try {
         const count = await notificationService.getUnreadCount(user.id);
         if (!cancelled) setUnreadCount(count);
       } catch (err) { console.warn('[Notif] Failed to load unread count:', err); }
     })();
-    const subscription = notificationService.subscribeToNotifications(user.id, () => {
-      if (!cancelled) incrementUnread();
+    const subscription = notificationService.subscribeToNotifications(user.id, (notification) => {
+      if (!cancelled && (!notification?.created_at || notification.created_at > fetchTime)) {
+        incrementUnread();
+      }
     });
     return () => {
       cancelled = true;
@@ -446,6 +368,7 @@ function NativeDriverHomeScreen() {
   useEffect(() => {
     if (navCountdown === null || navCountdown <= 0) return;
     const timer = setTimeout(() => {
+      if (navCancelledRef.current) { setNavCountdown(null); return; }
       if (navCountdown === 1) {
         trackValidationEvent('driver_auto_nav_triggered', { zone_distance: nearestHotZone?.distance, idle_minutes: idleMinutes });
         openNavigation(nearestHotZone!.lat, nearestHotZone!.lng);
@@ -547,7 +470,7 @@ function NativeDriverHomeScreen() {
 
   const handleToggleBreak = useCallback(async () => {
     if (!profile || togglingBreak) return;
-    if (activeTrip) {
+    if (activeTrip && activeTrip.status !== 'completed' && activeTrip.status !== 'cancelled') {
       Toast.show({ type: 'error', text1: t('driver.cannot_break_active_ride', { defaultValue: 'No puedes descansar durante un viaje activo' }) });
       return;
     }
@@ -590,10 +513,11 @@ function NativeDriverHomeScreen() {
     [handleAccept, handleReject, profile?.custom_per_km_rate_cup, serviceConfigs],
   );
 
-  // ── Active trip — full screen with map behind ──────────────────────────────
+  // ── Active trip — full-bleed map + DraggableSheet ────────────────────────
   if (activeTrip) {
     return (
       <Animated.View style={[styles.container, { opacity: tripFadeAnim }]}>
+        {/* Layer 1: Full-screen map */}
         <View style={StyleSheet.absoluteFillObject}>
           <RideMapView
             ref={mapRef}
@@ -604,23 +528,19 @@ function NativeDriverHomeScreen() {
             vehicleType="triciclo"
           />
         </View>
-        <View style={[StyleSheet.absoluteFillObject]} pointerEvents="box-none">
-          <LinearGradient
-            colors={['rgba(13,13,26,0.9)', 'transparent']}
-            style={[styles.tripHeaderGradient, { paddingTop: insets.top }]}
-            pointerEvents="box-none"
-          >
-            <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
-          </LinearGradient>
-          <View style={{ flex: 1, paddingHorizontal: 0 }}>
-            <DriverTripView />
-          </View>
+
+        {/* Layer 2: Floating header */}
+        <View style={[styles.floatingHeaderContainer, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+          <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
         </View>
+
+        {/* Layer 3: Trip DraggableSheet from bottom */}
+        <DriverTripView />
       </Animated.View>
     );
   }
 
-  // ── Idle / online / offline states ────────────────────────────────────────
+  // ── Idle / online / offline — Map + HomeBottomSheet ─────────────────────
   const firstRide = incomingRequests[0] ?? null;
 
   return (
@@ -637,285 +557,74 @@ function NativeDriverHomeScreen() {
           onRecenter={handleRecenter}
           vehicleType="triciclo"
         />
-        {/* Dim + warm orange overlay when offline */}
+        {/* Subtle dim when offline */}
         {!isOnline && (
-          <>
-            <View style={styles.offlineDimOverlay} pointerEvents="none" />
-            <LinearGradient
-              colors={['transparent', 'transparent', 'rgba(255,77,0,0.06)', 'rgba(255,77,0,0.12)']}
-              locations={[0, 0.5, 0.8, 1]}
-              style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
-            />
-          </>
+          <View style={styles.offlineDimOverlay} pointerEvents="none" />
         )}
       </View>
 
-      {/* ── Layer 2: Overlay content ── */}
-      <View style={[StyleSheet.absoluteFillObject]} pointerEvents="box-none">
-
-        {/* Top: floating header with gradient fade */}
-        <LinearGradient
-          colors={['rgba(13,13,26,0.85)', 'transparent']}
-          style={[styles.tripHeaderGradient, { paddingTop: insets.top + 8 }]}
-          pointerEvents="box-none"
-        >
-          <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
-        </LinearGradient>
-
-        {/* Top badges: heatmap indicator */}
-        {isOnline && heatmapData.length > 0 && (
-          <View style={[styles.heatmapBadge, { top: insets.top + 64 }]} pointerEvents="none">
-            <Ionicons name="flame" size={12} color={colors.brand.orange} />
-            <RNText style={styles.heatmapBadgeText}>{t('home.high_demand', { defaultValue: 'Alta demanda' })}</RNText>
-          </View>
-        )}
-
-        {/* Surge zone badge */}
-        {isOnline && surgeZones.length > 0 && (
-          <View
-            style={[
-              styles.heatmapBadge,
-              { top: insets.top + (heatmapData.length > 0 ? 92 : 64), backgroundColor: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)' },
-            ]}
-            pointerEvents="none"
-          >
-            <Ionicons name="trending-up" size={12} color="#ef4444" />
-            <RNText style={[styles.heatmapBadgeText, { color: '#fca5a5' }]}>
-              {t('home.surge_active', {
-                defaultValue: `Tarifa dinamica ${Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1)}x`,
-                multiplier: Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1),
-              })}
-            </RNText>
-          </View>
-        )}
-
-        {/* Bottom: gradient panel that fades from map */}
-        <LinearGradient
-          colors={['transparent', 'rgba(13,13,26,0.5)', 'rgba(13,13,26,0.92)', '#0d0d1a']}
-          locations={[0, 0.12, 0.35, 1]}
-          style={[styles.bottomPanelGradient, { paddingBottom: insets.bottom + 16 }]}
-          pointerEvents="box-none"
-        >
-
-          {/* Alert banners */}
-          {isIneligible && (
-            <View style={styles.alertBanner} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              <Ionicons name="warning-outline" size={16} color="#fca5a5" style={{ marginRight: 8 }} />
-              <View style={{ flex: 1 }}>
-                <RNText style={styles.alertText}>{t('home.ineligible_banner')}</RNText>
-                <Pressable onPress={() => router.push('/(tabs)/earnings')}>
-                  <RNText style={styles.alertLink}>{t('home.ineligible_recharge')}</RNText>
-                </Pressable>
-              </View>
-            </View>
-          )}
-
-          {(needsCheck || isProcessing) && (
-            <View style={[styles.alertBanner, { borderColor: '#f59e0b40', backgroundColor: '#1a1300' }]} accessibilityRole="alert">
-              <Ionicons name="camera-outline" size={16} color="#f59e0b" style={{ marginRight: 8 }} />
-              <View style={{ flex: 1 }}>
-                <RNText style={[styles.alertText, { color: '#fcd34d' }]}>{t('verification.selfie_required')}</RNText>
-                {!isProcessing && (
-                  <Pressable onPress={submitSelfie} disabled={selfieLoading}>
-                    <RNText style={[styles.alertLink, { color: '#f59e0b' }]}>{t('verification.take_selfie')}</RNText>
-                  </Pressable>
-                )}
-                {isProcessing && (
-                  <RNText style={[styles.alertText, { opacity: 0.7 }]}>{t('verification.processing')}</RNText>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* OMEGA: Auto-nav countdown banner */}
-          {navCountdown !== null && nearestHotZone && (
-            <View style={styles.omegaBanner}>
-              <Ionicons name="navigate" size={16} color="#f59e0b" />
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <RNText style={styles.omegaBannerTitle}>
-                  {t('home.high_demand_zone', { seconds: navCountdown, defaultValue: 'Navegando a zona en {{seconds}}s' })}
-                </RNText>
-                <RNText style={styles.omegaBannerSub}>
-                  {t('home.active_zone_nearby', { distance: nearestHotZone.distance })}
-                </RNText>
-              </View>
-              <Pressable style={styles.omegaCancelBtn} onPress={cancelAutoNav}>
-                <RNText style={styles.omegaCancelText}>{t('home.stay_here', { defaultValue: 'Quedar' })}</RNText>
-              </Pressable>
-            </View>
-          )}
-
-          {/* Greeting + motivational (offline only) */}
-          {!isOnline && (
-            <View style={styles.offlineGreeting}>
-              {user?.full_name ? (
-                <>
-                  <RNText style={styles.greetingPrefix}>HOLA,</RNText>
-                  <RNText style={styles.greetingName}>
-                    {(user.full_name.split(' ')[0] ?? user.full_name).toUpperCase()}
-                  </RNText>
-                </>
-              ) : (
-                <RNText style={styles.greetingName}>
-                  {t('home.greeting_generic', { defaultValue: '¡BIENVENIDO!' })}
-                </RNText>
-              )}
-              <RNText style={styles.greetingMotivation}>
-                {t('home.connect_to_earn', { defaultValue: 'Conectate para empezar a ganar' })}
-              </RNText>
-            </View>
-          )}
-
-          {/* Radar sweep searching indicator (online, idle) */}
-          {isOnline && !activeTrip && incomingRequests.length === 0 && (
-            <View style={styles.radarContainer}>
-              <View style={styles.radarTrack}>
-                <Animated.View style={[styles.radarSweep, {
-                  transform: [{
-                    translateX: radarSweepAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-80, 280],
-                    }),
-                  }],
-                }]}>
-                  <LinearGradient
-                    colors={['transparent', '#22c55e', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.radarSweepGradient}
-                  />
-                </Animated.View>
-              </View>
-              <RNText style={styles.searchingText}>
-                {t('home.searching_rides', { defaultValue: 'Buscando viajes cerca de ti...' })}
-                {estimatedWaitMinutes ? `  · ~${estimatedWaitMinutes} min` : ''}
-              </RNText>
-            </View>
-          )}
-
-          {/* Address search bar with orange accent (online only) */}
-          {isOnline && (
-            <View style={styles.searchBarWrapper}>
-              <AddressSearchBar
-                onSelect={handleAddressSelect}
-                placeholder={t('home.search_placeholder', { defaultValue: 'Buscar dirección o zona...' })}
-              />
-            </View>
-          )}
-
-          {/* Earnings stat cards (online) */}
-          {isOnline && (
-            <View style={styles.earningsCards}>
-              <View style={styles.statCard}>
-                <Ionicons name="trending-up" size={16} color="#FF8A5C" />
-                <RNText style={styles.statCardLabel}>{t('home.today', { defaultValue: 'Hoy' })}</RNText>
-                <RNText style={styles.statCardValue}>
-                  ₧{todayEarnings.amount.toLocaleString()}
-                </RNText>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="car-outline" size={16} color="#FF8A5C" />
-                <RNText style={styles.statCardLabel}>{t('home.trips_label', { defaultValue: 'Viajes' })}</RNText>
-                <RNText style={styles.statCardValue}>{todayEarnings.trips}</RNText>
-              </View>
-              {perHour > 0 && (
-                <View style={[styles.statCard, styles.statCardAccent]}>
-                  <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
-                  <RNText style={styles.statCardLabel}>{t('home.per_hour_label', { defaultValue: 'Por hora' })}</RNText>
-                  <RNText style={[styles.statCardValue, { color: colors.brand.orange }]}>
-                    ₧{perHour.toLocaleString()}
-                  </RNText>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Break banner */}
-          {isOnline && isOnBreak && (
-            <View style={styles.breakBanner}>
-              <Ionicons name="cafe-outline" size={14} color="#f59e0b" />
-              <RNText style={styles.breakBannerText}>
-                {t('home.on_break_label', { defaultValue: 'En descanso — no recibes solicitudes' })}
-              </RNText>
-            </View>
-          )}
-
-          {/* ── CTA "The Ignition Portal" ── */}
-          <View style={styles.ctaCircleContainer}>
-            {/* 3 concentric pulse rings */}
-            {!isOnline && (
-              <>
-                {[ring1Anim, ring2Anim, ring3Anim].map((anim, i) => (
-                  <Animated.View key={i} style={[styles.ctaRing, {
-                    opacity: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.5 - i * 0.12, 0] }),
-                    transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8 - i * 0.25] }) }],
-                  }]} />
-                ))}
-              </>
-            )}
-
-            <Animated.View style={{ transform: [{ scale: ctaScaleAnim }] }}>
-              <Pressable
-                onPressIn={onCtaPressIn}
-                onPressOut={onCtaPressOut}
-                onPress={handleToggleOnline}
-                disabled={toggling}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: isOnline, disabled: toggling }}
-                accessibilityLabel={isOnline ? t('home.go_offline') : t('home.go_online')}
-                style={toggling ? styles.toggleBtnDisabled : undefined}
-              >
-                {!isOnline ? (
-                  <LinearGradient
-                    colors={['#FF6B2C', '#FF4D00', '#CC3D00']}
-                    style={styles.ctaCircle}
-                  >
-                    <Ionicons name="power" size={38} color="#fff" />
-                  </LinearGradient>
-                ) : (
-                  <View style={styles.ctaCircleOnline}>
-                    <Ionicons name="power" size={24} color="#ef4444" />
-                  </View>
-                )}
-              </Pressable>
-            </Animated.View>
-
-            <RNText style={[styles.ctaLabel, isOnline && styles.ctaLabelOnline]}>
-              {toggling
-                ? (isOnline ? t('home.disconnecting', { defaultValue: 'DESCONECTANDO...' }) : t('home.connecting', { defaultValue: 'CONECTANDO...' }))
-                : (isOnline ? t('home.go_offline').toUpperCase() : t('home.go_online').toUpperCase())
-              }
-            </RNText>
-          </View>
-
-          {/* Break toggle (visible when online) */}
-          {isOnline && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.breakBtn,
-                isOnBreak ? styles.breakBtnActive : styles.breakBtnInactive,
-                togglingBreak && styles.toggleBtnDisabled,
-                pressed && { opacity: 0.85 },
-              ]}
-              onPress={handleToggleBreak}
-              disabled={togglingBreak}
-            >
-              <Ionicons
-                name={isOnBreak ? 'arrow-forward-outline' : 'cafe-outline'}
-                size={16}
-                color={isOnBreak ? '#fff' : '#9ca3af'}
-                style={{ marginRight: 6 }}
-              />
-              <RNText style={[styles.breakBtnText, isOnBreak && { color: '#fff' }]}>
-                {isOnBreak ? t('home.end_break', { defaultValue: 'Terminar descanso' }) : t('home.start_break', { defaultValue: 'Tomar descanso' })}
-              </RNText>
-            </Pressable>
-          )}
-        </LinearGradient>
+      {/* ── Layer 2: Floating header + badges ── */}
+      <View style={[styles.floatingHeaderContainer, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+        <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
       </View>
 
-      {/* ── Layer 3: Incoming ride modal overlay ── */}
+      {/* Top floating badges */}
+      {isOnline && heatmapData.length > 0 && (
+        <View style={[styles.heatmapBadge, { top: insets.top + 64 }]} pointerEvents="none">
+          <Ionicons name="flame" size={12} color={colors.brand.orange} />
+          <RNText style={styles.heatmapBadgeText}>{t('home.high_demand', { defaultValue: 'Alta demanda' })}</RNText>
+        </View>
+      )}
+      {isOnline && surgeZones.length > 0 && (
+        <View
+          style={[
+            styles.heatmapBadge,
+            { top: insets.top + (heatmapData.length > 0 ? 92 : 64), backgroundColor: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)' },
+          ]}
+          pointerEvents="none"
+        >
+          <Ionicons name="trending-up" size={12} color="#ef4444" />
+          <RNText style={[styles.heatmapBadgeText, { color: '#fca5a5' }]}>
+            {t('home.surge_active', {
+              defaultValue: `Tarifa dinamica ${Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1)}x`,
+              multiplier: Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1),
+            })}
+          </RNText>
+        </View>
+      )}
+
+      {/* ── Layer 3: HomeBottomSheet (replaces gradient panel) ── */}
+      <HomeBottomSheet
+        isOnline={isOnline}
+        isOnBreak={isOnBreak}
+        isIneligible={isIneligible}
+        toggling={toggling}
+        togglingBreak={togglingBreak}
+        needsSelfieCheck={needsCheck || isProcessing}
+        isSelfieProcessing={isProcessing}
+        selfieLoading={selfieLoading}
+        todayEarnings={todayEarnings}
+        perHour={perHour}
+        userName={user?.full_name?.split(' ')[0] ?? user?.full_name}
+        estimatedWaitMinutes={estimatedWaitMinutes}
+        navCountdown={navCountdown}
+        nearestHotZone={nearestHotZone}
+        onToggleOnline={handleToggleOnline}
+        onToggleBreak={handleToggleBreak}
+        onSubmitSelfie={submitSelfie}
+        onCancelAutoNav={cancelAutoNav}
+        onAddressSelect={handleAddressSelect}
+        ring1Anim={ring1Anim}
+        ring2Anim={ring2Anim}
+        ring3Anim={ring3Anim}
+        radarSweepAnim={radarSweepAnim}
+        ctaScaleAnim={ctaScaleAnim}
+        onCtaPressIn={onCtaPressIn}
+        onCtaPressOut={onCtaPressOut}
+        searchPulseAnim={searchPulseAnim}
+      />
+
+      {/* ── Layer 4: Incoming ride modal overlay ── */}
       {firstRide && !activeTrip && (
         <View style={styles.incomingOverlay} pointerEvents="box-none">
           <View style={styles.incomingOverlayDim} />
@@ -1020,9 +729,13 @@ const styles = StyleSheet.create({
   },
 
   // ── Header ──
-  tripHeaderGradient: {
+  floatingHeaderContainer: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    zIndex: 10,
   },
   floatingHeader: {
     flexDirection: 'row',
@@ -1045,14 +758,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: '#fff',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: -0.5,
   },
   logoGo: {
     fontSize: 20,
     fontWeight: '800',
     color: colors.brand.orange,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: -0.5,
     marginRight: 6,
   },
@@ -1067,7 +780,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     alignSelf: 'flex-end',
     marginBottom: 1,
   },
@@ -1134,7 +847,7 @@ const styles = StyleSheet.create({
   statusPillText: {
     fontSize: 13,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
   },
 
   // ── Heatmap badge ──
@@ -1155,7 +868,7 @@ const styles = StyleSheet.create({
     color: colors.brand.orange,
     fontSize: 11,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
   },
 
   // ── Bottom panel (gradient — no hard edge) ──
@@ -1182,14 +895,14 @@ const styles = StyleSheet.create({
   alertText: {
     color: '#fca5a5',
     fontSize: 13,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     lineHeight: 18,
   },
   alertLink: {
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     marginTop: 4,
   },
   omegaBanner: {
@@ -1206,12 +919,12 @@ const styles = StyleSheet.create({
     color: '#fcd34d',
     fontSize: 13,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
   },
   omegaBannerSub: {
     color: '#9ca3af',
     fontSize: 11,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     marginTop: 2,
   },
   omegaCancelBtn: {
@@ -1224,7 +937,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
   },
 
   // ── Offline greeting (dramatic typography) ──
@@ -1237,7 +950,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#FF8A5C',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: 6,
     textTransform: 'uppercase',
   },
@@ -1245,7 +958,7 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: '900',
     color: '#ffffff',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: 4,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -1254,7 +967,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '400',
     color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: 1,
   },
 
@@ -1283,7 +996,7 @@ const styles = StyleSheet.create({
   searchingText: {
     color: 'rgba(255,255,255,0.45)',
     fontSize: 13,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
   },
 
   // ── Search bar wrapper (orange accent) ──
@@ -1316,7 +1029,7 @@ const styles = StyleSheet.create({
   statCardLabel: {
     fontSize: 11,
     color: '#6b7280',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     fontWeight: '500',
     marginTop: 6,
     marginBottom: 3,
@@ -1324,7 +1037,7 @@ const styles = StyleSheet.create({
   statCardValue: {
     fontSize: 20,
     color: '#fff',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     fontWeight: '700',
   },
 
@@ -1343,7 +1056,7 @@ const styles = StyleSheet.create({
   breakBannerText: {
     color: '#fbbf24',
     fontSize: 12,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     fontWeight: '500',
   },
 
@@ -1388,7 +1101,7 @@ const styles = StyleSheet.create({
     color: '#FF8A5C',
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     letterSpacing: 4,
     textTransform: 'uppercase',
     marginTop: 20,
@@ -1423,7 +1136,7 @@ const styles = StyleSheet.create({
   breakBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     color: '#9ca3af',
   },
 

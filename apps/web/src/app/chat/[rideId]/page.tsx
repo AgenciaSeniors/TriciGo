@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 
@@ -17,8 +17,10 @@ type ChatMessage = {
 
 export default function ChatPage() {
   const { rideId } = useParams<{ rideId: string }>();
+  const router = useRouter();
   const { t } = useTranslation();
   const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,11 +28,17 @@ export default function ChatPage() {
   const [driverName, setDriverName] = useState('Conductor');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // BUG-011 fix: Auth guard
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
+      setAuthLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && !userId) router.replace('/login');
+  }, [authLoading, userId, router]);
 
   const fetchMessages = useCallback(async () => {
     if (!rideId) return;
@@ -110,11 +118,16 @@ export default function ChatPage() {
     }
   }
 
-  if (!userId) {
+  // Auth gate — redirect handled in useEffect, show loading meanwhile
+  if (authLoading || !userId) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesión para acceder al chat</p>
-        <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>Iniciar sesión</Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+        </div>
       </div>
     );
   }

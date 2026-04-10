@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 30 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`send-push:${clientIP}`, 30, 60 * 1000);
+    const rl = await rateLimit(`send-push:${clientIP}`, 30, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: allow internal service-role calls or valid JWT ──

@@ -37,7 +37,7 @@ export function BalanceBadge({
   className,
 }: BalanceBadgeProps) {
   const sizeConfig = {
-    sm: { label: 'text-xs', amount: 'text-lg', container: 'px-3 py-2', iconSize: 20 },
+    sm: { label: 'text-xs', amount: 'text-lg', container: 'px-3 py-2', iconSize: 24 },
     md: { label: 'text-sm', amount: 'text-2xl', container: 'px-4 py-3', iconSize: 28 },
     lg: { label: 'text-base', amount: 'text-4xl', container: 'px-6 py-4', iconSize: 36 },
   }[size];

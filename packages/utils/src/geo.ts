@@ -126,13 +126,99 @@ export function estimateRoadDistance(straightLineM: number): number {
 }
 
 /**
+ * Project a point onto a polyline and return the position along the route.
+ * Used for trip progress calculation (Uber-style progress bar).
+ *
+ * @param point  — current driver position
+ * @param polyline — route geometry from OSRM/Mapbox
+ * @returns segment index, projected point, and cumulative distance from route start
+ */
+export function projectPointOnPolyline(
+  point: GeoPoint,
+  polyline: GeoPoint[],
+): { segmentIndex: number; projectedPoint: GeoPoint; distanceAlongRouteM: number } {
+  if (polyline.length < 2) {
+    return { segmentIndex: 0, projectedPoint: point, distanceAlongRouteM: 0 };
+  }
+
+  let bestDist = Infinity;
+  let bestSegment = 0;
+  let bestProjected: GeoPoint = polyline[0]!;
+  let bestT = 0;
+
+  // For each segment, find closest point on line segment to the given point
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const a = polyline[i]!;
+    const b = polyline[i + 1]!;
+
+    // Convert to approximate planar coords (meters) for projection
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const midLat = (a.latitude + b.latitude) / 2;
+    const mPerDegLat = 111_320;
+    const mPerDegLng = 111_320 * Math.cos(toRad(midLat));
+
+    const ax = a.longitude * mPerDegLng;
+    const ay = a.latitude * mPerDegLat;
+    const bx = b.longitude * mPerDegLng;
+    const by = b.latitude * mPerDegLat;
+    const px = point.longitude * mPerDegLng;
+    const py = point.latitude * mPerDegLat;
+
+    // Compute parameter t = dot(AP, AB) / dot(AB, AB), clamped to [0, 1]
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const dotAB = abx * abx + aby * aby;
+
+    let t = 0;
+    if (dotAB > 0) {
+      t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / dotAB));
+    }
+
+    // Projected point in planar coords
+    const projX = ax + t * abx;
+    const projY = ay + t * aby;
+
+    // Distance from point to projected
+    const dx = px - projX;
+    const dy = py - projY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestSegment = i;
+      bestT = t;
+      bestProjected = {
+        latitude: projY / mPerDegLat,
+        longitude: projX / mPerDegLng,
+      };
+    }
+  }
+
+  // Calculate cumulative distance from route start to projected point
+  let cumulativeM = 0;
+  for (let i = 0; i < bestSegment; i++) {
+    cumulativeM += haversineDistance(polyline[i]!, polyline[i + 1]!);
+  }
+  // Add partial segment distance
+  cumulativeM += haversineDistance(polyline[bestSegment]!, bestProjected);
+
+  return {
+    segmentIndex: bestSegment,
+    projectedPoint: bestProjected,
+    distanceAlongRouteM: cumulativeM,
+  };
+}
+
+/**
  * Average speeds in km/h per service type.
  * Calibrated for Cuban urban conditions:
  * - Narrow streets, potholes, long traffic lights
  * - Dense traffic in Havana center
  * - Triciclos limited to ~10-12 km/h actual
  */
-const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
+export const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
   triciclo_basico: 10,
   triciclo_premium: 10,
   triciclo_cargo: 8,
@@ -157,6 +243,112 @@ export function estimateDuration(
   // 15% buffer for traffic lights, stops, and urban delays
   const URBAN_DELAY_FACTOR = 1.15;
   return Math.round(rawDuration * URBAN_DELAY_FACTOR);
+}
+
+/**
+ * Speed profiles (km/h) by distance tier for more accurate duration estimates.
+ * - urban: dense city streets, traffic lights, narrow roads
+ * - suburban: wider avenues, fewer stops, less congestion
+ * - intercity: highways and main roads between cities
+ * - null means vehicle type is not available for that tier (falls back to suburban)
+ */
+export const SPEED_PROFILES: Record<ServiceTypeSlug, { urban: number; suburban: number; intercity: number | null }> = {
+  triciclo_basico:  { urban: 10, suburban: 12, intercity: null },
+  triciclo_premium: { urban: 10, suburban: 12, intercity: null },
+  triciclo_cargo:   { urban: 8,  suburban: 10, intercity: null },
+  moto_standard:    { urban: 25, suburban: 40, intercity: 55 },
+  auto_standard:    { urban: 20, suburban: 35, intercity: 50 },
+  auto_confort:     { urban: 22, suburban: 38, intercity: 55 },
+  mensajeria:       { urban: 15, suburban: 25, intercity: 40 },
+};
+
+/** Distance thresholds for speed tier blending */
+const URBAN_THRESHOLD_M = 8_000;      // first 0-8 km at urban speed
+const SUBURBAN_THRESHOLD_M = 35_000;  // next 8-35 km at suburban speed
+const TRAFFIC_DELAY_FACTOR = 1.10;    // 10% buffer for stops, lights, congestion
+
+/**
+ * Calculate trip duration in seconds using tiered speed profiles.
+ * Uses the REAL road distance from the routing API and splits it across
+ * urban/suburban/intercity speed tiers for accurate estimates.
+ *
+ * Example (100 km, moto_standard):
+ *   - First 8 km at 25 km/h (urban) = 1152s
+ *   - Next 27 km at 40 km/h (suburban) = 2430s
+ *   - Last 65 km at 55 km/h (intercity) = 4255s
+ *   - Total: 7837s × 1.10 delay = 8621s (~144 min)
+ */
+export function calculateTripDuration(
+  distanceM: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  if (distanceM <= 0) return 0;
+
+  const profile = SPEED_PROFILES[serviceType] ?? SPEED_PROFILES.triciclo_basico;
+  const urbanSpeedMs = (profile.urban * 1000) / 3600;
+  const suburbanSpeedMs = (profile.suburban * 1000) / 3600;
+  const intercitySpeed = profile.intercity ?? profile.suburban;
+  const intercitySpeedMs = (intercitySpeed * 1000) / 3600;
+
+  let totalSeconds = 0;
+  let remaining = distanceM;
+
+  // Tier 1: Urban (first 8 km)
+  const urbanDist = Math.min(remaining, URBAN_THRESHOLD_M);
+  totalSeconds += urbanDist / urbanSpeedMs;
+  remaining -= urbanDist;
+
+  // Tier 2: Suburban (8-35 km)
+  if (remaining > 0) {
+    const suburbanDist = Math.min(remaining, SUBURBAN_THRESHOLD_M - URBAN_THRESHOLD_M);
+    totalSeconds += suburbanDist / suburbanSpeedMs;
+    remaining -= suburbanDist;
+  }
+
+  // Tier 3: Intercity (35 km+)
+  if (remaining > 0) {
+    totalSeconds += remaining / intercitySpeedMs;
+  }
+
+  return Math.round(totalSeconds * TRAFFIC_DELAY_FACTOR);
+}
+
+/** Assumed average speed (km/h) of Mapbox/OSRM driving profile in urban Havana */
+const MAPBOX_URBAN_AVG_KMH = 25;
+
+/**
+ * Adjust a raw car-based ETA (from Mapbox Matrix API) for a specific vehicle type.
+ * Since pickup ETAs are short urban routes, uses the urban speed tier only.
+ */
+export function adjustETAForVehicle(
+  rawDurationS: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  if (rawDurationS <= 0) return 0;
+  const profile = SPEED_PROFILES[serviceType] ?? SPEED_PROFILES.triciclo_basico;
+  const ratio = MAPBOX_URBAN_AVG_KMH / profile.urban;
+  return Math.round(rawDurationS * ratio);
+}
+
+/**
+ * Assumed average speed (km/h) of the Mapbox/OSRM "driving" profile.
+ * Based on typical urban routing results for Havana (~30 km/h).
+ * @deprecated Use calculateTripDuration() instead for accurate tiered duration.
+ */
+const ROUTING_API_ASSUMED_SPEED_KMH = 30;
+
+/**
+ * Adjust a route duration returned by a car-based routing API
+ * to account for the actual average speed of a given vehicle type.
+ * @deprecated Use calculateTripDuration(distanceM, serviceType) instead.
+ */
+export function adjustRouteDuration(
+  routeDurationS: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  const vehicleSpeedKmh = AVG_SPEEDS[serviceType] ?? 10;
+  const ratio = ROUTING_API_ASSUMED_SPEED_KMH / vehicleSpeedKmh;
+  return Math.round(routeDurationS * ratio);
 }
 
 /**
@@ -405,7 +597,7 @@ const ROUTE_CACHE_MAX = 30;
 
 function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
   // ~50m precision: same intersection pair → cache hit
-  return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}_${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
+  return `${(from.lat ?? 0).toFixed(4)},${(from.lng ?? 0).toFixed(4)}_${(to.lat ?? 0).toFixed(4)},${(to.lng ?? 0).toFixed(4)}`;
 }
 
 /**
@@ -992,25 +1184,25 @@ export function parseCubanAddress(query: string): CubanParsed | null {
 
   // COMPLETE: "X entre Y y Z" or "X e/ Y y Z"
   m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), cross2: m[3]!.trim() };
   m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), cross2: m[3]!.trim() };
 
   // PARTIAL: "X entre Y y " or "X e/ Y y " (about to type cross2)
   m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
   m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
   // PARTIAL: "X entre Y" (user still typing, waiting for " y Z")
   m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
   // PARTIAL: "X entre " or "X e/ " (waiting for cross1)
   m = query.match(/^(.+?)\s+entre\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+  if (m) return { main: m[1]!.trim(), cross1: '', partial: 'waiting_cross1' };
   m = query.match(/^(.+?)\s+e\/\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+  if (m) return { main: m[1]!.trim(), cross1: '', partial: 'waiting_cross1' };
 
   return null;
 }
@@ -1110,7 +1302,7 @@ export async function enrichWithCrossStreets(
   // Resolve exact intersection coordinates from Supabase (~5ms)
   const intersection = await lookupIntersectionPoint(
     mainStreet,
-    crossStreets[0],
+    crossStreets[0] ?? '',
     crossStreets[1],
     { latitude: lat, longitude: lng },
   ).catch(() => null);
@@ -1135,12 +1327,12 @@ function wayBearingNear(
   let bestIdx = 0;
   let bestDist = Infinity;
   for (let i = 0; i < geom.length - 1; i++) {
-    const d = pointToSegmentDistanceM(lat, lng, geom[i].lat, geom[i].lon, geom[i + 1].lat, geom[i + 1].lon);
+    const d = pointToSegmentDistanceM(lat, lng, geom[i]!.lat, geom[i]!.lon, geom[i + 1]!.lat, geom[i + 1]!.lon);
     if (d < bestDist) { bestDist = d; bestIdx = i; }
   }
   const cosLat = Math.cos(lat * Math.PI / 180);
-  const dlat = (geom[bestIdx + 1].lat - geom[bestIdx].lat);
-  const dlng = (geom[bestIdx + 1].lon - geom[bestIdx].lon) * cosLat;
+  const dlat = (geom[bestIdx + 1]!.lat - geom[bestIdx]!.lat);
+  const dlng = (geom[bestIdx + 1]!.lon - geom[bestIdx]!.lon) * cosLat;
   return Math.atan2(dlng, dlat) * 180 / Math.PI;
 }
 

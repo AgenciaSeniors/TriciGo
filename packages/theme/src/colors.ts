@@ -213,7 +213,65 @@ export const driverLightColors = {
   tabActive: '#FF4D00',
 } as const;
 
+// ============================================================
+// Driver App — Dual Theme: Map Dark + Standard Light
+// Map dark: optimized for map overlay visibility
+// Standard light: for non-map screens (earnings, settings, etc.)
+// ============================================================
+
+/** Map/navigation dark theme colors — optimized for map overlay visibility */
+export const driverMapDarkColors = {
+  background: {
+    primary: '#0a0a0f',
+    secondary: '#141418',
+    tertiary: '#1c1c24',
+  },
+  text: {
+    primary: '#F1F1F3',
+    secondary: '#8A8F98',
+    tertiary: '#5A5E66',
+    inverse: '#0F172A',
+    accent: '#FF4D00',
+  },
+  border: {
+    subtle: 'rgba(255,255,255,0.08)',
+    default: 'rgba(255,255,255,0.14)',
+    strong: 'rgba(255,255,255,0.22)',
+  },
+  card: '#141418',
+  elevated: '#1c1c24',
+  sheetBackground: '#141418',
+  sheetHandle: 'rgba(255,255,255,0.2)',
+} as const;
+
+/** Standard light theme colors — for non-map screens */
+export const driverStandardLightColors = {
+  background: {
+    primary: '#F8FAFC',
+    secondary: '#FFFFFF',
+    tertiary: '#F1F5F9',
+  },
+  text: {
+    primary: '#0F172A',
+    secondary: '#64748B',
+    tertiary: '#94A3B8',
+    inverse: '#FFFFFF',
+    accent: '#FF4D00',
+  },
+  border: {
+    subtle: '#F1F5F9',
+    default: '#E2E8F0',
+    strong: '#CBD5E1',
+  },
+  card: '#FFFFFF',
+  elevated: '#F8FAFC',
+  sheetBackground: '#FFFFFF',
+  sheetHandle: '#CBD5E1',
+} as const;
+
 export type ColorToken = typeof colors;
 export type DarkColorToken = typeof darkColors;
 export type DriverDarkColorToken = typeof driverDarkColors;
 export type DriverLightColorToken = typeof driverLightColors;
+export type DriverMapDarkColorToken = typeof driverMapDarkColors;
+export type DriverStandardLightColorToken = typeof driverStandardLightColors;

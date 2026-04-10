@@ -111,18 +111,18 @@ export default function DocumentsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+            className="mr-3 w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
           >
-            <Ionicons name="arrow-back" size={20} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('profile.documents', { defaultValue: 'Documentos' })}</Text>
+          <Text variant="h3" color="primary">{t('profile.documents', { defaultValue: 'Documentos' })}</Text>
         </View>
 
         {loading ? (
@@ -131,7 +131,6 @@ export default function DocumentsScreen() {
           </View>
         ) : documents.length === 0 ? (
           <EmptyState
-            forceDark
             icon="document-text-outline"
             title={t('verification.no_documents', { defaultValue: 'No hay documentos' })}
             description={t('verification.no_documents_desc', { defaultValue: 'Aún no has cargado documentos de verificación' })}
@@ -143,9 +142,9 @@ export default function DocumentsScreen() {
               const isRejected = !doc.is_verified && !!doc.rejection_reason;
 
               return (
-                <Card forceDark key={doc.id} variant="surface" padding="md" className="mb-3">
+                <Card theme="light" key={doc.id} variant="surface" padding="md" className="mb-3">
                   <View className="flex-row items-center">
-                    <View className="w-10 h-10 rounded-xl bg-[#252540] items-center justify-center mr-3">
+                    <View className="w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
                       <Ionicons
                         name={doc.is_verified ? 'checkmark-circle' : isRejected ? 'close-circle' : 'document-text'}
                         size={20}
@@ -153,7 +152,7 @@ export default function DocumentsScreen() {
                       />
                     </View>
                     <View className="flex-1">
-                      <Text variant="body" color="inverse">
+                      <Text variant="body" color="primary">
                         {DOC_TYPE_KEY[doc.document_type] ? t(DOC_TYPE_KEY[doc.document_type]!) : doc.document_type}
                       </Text>
                       <Text variant="caption" color="secondary" className="mt-0.5">
@@ -181,7 +180,6 @@ export default function DocumentsScreen() {
                       title={t('verification.reupload')}
                       variant="outline"
                       size="sm"
-                      forceDark
                       className="mt-3"
                       onPress={() => handleReupload(doc.document_type)}
                       loading={reuploading === doc.document_type}
@@ -189,12 +187,12 @@ export default function DocumentsScreen() {
                   )}
 
                   {doc.face_match_score != null && (
-                    <View className="flex-row items-center mt-3 bg-[#252540] rounded-lg px-3 py-2">
+                    <View className="flex-row items-center mt-3 bg-[#F1F5F9] rounded-lg px-3 py-2">
                       <Ionicons name="scan-outline" size={14} color={colors.neutral[400]} />
                       <Text variant="caption" color="secondary" className="ml-2 flex-1">
                         Face match
                       </Text>
-                      <View className="flex-1 h-1.5 bg-[#0d0d1a] rounded-full mx-2">
+                      <View className="flex-1 h-1.5 bg-[#E2E8F0] rounded-full mx-2">
                         <View
                           className="h-1.5 rounded-full"
                           style={{
@@ -220,12 +218,12 @@ export default function DocumentsScreen() {
                 {selfieChecks.map((check) => {
                   const badgeProps = getSelfieStatusProps(check);
                   return (
-                    <Card forceDark key={check.id} variant="surface" padding="sm" className="mb-2">
+                    <Card theme="light" key={check.id} variant="surface" padding="sm" className="mb-2">
                       <View className="flex-row items-center">
-                        <View className="w-8 h-8 rounded-lg bg-[#252540] items-center justify-center mr-3">
+                        <View className="w-8 h-8 rounded-lg bg-[#F1F5F9] items-center justify-center mr-3">
                           <Ionicons name="camera-outline" size={16} color={colors.neutral[400]} />
                         </View>
-                        <Text variant="caption" color="inverse" className="flex-1">
+                        <Text variant="caption" color="primary" className="flex-1">
                           {new Date(check.requested_at).toLocaleDateString('es-CU', {
                             day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                           })}

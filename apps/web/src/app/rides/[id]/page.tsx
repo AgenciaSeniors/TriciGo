@@ -99,7 +99,19 @@ export default function RideDetailPage() {
       </div>
     );
   }
-  if (!userId) { router.replace('/login'); return null; }
+  if (!userId) {
+    router.replace('/login');
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1rem' }}>

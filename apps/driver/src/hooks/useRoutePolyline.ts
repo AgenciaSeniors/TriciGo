@@ -14,7 +14,7 @@ export function useRoutePolyline(
   const cacheKeyRef = useRef<string>('');
 
   useEffect(() => {
-    if (!pickup || !dropoff) {
+    if (!pickup || !dropoff || pickup.latitude == null || pickup.longitude == null || dropoff.latitude == null || dropoff.longitude == null) {
       setCoordinates(null);
       cacheKeyRef.current = '';
       return;

@@ -19,7 +19,8 @@ const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
   accepted: 'driver_en_route',
   driver_en_route: 'arrived_at_pickup',
   arrived_at_pickup: 'in_progress',
-  in_progress: 'completed',
+  in_progress: 'arrived_at_destination',
+  arrived_at_destination: 'completed',
 };
 
 /**
@@ -148,9 +149,20 @@ export function useIncomingRequests(isOnline: boolean) {
   const { addRequest, removeRequest, removeStaleRequests, clearRequests } = useDriverRideStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Periodically remove stale requests (>30s old)
+  // Periodically remove stale requests (>30s old) and notify driver
   useEffect(() => {
-    const cleanup = setInterval(() => removeStaleRequests(), 15_000);
+    const cleanup = setInterval(() => {
+      const before = useDriverRideStore.getState().incomingRequests.length;
+      removeStaleRequests();
+      const after = useDriverRideStore.getState().incomingRequests.length;
+      if (after < before) {
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('driver:requests.expired', { defaultValue: 'Oferta expirada' }),
+          visibilityTime: 2000,
+        });
+      }
+    }, 15_000);
     return () => clearInterval(cleanup);
   }, [removeStaleRequests]);
 
@@ -221,6 +233,8 @@ export function useDriverRideActions() {
 
   const completingRef = useRef(false);
 
+  const acceptingRef = useRef(false);
+
   const acceptRide = useCallback(async (rideId: string) => {
     if (!profile || profile.status !== 'approved') return;
     // Bug 22: Block accept while completing previous ride
@@ -228,10 +242,15 @@ export function useDriverRideActions() {
       Toast.show({ type: 'info', text1: i18next.t('driver:common.completing_ride', { defaultValue: 'Completando viaje anterior...' }) });
       return;
     }
+    // BUG-005 fix: Prevent double-tap race condition
+    if (acceptingRef.current) return;
+    acceptingRef.current = true;
 
     try {
-      // Fast-path broadcast: notify client immediately so they can
-      // start the accept animation before the DB RPC completes.
+      // 1. RPC call FIRST — database determines who wins the race
+      const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
+
+      // 2. Only broadcast AFTER DB confirms success (BUG-005 fix)
       const user = useAuthStore.getState().user;
       const loc = useLocationStore.getState();
       if (user && loc.latitude && loc.longitude) {
@@ -250,8 +269,6 @@ export function useDriverRideActions() {
         };
         presenceService.broadcastDriverAccepted(rideId, broadcastData);
       }
-
-      const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
       setActiveTrip(ride);
       removeRequest(rideId);
       triggerHaptic('success');
@@ -271,9 +288,21 @@ export function useDriverRideActions() {
           useDriverRideStore.getState().updateActiveTrip(updated);
         });
       }
-    } catch {
-      Toast.show({ type: 'error', text1: i18next.t('driver:common.ride_already_accepted') });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const errorMessages: Record<string, string> = {
+        ride_already_taken: i18next.t('driver:common.ride_already_accepted'),
+        ride_not_found: i18next.t('driver:common.ride_not_found', { defaultValue: 'Viaje no encontrado' }),
+        driver_not_online: i18next.t('driver:common.driver_not_online', { defaultValue: 'Debes estar en línea para aceptar viajes' }),
+        driver_stale_heartbeat: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Conexión perdida. Verifica tu internet.' }),
+        driver_has_active_ride: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tienes un viaje activo' }),
+        driver_not_found: i18next.t('driver:common.driver_not_found_profile', { defaultValue: 'Perfil de conductor no encontrado' }),
+      };
+      const text1 = errorMessages[msg] ?? i18next.t('driver:common.ride_already_accepted');
+      Toast.show({ type: 'error', text1 });
       removeRequest(rideId);
+    } finally {
+      acceptingRef.current = false;
     }
   }, [profile, setActiveTrip, removeRequest]);
 
@@ -287,6 +316,9 @@ export function useDriverRideActions() {
       console.warn('[DriverRide] No valid next status for:', activeTrip.status);
       return;
     }
+
+    // Immediate visual feedback — loading spinner on button
+    useDriverRideStore.getState().setIsAdvancing(true);
 
     try {
       if (nextStatus === 'completed') {
@@ -312,9 +344,11 @@ export function useDriverRideActions() {
           // Fall back to estimated distance
         }
 
-        // Warn if GPS trail is suspiciously short (possible fraud or GPS issue)
+        // Warn if GPS trail is suspiciously sparse per-km (possible fraud or GPS issue)
         const estimatedM = activeTrip.estimated_distance_m ?? 0;
-        if (gpsPointCount < 10 && estimatedM > 0 && actualDistanceM < estimatedM * 0.5) {
+        const distanceKm = actualDistanceM / 1000;
+        const pointsPerKm = distanceKm > 0 ? gpsPointCount / distanceKm : 0;
+        if (pointsPerKm < 3 && estimatedM > 0 && actualDistanceM < estimatedM * 0.5) {
           console.warn(`[DriverRide] Low GPS quality: ${gpsPointCount} points, actual=${actualDistanceM}m vs estimated=${estimatedM}m`);
           Toast.show({
             type: 'info',
@@ -366,10 +400,17 @@ export function useDriverRideActions() {
           status: nextStatus,
         });
       }
-    } catch (err) {
-      Toast.show({ type: 'error', text1: i18next.t('driver:trip.status_update_failed') });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error('[DriverRide] advanceStatus failed', { error: errMsg, nextStatus });
+      Toast.show({
+        type: 'error',
+        text1: i18next.t('driver:trip.status_update_failed'),
+        text2: errMsg,
+      });
     } finally {
       completingRef.current = false;
+      useDriverRideStore.getState().setIsAdvancing(false);
     }
   }, [profile]);
 
@@ -395,5 +436,7 @@ export function useDriverRideActions() {
     useDriverRideStore.getState().setActiveTrip(null);
   }, []);
 
-  return { acceptRide, advanceStatus, cancelTrip, clearCompletedTrip };
+  const isAdvancing = useDriverRideStore((s) => s.isAdvancing);
+
+  return { acceptRide, advanceStatus, cancelTrip, clearCompletedTrip, isAdvancing };
 }

@@ -209,29 +209,29 @@ export default function EditVehicleScreen() {
   };
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
         <View className="flex-row items-center mb-6">
           <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={24} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">
+          <Text variant="h3" color="primary">
             {t('profile.edit_vehicle_title', { defaultValue: 'Editar vehículo' })}
           </Text>
         </View>
 
         {loading ? (
           <View className="items-center py-20">
-            <Text variant="body" color="inverse" className="opacity-50">...</Text>
+            <Text variant="body" color="primary" className="opacity-50">...</Text>
           </View>
         ) : (
           <>
             {/* ── Vehicle Type Selector ── */}
-            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="car-sport" size={20} color={colors.brand.orange} />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.vehicle_type', { defaultValue: 'Tipo de vehículo' })}
                 </Text>
               </View>
@@ -245,9 +245,9 @@ export default function EditVehicleScreen() {
                       style={{
                         width: '30%',
                         borderWidth: 2,
-                        borderColor: isSelected ? config.accent : '#252540',
+                        borderColor: isSelected ? config.accent : '#E2E8F0',
                         borderRadius: 12,
-                        backgroundColor: isSelected ? `${config.accent}15` : '#1a1a2e',
+                        backgroundColor: isSelected ? `${config.accent}15` : '#F8FAFC',
                         padding: 12,
                         alignItems: 'center',
                       }}
@@ -259,7 +259,7 @@ export default function EditVehicleScreen() {
                       />
                       <Text
                         variant="caption"
-                        style={{ color: isSelected ? config.accent : '#FFFFFF', fontWeight: '700' }}
+                        style={{ color: isSelected ? config.accent : '#0F172A', fontWeight: '700' }}
                       >
                         {config.label}
                       </Text>
@@ -278,10 +278,10 @@ export default function EditVehicleScreen() {
             </Card>
 
             {/* ── Vehicle Details ── */}
-            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="information-circle" size={20} color="#3B82F6" />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.step_vehicle', { defaultValue: 'Detalles del vehículo' })}
                 </Text>
               </View>
@@ -290,7 +290,7 @@ export default function EditVehicleScreen() {
                 value={make}
                 onChangeText={setMake}
                 placeholder="Custom"
-                variant="dark"
+                variant="light"
               />
               {errors.make ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.make}</Text> : null}
 
@@ -299,7 +299,7 @@ export default function EditVehicleScreen() {
                 value={model}
                 onChangeText={setModel}
                 placeholder="Triciclo Eléctrico"
-                variant="dark"
+                variant="light"
               />
               {errors.model ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.model}</Text> : null}
 
@@ -311,7 +311,7 @@ export default function EditVehicleScreen() {
                     onChangeText={setYear}
                     keyboardType="number-pad"
                     placeholder="2024"
-                    variant="dark"
+                    variant="light"
                   />
                   {errors.year ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.year}</Text> : null}
                 </View>
@@ -321,7 +321,7 @@ export default function EditVehicleScreen() {
                     value={color}
                     onChangeText={setColor}
                     placeholder="Azul"
-                    variant="dark"
+                    variant="light"
                   />
                   {errors.color ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.color}</Text> : null}
                 </View>
@@ -333,7 +333,7 @@ export default function EditVehicleScreen() {
                 onChangeText={setPlateNumber}
                 autoCapitalize="characters"
                 placeholder="P123456"
-                variant="dark"
+                variant="light"
               />
               {errors.plate ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.plate}</Text> : null}
 
@@ -344,20 +344,20 @@ export default function EditVehicleScreen() {
                 keyboardType="number-pad"
                 placeholder="4"
                 editable={vehicleType !== 'moto'}
-                variant="dark"
+                variant="light"
               />
               {errors.capacity ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.capacity}</Text> : null}
             </Card>
 
             {/* ── Verification Photos ── */}
-            <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
               <View className="flex-row items-center mb-2">
                 <Ionicons name="camera-outline" size={20} color={colors.brand.orange} />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('profile.verification_photos', { defaultValue: 'Fotos de verificación' })}
                 </Text>
               </View>
-              <Text variant="caption" color="inverse" className="opacity-40 mb-4">
+              <Text variant="caption" color="primary" className="opacity-40 mb-4">
                 {t('profile.verification_photos_desc', { defaultValue: 'Sube las fotos requeridas para verificar el cambio' })}
               </Text>
 
@@ -365,7 +365,7 @@ export default function EditVehicleScreen() {
                 <Pressable
                   key={photo.type}
                   onPress={() => pickPhoto(index)}
-                  className="flex-row items-center p-3 rounded-xl bg-neutral-700 mb-3"
+                  className="flex-row items-center p-3 rounded-xl bg-[#F1F5F9] mb-3"
                 >
                   {photo.uri ? (
                     <Image
@@ -374,15 +374,15 @@ export default function EditVehicleScreen() {
                       resizeMode="cover"
                     />
                   ) : (
-                    <View className="w-12 h-12 rounded-lg bg-neutral-600 items-center justify-center mr-3">
+                    <View className="w-12 h-12 rounded-lg bg-[#E2E8F0] items-center justify-center mr-3">
                       <Ionicons name={photo.icon} size={20} color="#A3A3A3" />
                     </View>
                   )}
                   <View className="flex-1">
-                    <Text variant="body" color="inverse">
+                    <Text variant="body" color="primary">
                       {t(photo.labelKey, { defaultValue: photo.defaultLabel })}
                     </Text>
-                    <Text variant="caption" color="inverse" className="opacity-50">
+                    <Text variant="caption" color="primary" className="opacity-50">
                       {photo.uploading
                         ? '...'
                         : photo.uploaded

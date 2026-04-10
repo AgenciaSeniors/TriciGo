@@ -1,3 +1,7 @@
+// Standard error pattern for admin pages:
+// 1. const [error, setError] = useState<string | null>(null);
+// 2. In catch blocks: setError(err.message);
+// 3. Render: {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -101,6 +105,7 @@ export default function DashboardPage() {
       .subscribe();
 
     return () => {
+      channel.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [fetchDashboard]);

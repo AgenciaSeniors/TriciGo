@@ -62,10 +62,18 @@ module.exports = {
         surface: {
           card: '#1a1a2e',
           elevated: '#252540',
+          light: '#FFFFFF',
+          lightCard: '#F8FAFC',
+          lightElevated: '#F1F5F9',
+        },
+        background: {
+          mapDark: '#0a0a0f',
+          lightPrimary: '#F8FAFC',
+          lightSecondary: '#FFFFFF',
         },
       },
       fontFamily: {
-        sans: ['var(--font-montserrat)', 'Montserrat', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'Inter', 'Montserrat', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {
@@ -74,6 +82,11 @@ module.exports = {
         lg: '12px',
         xl: '16px',
         '2xl': '24px',
+      },
+      screens: {
+        tablet: '600px',
+        desktop: '1024px',
+        wide: '1440px',
       },
     },
   },

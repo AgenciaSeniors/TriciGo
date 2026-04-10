@@ -67,7 +67,7 @@ export default function LoginScreen() {
         >
           {/* Hero section — deep dark premium gradient */}
           <LinearGradient
-            colors={['#0d0d1a', '#1a1a2e', '#0d0d1a']}
+            colors={['#0a0a0f', '#1a1a2e', '#0a0a0f']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{ paddingTop: 60, paddingBottom: 40, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}

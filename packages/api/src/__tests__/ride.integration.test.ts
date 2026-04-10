@@ -77,6 +77,9 @@ vi.mock('@tricigo/utils', () => ({
   isLocationInCuba: vi.fn().mockReturnValue(true),
   fetchRoute: vi.fn().mockResolvedValue({ distance_m: 3900, duration_s: 600 }),
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  DEFAULT_EXCHANGE_RATE: 300,
+  calculateTripDuration: vi.fn().mockReturnValue(600),
+  cupToTrc: vi.fn().mockImplementation((cup: number) => Math.round(cup / 300)),
 }));
 
 // Mock sibling services

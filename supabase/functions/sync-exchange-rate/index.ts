@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
     // 3. Check for large rate swings vs previous rate
     const { data: prevRate } = await supabase
       .from('exchange_rates')
-      .select('usd_cup_rate')
+      .select('id, usd_cup_rate')
       .eq('is_current', true)
       .single();
 
@@ -243,31 +243,34 @@ Deno.serve(async (req) => {
     });
 
     // Fallback: if RPC doesn't exist yet, use sequential operations
+    // INSERT new rate first so there is always at least one active rate,
+    // THEN deactivate the old one to avoid a window with no current rate.
     if (insertError?.message?.includes('function') && insertError?.message?.includes('does not exist')) {
       console.warn('upsert_exchange_rate RPC not found, using sequential fallback');
-      await supabase
-        .from('exchange_rates')
-        .update({ is_current: false })
-        .eq('is_current', true);
 
-      const { error: fallbackError } = await supabase
+      // Step 1: Insert new rate as current (briefly two rates are current)
+      const { data: newRate, error: fallbackError } = await supabase
         .from('exchange_rates')
         .insert({
           source,
           usd_cup_rate: usdCupRate,
           fetched_at: new Date().toISOString(),
           is_current: true,
-        });
+        })
+        .select('id')
+        .single();
 
       if (fallbackError) {
-        // Re-set last rate as current to avoid having no current rate
-        if (prevRate) {
-          await supabase
-            .from('exchange_rates')
-            .update({ is_current: true })
-            .eq('id', prevRate.id);
-        }
         throw fallbackError;
+      }
+
+      // Step 2: Deactivate all old rates except the one we just inserted
+      if (newRate?.id) {
+        await supabase
+          .from('exchange_rates')
+          .update({ is_current: false })
+          .eq('is_current', true)
+          .neq('id', newRate.id);
       }
     } else if (insertError) {
       // RPC exists but failed

@@ -94,7 +94,7 @@ export function ProximityBanner({ type, driverName, etaMinutes, onDismiss }: Pro
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body} numberOfLines={1}>{body}</Text>
         </Animated.View>
-        <Text style={styles.etaBadge}>~{etaMinutes} min</Text>
+        <Text style={styles.etaBadge}>{etaMinutes === 0 ? '< 1 min' : `~${etaMinutes} min`}</Text>
       </Animated.View>
     </Pressable>
   );

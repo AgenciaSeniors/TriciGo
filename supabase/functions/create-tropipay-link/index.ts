@@ -71,10 +71,16 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-083: Reject oversized payloads (1 MB limit)
+  const contentLength = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (contentLength > 1_048_576) {
+    return new Response(JSON.stringify({ error: 'Payload too large' }), { status: 413 });
+  }
+
   try {
     // Rate limit: 5 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`create-tropipay-link:${clientIP}`, 5, 60 * 1000);
+    const rl = await rateLimit(`create-tropipay-link:${clientIP}`, 5, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -85,9 +91,9 @@ Deno.serve(async (req) => {
     const body: CreateLinkRequest = await req.json();
     const { user_id, amount_cup, corporate_account_id } = body;
 
-    if (!user_id || !amount_cup || amount_cup <= 0) {
+    if (!user_id || !Number.isFinite(amount_cup) || amount_cup <= 0 || amount_cup > 10_000_000) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'invalid_params', detail: 'user_id and amount_cup > 0 required' }),
+        JSON.stringify({ ok: false, error: 'invalid_params', detail: 'user_id required and amount_cup must be a finite number between 1 and 10,000,000' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -193,6 +199,19 @@ Deno.serve(async (req) => {
     try {
       accessToken = await getTropiPayToken(baseUrl, clientId, clientSecret);
     } catch (err) {
+      // BUG-092: Structured logging for failed payment intent (auth phase)
+      console.error(JSON.stringify({
+        event: 'payment_intent_failed',
+        phase: 'tropipay_auth',
+        intent_id: intent.id,
+        reference,
+        user_id,
+        amount_cup,
+        amount_usd: amountUsd,
+        error: String(err),
+        timestamp: new Date().toISOString(),
+      }));
+
       // Update intent with error
       await supabase
         .from('payment_intents')
@@ -234,7 +253,18 @@ Deno.serve(async (req) => {
 
     if (!paymentCardRes.ok) {
       const errorBody = await paymentCardRes.text();
-      console.error(`TropiPay create payment card error: ${paymentCardRes.status} - ${errorBody}`);
+      // BUG-092: Structured logging for failed payment intents
+      console.error(JSON.stringify({
+        event: 'payment_intent_failed',
+        intent_id: intent.id,
+        reference,
+        user_id,
+        amount_cup,
+        amount_usd: amountUsd,
+        tropipay_status: paymentCardRes.status,
+        error: errorBody,
+        timestamp: new Date().toISOString(),
+      }));
 
       // Update intent with error
       await supabase

@@ -314,7 +314,7 @@ export default function RidesPage() {
       {/* Pagination */}
       <div className="flex items-center justify-between mt-4">
         <button
-          onClick={() => setPage((p) => p - 1)}
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={!canGoPrev}
           aria-label={t('common.previous')}
           className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"

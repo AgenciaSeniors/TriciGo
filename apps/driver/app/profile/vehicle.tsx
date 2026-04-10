@@ -6,7 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -56,7 +56,7 @@ export default function VehicleScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchVehicle(); }} />;
 
   return (
-    <Screen scroll bg="dark" padded>
+    <Screen scroll bg="lightPrimary" padded>
       <View className="pt-4">
         <View className="flex-row items-center mb-6">
           <Pressable
@@ -65,11 +65,11 @@ export default function VehicleScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
             className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: driverDarkColors.hover }}
+            style={{ backgroundColor: '#F1F5F9' }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('profile.vehicle_info')}</Text>
+          <Text variant="h3" color="primary">{t('profile.vehicle_info')}</Text>
         </View>
 
         {loading ? (
@@ -79,16 +79,16 @@ export default function VehicleScreen() {
             No hay vehículo registrado
           </Text>
         ) : (
-          <Card forceDark variant="filled" padding="md" className="bg-neutral-800">
+          <Card theme="light" variant="filled" padding="md" className="bg-white">
             {infoRows.map((row) => (
               <View
                 key={row.label}
-                className="flex-row justify-between py-3 border-b border-neutral-700"
+                className="flex-row justify-between py-3 border-b border-[#E2E8F0]"
               >
                 <Text variant="body" color="secondary">
                   {row.label}
                 </Text>
-                <Text variant="body" color="inverse" className="font-medium">
+                <Text variant="body" color="primary" className="font-medium">
                   {row.value}
                 </Text>
               </View>

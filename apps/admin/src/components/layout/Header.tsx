@@ -37,7 +37,7 @@ export function Header() {
     router.refresh();
   };
 
-  const initial = email.charAt(0).toUpperCase();
+  const initial = (email || 'A').charAt(0).toUpperCase();
 
   return (
     <header aria-label="Admin header" className="h-16 bg-white dark:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-700 flex items-center justify-between px-4 md:px-6">
@@ -46,7 +46,7 @@ export function Header() {
         <button
           onClick={toggle}
           aria-label={t('sidebar.open_menu', { defaultValue: 'Abrir menú' })}
-          className="p-2 text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white md:hidden"
+          className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white md:hidden"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -62,7 +62,7 @@ export function Header() {
         {/* Dark mode toggle */}
         <button
           onClick={toggleDark}
-          className="p-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+          className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
           title={isDark ? 'Modo claro' : 'Modo oscuro'}
           aria-label={isDark ? t('header.light_mode', { defaultValue: 'Modo claro' }) : t('header.dark_mode', { defaultValue: 'Modo oscuro' })}
         >
@@ -70,7 +70,7 @@ export function Header() {
         </button>
 
         {/* Notifications */}
-        <button className="relative p-2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors" aria-label={t('sidebar.notifications')}>
+        <button className="relative p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors" aria-label={t('sidebar.notifications')}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
@@ -88,7 +88,7 @@ export function Header() {
           </span>
           <button
             onClick={handleLogout}
-            className="ml-2 p-1.5 text-neutral-400 hover:text-red-500 transition-colors"
+            className="ml-2 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-neutral-400 hover:text-red-500 transition-colors"
             title={t('sidebar.logout', { defaultValue: 'Cerrar sesión' })}
             aria-label={t('sidebar.logout', { defaultValue: 'Cerrar sesión' })}
           >

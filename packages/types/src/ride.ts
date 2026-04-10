@@ -7,6 +7,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PricingSnapshotType,
+  RideMode,
   RideStatus,
   ServiceTypeSlug,
   UserRole,
@@ -91,6 +92,7 @@ export interface Ride {
   accepted_at: string | null;
   driver_arrived_at: string | null;
   pickup_at: string | null;
+  arrived_at_destination_at: string | null;
   completed_at: string | null;
   canceled_at: string | null;
   canceled_by: string | null;
@@ -157,7 +159,7 @@ export interface Ride {
   wait_time_charge_cup: number;
 
   // Ride mode
-  ride_mode: string;
+  ride_mode: RideMode;
 }
 
 export interface Tip {
@@ -329,4 +331,54 @@ export interface RideWithDriver extends Ride {
   vehicle_photo_url: string | null;
   /** Vehicle manufacturing year */
   vehicle_year: number | null;
+  /** Vehicle type slug (triciclo, moto, auto, confort) */
+  vehicle_type: string | null;
+}
+
+/**
+ * Privacy-safe subset of ride data exposed via public share token.
+ * Does NOT include: driver phone, exact addresses, fare amounts,
+ * payment details, promo codes, or customer identifiers.
+ */
+export interface SharedRideView {
+  id: string;
+  status: RideStatus;
+  service_type: ServiceTypeSlug;
+
+  // Coordinates only (NOT full addresses)
+  pickup_location: GeoPoint;
+  dropoff_location: GeoPoint;
+
+  // Timing
+  estimated_duration_s: number;
+  accepted_at: string | null;
+  pickup_at: string | null;
+  arrived_at_destination_at: string | null;
+  completed_at: string | null;
+  canceled_at: string | null;
+
+  // Driver (safe fields only)
+  driver_first_name: string | null;
+  driver_avatar_url: string | null;
+  driver_rating: number | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_color: string | null;
+  vehicle_plate: string | null;
+  vehicle_photo_url: string | null;
+  vehicle_type: string | null;
+}
+
+/** Trip progress state for Uber-style progress bar */
+export interface TripProgress {
+  /** Percentage of trip completed (0-100) */
+  progressPercent: number;
+  /** Distance remaining in meters */
+  distanceRemainingM: number;
+  /** Total trip distance in meters */
+  totalDistanceM: number;
+  /** ETA in minutes */
+  etaMinutes: number | null;
+  /** Formatted arrival time (e.g., "3:45pm") */
+  arrivalTime: string | null;
 }

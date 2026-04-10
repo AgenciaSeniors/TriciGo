@@ -86,10 +86,10 @@ export default function DriverReviewsScreen() {
   }, [hasMore, loading, page, fetchReviews]);
 
   const renderReview = ({ item }: { item: Review }) => (
-    <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
+    <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
       <View className="flex-row items-center justify-between mb-1">
         <StarRow rating={item.rating} />
-        <Text variant="caption" color="inverse" className="opacity-50">
+        <Text variant="caption" color="primary" className="opacity-50">
           {new Date(item.created_at).toLocaleDateString('es-CU', {
             day: 'numeric',
             month: 'short',
@@ -98,15 +98,15 @@ export default function DriverReviewsScreen() {
         </Text>
       </View>
       {item.comment && (
-        <Text variant="bodySmall" color="inverse" className="mt-1 opacity-80">
+        <Text variant="bodySmall" color="primary" className="mt-1 opacity-80">
           "{item.comment}"
         </Text>
       )}
       {item.tags && item.tags.length > 0 && (
         <View className="flex-row flex-wrap gap-1 mt-2">
           {item.tags.map((tag) => (
-            <View key={tag} className="px-2 py-0.5 rounded-full bg-neutral-700">
-              <Text variant="caption" color="inverse" className="text-[10px] opacity-70">
+            <View key={tag} className="px-2 py-0.5 rounded-full bg-[#F1F5F9]">
+              <Text variant="caption" color="primary" className="text-[10px] opacity-70">
                 {t(`review.tag_${tag}`, { defaultValue: tag.replace(/_/g, ' ') })}
               </Text>
             </View>
@@ -119,24 +119,23 @@ export default function DriverReviewsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchReviews(0, true); }} />;
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content">
+    <Screen bg="lightPrimary" statusBarStyle="dark-content">
       <View className="pt-4 px-5 flex-1">
         <ScreenHeader
           title={t('reviews.title', { defaultValue: 'Mis Reseñas' })}
           onBack={() => router.back()}
-          light
         />
 
         {/* Summary header */}
         {summary && (
-          <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4 mt-2">
+          <Card theme="light" variant="filled" padding="lg" className="bg-white mb-4 mt-2">
             <View className="flex-row items-center justify-between">
               <View className="items-center">
-                <Text variant="h1" color="inverse" className="font-bold">
+                <Text variant="h1" color="primary" className="font-bold">
                   {summary.average_rating.toFixed(1)}
                 </Text>
                 <StarRow rating={Math.round(summary.average_rating)} />
-                <Text variant="caption" color="inverse" className="opacity-50 mt-1">
+                <Text variant="caption" color="primary" className="opacity-50 mt-1">
                   {t('reviews.total_count', { defaultValue: '{{count}} reseñas', count: summary.total_reviews })}
                 </Text>
               </View>
@@ -148,8 +147,8 @@ export default function DriverReviewsScreen() {
                   const pct = summary.total_reviews > 0 ? (count / summary.total_reviews) * 100 : 0;
                   return (
                     <View key={star} className="flex-row items-center mb-1">
-                      <Text variant="caption" color="inverse" className="w-3 opacity-50">{star}</Text>
-                      <View className="flex-1 h-2 bg-neutral-700 rounded-full mx-2 overflow-hidden">
+                      <Text variant="caption" color="primary" className="w-3 opacity-50">{star}</Text>
+                      <View className="flex-1 h-2 bg-[#E2E8F0] rounded-full mx-2 overflow-hidden">
                         <View
                           className="h-full rounded-full"
                           style={{
@@ -158,7 +157,7 @@ export default function DriverReviewsScreen() {
                           }}
                         />
                       </View>
-                      <Text variant="caption" color="inverse" className="w-6 text-right opacity-50">
+                      <Text variant="caption" color="primary" className="w-6 text-right opacity-50">
                         {count}
                       </Text>
                     </View>
@@ -175,14 +174,14 @@ export default function DriverReviewsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderReview}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />
           }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             !loading ? (
               <View className="items-center py-12">
-                <Text variant="body" color="inverse" className="opacity-30">
+                <Text variant="body" color="primary" className="opacity-30">
                   {t('reviews.no_reviews', { defaultValue: 'Aún no tienes reseñas' })}
                 </Text>
               </View>

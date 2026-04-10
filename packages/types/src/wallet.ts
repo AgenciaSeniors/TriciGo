@@ -85,7 +85,8 @@ export interface WalletRedemption {
   id: string;
   driver_id: string;
   amount: number;
-  status: 'pending' | 'approved' | 'rejected';
+  // BUG-043 fix: match DB enum (redemption_status)
+  status: 'requested' | 'approved' | 'processed' | 'rejected';
   processed_by: string | null;
   processed_at: string | null;
   rejection_reason: string | null;

@@ -8,7 +8,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { Skeleton } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -57,13 +57,13 @@ function SkeletonNotification() {
   return (
     <View className="flex-row px-4 py-3.5 items-center">
       <View className="mr-3">
-        <Skeleton width={40} height={40} borderRadius={20} style={{ backgroundColor: colors.neutral[800] }} />
+        <Skeleton width={40} height={40} borderRadius={20} style={{ backgroundColor: colors.neutral[200] }} />
       </View>
       <View className="flex-1">
-        <Skeleton width="70%" height={14} className="mb-2" style={{ backgroundColor: colors.neutral[800] }} />
-        <Skeleton width="90%" height={11} style={{ backgroundColor: colors.neutral[800] }} />
+        <Skeleton width="70%" height={14} className="mb-2" style={{ backgroundColor: colors.neutral[200] }} />
+        <Skeleton width="90%" height={11} style={{ backgroundColor: colors.neutral[200] }} />
       </View>
-      <Skeleton width={24} height={10} style={{ backgroundColor: colors.neutral[800] }} />
+      <Skeleton width={24} height={10} style={{ backgroundColor: colors.neutral[200] }} />
     </View>
   );
 }
@@ -190,9 +190,9 @@ export default function NotificationsScreen() {
         onPress={() => handleTap(notif)}
         className="flex-row mx-3 px-3 py-3.5 rounded-xl mb-1"
         style={{
-          backgroundColor: !notif.read ? `${driverDarkColors.card}` : 'transparent',
+          backgroundColor: !notif.read ? '#FFFFFF' : 'transparent',
           borderWidth: !notif.read ? 1 : 0,
-          borderColor: !notif.read ? driverDarkColors.border.default : 'transparent',
+          borderColor: !notif.read ? '#E2E8F0' : 'transparent',
         }}
         accessibilityRole="button"
         accessibilityLabel={`${notif.title}: ${notif.body}`}
@@ -206,7 +206,7 @@ export default function NotificationsScreen() {
         <View className="flex-1 mr-2">
           <Text
             variant="bodySmall"
-            style={{ color: !notif.read ? '#f5f5f5' : colors.neutral[400], fontWeight: !notif.read ? '600' : '400' }}
+            style={{ color: !notif.read ? colors.neutral[900] : colors.neutral[500], fontWeight: !notif.read ? '600' : '400' }}
           >
             {notif.title}
           </Text>
@@ -237,11 +237,10 @@ export default function NotificationsScreen() {
   // Skeleton loading state
   if (isLoading && notifications.length === 0) {
     return (
-      <Screen bg="dark" statusBarStyle="light-content" padded={false}>
+      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded={false}>
         <ScreenHeader
           title={t('notifications.title')}
           onBack={() => router.back()}
-          light
         />
         <View className="px-4 pt-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -253,11 +252,10 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content" padded={false}>
+    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded={false}>
       <ScreenHeader
         title={t('notifications.title')}
         onBack={() => router.back()}
-        light
         rightAction={
           unreadCount > 0 ? (
             <Pressable onPress={handleMarkAllRead} className="px-2" hitSlop={8}>
@@ -279,14 +277,14 @@ export default function NotificationsScreen() {
               onPress={() => setFilter(f)}
               className="px-4 py-2 rounded-full flex-row items-center gap-1.5"
               style={{
-                backgroundColor: isActive ? colors.brand.orange : driverDarkColors.card,
+                backgroundColor: isActive ? colors.brand.orange : '#FFFFFF',
                 borderWidth: 1,
-                borderColor: isActive ? colors.brand.orange : driverDarkColors.border.default,
+                borderColor: isActive ? colors.brand.orange : '#E2E8F0',
               }}
             >
               <Text
                 variant="caption"
-                style={{ color: isActive ? '#FFFFFF' : colors.neutral[400], fontWeight: '600' }}
+                style={{ color: isActive ? '#FFFFFF' : colors.neutral[600], fontWeight: '600' }}
               >
                 {t(`notifications.${f}`)}
               </Text>
@@ -307,7 +305,6 @@ export default function NotificationsScreen() {
 
       {notifications.length === 0 && !isLoading ? (
         <EmptyState
-          forceDark
           icon="notifications-off-outline"
           title={t('notifications.empty')}
           description={t('notifications.empty_desc')}

@@ -57,13 +57,13 @@ export default function DisputeRespondScreen() {
 
   if (submitted) {
     return (
-      <Screen bg="dark" statusBarStyle="light-content" padded>
+      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
         <View className="pt-4 flex-1 items-center justify-center px-6">
-          <View className="w-16 h-16 rounded-full bg-green-900 items-center justify-center mb-4">
-            <Text variant="h2" color="inverse">✓</Text>
+          <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mb-4">
+            <Text variant="h2" color="primary">✓</Text>
           </View>
-          <Text variant="h3" color="inverse" className="text-center mb-2">{t('dispute.responded')}</Text>
-          <Text variant="body" color="inverse" className="text-center mb-8 opacity-60">
+          <Text variant="h3" color="primary" className="text-center mb-2">{t('dispute.responded')}</Text>
+          <Text variant="body" color="primary" className="text-center mb-8 opacity-60">
             {t('dispute.responded_description')}
           </Text>
           <Button
@@ -79,26 +79,26 @@ export default function DisputeRespondScreen() {
   }
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 pb-8">
         {/* Header */}
         <Pressable onPress={() => router.back()} className="mb-4">
           <Text variant="body" color="accent">← {t('trip.back_to_home', { defaultValue: 'Volver' })}</Text>
         </Pressable>
 
-        <Text variant="h3" color="inverse" className="mb-6">{t('dispute.respond')}</Text>
+        <Text variant="h3" color="primary" className="mb-6">{t('dispute.respond')}</Text>
 
         {/* Info banner */}
-        <Card forceDark variant="filled" padding="md" className="bg-orange-900/30 mb-6">
-          <Text variant="bodySmall" color="inverse" className="opacity-80">
+        <Card theme="light" variant="filled" padding="md" className="bg-orange-50 mb-6">
+          <Text variant="bodySmall" color="primary" className="opacity-80">
             {t('dispute.incoming')}
           </Text>
         </Card>
 
         {/* Response form */}
-        <Text variant="label" color="inverse" className="mb-2">{t('dispute.your_response')}</Text>
+        <Text variant="label" color="primary" className="mb-2">{t('dispute.your_response')}</Text>
         <TextInput
-          className="border border-neutral-600 rounded-xl px-4 py-3 text-base min-h-[160px] mb-6 text-white bg-neutral-800"
+          className="border border-[#E2E8F0] rounded-xl px-4 py-3 text-base min-h-[160px] mb-6 text-neutral-900 bg-white"
           placeholder={t('dispute.respond_placeholder')}
           placeholderTextColor="#666"
           value={message}

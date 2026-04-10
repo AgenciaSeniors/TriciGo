@@ -71,8 +71,9 @@ function StoreButtons({ variant = 'dark' }: { variant?: 'dark' | 'white' }) {
       >
         <GooglePlayIcon /> Google Play
       </a>
+      {/* TODO: Replace id000000000 with real App Store ID once published */}
       <a
-        href="https://apps.apple.com/app/tricigo/id000000000"
+        href="https://apps.apple.com/app/tricigo"
         target="_blank"
         rel="noopener noreferrer"
         className={cls}

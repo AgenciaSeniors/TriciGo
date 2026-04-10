@@ -26,7 +26,7 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
         ? 'border-neutral-600'
         : 'border-neutral-200 focus:border-primary-500';
 
-    const bgColor = isDark ? 'bg-neutral-800' : 'bg-white';
+    const bgColor = isDark ? 'bg-[#141418]' : 'bg-white';
     const textColor = isDark ? 'text-white' : 'text-neutral-900';
     const labelColor = isDark ? 'text-neutral-300' : 'text-neutral-700';
     const hintColor = isDark ? 'text-neutral-400' : 'text-neutral-500';

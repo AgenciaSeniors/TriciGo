@@ -212,6 +212,12 @@ export function RideCompleteView() {
     } catch (err) {
       logger.error('Error submitting review', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
+      // BUG-069: Clear rating reminder on review submission error to avoid stale notifications
+      const reminderId = useRideStore.getState().ratingReminderId;
+      if (reminderId) {
+        Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
+        useRideStore.getState().setRatingReminderId(null);
+      }
       setSubmitting(false);
     }
   };

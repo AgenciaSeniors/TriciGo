@@ -25,7 +25,8 @@ export type SoundEvent =
   | 'ride_accepted'
   | 'driver_arrived'
   | 'trip_completed'
-  | 'new_request';
+  | 'new_request'
+  | 'destination_arrived';
 
 /** Map sound events to the asset require() call.
  *  Each app must register its own sound map via `registerSoundAssets()`. */

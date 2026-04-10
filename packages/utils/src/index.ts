@@ -27,6 +27,8 @@ export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from
 export { logger, setLogContext, clearLogContext } from './logger';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
+export { SHARE_BASE_URL, buildShareUrl } from './shareRide';
+export { MAP_STYLE_LIGHT, MAP_STYLE_NAV_NIGHT, MARKER, ROUTE, GLASS, MAP_COLORS } from './mapStyles';
 
 /**
  * Extract initials from a name (e.g. "Carlos Garcia" → "CG").

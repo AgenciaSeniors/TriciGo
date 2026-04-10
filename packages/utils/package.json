@@ -16,6 +16,7 @@
     "./geo": "./src/geo.ts",
     "./haptics": "./src/haptics.ts",
     "./historyExport": "./src/historyExport.ts",
+    "./mapStyles": "./src/mapStyles.ts",
     "./mapboxOffline": "./src/mapboxOffline.ts",
     "./offlineLabels": "./src/offlineLabels.ts",
     "./receipt-template": "./src/receipt-template.ts",

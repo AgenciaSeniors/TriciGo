@@ -143,6 +143,7 @@ export function useDriverLocationTracking(
                 longitude: pos.longitude,
                 heading: pos.heading,
                 speed: loc.coords.speed ?? null,
+                accuracy: loc.coords.accuracy ?? null,
                 timestamp: Date.now(),
                 rideId: activeRideId,
                 driverId: driverId!,

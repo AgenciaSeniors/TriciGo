@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`verify-selfie:${clientIP}`, 10, 60 * 1000);
+    const rl = await rateLimit(`verify-selfie:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: allow internal service-role calls or valid JWT ──
@@ -86,19 +86,24 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 1. Fetch the selfie check record
-    const { data: check, error: checkError } = await supabase
+    // BUG-093: Atomically claim this selfie check for processing to prevent
+    // concurrent verifications (same pattern as BUG-038 webhook fix).
+    const { data: claimed } = await supabase
       .from('selfie_checks')
-      .select('*')
+      .update({ status: 'processing' })
       .eq('id', check_id)
-      .single();
+      .eq('status', 'pending')
+      .select();
 
-    if (checkError || !check) {
+    if (!claimed?.length) {
       return new Response(
-        JSON.stringify({ error: 'Selfie check not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({ error: 'Already processing or not found' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
+    // 1. Use the claimed record
+    const check = claimed[0];
 
     // 2. Fetch the onboarding selfie for comparison
     const { data: onboardingSelfie } = await supabase

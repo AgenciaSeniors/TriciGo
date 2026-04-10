@@ -82,8 +82,8 @@ export interface FareEstimate {
   estimated_fare_cup: number;
   /** Fare in TRC whole units (same as CUP since 1:1) */
   estimated_fare_trc: number;
-  /** Fare in USD (derived from exchange rate) */
-  estimated_fare_usd: number;
+  /** Fare in USD (derived from exchange rate). Optional for Cuba-only MVP. */
+  estimated_fare_usd?: number;
   estimated_distance_m: number;
   estimated_duration_s: number;
   surge_multiplier: number;
@@ -107,10 +107,10 @@ export interface FareEstimate {
   fare_range_min_trc: number;
   /** Maximum expected fare in TRC (same as CUP) */
   fare_range_max_trc: number;
-  /** Minimum expected fare in USD */
-  fare_range_min_usd: number;
-  /** Maximum expected fare in USD */
-  fare_range_max_usd: number;
+  /** Minimum expected fare in USD. Optional for Cuba-only MVP. */
+  fare_range_min_usd?: number;
+  /** Maximum expected fare in USD. Optional for Cuba-only MVP. */
+  fare_range_max_usd?: number;
   /** Insurance premium in CUP/TRC (if insurance available) */
   insurance_premium_cup?: number;
   /** Insurance premium in TRC (same as CUP) */

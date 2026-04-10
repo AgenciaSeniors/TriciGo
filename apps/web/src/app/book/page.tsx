@@ -5,9 +5,9 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService, corporateService } from '@tricigo/api';
+import { rideService, nearbyService, customerService, corporateService, walletService } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences, CorporateAccount } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
@@ -93,7 +93,15 @@ export default function BookPage() {
 
   /* ─── Ride state ─── */
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tricigo_payment_method');
+      if (saved === 'cash' || saved === 'tricicoin') return saved;
+    }
+    return 'cash';
+  });
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [walletBalanceError, setWalletBalanceError] = useState(false);
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
   const [allEstimates, setAllEstimates] = useState<Record<string, FareEstimate | null>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
@@ -117,6 +125,8 @@ export default function BookPage() {
   const [centerAddress, setCenterAddress] = useState<string | null>(null);
   const [centerAddressLoading, setCenterAddressLoading] = useState(false);
   const centerGeoIdRef = useRef(0); // Race condition guard for reverse geocode
+  const pickupGeoIdRef = useRef(0); // Race condition guard for pickup reverse geocode
+  const dropoffGeoIdRef = useRef(0); // Race condition guard for dropoff reverse geocode
   const [flyToTarget, setFlyToTarget] = useState<{ latitude: number; longitude: number } | null>(null);
 
   /* ─── Waypoints state (W1.1) ─── */
@@ -200,12 +210,18 @@ export default function BookPage() {
           const etas = await fetchETAsToPickup(origins, dest);
 
           if (!cancelled) {
+            const VT_TO_SERVICE: Record<VehicleType, ServiceTypeSlug> = {
+              triciclo: 'triciclo_basico', moto: 'moto_standard', auto: 'auto_standard',
+            };
             const newEtas: Record<VehicleType, number | null> = { triciclo: null, moto: null, auto: null };
             let idx = 0;
             for (const vt of ['triciclo', 'moto', 'auto'] as VehicleType[]) {
               if (typeGroups[vt]) {
                 const etaResult = etas[idx];
-                newEtas[vt] = etaResult ? Math.ceil(etaResult.duration_s / 60) : null;
+                if (etaResult) {
+                  const adjustedS = adjustETAForVehicle(etaResult.duration_s, VT_TO_SERVICE[vt]);
+                  newEtas[vt] = Math.ceil(adjustedS / 60);
+                }
                 idx++;
               }
             }
@@ -231,7 +247,9 @@ export default function BookPage() {
 
   /* ─── Subscribe to real-time driver positions ─── */
   useEffect(() => {
+    let isMounted = true;
     const channel = nearbyService.subscribeToDriverPositions((update) => {
+      if (!isMounted) return;
       setNearbyVehicles((prev) =>
         prev.map((v) =>
           v.driver_profile_id === update.driver_profile_id
@@ -243,6 +261,7 @@ export default function BookPage() {
     realtimeChannelRef.current = channel;
 
     return () => {
+      isMounted = false;
       if (realtimeChannelRef.current) {
         realtimeChannelRef.current.unsubscribe();
         realtimeChannelRef.current = null;
@@ -293,6 +312,9 @@ export default function BookPage() {
 
     autoSetPickupRef.current = true;
 
+    // Fly map to user's location immediately (before reverse geocode resolves)
+    setFlyToTarget({ latitude: userLat, longitude: userLng });
+
     (async () => {
       try {
         const address = await reverseGeocode(userLat, userLng);
@@ -306,6 +328,37 @@ export default function BookPage() {
       } catch { /* ignore — user can set manually */ }
     })();
   }, [userLat, userLng, pickup]);
+
+  /* ─── Persist payment method ─── */
+  useEffect(() => {
+    localStorage.setItem('tricigo_payment_method', paymentMethod);
+  }, [paymentMethod]);
+
+  /* ─── Load wallet balance ─── */
+  useEffect(() => {
+    if (!user?.id) return;
+    walletService.getBalance(user.id).then(({ available }) => {
+      setWalletBalance(available);
+      setWalletBalanceError(false);
+    }).catch(() => {
+      // BUG-014 fix: distinguish "balance unknown" from "balance is 0"
+      setWalletBalanceError(true);
+    });
+  }, [user?.id]);
+
+  /** Format price based on current payment method */
+  function formatPrice(cupAmount: number, trcAmount?: number): string {
+    if (paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return formatCUP(cupAmount);
+  }
+
+  /** Get the fare amount based on current payment method */
+  function getFareAmount(est: FareEstimate | null): number {
+    if (!est) return 0;
+    return paymentMethod === 'tricicoin' ? (est.estimated_fare_trc ?? est.estimated_fare_cup) : est.estimated_fare_cup;
+  }
 
   /* ─── Route helper ─── */
   async function loadRoute(from: LocationPreset, to: LocationPreset) {
@@ -339,7 +392,9 @@ export default function BookPage() {
       setPickupAddress(loc.address);
     } else {
       setPickupAddress(null);
+      const geoId = ++pickupGeoIdRef.current;
       reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
+        if (geoId !== pickupGeoIdRef.current) return; // Discard stale result
         if (addr) setPickupAddress(addr);
       });
     }
@@ -359,7 +414,9 @@ export default function BookPage() {
       setDropoffAddress(loc.address);
     } else {
       setDropoffAddress(null);
+      const geoId = ++dropoffGeoIdRef.current;
       reverseGeocode(loc.latitude, loc.longitude).then((addr) => {
+        if (geoId !== dropoffGeoIdRef.current) return; // Discard stale result
         if (addr) setDropoffAddress(addr);
       });
     }
@@ -502,7 +559,11 @@ export default function BookPage() {
   /* ─── Promo code validation ─── */
   async function handleApplyPromo() {
     const code = promoCode.trim();
-    if (!code || !selectedEstimate) return;
+    if (!code) return;
+    if (!selectedEstimate) {
+      setPromoResult({ valid: false, discount: 0, error: t('booking.select_service_first', { defaultValue: 'Selecciona un servicio primero' }) });
+      return;
+    }
     setPromoValidating(true);
     setPromoResult(null);
     try {
@@ -532,13 +593,26 @@ export default function BookPage() {
   async function handleRequest() {
     if (!pickup || !dropoff || !selectedEstimate) return;
 
+    // Validate TriciCoin balance (BUG-014 fix: check for balance load failure)
+    if (paymentMethod === 'tricicoin') {
+      if (walletBalanceError) {
+        alert(t('book.wallet_balance_error', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo.' }));
+        return;
+      }
+      const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
+      if (walletBalance < requiredAmount) {
+        router.push('/wallet');
+        return;
+      }
+    }
+
     // Validate delivery fields
     if (serviceType === 'mensajeria') {
       if (!deliveryDetails.recipient_name.trim()) {
         setError('Ingresa el nombre del destinatario');
         return;
       }
-      if (!deliveryDetails.recipient_phone.trim() || !/^\+?[\d\s-]{6,}$/.test(deliveryDetails.recipient_phone.trim())) {
+      if (!deliveryDetails.recipient_phone.trim() || !/^\+?\d{1,3}[\d\s-]{5,}$/.test(deliveryDetails.recipient_phone.trim()) || (deliveryDetails.recipient_phone.replace(/[^\d]/g, '').length < 6)) {
         setError('Ingresa un numero de telefono valido para el destinatario');
         return;
       }
@@ -653,12 +727,11 @@ export default function BookPage() {
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d0d1a' }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: '#999' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
-            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+            Trici<span style={{ color: '#00C853' }}>Go</span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>{t('web.loading', { defaultValue: 'Cargando...' })}</p>
         </div>
       </div>
     );
@@ -1065,8 +1138,9 @@ export default function BookPage() {
                           <div style={{ width: 60, height: 14, borderRadius: 4, background: 'var(--border-light)', animation: 'pulse 1.5s ease-in-out infinite' }} />
                         ) : est ? (
                           <>
-                            <div style={{ fontWeight: 700, fontSize: '1rem', color: isSelected ? 'var(--primary)' : 'var(--text-primary)' }}>
-                              {formatCUP(est.estimated_fare_cup)}
+                            <div style={{ fontWeight: 700, fontSize: '1rem', color: isSelected ? 'var(--primary)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                              {paymentMethod === 'tricicoin' && <img src="/images/coins/tricoin-small.png" alt="TRC" style={{ width: 32, height: 32 }} />}
+                              {formatPrice(est.estimated_fare_cup, est.estimated_fare_trc)}
                             </div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
                               ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min viaje
@@ -1138,7 +1212,7 @@ export default function BookPage() {
                     >
                       <img src={v.icon} alt={v.label} style={{ width: 22, height: 22, objectFit: 'contain' }} />
                       {v.label}
-                      {vEst && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{formatCUP(vEst.estimated_fare_cup)}</span>}
+                      {vEst && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{formatPrice(vEst.estimated_fare_cup, vEst.estimated_fare_trc)}</span>}
                     </button>
                     );
                   })}
@@ -1295,15 +1369,17 @@ export default function BookPage() {
                   {promoResult?.valid && promoResult.discount > 0 ? (
                     <>
                       <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-tertiary)', textDecoration: 'line-through', marginRight: '0.5rem' }}>
-                        {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
+                        {formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}
                       </span>
-                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#22c55e' }}>
-                        {formatCUP(Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoResult.discount, 0))}
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#22c55e', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        {paymentMethod === 'tricicoin' && <img src="/images/coins/tricoin-small.png" alt="TRC" style={{ width: 36, height: 36 }} />}
+                        {formatPrice(Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoResult.discount, 0))}
                       </span>
                     </>
                   ) : (
-                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>
-                      {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                      {paymentMethod === 'tricicoin' && <img src="/images/coins/tricoin-small.png" alt="TRC" style={{ width: 36, height: 36 }} />}
+                      {formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}
                     </span>
                   )}
                 </div>
@@ -1318,7 +1394,7 @@ export default function BookPage() {
                   ~${((selectedEstimate?.estimated_fare_cup ?? 0) / 300).toFixed(2)} USD
                 </span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  {'\u2248'} {formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}
+                  {'\u2248'} {formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}
                 </span>
                 {(selectedEstimate?.surge_multiplier ?? 0) > 1 && (
                   <span
@@ -1338,7 +1414,7 @@ export default function BookPage() {
               {(selectedEstimate?.per_km_rate_cup ?? 0) > 0 && (
                 <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                   {t('book.per_km_rate', {
-                    rate: formatCUP(selectedEstimate?.per_km_rate_cup ?? 0),
+                    rate: formatPrice(selectedEstimate?.per_km_rate_cup ?? 0),
                   })}
                 </p>
               )}
@@ -1458,8 +1534,13 @@ export default function BookPage() {
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'tricicoin' ? 700 : 400,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.35rem',
                     }}
                   >
+                    <img src="/images/coins/tricoin-small.png" alt="" style={{ width: 32, height: 32 }} />
                     {t('book.payment_tricicoin')}
                   </button>
                 </div>
@@ -1532,7 +1613,7 @@ export default function BookPage() {
             {promoResult && (
               <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
                 {promoResult.valid
-                  ? `Descuento aplicado: -${formatCUP(promoResult.discount)}`
+                  ? `Descuento aplicado: -${formatPrice(promoResult.discount)}`
                   : promoResult.error}
               </p>
             )}
@@ -1601,7 +1682,7 @@ export default function BookPage() {
               {isRequesting
                 ? t('book.requesting')
                 : selectedEstimate
-                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatCUP(promoResult?.valid ? Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - (promoResult.discount || 0), 0) : (selectedEstimate?.estimated_fare_cup ?? 0))}`
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatPrice(promoResult?.valid ? Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - (promoResult.discount || 0), 0) : (selectedEstimate?.estimated_fare_cup ?? 0), promoResult?.valid ? undefined : selectedEstimate?.estimated_fare_trc)}`
                   : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>
@@ -1632,7 +1713,7 @@ export default function BookPage() {
             {isRequesting
               ? t('book.requesting')
               : selectedEstimate
-                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatCUP(selectedEstimate?.estimated_fare_cup ?? 0)}`
+                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}`
                 : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
             }
           </button>

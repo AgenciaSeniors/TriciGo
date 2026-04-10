@@ -298,7 +298,23 @@
     "payment_method_tropipay": "TropiPay",
     "payment_method_corporate": "Corporativo",
     "rate_reminder_title": "¿Cómo fue tu viaje?",
-    "rate_reminder_body": "Tu opinión nos ayuda a mejorar. ¡Califica al conductor!"
+    "rate_reminder_body": "Tu opinión nos ayuda a mejorar. ¡Califica al conductor!",
+    "status_arrived_at_destination": "En destino",
+    "arrived_at_destination_title": "Llegaste a tu destino",
+    "arrived_at_destination_body": "Tu conductor ha llegado al punto de destino",
+    "trip_progress_remaining": "{{distance}} km restantes",
+    "trip_progress_eta": "~{{minutes}} min",
+    "trip_progress_arrival": "Llegas ~{{time}}",
+    "pickup_arrival_title": "Tu conductor ha llegado",
+    "pickup_arrival_body": "{{name}} te espera en {{vehicle}}",
+    "view_driver_profile": "Ver perfil del conductor",
+    "driver_profile_title": "Perfil del conductor",
+    "driver_profile_member_since": "Miembro desde {{date}}",
+    "driver_profile_trips": "{{count}} viajes",
+    "driver_profile_verified": "Verificado",
+    "driver_profile_reviews": "Ultimas resenas",
+    "driver_profile_no_reviews": "Sin resenas aun",
+    "driver_profile_vehicle": "Vehiculo"
   },
 
   "dispute": {

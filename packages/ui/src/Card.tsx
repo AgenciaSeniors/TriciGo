@@ -6,6 +6,8 @@ export interface CardProps extends ViewProps {
   padding?: 'none' | 'sm' | 'md' | 'lg';
   /** Force dark background mode (dark card on dark bg) */
   forceDark?: boolean;
+  /** Theme override: 'light' forces white bg, 'dark' forces dark bg, 'auto' follows system (default) */
+  theme?: 'light' | 'dark' | 'auto';
 }
 
 const variantClasses = {
@@ -31,28 +33,37 @@ const paddingClasses = {
   lg: 'p-6',
 } as const;
 
+/** Light theme classes: white bg, subtle border, light shadow */
+const lightThemeClass = 'bg-white border border-[#E2E8F0] shadow-sm';
+
 export function Card({
   variant = 'elevated',
   padding = 'md',
   className,
   children,
   forceDark = false,
+  theme = 'auto',
   style,
   ...props
 }: CardProps & { className?: string }) {
   const colorScheme = useColorScheme();
-  const isDark = forceDark || colorScheme === 'dark';
+  const isDark = forceDark || theme === 'dark' || (theme === 'auto' && colorScheme === 'dark');
+  const isLight = theme === 'light';
+
+  const variantClass = isLight ? lightThemeClass : variantClasses[variant];
+  const forceStyle = !isLight && (forceDark || theme === 'dark') ? forceDarkStyles[variant] : undefined;
 
   return (
     <View
       accessible
       accessibilityRole="summary"
       className={`
-        ${variantClasses[variant]}
+        ${variantClass}
+        ${!isLight ? '' : 'rounded-2xl'}
         ${paddingClasses[padding]}
         ${className ?? ''}
       `}
-      style={[forceDark ? forceDarkStyles[variant] : undefined, style as ViewStyle]}
+      style={[forceStyle, style as ViewStyle]}
       {...props}
     >
       {children}

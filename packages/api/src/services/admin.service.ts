@@ -3,6 +3,11 @@
 // Admin panel operations. Uses service role where needed.
 // ============================================================
 
+/** Escape special characters for PostgreSQL ILIKE patterns */
+function escapeLikePattern(pattern: string): string {
+  return pattern.replace(/[%_\\]/g, '\\$&');
+}
+
 import type {
   AdminAction,
   AuditLog,
@@ -109,7 +114,7 @@ export const adminService = {
       query = query.eq('status', filters.status);
     }
     if (filters.search) {
-      query = query.ilike('users.full_name', `%${filters.search}%`);
+      query = query.ilike('users.full_name', `%${escapeLikePattern(filters.search)}%`);
     }
     if (filters.ratingMin !== undefined && filters.ratingMin > 0) {
       query = query.gte('rating_avg', filters.ratingMin);
@@ -153,7 +158,8 @@ export const adminService = {
         .from('driver_documents')
         .select('*')
         .eq('driver_id', driverId)
-        .order('uploaded_at', { ascending: false }),
+        .order('uploaded_at', { ascending: false })
+        .limit(100),
       supabase
         .from('driver_score_events')
         .select('*')
@@ -344,7 +350,8 @@ export const adminService = {
       query = query.eq('role', filters.role);
     }
     if (filters.search) {
-      query = query.or(`full_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+      const escaped = escapeLikePattern(filters.search);
+      query = query.or(`full_name.ilike.%${escaped}%,phone.ilike.%${escaped}%`);
     }
     if (filters.dateFrom) {
       query = query.gte('created_at', filters.dateFrom);
@@ -403,7 +410,8 @@ export const adminService = {
       query = query.lt('created_at', filters.dateTo + 'T23:59:59');
     }
     if (filters.search) {
-      query = query.or(`pickup_address.ilike.%${filters.search}%,dropoff_address.ilike.%${filters.search}%`);
+      const escaped = escapeLikePattern(filters.search);
+      query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
     }
     if (filters.cityId) {
       query = query.eq('city_id', filters.cityId);
@@ -446,7 +454,8 @@ export const adminService = {
     let query = supabase
       .from('admin_actions')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(pageSize);
 
     if (filters.dateFrom) {
       query = query.gte('created_at', filters.dateFrom);

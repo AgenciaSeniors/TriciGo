@@ -34,6 +34,7 @@ if (Platform.OS !== 'web') {
       ride_accepted: require('../assets/sounds/ride_accepted.wav'),
       driver_arrived: require('../assets/sounds/driver_arrived.wav'),
       trip_completed: require('../assets/sounds/trip_completed.wav'),
+      destination_arrived: require('../assets/sounds/trip_completed.wav'),
     });
   } catch { /* Sound registration failed — non-fatal */ }
 }
@@ -127,6 +128,7 @@ function RootNavigator() {
       <Stack.Screen name="refer" />
       <Stack.Screen name="promo" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="driver-profile" />
       <Stack.Screen name="support" />
       <Stack.Screen name="notifications" />
       <Stack.Screen name="+not-found" />

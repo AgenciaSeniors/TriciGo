@@ -143,7 +143,10 @@
     "nav_auto_started": "Navegação iniciada",
     "restart_nav": "Reiniciar navegação",
     "approaching_pickup": "Chegando ao ponto de embarque",
-    "approaching_pickup_body": "Você está a ~2 minutos do ponto de embarque"
+    "approaching_pickup_body": "Você está a ~2 minutos do ponto de embarque",
+    "step_at_destination": "No destino",
+    "action_arrived_destination": "Cheguei ao destino",
+    "action_finish": "Finalizar viagem"
   },
 
   "ride": {

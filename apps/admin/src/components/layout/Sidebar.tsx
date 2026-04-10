@@ -39,6 +39,9 @@ type NavItem = {
   icon: LucideIcon;
 };
 
+// IMPORTANT: When adding new admin routes, add the corresponding entry here.
+// Each route in /app that should be navigable via the sidebar must have a NavItem below.
+// Keep entries grouped logically and in the order they should appear in the UI.
 const navItems: NavItem[] = [
   { href: '/', labelKey: 'sidebar.dashboard', icon: LayoutDashboard },
   { href: '/drivers', labelKey: 'sidebar.drivers', icon: Car },

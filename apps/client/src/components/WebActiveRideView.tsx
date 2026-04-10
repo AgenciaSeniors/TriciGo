@@ -8,7 +8,7 @@ import { useDriverToPickupRoute } from '@/hooks/useDriverToPickupRoute';
 import { useETA } from '@/hooks/useETA';
 import { rideService } from '@tricigo/api/services/ride';
 import { WebMapView } from './WebMapView';
-import { getInitials } from '@tricigo/utils';
+import { getInitials, buildShareUrl } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 
 /* ── CSS keyframes for active ride animations ── */
@@ -38,10 +38,11 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
   const driverPosition = driverPosState.position;
 
   // Route polylines
-  const routeGeoPoints = useRoutePolyline(
+  const routeData = useRoutePolyline(
     activeRide?.pickup_location,
     activeRide?.dropoff_location,
   );
+  const routeGeoPoints = routeData.coordinates;
 
   // Convert GeoPoint[] to [lat, lng][] tuples for WebMapView
   const routeCoords = routeGeoPoints?.map(
@@ -79,7 +80,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
         token = await rideService.generateShareToken(activeRide.id);
         useRideStore.getState().setActiveRide({ ...activeRide, share_token: token });
       }
-      const url = `https://tricigo.com/track/share/${token}`;
+      const url = buildShareUrl(token);
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ title: 'TriciGo', text: t('ride.share_message', { url }), url });
       } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -135,7 +136,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
               animation: 'war-fadeIn 0.4s ease both',
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.brand.orange} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-              ~{etaMinutes} min
+              {etaMinutes === 0 ? '< 1 min' : `~${etaMinutes} min`}
             </div>
           )}
         </div>
@@ -225,9 +226,11 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
             }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A3412" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
               <span style={{ fontSize: 14, fontWeight: 600, color: '#9A3412' }}>
-                {activeRide?.status === 'in_progress'
-                  ? t('ride.eta_destination', { minutes: etaMinutes, defaultValue: `Arriving in ~${etaMinutes} min` })
-                  : t('ride.eta_driver_arriving', { minutes: etaMinutes, defaultValue: `Arrives in ~${etaMinutes} min` })}
+                {etaMinutes === 0
+                  ? t('ride.arriving', { defaultValue: 'Llegando' })
+                  : activeRide?.status === 'in_progress'
+                    ? t('ride.eta_destination', { minutes: etaMinutes, defaultValue: `Arriving in ~${etaMinutes} min` })
+                    : t('ride.eta_driver_arriving', { minutes: etaMinutes, defaultValue: `Arrives in ~${etaMinutes} min` })}
               </span>
             </div>
           )}

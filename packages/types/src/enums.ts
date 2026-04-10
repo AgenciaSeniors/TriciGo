@@ -18,6 +18,7 @@ export type RideStatus =
   | 'driver_en_route'
   | 'arrived_at_pickup'
   | 'in_progress'
+  | 'arrived_at_destination'
   | 'completed'
   | 'canceled'
   | 'disputed';

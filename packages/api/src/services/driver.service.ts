@@ -22,6 +22,20 @@ import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 
+/**
+ * Transform raw Supabase ride data to proper GeoPoint coordinates.
+ * PostGIS returns pickup_location/dropoff_location as WKB hex strings,
+ * but the Ride type expects { latitude, longitude } GeoPoint objects.
+ * We use the auto-synced pickup_lat/lng and dropoff_lat/lng columns instead.
+ */
+function transformRideCoordinates(ride: Record<string, unknown>): Ride {
+  return {
+    ...(ride as unknown as Ride),
+    pickup_location: { latitude: (ride.pickup_lat as number) ?? 0, longitude: (ride.pickup_lng as number) ?? 0 },
+    dropoff_location: { latitude: (ride.dropoff_lat as number) ?? 0, longitude: (ride.dropoff_lng as number) ?? 0 },
+  };
+}
+
 export const driverService = {
   /**
    * Get the driver profile for the current user.
@@ -400,13 +414,16 @@ export const driverService = {
       case 'in_progress':
         updates.pickup_at = new Date().toISOString();
         break;
+      case 'arrived_at_destination':
+        updates.arrived_at_destination_at = new Date().toISOString();
+        break;
     }
 
     const { error } = await supabase
       .from('rides')
       .update(updates)
       .eq('id', rideId);
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
 
     // Delivery-specific notifications
     const { data: rideData } = await supabase
@@ -448,7 +465,7 @@ export const driverService = {
       p_actual_distance_m: params.actualDistanceM,
       p_actual_duration_s: params.actualDurationS,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     return data as CompleteRideResult;
   },
 
@@ -458,7 +475,7 @@ export const driverService = {
   async getActiveTrip(driverId: string): Promise<Ride | null> {
     const supabase = getSupabaseClient();
     const activeStatuses: RideStatus[] = [
-      'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress',
+      'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination',
     ];
 
     const { data, error } = await supabase
@@ -470,7 +487,8 @@ export const driverService = {
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    return data as Ride | null;
+    if (!data) return null;
+    return transformRideCoordinates(data as Record<string, unknown>);
   },
 
   /**
@@ -493,7 +511,7 @@ export const driverService = {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as Ride[];
+    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
   },
 
   /**
@@ -507,14 +525,15 @@ export const driverService = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('rides')
-      .select('*')
+      .select('id, status, created_at, completed_at, final_fare_cup, estimated_fare_cup, final_fare_trc, actual_distance_m, actual_duration_s, service_type, payment_method, pickup_address, dropoff_address, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng')
       .eq('driver_id', driverId)
       .eq('status', 'completed')
       .gte('completed_at', startDate)
       .lte('completed_at', endDate)
-      .order('completed_at', { ascending: false });
+      .order('completed_at', { ascending: false })
+      .limit(200);
     if (error) throw error;
-    return data as Ride[];
+    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
   },
 
   /**
@@ -567,7 +586,7 @@ export const driverService = {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as Ride[];
+    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
   },
 
   // ==================== AUTO-ACCEPT ====================

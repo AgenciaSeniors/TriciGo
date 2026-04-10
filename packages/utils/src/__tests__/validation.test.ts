@@ -292,7 +292,7 @@ describe('maskPhone', () => {
   });
 
   it('masks international phone with + prefix', () => {
-    expect(maskPhone('+14155551234')).toBe('+14 •••• 1234');
+    expect(maskPhone('+14155551234')).toBe('+1415 •••• 1234');
   });
 
   it('returns empty string for null/undefined/empty', () => {

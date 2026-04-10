@@ -86,13 +86,13 @@ export default function DriverReferralScreen() {
   const renderReferral = ({ item }: { item: Referral }) => {
     const display = STATUS_DISPLAY[item.status] ?? { key: 'profile.referral_status_pending' };
     return (
-      <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
+      <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
         <View className="flex-row items-center justify-between">
           <View className="flex-1 mr-2">
-            <Text variant="bodySmall" color="inverse" numberOfLines={1}>
+            <Text variant="bodySmall" color="primary" numberOfLines={1}>
               {t('profile.referral_item', { id: item.id.substring(0, 8) })}
             </Text>
-            <Text variant="caption" color="inverse" className="mt-0.5 opacity-50">
+            <Text variant="caption" color="primary" className="mt-0.5 opacity-50">
               {new Date(item.created_at).toLocaleDateString('es-CU', {
                 day: 'numeric',
                 month: 'short',
@@ -112,12 +112,11 @@ export default function DriverReferralScreen() {
   };
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content" padded>
+    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader
           title={t('profile.referral_title')}
           onBack={() => router.back()}
-          light
         />
 
         <FlatList
@@ -127,8 +126,8 @@ export default function DriverReferralScreen() {
           ListHeaderComponent={
             <View>
               {/* My Code Section */}
-              <Card forceDark variant="filled" padding="lg" className="mb-6 bg-neutral-800 items-center">
-                <Text variant="bodySmall" color="inverse" className="mb-2 opacity-50">
+              <Card theme="light" variant="filled" padding="lg" className="mb-6 bg-white items-center">
+                <Text variant="bodySmall" color="primary" className="mb-2 opacity-50">
                   {t('profile.referral_your_code')}
                 </Text>
                 <Text variant="h2" color="accent" className="mb-3 tracking-widest">
@@ -141,15 +140,15 @@ export default function DriverReferralScreen() {
                   onPress={handleShare}
                   disabled={!myCode}
                 />
-                <Text variant="caption" color="inverse" className="mt-3 text-center opacity-50">
+                <Text variant="caption" color="primary" className="mt-3 text-center opacity-50">
                   {t('profile.referral_share_help', { bonus: formatCUP(500) })}
                 </Text>
               </Card>
 
               {/* Apply Code Section */}
               {!hasBeenReferred && (
-                <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
-                  <Text variant="body" color="inverse" className="font-semibold mb-3">
+                <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
+                  <Text variant="body" color="primary" className="font-semibold mb-3">
                     {t('profile.referral_have_code')}
                   </Text>
                   <Input
@@ -158,14 +157,13 @@ export default function DriverReferralScreen() {
                     value={inputCode}
                     onChangeText={setInputCode}
                     autoCapitalize="characters"
-                    variant="dark"
+                    variant="light"
                   />
                   <Button
                     title={t('profile.referral_apply')}
                     variant="outline"
                     size="md"
                     fullWidth
-                    forceDark
                     onPress={handleApplyCode}
                     loading={submitting}
                     disabled={!inputCode.trim() || submitting}
@@ -175,10 +173,10 @@ export default function DriverReferralScreen() {
               )}
 
               {hasBeenReferred && (
-                <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
+                <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
                   <View className="flex-row items-center">
                     <Ionicons name="checkmark-circle" size={20} color={colors.success.DEFAULT} />
-                    <Text variant="bodySmall" color="inverse" className="ml-2 opacity-70">
+                    <Text variant="bodySmall" color="primary" className="ml-2 opacity-70">
                       {t('profile.referral_already_applied')}
                     </Text>
                   </View>
@@ -187,7 +185,7 @@ export default function DriverReferralScreen() {
 
               {/* History header */}
               {referrals.length > 0 && (
-                <Text variant="h4" color="inverse" className="mb-3">
+                <Text variant="h4" color="primary" className="mb-3">
                   {t('profile.referral_history')}
                 </Text>
               )}
@@ -196,7 +194,6 @@ export default function DriverReferralScreen() {
           ListEmptyComponent={
             !loading ? (
               <EmptyState
-                forceDark
                 icon="gift-outline"
                 title={t('profile.referral_empty')}
               />

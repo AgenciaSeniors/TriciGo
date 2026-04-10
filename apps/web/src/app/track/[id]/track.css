@@ -410,6 +410,19 @@
 .track-action-btn--whatsapp:hover {
   background: #1ebe5d;
 }
+.track-action-btn--cancel {
+  background: var(--bg-primary);
+  color: #ef4444;
+  border: 1px solid #ef4444;
+}
+.track-action-btn--cancel:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.track-action-btn--cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .track-action-btn svg {
   width: 18px;
@@ -620,33 +633,114 @@
   box-shadow: 0 2px 8px rgba(37, 211, 102, 0.15);
 }
 
-/* ── Responsive ── */
+/* ── Glassmorphism Card Variant ── */
+.track-card--glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .track-card--glass {
+  background: rgba(15, 15, 35, 0.78);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Shared Page Specific Styles ── */
+.track-page--shared .track-panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,1) 100%);
+}
+
+.track-page--shared .track-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .track-page--shared .track-panel {
+  background: linear-gradient(180deg, rgba(15,15,35,0.95) 0%, rgba(10,10,25,1) 100%);
+}
+
+[data-theme="dark"] .track-page--shared .track-card {
+  background: rgba(15, 15, 35, 0.78);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Powered-by Footer ── */
+.track-powered-by {
+  text-align: center;
+  padding: var(--space-md) 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.track-powered-logo {
+  font-weight: 800;
+  font-size: var(--text-sm);
+}
+.track-powered-logo span {
+  color: var(--primary);
+}
+
+/* ── Responsive — Mobile Bottom Sheet ── */
 @media (max-width: 768px) {
   .track-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    position: relative;
   }
 
   .track-map-hero {
-    height: 280px;
-    position: relative;
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 0;
   }
 
   .track-panel {
-    max-height: none;
+    position: relative;
+    z-index: 1;
+    margin-top: 55vh;
+    max-height: 45vh;
+    overflow-y: auto;
     border-left: none;
-    padding: var(--space-lg);
+    border-radius: 20px 20px 0 0;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.08);
+    padding: 12px var(--space-lg) var(--space-xl);
+  }
+
+  .track-panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    margin: 0 auto 12px;
+  }
+
+  [data-theme="dark"] .track-panel {
+    background: rgba(15, 15, 35, 0.92);
+  }
+
+  [data-theme="dark"] .track-panel::before {
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
 @media (max-width: 480px) {
-  .track-map-hero {
-    height: 220px;
-  }
-
   .track-panel {
-    padding: var(--space-md);
+    padding: 12px var(--space-md) var(--space-lg);
   }
 
   .track-actions {
@@ -655,5 +749,15 @@
 
   .track-panel-title {
     font-size: var(--text-lg);
+  }
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .track-stepper-dot--active,
+  .track-eta-badge--urgent,
+  .track-live-dot,
+  .track-card {
+    animation: none;
   }
 }

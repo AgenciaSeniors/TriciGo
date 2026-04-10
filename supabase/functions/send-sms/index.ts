@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`send-sms:${clientIP}`, 10, 60 * 1000);
+    const rl = await rateLimit(`send-sms:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: allow internal service-role calls (pg_net triggers) or valid JWT ──
@@ -74,6 +74,15 @@ Deno.serve(async (req) => {
     if (!phone || !body) {
       return new Response(
         JSON.stringify({ error: 'phone and body are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // BUG-086: Validate E.164 phone format
+    const e164Regex = /^\+[1-9]\d{6,14}$/;
+    if (!e164Regex.test(phone)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid phone format. Use E.164.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }

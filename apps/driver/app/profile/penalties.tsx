@@ -48,15 +48,15 @@ export default function PenaltiesScreen() {
   const totalAmount = penalties.reduce((sum, p) => sum + p.amount, 0);
 
   const renderPenalty = ({ item }: { item: CancellationPenalty }) => (
-    <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
+    <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
       <View className="flex-row items-center justify-between">
         <View className="flex-1 mr-3">
-          <Text variant="bodySmall" color="inverse">
+          <Text variant="bodySmall" color="primary">
             {item.reason
               ? t(`penalties.reason_${item.reason}`, { defaultValue: item.reason.replace(/_/g, ' ') })
               : t('penalties.cancellation', { defaultValue: 'Cancelación de viaje' })}
           </Text>
-          <Text variant="caption" color="inverse" className="opacity-50 mt-0.5">
+          <Text variant="caption" color="primary" className="opacity-50 mt-0.5">
             {new Date(item.created_at).toLocaleDateString('es-CU', {
               day: 'numeric',
               month: 'short',
@@ -76,21 +76,20 @@ export default function PenaltiesScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content">
+    <Screen bg="lightPrimary" statusBarStyle="dark-content">
       <View className="pt-4 px-5 flex-1">
         <ScreenHeader
           title={t('penalties.title', { defaultValue: 'Penalidades' })}
           onBack={() => router.back()}
-          light
         />
 
         {/* Summary */}
         {penalties.length > 0 && (
-          <Card forceDark variant="filled" padding="md" className="bg-red-900/30 mb-4 mt-2">
+          <Card theme="light" variant="filled" padding="md" className="bg-red-50 mb-4 mt-2">
             <View className="flex-row items-center gap-2">
               <Ionicons name="warning-outline" size={20} color="#EF4444" />
               <View>
-                <Text variant="bodySmall" color="inverse">
+                <Text variant="bodySmall" color="primary">
                   {t('penalties.total', { defaultValue: 'Total penalidades' })}
                 </Text>
                 <Text variant="h4" className="text-red-400">
@@ -98,7 +97,7 @@ export default function PenaltiesScreen() {
                 </Text>
               </View>
             </View>
-            <Text variant="caption" color="inverse" className="opacity-50 mt-2">
+            <Text variant="caption" color="primary" className="opacity-50 mt-2">
               {t('penalties.description', { defaultValue: 'Las penalidades se aplican por cancelaciones frecuentes o tardías. Mantén una baja tasa de cancelación para evitarlas.' })}
             </Text>
           </Card>
@@ -109,13 +108,13 @@ export default function PenaltiesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderPenalty}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />
           }
           ListEmptyComponent={
             !loading ? (
               <View className="items-center py-12">
                 <Ionicons name="checkmark-circle-outline" size={48} color={colors.neutral[600]} />
-                <Text variant="body" color="inverse" className="opacity-30 mt-3">
+                <Text variant="body" color="primary" className="opacity-30 mt-3">
                   {t('penalties.no_penalties', { defaultValue: 'No tienes penalidades' })}
                 </Text>
               </View>

@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { WebView } from 'react-native-webview';
 import { Platform } from 'react-native';
 
@@ -16,7 +16,7 @@ export default function PrivacyScreen() {
   const [error, setError] = useState(false);
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content" padded={false}>
+    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded={false}>
       <View className="pt-4 px-4">
         <View className="flex-row items-center mb-4">
           <Pressable
@@ -25,11 +25,11 @@ export default function PrivacyScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
             className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: driverDarkColors.hover }}
+            style={{ backgroundColor: colors.neutral[100] }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
           </Pressable>
-          <Text variant="h3" color="inverse">
+          <Text variant="h3" color="primary">
             {t('profile.privacy', { defaultValue: 'Política de privacidad' })}
           </Text>
         </View>
@@ -47,7 +47,7 @@ export default function PrivacyScreen() {
             className="px-6 py-3 rounded-xl"
             style={{ backgroundColor: colors.brand.orange }}
           >
-            <Text variant="body" color="inverse" className="font-semibold">
+            <Text variant="body" color="primary" className="font-semibold">
               {t('common.retry', { defaultValue: 'Reintentar' })}
             </Text>
           </Pressable>
@@ -58,7 +58,7 @@ export default function PrivacyScreen() {
           style={{ flex: 1 }}
           startInLoadingState
           renderLoading={() => (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: driverDarkColors.background.primary }}>
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
               <ActivityIndicator size="large" color={colors.brand.orange} />
             </View>
           )}

@@ -4,12 +4,12 @@ import { View, ActivityIndicator } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
-  Montserrat_400Regular,
-  Montserrat_500Medium,
-  Montserrat_600SemiBold,
-  Montserrat_700Bold,
-  Montserrat_800ExtraBold,
-} from '@expo-google-fonts/montserrat';
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
@@ -158,11 +158,11 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RootLayoutInner() {
   const [fontsLoaded] = useFonts({
-    Montserrat_400Regular,
-    Montserrat_500Medium,
-    Montserrat_600SemiBold,
-    Montserrat_700Bold,
-    Montserrat_800ExtraBold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
   });
 
   const onLayoutReady = useCallback(async () => {

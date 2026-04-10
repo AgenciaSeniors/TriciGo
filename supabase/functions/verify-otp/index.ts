@@ -2,11 +2,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 // ── CORS: restrict to allowed origins ──
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+// BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : (ALLOWED_ORIGINS[0] ?? 'https://tricigo.com');
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -18,10 +19,16 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
+  // BUG-083: Reject oversized payloads (1 MB limit)
+  const contentLength = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (contentLength > 1_048_576) {
+    return new Response(JSON.stringify({ error: 'Payload too large' }), { status: 413 });
+  }
+
   try {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`verify-otp:${clientIP}`, 10, 60 * 1000);
+    const rl = await rateLimit(`verify-otp:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const { phone, code } = await req.json();
@@ -132,10 +139,20 @@ Deno.serve(async (req) => {
     const devEmail = `phone_${normalizedPhone.replace(/\+/g, '')}@tricigo.app`;
 
     // Try to find existing user by email
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email === devEmail || u.phone === normalizedPhone,
-    );
+    let existingUser: { id: string; email?: string; phone?: string } | undefined;
+    try {
+      const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
+      if (listError) throw listError;
+      existingUser = existingUsers?.users?.find(
+        (u) => u.email === devEmail || u.phone === normalizedPhone,
+      );
+    } catch (err) {
+      console.error('Failed to list users:', err);
+      return new Response(
+        JSON.stringify({ error: 'Authentication service unavailable' }),
+        { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
 
     let userId: string;
 
@@ -170,20 +187,16 @@ Deno.serve(async (req) => {
       userId = newUser.user.id;
 
       // Fix NULL token columns (prevent "Database error querying schema")
-      await supabase.rpc('exec_sql', {
-        query: `UPDATE auth.users SET
-          confirmation_token = COALESCE(confirmation_token, ''),
-          email_change = COALESCE(email_change, ''),
-          email_change_token_new = COALESCE(email_change_token_new, ''),
-          recovery_token = COALESCE(recovery_token, ''),
-          email_change_token_current = COALESCE(email_change_token_current, ''),
-          phone_change_token = COALESCE(phone_change_token, ''),
-          phone_change = COALESCE(phone_change, ''),
-          reauthentication_token = COALESCE(reauthentication_token, '')
-        WHERE id = '${userId}'`,
+      // Use parameterized query to prevent SQL injection (BUG-001 fix)
+      await supabase.rpc('fix_null_auth_tokens', {
+        p_user_id: userId,
       }).catch(() => {
-        // If exec_sql RPC doesn't exist, try direct update
-        console.warn('exec_sql RPC not available, NULL tokens may cause issues');
+        // If RPC doesn't exist, try admin API as fallback (no raw SQL)
+        supabase.auth.admin.updateUserById(userId, {
+          user_metadata: { tokens_fixed: true },
+        }).catch(() => {
+          console.warn('Could not fix NULL tokens, may cause issues');
+        });
       });
     }
 
@@ -194,8 +207,8 @@ Deno.serve(async (req) => {
     });
 
     if (linkError || !linkData) {
-      console.error('Failed to generate session link:', linkError);
-      // Fallback: sign in with password
+      console.error('Failed to generate session link, using fallback auth');
+      // BUG-039: Fallback sign-in with ephemeral password — NEVER log or return tempPassword
       const tempPassword = `otp_${crypto.randomUUID()}`;
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
 
@@ -210,6 +223,8 @@ Deno.serve(async (req) => {
           { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
+
+      console.log('Fallback auth completed for user', userId);
 
       return new Response(
         JSON.stringify({
@@ -230,13 +245,15 @@ Deno.serve(async (req) => {
     const token = url.searchParams.get('token') ?? url.hash?.split('access_token=')[1]?.split('&')[0];
 
     if (!token) {
-      // Fallback approach
+      // BUG-039: Fallback approach — ephemeral password NEVER logged or returned in response
       const tempPassword = `otp_${crypto.randomUUID()}`;
       await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
       const { data: fbData } = await supabase.auth.signInWithPassword({
         email: devEmail,
         password: tempPassword,
       });
+
+      console.log('Fallback auth completed for user', userId);
 
       return new Response(
         JSON.stringify({

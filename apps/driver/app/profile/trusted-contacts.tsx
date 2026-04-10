@@ -10,7 +10,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
@@ -85,7 +85,7 @@ export default function TrustedContactsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadContacts(); }} />;
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content" padded>
+    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
@@ -99,11 +99,11 @@ export default function TrustedContactsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
               className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-              style={{ backgroundColor: driverDarkColors.hover }}
+              style={{ backgroundColor: '#F1F5F9' }}
             >
-              <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+              <Ionicons name="arrow-back" size={20} color="#0F172A" />
             </Pressable>
-            <Text variant="h3" color="inverse">{t('trusted_contacts.title')}</Text>
+            <Text variant="h3" color="primary">{t('trusted_contacts.title')}</Text>
           </View>
 
           <Text variant="bodySmall" color="secondary" className="mb-4">
@@ -123,7 +123,7 @@ export default function TrustedContactsScreen() {
                 <View
                   key={contact.id}
                   className="rounded-2xl p-4 mb-3"
-                  style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+                  style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
                 >
                   <View className="flex-row items-start">
                     <View className="w-10 h-10 rounded-full items-center justify-center mr-3 mt-1" style={{ backgroundColor: `${colors.brand.orange}20` }}>
@@ -131,12 +131,12 @@ export default function TrustedContactsScreen() {
                     </View>
                     <View className="flex-1">
                       <View className="flex-row items-center">
-                        <Text variant="body" color="inverse" className="font-semibold flex-1">
+                        <Text variant="body" color="primary" className="font-semibold flex-1">
                           {contact.name}
                         </Text>
                         {contact.is_emergency && (
                           <View className="bg-error px-2 py-0.5 rounded-full ml-2">
-                            <Text variant="caption" color="inverse" className="text-xs">
+                            <Text variant="caption" color="primary" className="text-xs">
                               {t('trusted_contacts.emergency_badge')}
                             </Text>
                           </View>
@@ -147,14 +147,14 @@ export default function TrustedContactsScreen() {
                         <Text variant="caption" color="secondary">{contact.relationship}</Text>
                       )}
 
-                      <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: driverDarkColors.border.default }}>
+                      <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: '#E2E8F0' }}>
                         <Text variant="caption" color="secondary">
                           {t('trusted_contacts.auto_share')}
                         </Text>
                         <Switch
                           value={contact.auto_share}
                           onValueChange={() => handleToggleAutoShare(contact)}
-                          trackColor={{ false: driverDarkColors.hover, true: colors.brand.orange }}
+                          trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
                         />
                       </View>
                     </View>
@@ -170,7 +170,6 @@ export default function TrustedContactsScreen() {
 
           {!loading && contacts.length === 0 && (
             <EmptyState
-              forceDark
               icon="people-outline"
               title={t('trusted_contacts.no_contacts')}
               description={t('trusted_contacts.no_contacts_desc')}
@@ -183,7 +182,6 @@ export default function TrustedContactsScreen() {
               variant="outline"
               size="lg"
               fullWidth
-              forceDark
               onPress={() => {
                 // TODO: Open add contact sheet
                 Toast.show({ type: 'info', text1: t('common.coming_soon', { defaultValue: 'Próximamente' }) });

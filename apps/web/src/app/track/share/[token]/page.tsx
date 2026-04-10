@@ -6,8 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, rideService } from '@tricigo/api';
-import { formatCUP } from '@tricigo/utils';
-import type { RideWithDriver, RideStatus } from '@tricigo/types';
+import type { SharedRideView, RideStatus } from '@tricigo/types';
 import '../../[id]/track.css';
 
 const TrackingMap = dynamic(() => import('../../TrackingMap'), { ssr: false });
@@ -41,7 +40,8 @@ function useStatusSteps() {
     { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route', { defaultValue: 'En camino a recogerte' }), stepNumber: 3 },
     { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived', { defaultValue: 'Llegó al punto' }), stepNumber: 4 },
     { key: 'in_progress' as RideStatus, label: t('track.step_in_progress', { defaultValue: 'Viaje en curso' }), stepNumber: 5 },
-    { key: 'completed' as RideStatus, label: t('track.step_completed', { defaultValue: 'Viaje completado' }), stepNumber: 6 },
+    { key: 'arrived_at_destination' as RideStatus, label: t('track.step_at_destination', { defaultValue: 'En destino' }), stepNumber: 6 },
+    { key: 'completed' as RideStatus, label: t('track.step_completed', { defaultValue: 'Viaje completado' }), stepNumber: 7 },
   ], [t]);
 }
 
@@ -89,7 +89,7 @@ export default function SharedTrackingPage() {
   const { t } = useTranslation('web');
   const params = useParams();
   const token = params.token as string;
-  const [ride, setRide] = useState<RideWithDriver | null>(null);
+  const [ride, setRide] = useState<SharedRideView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -98,9 +98,9 @@ export default function SharedTrackingPage() {
 
   const fetchRide = useCallback(async () => {
     try {
-      const data = await rideService.getRideByShareToken(token);
+      const data = await rideService.getPublicRideByShareToken(token);
       if (data) setRide(data);
-      else setError(t('track.invalid_link', { defaultValue: 'Enlace de seguimiento inválido' }));
+      else setError(t('track.invalid_link', { defaultValue: 'Enlace de seguimiento inválido o expirado' }));
     } catch {
       setError(t('track.error_loading', { defaultValue: 'Error al cargar el viaje' }));
     } finally {
@@ -108,30 +108,43 @@ export default function SharedTrackingPage() {
     }
   }, [token, t]);
 
+  // Initial fetch only — no polling (real-time subscription handles updates)
   useEffect(() => {
     fetchRide();
-    const interval = setInterval(fetchRide, 10_000);
-    return () => clearInterval(interval);
   }, [fetchRide]);
 
   useEffect(() => {
     if (!ride) return;
     const channel = rideService.subscribeToRide(ride.id, (updated) => {
-      setRide((prev) => (prev ? { ...prev, ...updated } : null));
+      setRide((prev) => {
+        if (!prev) return null;
+        // Only update fields that exist on SharedRideView
+        const safe: Partial<SharedRideView> = {};
+        if (updated.status) safe.status = updated.status as SharedRideView['status'];
+        if (updated.accepted_at !== undefined) safe.accepted_at = updated.accepted_at;
+        if (updated.pickup_at !== undefined) safe.pickup_at = updated.pickup_at;
+        if (updated.arrived_at_destination_at !== undefined) safe.arrived_at_destination_at = updated.arrived_at_destination_at;
+        if (updated.completed_at !== undefined) safe.completed_at = updated.completed_at;
+        if (updated.canceled_at !== undefined) safe.canceled_at = updated.canceled_at;
+        return { ...prev, ...safe };
+      });
     });
     return () => { channel.unsubscribe(); };
   }, [ride?.id]);
 
+  // Subscribe to driver location via ride-level channel (no driver_id exposed)
   useEffect(() => {
-    if (!ride?.driver_id) return;
+    if (!ride) return;
+    const isActive = !['completed', 'canceled', 'disputed'].includes(ride.status);
+    if (!isActive) return;
     const supabase = getSupabaseClient();
-    const channel = supabase.channel(`driver-location-${ride.driver_id}`)
-      .on('broadcast', { event: 'location' }, (payload: { payload: { latitude: number; longitude: number } }) => {
+    const channel = supabase.channel(`ride-driver-location-${ride.id}`)
+      .on('broadcast', { event: 'driver_location' }, (payload: { payload: { latitude: number; longitude: number } }) => {
         setDriverLocation({ lat: payload.payload.latitude, lng: payload.payload.longitude });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [ride?.driver_id]);
+  }, [ride?.id, ride?.status]);
 
   /* ── Loading State ── */
   if (loading) {
@@ -163,10 +176,10 @@ export default function SharedTrackingPage() {
   const isCompleted = ride.status === 'completed';
   const isTerminal = isCanceled || isCompleted || ride.status === 'disputed';
 
-  const pickupLat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
-  const pickupLng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
-  const dropoffLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
-  const dropoffLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
+  const pickupLat = ride.pickup_location?.latitude ?? 0;
+  const pickupLng = ride.pickup_location?.longitude ?? 0;
+  const dropoffLat = ride.dropoff_location?.latitude ?? 0;
+  const dropoffLng = ride.dropoff_location?.longitude ?? 0;
 
   const statusBadgeClass = isCanceled ? 'track-status-badge--canceled'
     : ride.status === 'completed' ? 'track-status-badge--completed'
@@ -175,6 +188,7 @@ export default function SharedTrackingPage() {
 
   const statusLabel = isCanceled ? t('track.canceled', { defaultValue: 'Cancelado' })
     : ride.status === 'completed' ? t('track.step_completed', { defaultValue: 'Completado' })
+    : ride.status === 'arrived_at_destination' ? t('track.step_at_destination', { defaultValue: 'En destino' })
     : ride.status === 'searching' ? t('track.step_searching', { defaultValue: 'Buscando' })
     : t('track.step_in_progress', { defaultValue: 'En curso' });
 
@@ -191,7 +205,7 @@ export default function SharedTrackingPage() {
   };
 
   return (
-    <div className="track-page">
+    <div className="track-page track-page--shared">
       <div className="track-layout">
         {/* ═══ LEFT: Map Hero ═══ */}
         <div className="track-map-hero">
@@ -202,14 +216,15 @@ export default function SharedTrackingPage() {
             dropoffLng={dropoffLng}
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
+            vehicleType={ride.vehicle_type ?? undefined}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 
           {/* ETA Badge */}
-          {!isTerminal && ride.estimated_duration_min && (
+          {!isTerminal && ride.estimated_duration_s > 0 && (
             <div className="track-eta-badge">
               <IconClock />
-              <span>~{ride.estimated_duration_min} min</span>
+              <span>~{Math.ceil(ride.estimated_duration_s / 60)} min</span>
             </div>
           )}
         </div>
@@ -241,9 +256,6 @@ export default function SharedTrackingPage() {
             <div className="track-canceled-card track-card">
               <div className="track-canceled-icon"><IconX /></div>
               <div className="track-canceled-title">{t('track.canceled', { defaultValue: 'Viaje cancelado' })}</div>
-              {ride.cancellation_reason && (
-                <div className="track-canceled-reason">{ride.cancellation_reason}</div>
-              )}
             </div>
           ) : (
             <div className="track-card">
@@ -251,7 +263,7 @@ export default function SharedTrackingPage() {
             </div>
           )}
 
-          {/* Route Card */}
+          {/* Route Card — coordinates only for privacy */}
           <div className="track-card">
             <div className="track-route">
               <div className="track-route-dots">
@@ -261,27 +273,31 @@ export default function SharedTrackingPage() {
               </div>
               <div className="track-route-addresses">
                 <div>
-                  <div className="track-route-label">{t('track.from', { defaultValue: 'Desde' })}</div>
-                  <div className="track-route-address">{ride.pickup_address}</div>
+                  <div className="track-route-label">{t('track.from', { defaultValue: 'Origen' })}</div>
+                  <div className="track-route-address" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                    {pickupLat.toFixed(4)}, {pickupLng.toFixed(4)}
+                  </div>
                 </div>
                 <div>
-                  <div className="track-route-label">{t('track.to', { defaultValue: 'Hasta' })}</div>
-                  <div className="track-route-address">{ride.dropoff_address}</div>
+                  <div className="track-route-label">{t('track.to', { defaultValue: 'Destino' })}</div>
+                  <div className="track-route-address" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                    {dropoffLat.toFixed(4)}, {dropoffLng.toFixed(4)}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Driver Card */}
-          {ride.driver_name && (
+          {/* Driver Card — first name only for privacy */}
+          {ride.driver_first_name && (
             <div className="track-card">
               <div className="track-route-label" style={{ marginBottom: 10 }}>{t('track.your_driver', { defaultValue: 'Tu conductor' })}</div>
               <div className="track-driver">
                 <div className="track-driver-avatar">
-                  {ride.driver_name.charAt(0).toUpperCase()}
+                  {ride.driver_first_name.charAt(0).toUpperCase()}
                 </div>
                 <div className="track-driver-info">
-                  <div className="track-driver-name">{ride.driver_name}</div>
+                  <div className="track-driver-name">{ride.driver_first_name}</div>
                   {ride.vehicle_make && (
                     <div className="track-driver-vehicle">
                       {ride.vehicle_color} {ride.vehicle_make} {ride.vehicle_model}
@@ -296,17 +312,19 @@ export default function SharedTrackingPage() {
             </div>
           )}
 
-          {/* Fare Card */}
-          <div className="track-card">
-            <div className="track-fare">
-              <span className="track-fare-label">
-                {isTerminal ? t('track.fare', { defaultValue: 'Tarifa final' }) : t('track.estimated', { defaultValue: 'Tarifa estimada' })}
-              </span>
-              <span className="track-fare-amount">
-                {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
-              </span>
+          {/* ETA Card — estimated duration (no fare for privacy) */}
+          {!isTerminal && ride.estimated_duration_s > 0 && (
+            <div className="track-card">
+              <div className="track-fare">
+                <span className="track-fare-label">
+                  {t('track.estimated_time', { defaultValue: 'Tiempo estimado' })}
+                </span>
+                <span className="track-fare-amount">
+                  ~{Math.ceil(ride.estimated_duration_s / 60)} min
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Action Buttons */}
           <div className="track-actions">
@@ -333,19 +351,11 @@ export default function SharedTrackingPage() {
             </div>
           )}
 
-          {/* CTA */}
-          <Link
-            href="/book"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 'var(--space-md)', borderRadius: 'var(--radius-md)',
-              background: 'var(--primary)', color: 'white',
-              fontWeight: 600, fontSize: 'var(--text-sm)',
-              textDecoration: 'none', textAlign: 'center',
-            }}
-          >
-            {t('track.cta_book', { defaultValue: 'Solicita tu viaje en TriciGo' })}
-          </Link>
+          {/* Powered-by footer */}
+          <div className="track-powered-by">
+            <span>Powered by</span>
+            <span className="track-powered-logo">Trici<span>Go</span></span>
+          </div>
         </div>
       </div>
     </div>

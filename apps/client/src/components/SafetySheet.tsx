@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Pressable, Linking, Share, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Pressable, Linking, Share, ActivityIndicator, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { Text } from '@tricigo/ui/Text';
@@ -7,7 +7,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import Toast from 'react-native-toast-message';
 import { incidentService, rideService, trustedContactService, notificationService } from '@tricigo/api';
-import { logger, triggerHaptic } from '@tricigo/utils';
+import { logger, triggerHaptic, buildShareUrl } from '@tricigo/utils';
 import type { TrustedContact } from '@tricigo/types';
 
 interface SafetySheetProps {
@@ -39,14 +39,14 @@ export function SafetySheet({
     trustedContactService.getAutoShareContacts(userId).then(setAutoShareContacts).catch(() => {});
   }, [visible, userId]);
 
-  const notifyTrustedContacts = async () => {
+  const notifyTrustedContacts = useCallback(async () => {
     if (autoShareContacts.length === 0) return;
     try {
       let token = await rideService.getShareTokenForRide(rideId);
       if (!token) {
         token = await rideService.generateShareToken(rideId);
       }
-      const url = `https://tricigo.app/track/share/${token}`;
+      const url = buildShareUrl(token);
       const userName = emergencyContact?.name ?? t('safety.someone');
       await notificationService.notifyTrustedContacts({
         contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
@@ -56,9 +56,9 @@ export function SafetySheet({
     } catch (err) {
       logger.error('Failed to notify trusted contacts during SOS', { error: String(err) });
     }
-  };
+  }, [autoShareContacts, rideId, emergencyContact, t]);
 
-  const handleSOS = async () => {
+  const handleSOS = useCallback(async () => {
     onClose();
 
     // Haptic feedback immediately
@@ -84,7 +84,43 @@ export function SafetySheet({
       type: 'success',
       text1: tr('ride.sos_activated'),
     });
-  };
+  }, [onClose, notifyTrustedContacts, rideId, userId, driverId, tr]);
+
+  // ── SOS long-press state (2s hold to activate) ──
+  const [sosHolding, setSosHolding] = useState(false);
+  const sosProgress = useRef(new Animated.Value(0)).current;
+  const sosTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSOSPressIn = useCallback(() => {
+    setSosHolding(true);
+    triggerHaptic('light');
+    Animated.timing(sosProgress, {
+      toValue: 1,
+      duration: 2000,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start();
+    sosTimerRef.current = setTimeout(() => {
+      setSosHolding(false);
+      sosProgress.setValue(0);
+      handleSOS();
+    }, 2000);
+  }, [sosProgress, handleSOS]);
+
+  const handleSOSPressOut = useCallback(() => {
+    if (sosTimerRef.current) {
+      clearTimeout(sosTimerRef.current);
+      sosTimerRef.current = null;
+    }
+    setSosHolding(false);
+    sosProgress.setValue(0);
+  }, [sosProgress]);
+
+  useEffect(() => {
+    return () => {
+      if (sosTimerRef.current) clearTimeout(sosTimerRef.current);
+    };
+  }, []);
 
   const handleShareTrip = async () => {
     setSharing(true);
@@ -93,12 +129,16 @@ export function SafetySheet({
       if (!token) {
         token = await rideService.generateShareToken(rideId);
       }
-      const url = `https://tricigo.app/track/share/${token}`;
+      const url = buildShareUrl(token);
       await Share.share({
         message: t('safety.share_trip_message', { url }),
       });
-    } catch {
-      // Share dismissed or failed — no-op
+    } catch (err: unknown) {
+      // Share.share rejects on iOS if user cancels — ignore that
+      const message = err instanceof Error ? err.message : '';
+      if (message !== 'User did not share') {
+        Toast.show({ type: 'error', text1: tr('ride.share_failed', { defaultValue: 'Error al compartir' }) });
+      }
     } finally {
       setSharing(false);
     }
@@ -110,20 +150,46 @@ export function SafetySheet({
         {t('safety.title')}
       </Text>
 
-      {/* ═══ TIER 1 — EMERGENCY ═══ */}
+      {/* ═══ TIER 1 — EMERGENCY (long-press 2s to activate) ═══ */}
       <View className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-4">
         <Pressable
-          className="bg-red-600 rounded-xl py-4 items-center justify-center w-full"
-          onPress={handleSOS}
+          onPressIn={handleSOSPressIn}
+          onPressOut={handleSOSPressOut}
+          style={{
+            borderRadius: 12,
+            overflow: 'hidden',
+            backgroundColor: '#DC2626',
+            paddingVertical: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+          }}
           accessibilityRole="button"
-          accessibilityLabel={tr('ride.sos_full')}
+          accessibilityLabel={tr('ride.sos_hold', { defaultValue: 'Mantén presionado para SOS' })}
+          accessibilityHint={tr('ride.sos_hold_hint', { defaultValue: 'Mantén presionado 2 segundos para activar emergencia' })}
         >
-          <Text variant="h3" className="text-white text-center font-bold">
-            {tr('ride.sos_full')}
+          {/* Progress overlay — fills left-to-right while holding */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              backgroundColor: '#991B1B',
+              width: sosProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0%', '100%'],
+              }),
+            }}
+          />
+          <Text variant="h3" className="text-white text-center font-bold" style={{ zIndex: 1 }}>
+            {sosHolding
+              ? tr('ride.sos_holding', { defaultValue: 'Mantenga...' })
+              : tr('ride.sos_full')}
           </Text>
         </Pressable>
         <Text variant="bodySmall" className="text-red-700 dark:text-red-400 text-center mt-2">
-          {tr('ride.sos_auto_notify')}
+          {tr('ride.sos_hold_instruction', { defaultValue: 'Mantén presionado 2 seg para activar SOS' })}
         </Text>
       </View>
 

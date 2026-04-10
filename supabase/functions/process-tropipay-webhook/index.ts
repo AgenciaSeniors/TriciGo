@@ -32,10 +32,16 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-083: Reject oversized payloads (1 MB limit)
+  const contentLength = parseInt(req.headers.get('content-length') ?? '0', 10);
+  if (contentLength > 1_048_576) {
+    return new Response(JSON.stringify({ error: 'Payload too large' }), { status: 413 });
+  }
+
   try {
     // Rate limit: 30 requests per IP per minute (webhooks need higher limits)
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`process-tropipay-webhook:${clientIP}`, 30, 60 * 1000);
+    const rl = await rateLimit(`process-tropipay-webhook:${clientIP}`, 30, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -179,11 +185,17 @@ Deno.serve(async (req) => {
         );
       }
     } else {
-      console.warn('TROPIPAY_WEBHOOK_SECRET not set — skipping signature verification');
+      console.error('TROPIPAY_WEBHOOK_SECRET not configured — rejecting webhook for security');
+      return new Response(
+        JSON.stringify({ error: 'Webhook secret not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     payload = JSON.parse(rawBody);
-    console.log('TropiPay webhook received:', JSON.stringify(payload));
+    // BUG-091: Log only non-sensitive fields instead of the full payload
+    const { bankOrderCode, id: payloadId, state: payloadState, amount: payloadAmount } = payload as Record<string, unknown>;
+    console.log('TropiPay webhook received:', JSON.stringify({ bankOrderCode, id: payloadId, state: payloadState, amount: payloadAmount }));
 
     // TropiPay webhook payload shape:
     // { status, data: { id, reference, amount, currency, state, ... } }
@@ -217,8 +229,8 @@ Deno.serve(async (req) => {
     }
 
     // ─── Idempotency: skip if this payment intent was already processed ───
-    if (intent.status === 'completed') {
-      console.log(`[Idempotency] Payment intent ${reference} already completed — skipping`);
+    if (intent.status === 'completed' || intent.status === 'processing') {
+      console.log(`[Idempotency] Payment intent ${reference} already ${intent.status} — skipping`);
       return new Response(
         JSON.stringify({ ok: true, action: 'already_processed', reference }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -228,6 +240,22 @@ Deno.serve(async (req) => {
       console.log(`[Idempotency] Payment intent ${reference} already marked failed — skipping`);
       return new Response(
         JSON.stringify({ ok: true, action: 'already_failed', reference }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ─── Atomically claim this intent for processing (prevents double-credit) ───
+    const { data: claimed, error: claimError } = await supabase
+      .from('payment_intents')
+      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .eq('id', intent.id)
+      .eq('status', 'pending')
+      .select();
+
+    if (claimError || !claimed || claimed.length === 0) {
+      console.log(`[Idempotency] Payment intent ${reference} already claimed by another request`);
+      return new Response(
+        JSON.stringify({ ok: true, action: 'already_processing', reference }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }

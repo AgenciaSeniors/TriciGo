@@ -15,6 +15,7 @@ export interface BufferedLocation {
   longitude: number;
   heading: number | null;
   speed: number | null;
+  accuracy: number | null;
   timestamp: number;
   rideId: string | null;
   driverId: string;

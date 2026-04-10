@@ -112,7 +112,7 @@ export default function DriverLostItemScreen() {
 
   if (loading) {
     return (
-      <Screen bg="dark" statusBarStyle="light-content" padded>
+      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
         <View className="flex-1 items-center justify-center py-20">
           <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
@@ -122,10 +122,10 @@ export default function DriverLostItemScreen() {
 
   if (!item) {
     return (
-      <Screen bg="dark" statusBarStyle="light-content" padded>
+      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
         <View className="pt-4">
-          <ScreenHeader title="" onBack={() => router.back()} light />
-          <Text variant="body" color="inverse" className="opacity-50">
+          <ScreenHeader title="" onBack={() => router.back()} />
+          <Text variant="body" color="primary" className="opacity-50">
             {t('lost_found.no_items')}
           </Text>
         </View>
@@ -140,18 +140,17 @@ export default function DriverLostItemScreen() {
   const isResolved = item.status === 'returned' || item.status === 'closed';
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 pb-8">
         <ScreenHeader
           title={t('lost_found.title')}
           onBack={() => router.back()}
-          light
         />
 
         {/* Item info */}
-        <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
+        <Card theme="light" variant="filled" padding="md" className="bg-white mb-4">
           <View className="flex-row items-center mb-3">
-            <View className="w-10 h-10 rounded-full bg-amber-900/50 items-center justify-center mr-3">
+            <View className="w-10 h-10 rounded-full bg-amber-100 items-center justify-center mr-3">
               <Ionicons
                 name={CATEGORY_ICONS[item.category] ?? 'help-circle-outline'}
                 size={20}
@@ -159,28 +158,28 @@ export default function DriverLostItemScreen() {
               />
             </View>
             <View className="flex-1">
-              <Text variant="label" color="inverse">{t(`lost_found.item_category`)}</Text>
-              <Text variant="bodySmall" color="inverse" className="opacity-70">
+              <Text variant="label" color="primary">{t(`lost_found.item_category`)}</Text>
+              <Text variant="bodySmall" color="primary" className="opacity-70">
                 {t(`lost_found.status_${item.status}`)}
               </Text>
             </View>
           </View>
 
-          <Text variant="caption" color="inverse" className="opacity-50 mb-1">
+          <Text variant="caption" color="primary" className="opacity-50 mb-1">
             {t('lost_found.item_description')}
           </Text>
-          <Text variant="body" color="inverse">{item.description}</Text>
+          <Text variant="body" color="primary">{item.description}</Text>
         </Card>
 
         {/* Driver response section (not yet responded) */}
         {!hasResponded && (
-          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
-            <Text variant="label" color="inverse" className="mb-3">
+          <Card theme="light" variant="filled" padding="md" className="bg-white mb-4">
+            <Text variant="label" color="primary" className="mb-3">
               {t('lost_found.respond')}
             </Text>
 
             <TextInput
-              className="border border-neutral-600 rounded-xl px-4 py-3 text-base min-h-[80px] mb-4 text-white"
+              className="border border-[#E2E8F0] rounded-xl px-4 py-3 text-base min-h-[80px] mb-4 text-neutral-900 bg-white"
               placeholder={t('lost_found.response_placeholder')}
               placeholderTextColor="#666"
               value={response}
@@ -206,7 +205,6 @@ export default function DriverLostItemScreen() {
                   variant="outline"
                   size="md"
                   fullWidth
-                  forceDark
                   onPress={() => handleRespond(false)}
                   disabled={submitting}
                 />
@@ -217,16 +215,16 @@ export default function DriverLostItemScreen() {
 
         {/* Arrange return (item found, not yet arranged) */}
         {canArrangeReturn && (
-          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
-            <Text variant="label" color="inverse" className="mb-3">
+          <Card theme="light" variant="filled" padding="md" className="bg-white mb-4">
+            <Text variant="label" color="primary" className="mb-3">
               {t('lost_found.arrange_return')}
             </Text>
 
-            <Text variant="caption" color="inverse" className="opacity-50 mb-1">
+            <Text variant="caption" color="primary" className="opacity-50 mb-1">
               {t('lost_found.return_fee_label')}
             </Text>
             <TextInput
-              className="border border-neutral-600 rounded-xl px-4 py-3 text-base mb-3 text-white"
+              className="border border-[#E2E8F0] rounded-xl px-4 py-3 text-base mb-3 text-neutral-900 bg-white"
               placeholder="0"
               placeholderTextColor="#666"
               value={returnFee}
@@ -234,22 +232,22 @@ export default function DriverLostItemScreen() {
               keyboardType="numeric"
             />
 
-            <Text variant="caption" color="inverse" className="opacity-50 mb-1">
+            <Text variant="caption" color="primary" className="opacity-50 mb-1">
               {t('lost_found.return_location_label')}
             </Text>
             <TextInput
-              className="border border-neutral-600 rounded-xl px-4 py-3 text-base mb-3 text-white"
+              className="border border-[#E2E8F0] rounded-xl px-4 py-3 text-base mb-3 text-neutral-900 bg-white"
               placeholder={t('lost_found.return_location_label')}
               placeholderTextColor="#666"
               value={returnLocation}
               onChangeText={setReturnLocation}
             />
 
-            <Text variant="caption" color="inverse" className="opacity-50 mb-1">
+            <Text variant="caption" color="primary" className="opacity-50 mb-1">
               {t('lost_found.return_notes_label')}
             </Text>
             <TextInput
-              className="border border-neutral-600 rounded-xl px-4 py-3 text-base min-h-[60px] mb-4 text-white"
+              className="border border-[#E2E8F0] rounded-xl px-4 py-3 text-base min-h-[60px] mb-4 text-neutral-900 bg-white"
               placeholder={t('lost_found.return_notes_label')}
               placeholderTextColor="#666"
               value={returnNotes}
@@ -271,18 +269,18 @@ export default function DriverLostItemScreen() {
 
         {/* Mark returned button */}
         {canMarkReturned && (
-          <Card forceDark variant="filled" padding="md" className="bg-neutral-800 mb-4">
+          <Card theme="light" variant="filled" padding="md" className="bg-white mb-4">
             {item.return_location && (
               <View className="mb-3">
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {t('lost_found.return_location_label')}
                 </Text>
-                <Text variant="body" color="inverse">{item.return_location}</Text>
+                <Text variant="body" color="primary">{item.return_location}</Text>
               </View>
             )}
             {item.return_fee_cup != null && item.return_fee_cup > 0 && (
               <View className="mb-3">
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {t('lost_found.return_fee_label')}
                 </Text>
                 <Text variant="body" color="accent">{formatCUP(item.return_fee_cup)}</Text>
@@ -301,8 +299,8 @@ export default function DriverLostItemScreen() {
 
         {/* Resolved status */}
         {isResolved && (
-          <Card forceDark variant="filled" padding="md" className="bg-green-900/30 border border-green-500/30 mb-4">
-            <Text variant="body" color="inverse" className="font-semibold">
+          <Card theme="light" variant="filled" padding="md" className="bg-green-50 border border-green-200 mb-4">
+            <Text variant="body" color="primary" className="font-semibold">
               ✓ {t(`lost_found.status_${item.status}`)}
             </Text>
           </Card>

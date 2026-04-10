@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
@@ -14,16 +15,21 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.brand.orange,
         tabBarInactiveTintColor: colors.neutral[500],
         tabBarStyle: {
-          backgroundColor: colors.brand.black,
-          borderTopColor: colors.neutral[800],
+          backgroundColor: '#141418',
+          borderTopColor: 'rgba(255,255,255,0.06)',
+          borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
-          height: 60,
+          height: 64,
+          ...(Platform.OS === 'web'
+            ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(20,20,24,0.92)' } as any
+            : {}),
         },
         tabBarLabelStyle: {
-          fontFamily: 'Montserrat',
-          fontSize: 12,
+          fontFamily: 'Inter',
+          fontSize: 11,
           fontWeight: '600',
+          letterSpacing: 0.2,
         },
       }}
     >

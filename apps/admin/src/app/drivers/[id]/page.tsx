@@ -56,6 +56,7 @@ export default function DriverDetailPage() {
   const router = useRouter();
   const [driver, setDriver] = useState<DriverDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [showReasonModal, setShowReasonModal] = useState<'reject' | 'suspend' | null>(null);
   const [reason, setReason] = useState('');
@@ -87,7 +88,7 @@ export default function DriverDetailPage() {
           }).catch(() => {});
         }
       } catch (err) {
-        // Error handled by UI
+        if (!cancelled) setApiError(err instanceof Error ? err.message : 'Error al cargar datos del conductor');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,9 +105,13 @@ export default function DriverDetailPage() {
     driver.documents.forEach(async (doc) => {
       try {
         const url = await adminService.getDocumentUrl(doc.storage_path);
+        if (!url) {
+          setDocUrls((prev) => ({ ...prev, [doc.id]: '__error__' }));
+          return;
+        }
         setDocUrls((prev) => ({ ...prev, [doc.id]: url }));
       } catch {
-        // Storage may not be configured yet
+        setDocUrls((prev) => ({ ...prev, [doc.id]: '__error__' }));
       }
     });
   }, [driver?.documents]);
@@ -179,7 +184,9 @@ export default function DriverDetailPage() {
   if (!driver) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-neutral-400">{t('drivers.driver_not_found')}</p>
+        <p className="text-neutral-400">
+          {apiError ? t('drivers.error_loading', { defaultValue: 'Error al cargar datos del conductor' }) : t('drivers.driver_not_found')}
+        </p>
       </div>
     );
   }
@@ -349,7 +356,7 @@ export default function DriverDetailPage() {
                   {doc ? (
                     <div>
                       {/* Image preview */}
-                      {url && (
+                      {url && url !== '__error__' && (
                         <a href={url} target="_blank" rel="noopener noreferrer">
                           <img
                             src={url}
@@ -357,6 +364,11 @@ export default function DriverDetailPage() {
                             className="w-full h-32 object-cover rounded-md mb-2 cursor-pointer hover:opacity-80 transition-opacity"
                           />
                         </a>
+                      )}
+                      {url === '__error__' && (
+                        <div className="w-full h-32 bg-red-50 border border-red-200 rounded-md mb-2 flex items-center justify-center">
+                          <span className="text-xs text-red-500">{t('verification.doc_load_error', { defaultValue: 'Error loading document' })}</span>
+                        </div>
                       )}
                       {!url && (
                         <div className="w-full h-32 bg-neutral-100 rounded-md mb-2 flex items-center justify-center">
@@ -649,6 +661,16 @@ export default function DriverDetailPage() {
             <h3 id="reason-modal-title" className="text-lg font-bold mb-4">
               {showReasonModal === 'reject' ? t('drivers.reject_reason_title') : t('drivers.suspend_reason_title')}
             </h3>
+            {showReasonModal === 'suspend' && (
+              <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                <p className="font-semibold">{t('drivers.suspend_warning_title', 'Consecuencias de la suspension')}</p>
+                <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
+                  <li>{t('drivers.suspend_warning_active_rides', 'Los viajes activos del conductor seran cancelados')}</li>
+                  <li>{t('drivers.suspend_warning_no_new', 'No podra aceptar nuevos viajes')}</li>
+                  <li>{t('drivers.suspend_warning_wallet', 'El acceso a la billetera quedara restringido')}</li>
+                </ul>
+              </div>
+            )}
             <textarea
               className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500"
               rows={3}

@@ -306,7 +306,7 @@ export const walletService = {
     });
     if (error) throw error;
     const result = data as Record<string, unknown>;
-    logger.info('quota_recharged', { driverUserId, amount, newBalance: result.balance });
+    logger.info('quota_recharged', { driverUserId, amount, newBalance: result.balance as number });
     return {
       balance: Number(result.balance ?? 0),
       recharged: Number(result.recharged ?? amount),

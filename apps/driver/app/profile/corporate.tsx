@@ -7,7 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { getSupabaseClient } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
@@ -112,8 +112,8 @@ export default function CorporateScreen() {
   return (
     <Screen
       scroll
-      bg="dark"
-      statusBarStyle="light-content"
+      bg="lightPrimary"
+      statusBarStyle="dark-content"
       padded
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={colors.brand.orange} />}
     >
@@ -125,11 +125,11 @@ export default function CorporateScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
             className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: driverDarkColors.hover }}
+            style={{ backgroundColor: colors.neutral[100] }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
           </Pressable>
-          <Text variant="h3" color="inverse">
+          <Text variant="h3" color="primary">
             {t('corporate.title', { defaultValue: 'Corporativo' })}
           </Text>
         </View>
@@ -143,7 +143,7 @@ export default function CorporateScreen() {
 
         {!loading && !fleet && (
           <EmptyState
-            forceDark
+
             icon="business-outline"
             title={t('corporate.no_fleet', { defaultValue: 'Sin flota asignada' })}
             description={t('corporate.no_fleet_desc', { defaultValue: 'No perteneces a ninguna flota corporativa. Contacta a tu administrador para unirte.' })}
@@ -157,14 +157,14 @@ export default function CorporateScreen() {
               {t('corporate.fleet_section', { defaultValue: 'Tu flota' })}
             </Text>
             <AnimatedCard delay={0} className="rounded-2xl p-4 mb-6"
-              style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+              style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
             >
               <View className="flex-row items-center">
                 <View className="w-12 h-12 rounded-2xl items-center justify-center mr-4" style={{ backgroundColor: `${colors.brand.orange}20` }}>
                   <Ionicons name="business" size={24} color={colors.brand.orange} />
                 </View>
                 <View className="flex-1">
-                  <Text variant="body" color="inverse" className="font-bold">{fleet.name}</Text>
+                  <Text variant="body" color="primary" className="font-bold">{fleet.name}</Text>
                   <Text variant="caption" color="secondary">{fleet.contact_email}</Text>
                 </View>
                 <View className="px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.success.DEFAULT}20` }}>
@@ -186,7 +186,7 @@ export default function CorporateScreen() {
                     <View
                       key={i}
                       className="rounded-xl p-3"
-                      style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default, minWidth: '45%' }}
+                      style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', minWidth: '45%' }}
                     >
                       <Text variant="caption" color="secondary">{rate.service_type}</Text>
                       <Text variant="metric" color="accent">{rate.rate_multiplier}x</Text>
@@ -203,7 +203,7 @@ export default function CorporateScreen() {
             </Text>
             {rides.length === 0 ? (
               <EmptyState
-                forceDark
+    
                 icon="car-outline"
                 title={t('corporate.no_rides', { defaultValue: 'Sin viajes corporativos' })}
                 description={t('corporate.no_rides_desc', { defaultValue: 'Tus viajes corporativos aparecerán aquí.' })}
@@ -214,7 +214,7 @@ export default function CorporateScreen() {
                   <View
                     key={ride.id}
                     className="rounded-xl p-4 mb-2"
-                    style={{ backgroundColor: driverDarkColors.card, borderWidth: 1, borderColor: driverDarkColors.border.default }}
+                    style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
                   >
                     <View className="flex-row items-center justify-between mb-2">
                       <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${colors.info.DEFAULT}20` }}>
@@ -228,13 +228,13 @@ export default function CorporateScreen() {
                     </View>
                     <View className="flex-row items-center mb-1">
                       <Ionicons name="ellipse" size={8} color={colors.success.DEFAULT} />
-                      <Text variant="bodySmall" color="inverse" className="ml-2" numberOfLines={1}>
+                      <Text variant="bodySmall" color="primary" className="ml-2" numberOfLines={1}>
                         {ride.pickup_address}
                       </Text>
                     </View>
                     <View className="flex-row items-center">
                       <Ionicons name="ellipse" size={8} color={colors.brand.orange} />
-                      <Text variant="bodySmall" color="inverse" className="ml-2" numberOfLines={1}>
+                      <Text variant="bodySmall" color="primary" className="ml-2" numberOfLines={1}>
                         {ride.dropoff_address}
                       </Text>
                     </View>

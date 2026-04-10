@@ -6,7 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverDarkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -56,7 +56,7 @@ export default function SavedZonesScreen() {
   };
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 pb-8">
         <View className="flex-row items-center mb-6">
           <Pressable
@@ -65,11 +65,11 @@ export default function SavedZonesScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
             className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: driverDarkColors.hover }}
+            style={{ backgroundColor: colors.neutral[100] }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
           </Pressable>
-          <Text variant="h3" color="inverse">
+          <Text variant="h3" color="primary">
             {t('profile.saved_zones', { defaultValue: 'Zonas guardadas' })}
           </Text>
         </View>
@@ -88,7 +88,6 @@ export default function SavedZonesScreen() {
 
         {!loading && zones.length === 0 && (
           <EmptyState
-            forceDark
             icon="location-outline"
             title={t('profile.no_zones', { defaultValue: 'Sin zonas guardadas' })}
             description={t('profile.no_zones_desc', { defaultValue: 'Agrega zonas donde prefieres trabajar.' })}
@@ -103,14 +102,14 @@ export default function SavedZonesScreen() {
                 onPress={() => togglePrimary(zone.id)}
                 className="rounded-2xl p-4 mb-3 flex-row items-center"
                 style={{
-                  backgroundColor: driverDarkColors.card,
+                  backgroundColor: '#FFFFFF',
                   borderWidth: 1,
-                  borderColor: zone.is_primary ? colors.brand.orange : driverDarkColors.border.default,
+                  borderColor: zone.is_primary ? colors.brand.orange : '#E2E8F0',
                 }}
               >
                 <View
                   className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-                  style={{ backgroundColor: zone.is_primary ? `${colors.brand.orange}20` : driverDarkColors.hover }}
+                  style={{ backgroundColor: zone.is_primary ? `${colors.brand.orange}20` : colors.neutral[100] }}
                 >
                   <Ionicons
                     name={zone.is_primary ? 'location' : 'location-outline'}
@@ -119,7 +118,7 @@ export default function SavedZonesScreen() {
                   />
                 </View>
                 <View className="flex-1">
-                  <Text variant="body" color="inverse" className="font-semibold">{zone.name}</Text>
+                  <Text variant="body" color="primary" className="font-semibold">{zone.name}</Text>
                   <Text variant="caption" style={{ color: colors.neutral[500] }}>
                     {t('profile.zone_radius', { defaultValue: 'Radio' })}: {zone.radius_km} km
                   </Text>

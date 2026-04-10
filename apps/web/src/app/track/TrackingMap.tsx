@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { fetchRoute } from '@tricigo/utils';
+import { fetchRoute, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
@@ -15,6 +15,7 @@ export interface TrackingMapProps {
   driverLat?: number;
   driverLng?: number;
   driverHeading?: number;
+  vehicleType?: string;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -23,61 +24,45 @@ export interface TrackingMapProps {
 
 function createPickupMarkerEl(): HTMLDivElement {
   const el = document.createElement('div');
+  const s = MARKER.pickup.size;
+  const d = MARKER.pickup.innerDot;
   el.innerHTML = `
-    <div style="position:relative;width:28px;height:28px;">
-      <div style="
-        position:absolute;inset:0;border-radius:50%;
-        background:rgba(34,197,94,0.3);
-        animation:pulse-green 2s ease-out infinite;
-      "></div>
-      <div style="
-        position:relative;width:28px;height:28px;border-radius:50%;
-        background:#22c55e;border:3px solid white;
-        box-shadow:0 2px 8px rgba(0,0,0,0.4);
-        display:flex;align-items:center;justify-content:center;
-      "><div style="width:8px;height:8px;border-radius:50%;background:white;"></div></div>
+    <div style="position:relative;width:${s}px;height:${s}px;">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${MAP_COLORS.pickup};opacity:0.3;animation:pulse-green 2s ease-out infinite;"></div>
+      <div style="position:relative;width:${s}px;height:${s}px;border-radius:50%;background:${MAP_COLORS.pickup};border:3px solid white;box-shadow:${MARKER.pickup.shadow};display:flex;align-items:center;justify-content:center;">
+        <div style="width:${d}px;height:${d}px;border-radius:50%;background:white;"></div>
+      </div>
     </div>`;
   return el;
 }
 
 function createDropoffMarkerEl(): HTMLDivElement {
   const el = document.createElement('div');
+  const s = MARKER.dropoff.size;
+  const d = MARKER.dropoff.innerDot;
+  const t = MARKER.dropoff.tailH;
   el.innerHTML = `
-    <div style="position:relative;width:28px;height:40px;">
-      <div style="
-        width:28px;height:28px;border-radius:50%;
-        background:#EF4444;border:3px solid white;
-        box-shadow:0 3px 10px rgba(239,68,68,0.4);
-        position:relative;z-index:1;
-      "></div>
-      <div style="
-        position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-        width:0;height:0;
-        border-left:8px solid transparent;border-right:8px solid transparent;
-        border-top:12px solid #EF4444;
-      "></div>
+    <div style="position:relative;width:${s}px;height:${s + t}px;animation:drop-in 0.4s ease-out both;">
+      <div style="width:${s}px;height:${s}px;border-radius:50%;background:${MAP_COLORS.dropoff};border:3px solid white;box-shadow:${MARKER.dropoff.shadow};position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
+        <div style="width:${d}px;height:${d}px;border-radius:50%;background:white;"></div>
+      </div>
+      <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:${t}px solid ${MAP_COLORS.dropoff};"></div>
     </div>`;
   return el;
 }
 
-function createDriverMarkerEl(): HTMLDivElement {
+function createDriverMarkerEl(vehicleType?: string): HTMLDivElement {
   const el = document.createElement('div');
+  const s = MARKER.driver.size;
+  const r = MARKER.driver.ringSize;
+  const vehicleImg = vehicleType
+    ? `<img src="/images/vehicles/markers/${vehicleType}@2x.png" style="width:28px;height:28px;object-fit:contain;" alt="" />`
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L19 21L12 17L5 21L12 2Z"/></svg>`;
   el.innerHTML = `
-    <div style="position:relative;width:32px;height:32px;">
-      <div style="
-        position:absolute;inset:-8px;border-radius:50%;
-        background:rgba(59,130,246,0.2);
-        animation:pulse-driver 2s ease-out infinite;
-      "></div>
-      <div style="
-        width:32px;height:32px;border-radius:50%;
-        background:#3b82f6;border:3px solid white;
-        box-shadow:0 2px 8px rgba(59,130,246,0.5);
-        display:flex;align-items:center;justify-content:center;
-      ">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2L19 21L12 17L5 21L12 2Z"/>
-        </svg>
+    <div style="position:relative;width:${r}px;height:${r}px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${MAP_COLORS.driver};opacity:0.15;animation:pulse-driver 2s ease-out infinite;"></div>
+      <div style="width:${s}px;height:${s}px;border-radius:50%;background:${MAP_COLORS.driverContainer};border:2px solid ${MAP_COLORS.driver};box-shadow:${MARKER.driver.shadow};display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        ${vehicleImg}
       </div>
     </div>`;
   return el;
@@ -91,8 +76,18 @@ const PULSE_STYLES = `
   }
   @keyframes pulse-driver {
     0% { transform: scale(1); opacity: 0.5; }
-    70% { transform: scale(2.5); opacity: 0; }
+    70% { transform: scale(2); opacity: 0; }
     100% { transform: scale(1); opacity: 0; }
+  }
+  @keyframes drop-in {
+    0% { transform: scale(0.3); opacity: 0; }
+    60% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes pulse-green { 0%, 100% { transform: scale(1); opacity: 0.3; } }
+    @keyframes pulse-driver { 0%, 100% { transform: scale(1); opacity: 0.15; } }
+    @keyframes drop-in { 0%, 100% { transform: scale(1); opacity: 1; } }
   }
 `;
 
@@ -104,6 +99,7 @@ export default function TrackingMap({
   driverLat,
   driverLng,
   driverHeading,
+  vehicleType,
   className,
   style: styleProp,
 }: TrackingMapProps) {
@@ -133,7 +129,7 @@ export default function TrackingMap({
     try {
       map = new mapboxgl.Map({
         container,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: MAP_STYLE_LIGHT,
         center: [pickupLng, pickupLat],
         zoom: 13,
         attributionControl: false,
@@ -161,23 +157,23 @@ export default function TrackingMap({
         type: 'line',
         source: 'route',
         paint: {
-          'line-color': '#000',
-          'line-width': 8,
-          'line-opacity': 0.15,
-          'line-blur': 3,
+          'line-color': ROUTE.shadow.color,
+          'line-width': ROUTE.shadow.width,
+          'line-opacity': ROUTE.shadow.opacity,
+          'line-blur': ROUTE.shadow.blur,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
 
-      // Route line
+      // Route line — blue premium
       map.addLayer({
         id: 'route-line',
         type: 'line',
         source: 'route',
         paint: {
-          'line-color': '#FF4D00',
-          'line-width': 5,
-          'line-opacity': 0.9,
+          'line-color': ROUTE.main.color,
+          'line-width': ROUTE.main.width,
+          'line-opacity': ROUTE.main.opacity,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
@@ -234,7 +230,7 @@ export default function TrackingMap({
       }
     } else {
       driverMarkerRef.current = new mapboxgl.Marker({
-        element: createDriverMarkerEl(),
+        element: createDriverMarkerEl(vehicleType),
         anchor: 'center',
         rotation: driverHeading ?? 0,
         rotationAlignment: 'map',

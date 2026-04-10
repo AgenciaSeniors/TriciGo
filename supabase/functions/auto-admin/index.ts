@@ -135,7 +135,9 @@ async function autoApproveDrivers(
               body: 'Tu cuenta de conductor ha sido aprobada. Ya puedes empezar a recibir viajes.',
               data: { type: 'driver_status', status: 'approved' },
             },
-          }).catch(() => {});
+          }).catch((err) => {
+            console.error(`Push notification failed for user ${driver.user_id}:`, err?.message || err);
+          });
         }
       }
 
@@ -364,6 +366,19 @@ Deno.serve(async (req: Request) => {
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: cors });
+  }
+
+  // BUG-036: Validate cron secret — this authentication prevents unauthorized
+  // invocation, which mitigates the need for per-request rate limiting (BUG-088).
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const requestSecret = req.headers.get('x-cron-secret');
+  const authHeader = req.headers.get('authorization');
+  const isServiceRole = authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '___none___');
+  if (!isServiceRole && (!cronSecret || requestSecret !== cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
   }
 
   const supabase = getSupabase();

@@ -230,7 +230,7 @@ export const useRideStore = create<RideState>((set, get) => ({
 
     // X2.2: Validate forward-only status transitions
     if (ride.status !== activeRide.status) {
-      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'completed', 'canceled'];
+      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed', 'canceled'];
 
       const isValidTransition = (current: string, next: string): boolean => {
         if (next === 'canceled') return true; // can always cancel
@@ -261,7 +261,8 @@ export const useRideStore = create<RideState>((set, get) => ({
       ride.status === 'accepted' ||
       ride.status === 'driver_en_route' ||
       ride.status === 'arrived_at_pickup' ||
-      ride.status === 'in_progress'
+      ride.status === 'in_progress' ||
+      ride.status === 'arrived_at_destination'
     ) {
       set({ flowStep: 'active' });
     } else if (ride.status === 'completed') {
@@ -278,13 +279,20 @@ export const useRideStore = create<RideState>((set, get) => ({
   setPromoResult: (promoResult) => set({ promoResult }),
   setAllFareEstimates: (allFareEstimates) => set({ allFareEstimates }),
   setCorporateAccount: (corporateAccountId) =>
-    set((s) => ({
-      draft: {
-        ...s.draft,
-        corporateAccountId,
-        paymentMethod: corporateAccountId ? 'corporate' : s.draft.paymentMethod === 'corporate' ? 'cash' : s.draft.paymentMethod,
-      },
-    })),
+    set((s) => {
+      // Bug 23: Save previous payment method before switching to corporate so we can restore it on deselect
+      if (corporateAccountId) {
+        return {
+          _prevPaymentMethod: s.draft.paymentMethod !== 'corporate' ? s.draft.paymentMethod : (s as any)._prevPaymentMethod ?? 'cash',
+          draft: { ...s.draft, corporateAccountId, paymentMethod: 'corporate' as PaymentMethod },
+        };
+      }
+      // Deselecting: restore previous payment method instead of defaulting to cash
+      const restored: PaymentMethod = (s as any)._prevPaymentMethod ?? 'cash';
+      return {
+        draft: { ...s.draft, corporateAccountId: null, paymentMethod: s.draft.paymentMethod === 'corporate' ? restored : s.draft.paymentMethod },
+      };
+    }),
   setDeliveryField: (field, value) =>
     set((s) => ({ draft: { ...s.draft, delivery: { ...s.draft.delivery, [field]: value } } })),
 

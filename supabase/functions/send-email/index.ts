@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
+    const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: verify JWT or internal service-role call ──
@@ -516,6 +516,15 @@ Deno.serve(async (req) => {
     if (!recipient_email || !subject || !template) {
       return new Response(
         JSON.stringify({ error: 'recipient_email, subject, and template are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // BUG-085: Validate email format before sending
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipient_email)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email format' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }

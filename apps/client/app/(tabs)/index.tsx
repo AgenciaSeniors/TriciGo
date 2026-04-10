@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -183,6 +183,8 @@ function WebSearchingState({
 
   const searchMessage = WEB_SEARCH_MESSAGES[searchPhase] ?? WEB_SEARCH_MESSAGES[0];
   const fmtCUP = (v: number) => `${Math.round(v).toLocaleString('es-CU')} CUP`;
+  const fmtPrice = (cupAmount: number, trcAmount?: number) =>
+    paymentMethod === 'tricicoin' ? formatTRC(trcAmount ?? cupAmount) : fmtCUP(cupAmount);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', ...font }}>
@@ -488,7 +490,7 @@ function WebSearchingState({
               )}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: colors.brand.orange, letterSpacing: '-0.02em' }}>
-              {fmtCUP(selectedEstimate.estimated_fare_cup)}
+              {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
             </div>
           </div>
         )}
@@ -566,6 +568,15 @@ function WebHomeScreen() {
   // Ride state
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin'>('cash');
+
+  /** Format fare price based on current payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return `₧${formatCurrency(cupAmount)}`;
+  }, [paymentMethod]);
+
   const [allEstimates, setAllEstimates] = useState<Record<string, any>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
@@ -764,6 +775,16 @@ function WebHomeScreen() {
   // Request ride handler
   const handleRequest = async () => {
     if (!pickup || !dropoff || !selectedEstimate) return;
+
+    // Validate TriciCoin balance
+    if (paymentMethod === 'tricicoin') {
+      const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
+      if (walletBalance < requiredAmount) {
+        router.push('/(tabs)/wallet');
+        return;
+      }
+    }
+
     if (serviceType === 'mensajeria') {
       if (!deliveryName.trim()) { setError('Ingresa el nombre del destinatario'); return; }
       if (!deliveryPhone.trim() || !/^\+?[\d\s-]{6,}$/.test(deliveryPhone.trim())) { setError('Ingresa un teléfono válido'); return; }
@@ -893,6 +914,8 @@ function WebHomeScreen() {
 
   // Format CUP helper
   const fmtCUP = (cup: number) => `${Math.round(cup).toLocaleString('es-CU')} CUP`;
+  const fmtPrice = (cupAmount: number, trcAmount?: number) =>
+    paymentMethod === 'tricicoin' ? formatTRC(trcAmount ?? cupAmount) : fmtCUP(cupAmount);
 
   // ── Phase 5: Web active ride view ──
   const flowStep = useRideStore((s) => s.flowStep);
@@ -1062,7 +1085,7 @@ function WebHomeScreen() {
                         ) : est ? (
                           <>
                             <div style={{ fontWeight: 700, fontSize: 15, color: isSelected ? colors.brand.orange : '#1a1a1a' }}>
-                              {fmtCUP(est.estimated_fare_cup)}
+                              {fmtPrice(est.estimated_fare_cup, est.estimated_fare_trc)}
                             </div>
                             <div style={{ fontSize: 11, color: '#9ca3af' }}>
                               ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
@@ -1171,15 +1194,15 @@ function WebHomeScreen() {
                       {promoResult?.valid && promoResult.discount > 0 ? (
                         <>
                           <span style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginRight: 8 }}>
-                            {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                            {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                           </span>
                           <span style={{ fontSize: 22, fontWeight: 800, color: '#22c55e' }}>
-                            {fmtCUP(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                            {fmtPrice(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
                           </span>
                         </>
                       ) : (
                         <span style={{ fontSize: 22, fontWeight: 800, color: colors.brand.orange }}>
-                          {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                          {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                         </span>
                       )}
                     </div>
@@ -1249,7 +1272,7 @@ function WebHomeScreen() {
               </div>
               {promoResult && (
                 <p style={{ fontSize: 12, marginTop: 4, color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
-                  {promoResult.valid ? `Descuento: -${fmtCUP(promoResult.discount)}` : promoResult.error}
+                  {promoResult.valid ? `Descuento: -${fmtPrice(promoResult.discount)}` : promoResult.error}
                 </p>
               )}
             </div>
@@ -1294,8 +1317,9 @@ function WebHomeScreen() {
               {isRequesting
                 ? 'Solicitando...'
                 : selectedEstimate
-                  ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtCUP(
+                  ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtPrice(
                       promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup,
+                      promoResult?.valid ? undefined : selectedEstimate.estimated_fare_trc,
                     )}`
                 : 'Solicitar viaje'}
             </button>
@@ -1908,11 +1932,14 @@ function SelectingView() {
   }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude]);
 
   // Bug 11: Re-estimate fare when payment method changes
+  // Bug 22/28: Clear promoResult so stale discount is not applied to new estimate
   const prevPaymentRef = useRef(draft.paymentMethod);
   useEffect(() => {
     if (draft.paymentMethod !== prevPaymentRef.current) {
       prevPaymentRef.current = draft.paymentMethod;
-      const fe = useRideStore.getState().fareEstimate;
+      const store = useRideStore.getState();
+      if (store.promoResult) store.setPromoResult(null);
+      const fe = store.fareEstimate;
       if (fe) requestEstimate();
     }
   }, [draft.paymentMethod, requestEstimate]);
@@ -1936,7 +1963,8 @@ function SelectingView() {
   const deliveryValid = !isDelivery || (
     draft.delivery.packageDescription.trim() &&
     draft.delivery.recipientName.trim() &&
-    draft.delivery.recipientPhone.trim()
+    draft.delivery.recipientPhone.trim() &&
+    !!draft.delivery.deliveryVehicleType
   );
   const canEstimate = draft.pickup && draft.dropoff && deliveryValid;
 
@@ -2113,7 +2141,7 @@ function SelectingView() {
                       className="font-bold"
                       color={isSelected ? 'accent' : 'primary'}
                     >
-                      ₧{formatCurrency(est.estimated_fare_cup)}
+                      {formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}
                     </Text>
                     {est.estimated_duration_s != null && est.estimated_duration_s > 0 && (
                       <Text variant="caption" color="tertiary">
@@ -2282,7 +2310,7 @@ function SelectingView() {
                   </Text>
                   {vEst && (
                     <Text variant="caption" color="tertiary" className="ml-1" style={{ fontSize: 10 }}>
-                      ₧{formatCurrency(vEst.estimated_fare_cup)}
+                      {formatFare(vEst.estimated_fare_cup, vEst.estimated_fare_trc)}
                     </Text>
                   )}
                 </Pressable>
@@ -2827,7 +2855,7 @@ function ReviewingView() {
           </View>
           <View className="items-end">
             <Text variant="h2" color="accent" className="font-bold">
-              ₧{formatCurrency(fareEstimate.estimated_fare_cup)}
+              {formatFare(fareEstimate.estimated_fare_cup, fareEstimate.estimated_fare_trc)}
             </Text>
             {fareEstimate.exchange_rate_usd_cup > 0 && (
               <Text variant="caption" color="tertiary">
@@ -2845,7 +2873,7 @@ function ReviewingView() {
           )}
           {fareEstimate.per_km_rate_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              ₧{formatCurrency(fareEstimate.per_km_rate_cup)}/km
+              {formatFare(fareEstimate.per_km_rate_cup)}/km
             </Text>
           )}
           {fareEstimate.exchange_rate_usd_cup > 0 && (
@@ -2884,7 +2912,7 @@ function ReviewingView() {
                   </Text>
                   {est && (
                     <Text variant="caption" color="accent" className="ml-2 font-semibold">
-                      ₧{formatCurrency(est.estimated_fare_cup)}
+                      {formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}
                     </Text>
                   )}
                 </Pressable>
@@ -2945,12 +2973,13 @@ function ReviewingView() {
         </View>
       )}
 
+      {/* Bug 29: Disable confirm button while promo is validating */}
       <Button
         title={confirmLabel}
         size="lg"
         fullWidth
         onPress={debouncedConfirmRide}
-        loading={isLoading || isFareEstimating}
+        loading={isLoading || isFareEstimating || validatingPromo}
         className="mb-3"
       />
       <Button
@@ -2998,15 +3027,18 @@ function ReviewingView() {
           </Card>
 
           {/* UX-3: Nearby vehicles count (moved from main view) */}
-          {nearbyVehicles.length > 0 && (
-            <View className="mt-1 mb-3">
-              <Text variant="caption" color="secondary" className="text-center">
-                {t('ride.nearby_vehicles', { count: nearbyVehicles.length })}
-              </Text>
-            </View>
-          )}
+          <View className="mt-1 mb-3">
+            <Text variant="caption" color="secondary" className="text-center">
+              {nearbyVehicles.length > 0
+                ? t('ride.nearby_vehicles', { count: nearbyVehicles.length })
+                : t('ride.no_nearby_vehicles', { defaultValue: 'Sin conductores cercanos' })}
+            </Text>
+          </View>
 
           {/* Fare breakdown */}
+          {/* BUG-067: Discount applies only to base fare (before insurance premium).
+              The order is: baseFare → distance → duration → surge → discount → subtotal → insurance → total.
+              Insurance premium is calculated on the full fare and added after the discount is applied. */}
           <View className="mb-4">
             <FareBreakdownCard
               title={t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
@@ -3021,7 +3053,7 @@ function ReviewingView() {
               totalCup={fareEstimate.estimated_fare_cup}
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}
-              discountTrc={discount}
+              discountTrc={discount} /* discountAmount is in CUP; TRC = CUP 1:1 — discount applies to base fare only, before insurance */
               discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
               minFareApplied={fareEstimate.min_fare_applied}
               minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
@@ -3043,11 +3075,14 @@ function ReviewingView() {
           {/* U1.4: Fare range context */}
           {fareEstimate.estimated_fare_cup > 0 && (
             <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
-              {t('home.usual_fare_range', {
-                low: Math.round(fareEstimate.estimated_fare_cup * 0.85).toLocaleString(),
-                high: Math.round(fareEstimate.estimated_fare_cup * 1.15).toLocaleString(),
-                defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
-              })}
+              {paymentMethod === 'tricicoin'
+                ? `Este viaje suele costar ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 0.85) - discount))} – ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 1.15) - discount))}`
+                : t('home.usual_fare_range', {
+                    low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString(),
+                    high: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 1.15) - discount).toLocaleString(),
+                    defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
+                  })
+              }
             </Text>
           )}
 
@@ -3132,7 +3167,8 @@ function ReviewingView() {
           )}
 
           {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
-          {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
+          {/* BUG-066: Guard against stale activeRide — only show split fare when ride is in a valid pre-completion state */}
+          {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'].includes(activeRide.status) && (
             <>
               <Pressable
                 className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${

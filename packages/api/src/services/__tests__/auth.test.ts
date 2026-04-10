@@ -10,6 +10,11 @@ const mockAuth = {
   onAuthStateChange: vi.fn(),
   signInWithOAuth: vi.fn(),
   updateUser: vi.fn(),
+  setSession: vi.fn(),
+  signInWithPassword: vi.fn(),
+};
+const mockFunctions = {
+  invoke: vi.fn(),
 };
 const mockFrom = vi.fn();
 const mockStorageUpload = vi.fn();
@@ -20,7 +25,7 @@ const mockStorage = {
     getPublicUrl: mockStorageGetPublicUrl,
   })),
 };
-const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage };
+const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage, functions: mockFunctions };
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -36,17 +41,19 @@ describe('authService', () => {
 
   // ==================== sendOTP ====================
   describe('sendOTP', () => {
-    it('calls supabase auth.signInWithOtp with the phone number', async () => {
-      mockAuth.signInWithOtp.mockResolvedValue({ error: null });
+    it('calls supabase functions.invoke with the phone number', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
 
       await authService.sendOTP('+573001234567');
 
-      expect(mockAuth.signInWithOtp).toHaveBeenCalledWith({ phone: '+573001234567' });
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('send-sms-otp', {
+        body: { phone: '+573001234567' },
+      });
     });
 
     it('throws on supabase error', async () => {
       const err = { message: 'Rate limit exceeded', code: '429' };
-      mockAuth.signInWithOtp.mockResolvedValue({ error: err });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
 
       await expect(authService.sendOTP('+573001234567')).rejects.toEqual(err);
     });
@@ -54,23 +61,22 @@ describe('authService', () => {
 
   // ==================== verifyOTP ====================
   describe('verifyOTP', () => {
-    it('calls supabase auth.verifyOtp with phone, token, and type sms', async () => {
-      const mockData = { session: { access_token: 'tok-123' }, user: { id: 'u-1' } };
-      mockAuth.verifyOtp.mockResolvedValue({ data: mockData, error: null });
+    it('calls supabase functions.invoke with phone and code', async () => {
+      const mockData = { session: { access_token: 'tok-123', refresh_token: 'ref-123' }, user: { id: 'u-1' } };
+      mockFunctions.invoke.mockResolvedValue({ data: mockData, error: null });
+      mockAuth.setSession.mockResolvedValue({ error: null });
 
       const result = await authService.verifyOTP('+573001234567', '123456');
 
-      expect(mockAuth.verifyOtp).toHaveBeenCalledWith({
-        phone: '+573001234567',
-        token: '123456',
-        type: 'sms',
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('verify-otp', {
+        body: { phone: '+573001234567', code: '123456' },
       });
       expect(result).toEqual(mockData);
     });
 
     it('throws on supabase error', async () => {
       const err = { message: 'Invalid OTP', code: 'otp_expired' };
-      mockAuth.verifyOtp.mockResolvedValue({ data: null, error: err });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
 
       await expect(authService.verifyOTP('+573001234567', '000000')).rejects.toEqual(err);
     });

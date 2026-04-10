@@ -8,6 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
@@ -96,13 +97,13 @@ export default function DriverHelpScreen() {
     const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' };
     return (
       <Pressable onPress={() => router.push(`/profile/ticket-detail?ticketId=${item.id}`)}>
-        <Card forceDark variant="filled" padding="md" className="mb-2 bg-neutral-800">
+        <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 mr-2">
-              <Text variant="body" color="inverse" className="font-semibold" numberOfLines={1}>
+              <Text variant="body" color="primary" className="font-semibold" numberOfLines={1}>
                 {item.subject}
               </Text>
-              <Text variant="caption" color="inverse" className="mt-0.5 opacity-50">
+              <Text variant="caption" color="primary" className="mt-0.5 opacity-50">
                 {new Date(item.created_at).toLocaleDateString('es-CU', {
                   day: 'numeric',
                   month: 'short',
@@ -121,13 +122,13 @@ export default function DriverHelpScreen() {
   };
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content" padded>
+    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 flex-1">
         <View className="flex-row items-center mb-6">
           <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={24} color={colors.neutral[800]} />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('profile.help_title')}</Text>
+          <Text variant="h3" color="primary">{t('profile.help_title')}</Text>
         </View>
 
         <FlatList
@@ -141,22 +142,22 @@ export default function DriverHelpScreen() {
                 const answerKey = key.replace('_q', '_a') as `faq_a${1 | 2 | 3}`;
                 const isExpanded = expandedIdx === idx;
                 return (
-                  <Card forceDark key={key} variant="filled" padding="md" className="mb-3 bg-neutral-800">
+                  <Card theme="light" key={key} variant="filled" padding="md" className="mb-3 bg-white">
                     <Pressable
                       onPress={() => setExpandedIdx(isExpanded ? null : idx)}
                       className="flex-row items-center justify-between"
                     >
-                      <Text variant="body" color="inverse" className="flex-1 mr-2">
+                      <Text variant="body" color="primary" className="flex-1 mr-2">
                         {t(`profile.${key}`)}
                       </Text>
                       <Ionicons
                         name={isExpanded ? 'chevron-up' : 'chevron-down'}
                         size={20}
-                        color="#A3A3A3"
+                        color={colors.neutral[500]}
                       />
                     </Pressable>
                     {isExpanded && (
-                      <Text variant="bodySmall" color="inverse" className="mt-2 opacity-60">
+                      <Text variant="bodySmall" color="primary" className="mt-2 opacity-60">
                         {t(`profile.${answerKey}`)}
                       </Text>
                     )}
@@ -165,15 +166,15 @@ export default function DriverHelpScreen() {
               })}
 
               {/* Contact info */}
-              <Card forceDark variant="filled" padding="md" className="mt-1 mb-6 bg-neutral-800">
-                <Text variant="body" color="inverse" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
+              <Card theme="light" variant="filled" padding="md" className="mt-1 mb-6 bg-white">
+                <Text variant="body" color="primary" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
-                  <Ionicons name="mail-outline" size={18} color="#A3A3A3" />
-                  <Text variant="bodySmall" color="inverse" className="ml-2 opacity-60">soporte@tricigo.app</Text>
+                  <Ionicons name="mail-outline" size={18} color={colors.neutral[500]} />
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">soporte@tricigo.app</Text>
                 </View>
                 <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color="#A3A3A3" />
-                  <Text variant="bodySmall" color="inverse" className="ml-2 opacity-60">+53 5XXXXXXX</Text>
+                  <Ionicons name="call-outline" size={18} color={colors.neutral[500]} />
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">+53 5XXXXXXX</Text>
                 </View>
               </Card>
 
@@ -189,14 +190,14 @@ export default function DriverHelpScreen() {
 
               {/* Tickets header */}
               {tickets.length > 0 && (
-                <Text variant="h4" color="inverse" className="mb-3">{t('profile.help_my_tickets')}</Text>
+                <Text variant="h4" color="primary" className="mb-3">{t('profile.help_my_tickets')}</Text>
               )}
             </View>
           }
           ListEmptyComponent={
             !loadingTickets ? (
               <View className="items-center py-6">
-                <Text variant="bodySmall" color="inverse" className="opacity-50">
+                <Text variant="bodySmall" color="primary" className="opacity-50">
                   {t('profile.help_no_tickets')}
                 </Text>
               </View>
@@ -218,13 +219,13 @@ export default function DriverHelpScreen() {
                 key={cat.value}
                 onPress={() => setCategory(cat.value)}
                 className={`px-3 py-1.5 rounded-full ${
-                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-700'
+                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-100'
                 }`}
               >
                 <Text
                   variant="caption"
                   className={`font-medium ${
-                    category === cat.value ? 'text-white' : 'text-neutral-300'
+                    category === cat.value ? 'text-white' : 'text-neutral-600'
                   }`}
                 >
                   {t(cat.key)}

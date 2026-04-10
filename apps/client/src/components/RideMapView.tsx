@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { View, Text, Animated, Platform, useColorScheme } from 'react-native';
+import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
@@ -57,6 +58,8 @@ interface RideMapViewProps {
   acceptedDriverLocation?: GeoPoint | null;
   /** Route from driver's current position to pickup (blue dashed line) */
   driverToPickupRoute?: GeoPoint[] | null;
+  /** Vehicle type slug for driver marker (triciclo, moto, auto, confort) */
+  vehicleType?: string;
   height?: number;
 }
 
@@ -101,12 +104,16 @@ function RideMapViewInner({
   isAcceptAnimating,
   acceptedDriverLocation,
   driverToPickupRoute,
+  vehicleType,
   height = 200,
 }: RideMapViewProps) {
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pickupPulseAnim = useRef(new Animated.Value(1)).current;
+  const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
+  const dropoffScale = useRef(new Animated.Value(0.3)).current;
 
   // Smooth driver position interpolation
   const animatedDriver = useAnimatedPosition(driverLocation ?? null);
@@ -123,6 +130,31 @@ function RideMapViewInner({
     animation.start();
     return () => animation.stop();
   }, [driverLocation, pulseAnim]);
+
+  // Pulsing ring animation for pickup marker
+  useEffect(() => {
+    if (!pickupLocation) return;
+    const animation = Animated.loop(
+      Animated.parallel([
+        Animated.timing(pickupPulseAnim, { toValue: 2.5, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pickupPulseOpacity, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pickupLocation, pickupPulseAnim, pickupPulseOpacity]);
+
+  // Bounce-in animation for dropoff marker
+  useEffect(() => {
+    if (!dropoffLocation) return;
+    dropoffScale.setValue(0.3);
+    Animated.spring(dropoffScale, {
+      toValue: 1,
+      tension: 80,
+      friction: 6,
+      useNativeDriver: true,
+    }).start();
+  }, [dropoffLocation, dropoffScale]);
 
   // Animated route drawing — progressively reveal route coordinates
   const [animatedRouteCoords, setAnimatedRouteCoords] = useState<GeoPoint[] | null>(null);
@@ -252,7 +284,7 @@ function RideMapViewInner({
     <View style={{ height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL="mapbox://styles/mapbox/streets-v12"
+        styleURL={MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
@@ -286,15 +318,15 @@ function RideMapViewInner({
               : {})}
         />
 
-        {/* Driver-to-pickup route (blue dashed) */}
+        {/* Driver-to-pickup route (light blue dashed) */}
         {driverRouteGeoJSON && (
           <MapboxGL.ShapeSource id="driver-to-pickup-route" shape={driverRouteGeoJSON}>
             <MapboxGL.LineLayer
               id="driverRouteLine"
               style={{
-                lineColor: '#3b82f6',
-                lineWidth: 3,
-                lineDasharray: [6, 4],
+                lineColor: ROUTE.driverTo.color,
+                lineWidth: ROUTE.driverTo.width,
+                lineDasharray: ROUTE.driverTo.dashArray,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
@@ -302,14 +334,26 @@ function RideMapViewInner({
           </MapboxGL.ShapeSource>
         )}
 
-        {/* Route polyline */}
+        {/* Route polyline — shadow + main line */}
         {routeGeoJSON && (
           <MapboxGL.ShapeSource id="route" shape={routeGeoJSON}>
             <MapboxGL.LineLayer
+              id="routeShadow"
+              style={{
+                lineColor: ROUTE.shadow.color,
+                lineWidth: ROUTE.shadow.width,
+                lineOpacity: ROUTE.shadow.opacity,
+                lineBlur: ROUTE.shadow.blur,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <MapboxGL.LineLayer
               id="routeLine"
               style={{
-                lineColor: colors.brand.orange,
-                lineWidth: 4,
+                lineColor: ROUTE.main.color,
+                lineWidth: ROUTE.main.width,
+                lineOpacity: ROUTE.main.opacity,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
@@ -317,7 +361,7 @@ function RideMapViewInner({
           </MapboxGL.ShapeSource>
         )}
 
-        {/* Pickup marker */}
+        {/* Pickup marker — premium 3D with pulsing ring */}
         {pickupLocation && (
           <MapboxGL.PointAnnotation
             id="pickup"
@@ -330,28 +374,49 @@ function RideMapViewInner({
               }
             }}
           >
-            <View
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: colors.success.DEFAULT,
-                borderWidth: 3,
-                borderColor: 'white',
-                shadowColor: '#000',
-                shadowOpacity: 0.3,
-                shadowRadius: 4,
-                elevation: 4,
-              }}
-            />
+            <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center' }}>
+              {/* Pulsing ring */}
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  width: MARKER.pickup.size,
+                  height: MARKER.pickup.size,
+                  borderRadius: MARKER.pickup.size / 2,
+                  backgroundColor: MAP_COLORS.pickup,
+                  transform: [{ scale: pickupPulseAnim }],
+                  opacity: pickupPulseOpacity,
+                }}
+              />
+              {/* Main circle */}
+              <View
+                style={{
+                  width: MARKER.pickup.size,
+                  height: MARKER.pickup.size,
+                  borderRadius: MARKER.pickup.size / 2,
+                  backgroundColor: MAP_COLORS.pickup,
+                  borderWidth: 3,
+                  borderColor: 'white',
+                  shadowColor: MAP_COLORS.pickup,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 6,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <View style={{ width: MARKER.pickup.innerDot, height: MARKER.pickup.innerDot, borderRadius: 5, backgroundColor: 'white' }} />
+              </View>
+            </View>
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Dropoff marker */}
+        {/* Dropoff marker — premium pin with tail + bounce-in */}
         {dropoffLocation && (
           <MapboxGL.PointAnnotation
             id="dropoff"
             coordinate={toCoord(dropoffLocation)}
+            anchor={{ x: 0.5, y: 1 }}
             draggable={!!onDropoffDrag}
             onDragEnd={(e: any) => {
               if (onDropoffDrag && e?.geometry?.coordinates) {
@@ -360,20 +425,42 @@ function RideMapViewInner({
               }
             }}
           >
-            <View
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: colors.error.DEFAULT,
-                borderWidth: 3,
-                borderColor: 'white',
-                shadowColor: '#000',
-                shadowOpacity: 0.3,
-                shadowRadius: 4,
-                elevation: 4,
-              }}
-            />
+            <Animated.View style={{ alignItems: 'center', transform: [{ scale: dropoffScale }] }}>
+              {/* Circle head */}
+              <View
+                style={{
+                  width: MARKER.dropoff.size,
+                  height: MARKER.dropoff.size,
+                  borderRadius: MARKER.dropoff.size / 2,
+                  backgroundColor: MAP_COLORS.dropoff,
+                  borderWidth: 3,
+                  borderColor: 'white',
+                  shadowColor: MAP_COLORS.dropoff,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 6,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <View style={{ width: MARKER.dropoff.innerDot, height: MARKER.dropoff.innerDot, borderRadius: 5, backgroundColor: 'white' }} />
+              </View>
+              {/* Triangle tail */}
+              <View
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeftWidth: 8,
+                  borderRightWidth: 8,
+                  borderTopWidth: MARKER.dropoff.tailH,
+                  borderLeftColor: 'transparent',
+                  borderRightColor: 'transparent',
+                  borderTopColor: MAP_COLORS.dropoff,
+                  marginTop: -2,
+                }}
+              />
+            </Animated.View>
           </MapboxGL.PointAnnotation>
         )}
 
@@ -403,28 +490,56 @@ function RideMapViewInner({
           </MapboxGL.PointAnnotation>
         ))}
 
-        {/* Driver marker with smooth animation + pulsing */}
+        {/* Driver marker — premium vehicle in dark container + pulsing ring */}
         {animatedDriver && (
           <MapboxGL.PointAnnotation
             id="driver"
             coordinate={[animatedDriver.longitude, animatedDriver.latitude]}
           >
-            <Animated.View style={{ transform: [{ scale: pulseAnim }], opacity: driverMarkerOpacity }}>
-              <View
+            <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center', opacity: driverMarkerOpacity }}>
+              {/* Pulsing glow ring */}
+              <Animated.View
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: colors.info.DEFAULT,
-                  borderWidth: 3,
-                  borderColor: colors.brand.white,
-                  shadowColor: colors.info.DEFAULT,
-                  shadowOpacity: 0.5,
-                  shadowRadius: 8,
-                  elevation: 4,
+                  position: 'absolute',
+                  width: MARKER.driver.ringSize,
+                  height: MARKER.driver.ringSize,
+                  borderRadius: MARKER.driver.ringSize / 2,
+                  backgroundColor: MAP_COLORS.driver,
+                  opacity: 0.15,
+                  transform: [{ scale: pulseAnim }],
                 }}
               />
-            </Animated.View>
+              {/* Dark container with vehicle image */}
+              <View
+                style={{
+                  width: MARKER.driver.size,
+                  height: MARKER.driver.size,
+                  borderRadius: MARKER.driver.size / 2,
+                  backgroundColor: MAP_COLORS.driverContainer,
+                  borderWidth: 2,
+                  borderColor: MAP_COLORS.driver,
+                  shadowColor: MAP_COLORS.driver,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  transform: [{ rotate: `${animatedDriver.heading ?? 0}deg` }],
+                }}
+              >
+                {vehicleType && vehicleMarkerImages[`marker-${vehicleType}`] ? (
+                  <Image
+                    source={vehicleMarkerImages[`marker-${vehicleType}`]}
+                    style={{ width: 28, height: 28 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: MAP_COLORS.driver }} />
+                )}
+              </View>
+            </View>
           </MapboxGL.PointAnnotation>
         )}
 

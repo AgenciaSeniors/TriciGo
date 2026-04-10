@@ -10,7 +10,9 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useTranslation('admin');
-  const redirect = searchParams.get('redirect') ?? '/';
+  const rawRedirect = searchParams.get('redirect') ?? '/';
+  // BUG-018 fix: prevent open redirect attacks — only allow relative paths
+  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
   const errorParam = searchParams.get('error');
 
   const [email, setEmail] = useState('');

@@ -140,6 +140,9 @@ export default function DriversPage() {
   const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(drivers, 'created_at');
 
   const canGoPrev = page > 0;
+  // Heuristic: if we got exactly PAGE_SIZE items, there may be more pages.
+  // This can show a false "next" on the last page when items are exactly PAGE_SIZE,
+  // but it's an acceptable trade-off to avoid an extra count query.
   const canGoNext = drivers.length === PAGE_SIZE;
 
   return (

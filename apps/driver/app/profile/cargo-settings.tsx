@@ -88,29 +88,29 @@ export default function CargoSettingsScreen() {
   };
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
         <View className="flex-row items-center mb-6">
           <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={24} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">
+          <Text variant="h3" color="primary">
             {t('profile.cargo_settings_title', { defaultValue: 'Configurar envíos' })}
           </Text>
         </View>
 
         {loading ? (
           <View className="items-center py-20">
-            <Text variant="body" color="inverse" className="opacity-50">...</Text>
+            <Text variant="body" color="primary" className="opacity-50">...</Text>
           </View>
         ) : (
           <>
             {/* Max weight */}
-            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="scale-outline" size={20} color={colors.brand.orange} />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.max_cargo_weight', { defaultValue: 'Peso máximo de carga (kg)' })}
                 </Text>
               </View>
@@ -119,7 +119,7 @@ export default function CargoSettingsScreen() {
                 onChangeText={(v) => { setMaxWeight(v); setWeightError(''); }}
                 keyboardType="numeric"
                 placeholder="100"
-                variant="dark"
+                variant="light"
               />
               {weightError ? (
                 <Text variant="caption" className="text-red-400 mt-1">{weightError}</Text>
@@ -127,14 +127,14 @@ export default function CargoSettingsScreen() {
             </Card>
 
             {/* Dimensions */}
-            <Card forceDark variant="filled" padding="md" className="mb-4 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.cargo_dimensions', { defaultValue: 'Dimensiones máx. carga (cm)' })}
                 </Text>
               </View>
-              <Text variant="caption" color="inverse" className="opacity-40 mb-2">
+              <Text variant="caption" color="primary" className="opacity-40 mb-2">
                 {t('profile.dimensions_optional', { defaultValue: 'Opcional — ayuda a asignar envíos compatibles' })}
               </Text>
               <View className="flex-row gap-2">
@@ -144,7 +144,7 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxLength}
                     keyboardType="numeric"
                     placeholder="L (cm)"
-                    variant="dark"
+                    variant="light"
                   />
                 </View>
                 <View className="flex-1">
@@ -153,7 +153,7 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxWidth}
                     keyboardType="numeric"
                     placeholder="A (cm)"
-                    variant="dark"
+                    variant="light"
                   />
                 </View>
                 <View className="flex-1">
@@ -162,17 +162,17 @@ export default function CargoSettingsScreen() {
                     onChangeText={setMaxHeight}
                     keyboardType="numeric"
                     placeholder="H (cm)"
-                    variant="dark"
+                    variant="light"
                   />
                 </View>
               </View>
             </Card>
 
             {/* Categories */}
-            <Card forceDark variant="filled" padding="md" className="mb-6 bg-neutral-800">
+            <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
               <View className="flex-row items-center mb-3">
                 <Ionicons name="pricetags-outline" size={20} color={colors.brand.orange} />
-                <Text variant="body" color="inverse" className="ml-2 font-semibold">
+                <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.cargo_categories', { defaultValue: 'Categorías de carga aceptadas' })}
                 </Text>
               </View>

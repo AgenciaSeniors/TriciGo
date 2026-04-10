@@ -44,7 +44,7 @@ export function Skeleton({
           width: width as any,
           height,
           borderRadius,
-          backgroundColor: isDark ? colors.neutral[800] : colors.neutral[200],
+          backgroundColor: isDark ? colors.neutral[800] : '#E2E8F0',
           opacity,
         },
         style,

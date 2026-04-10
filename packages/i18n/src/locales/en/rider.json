@@ -298,7 +298,23 @@
     "payment_method_tropipay": "TropiPay",
     "payment_method_corporate": "Corporate",
     "rate_reminder_title": "How was your ride?",
-    "rate_reminder_body": "Your feedback helps us improve. Rate your driver!"
+    "rate_reminder_body": "Your feedback helps us improve. Rate your driver!",
+    "status_arrived_at_destination": "At destination",
+    "arrived_at_destination_title": "You've arrived",
+    "arrived_at_destination_body": "Your driver has arrived at the destination",
+    "trip_progress_remaining": "{{distance}} km remaining",
+    "trip_progress_eta": "~{{minutes}} min",
+    "trip_progress_arrival": "Arriving ~{{time}}",
+    "pickup_arrival_title": "Your driver is here",
+    "pickup_arrival_body": "{{name}} is waiting in {{vehicle}}",
+    "view_driver_profile": "View driver profile",
+    "driver_profile_title": "Driver profile",
+    "driver_profile_member_since": "Member since {{date}}",
+    "driver_profile_trips": "{{count}} trips",
+    "driver_profile_verified": "Verified",
+    "driver_profile_reviews": "Recent reviews",
+    "driver_profile_no_reviews": "No reviews yet",
+    "driver_profile_vehicle": "Vehicle"
   },
 
   "dispute": {

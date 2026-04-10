@@ -90,6 +90,7 @@ describe('Matching Service Integration', () => {
         p_service_type: 'triciclo_basico',
         p_limit: 5,
         p_radius_m: 5000,
+        p_is_delivery: false,
       });
       // First driver should have highest composite score
       expect(result[0].composite_score).toBeGreaterThan(result[1].composite_score);
@@ -122,6 +123,7 @@ describe('Matching Service Integration', () => {
         p_service_type: 'moto_standard',
         p_limit: 5,
         p_radius_m: 5000,
+        p_is_delivery: false,
       });
     });
 

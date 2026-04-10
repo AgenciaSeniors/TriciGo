@@ -30,8 +30,8 @@ export interface FareBreakdownCardProps {
   totalLabel: string;
   /** Exchange rate: 1 USD = X CUP/TRC (for USD display) */
   exchangeRate?: number;
-  /** Discount in TRC whole units */
-  discountTrc?: number;
+  /** Discount in CUP whole units (1 CUP = 1 TRC, so valid for both) */
+  discountCup?: number;
   /** Discount label */
   discountLabel?: string;
   /** Whether minimum fare was applied */
@@ -105,8 +105,10 @@ export function FareBreakdownCard({
   const timeCharge = Math.round(durationMin * perMinRateCup);
   const subtotal = baseFareCup + distanceCharge + timeCharge;
   const finalTrc = totalTrc - discountTrc + insurancePremiumTrc;
-  // Since TRC = CUP (1:1), always show TRC as primary
-  const totalDisplay = formatTRC(finalTrc);
+  const isTrc = paymentMethod === 'tricicoin';
+  const fmt = (cup: number) => isTrc ? formatTRC(cup) : formatCUP(cup);
+  const unitLabel = isTrc ? 'TRC' : 'CUP';
+  const totalDisplay = isTrc ? formatTRC(finalTrc) : formatCUP(totalCup - (discountTrc) + insurancePremiumTrc);
   const totalUsdDisplay = exchangeRate > 0 ? formatUSD(trcToUsd(finalTrc, exchangeRate)) : null;
 
   return (
@@ -114,20 +116,20 @@ export function FareBreakdownCard({
       <Text variant="h4" className="mb-4">{title}</Text>
 
       {/* Base fare */}
-      <Row label={labels.baseFare} value={formatCUP(baseFareCup)} />
+      <Row label={labels.baseFare} value={fmt(baseFareCup)} />
 
       {/* Distance charge */}
       <Row
         label={labels.distanceCharge}
-        value={formatCUP(distanceCharge)}
-        detail={`${distanceKm.toFixed(1)} km × ${perKmRateCup} CUP/km`}
+        value={fmt(distanceCharge)}
+        detail={`${distanceKm.toFixed(1)} km × ${perKmRateCup} ${unitLabel}/km`}
       />
 
       {/* Time charge */}
       <Row
         label={labels.timeCharge}
-        value={formatCUP(timeCharge)}
-        detail={`${Math.round(durationMin)} min × ${perMinRateCup} CUP/min`}
+        value={fmt(timeCharge)}
+        detail={`${Math.round(durationMin)} min × ${perMinRateCup} ${unitLabel}/min`}
       />
 
       {/* Surge indicator */}
@@ -161,7 +163,7 @@ export function FareBreakdownCard({
             </Text>
           </View>
           <Text variant="bodySmall" className="text-amber-600">
-            +{formatCUP(waitTimeChargeCup)} ({waitTimeMinutes} min)
+            +{fmt(waitTimeChargeCup)} ({waitTimeMinutes} min)
           </Text>
         </View>
       )}
@@ -180,7 +182,7 @@ export function FareBreakdownCard({
       {discountTrc > 0 && discountLabel && (
         <View className="flex-row justify-between mb-2">
           <Text variant="bodySmall" className="text-green-600">{discountLabel}</Text>
-          <Text variant="bodySmall" className="text-green-600">-{formatTRC(discountTrc)}</Text>
+          <Text variant="bodySmall" className="text-green-600">-{fmt(discountTrc)}</Text>
         </View>
       )}
 
@@ -191,7 +193,7 @@ export function FareBreakdownCard({
             <Ionicons name="shield-checkmark-outline" size={14} color="#3b82f6" />
             <Text variant="bodySmall" className="ml-1 text-blue-500">{insuranceLabel}</Text>
           </View>
-          <Text variant="bodySmall" className="text-blue-500">+{formatTRC(insurancePremiumTrc)}</Text>
+          <Text variant="bodySmall" className="text-blue-500">+{fmt(insurancePremiumTrc)}</Text>
         </View>
       )}
 
@@ -212,7 +214,7 @@ export function FareBreakdownCard({
         <View className="flex-row items-center mt-2">
           <Ionicons name="swap-horizontal-outline" size={14} color="#9ca3af" />
           <Text variant="caption" color="secondary" className="ml-1">
-            {fareRangeLabel ?? 'Rango estimado'}: {formatTRC(fareRangeMinTrc)} – {formatTRC(fareRangeMaxTrc)}
+            {fareRangeLabel ?? 'Rango estimado'}: {fmt(fareRangeMinTrc)} – {fmt(fareRangeMaxTrc)}
           </Text>
         </View>
       )}

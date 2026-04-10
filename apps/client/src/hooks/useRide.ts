@@ -45,9 +45,14 @@ export function useRideInit() {
 
         // Subscribe to updates
         channelRef.current?.unsubscribe();
-        channelRef.current = rideService.subscribeToRide(active.id, (ride) => {
-          useRideStore.getState().updateRideFromRealtime(ride);
-        });
+        // BUG-075: Wrap subscription in try-catch to prevent leaked null reference on error
+        try {
+          channelRef.current = rideService.subscribeToRide(active.id, (ride) => {
+            useRideStore.getState().updateRideFromRealtime(ride);
+          });
+        } catch (subErr) {
+          logger.error('Failed to subscribe to ride updates', { error: String(subErr), rideId: active.id });
+        }
 
         // Load driver info if assigned
         if (active.driver_id) {
@@ -88,6 +93,7 @@ export function useRideActions() {
     setPromoResult,
     resetAll,
   } = useRideStore();
+  // Bug 24: Use both useState (for UI re-renders) and a ref (for async access in confirmRide)
   const [validatingPromo, setValidatingPromo] = useState(false);
   const validatingPromoRef = useRef(false);
 
@@ -113,6 +119,9 @@ export function useRideActions() {
       });
       return;
     }
+
+    // Bug 22: Clear stale promo result on re-estimate so it doesn't carry over
+    setPromoResult(null);
 
     setFareEstimating(true);
     setError(null);
@@ -160,10 +169,10 @@ export function useRideActions() {
 
   const validatePromo = useCallback(async () => {
     const { promoCode, fareEstimate: fe } = useRideStore.getState();
-    if (!promoCode.trim() || !user || validatingPromoRef.current) return;
+    if (!promoCode.trim() || !user || validatingPromo) return;
 
-    validatingPromoRef.current = true;
     setValidatingPromo(true);
+    validatingPromoRef.current = true;
     try {
       const result = await rideService.validatePromoCode({
         code: promoCode.trim(),
@@ -182,10 +191,10 @@ export function useRideActions() {
     } catch {
       setPromoResult({ valid: false, discountAmount: 0, error: i18next.t('rider:ride.promo_invalid') });
     } finally {
-      validatingPromoRef.current = false;
       setValidatingPromo(false);
+      validatingPromoRef.current = false;
     }
-  }, [user, setPromoResult]);
+  }, [user, validatingPromo, setPromoResult]);
 
   // Synchronous flag to prevent double-submission (state updates are async)
   const isSubmittingRef = useRef(false);
@@ -209,11 +218,25 @@ export function useRideActions() {
       return;
     }
 
-    const { draft: d, fareEstimate, promoResult, validatingPromo } = useRideStore.getState();
+    const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
     if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; pendingRequestIdRef.current = null; return; }
 
-    // Bug 12: Block confirm while promo is validating
-    if (validatingPromo) {
+    // Bug 25: Validate minimum distance in confirmRide (guards deep-link bypass)
+    const { haversineDistance } = await import('@tricigo/utils');
+    const confirmDist = haversineDistance(d.pickup.location, d.dropoff.location);
+    if (confirmDist < RIDE_CONFIG.MIN_DISTANCE_M) {
+      isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
+      Toast.show({
+        type: 'info',
+        text1: i18next.t('rider:ride.too_close_title', { defaultValue: 'Destino muy cercano' }),
+        text2: i18next.t('rider:ride.too_close_msg', { defaultValue: 'El destino está a menos de 200m del punto de recogida. Selecciona un destino más lejano.' }),
+      });
+      return;
+    }
+
+    // Bug 12 + Bug 24: Block confirm while promo is validating (use ref for async accuracy)
+    if (validatingPromoRef.current) {
       isSubmittingRef.current = false;
       pendingRequestIdRef.current = null;
       Toast.show({ type: 'info', text1: i18next.t('rider:ride.wait_promo', { defaultValue: 'Espera, validando código...' }) });
@@ -227,7 +250,8 @@ export function useRideActions() {
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           const bal = await walletService.getBalance(userId);
-          if (bal.available < (fareEstimate.estimated_fare_trc ?? 0)) {
+          // Bug 26: Add 20% buffer to account for surge pricing changes since estimate
+          if (bal.available < (fareEstimate.estimated_fare_trc ?? 0) * 1.2) {
             isSubmittingRef.current = false;
             pendingRequestIdRef.current = null;
             Toast.show({
@@ -249,6 +273,41 @@ export function useRideActions() {
         });
         return;
       }
+    }
+
+    // BUG-073: For corporate rides, re-fetch budget to account for pending rides
+    if (d.paymentMethod === 'corporate' && d.corporateAccountId && fareEstimate) {
+      try {
+        const { corporateService } = await import('@tricigo/api');
+        const freshAccount = await corporateService.getAccountDetails(d.corporateAccountId);
+        const remainingBudget = freshAccount.monthly_budget_trc - freshAccount.current_month_spent;
+        if (remainingBudget < (fareEstimate.estimated_fare_trc ?? 0)) {
+          isSubmittingRef.current = false;
+          pendingRequestIdRef.current = null;
+          Toast.show({
+            type: 'error',
+            text1: i18next.t('rider:corporate.budget_exceeded_title', { defaultValue: 'Presupuesto insuficiente' }),
+            text2: i18next.t('rider:corporate.budget_exceeded_msg', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }),
+          });
+          return;
+        }
+      } catch (corpErr) {
+        logger.warn('Corporate budget re-check failed', { error: String(corpErr) });
+        // Allow ride to proceed — server will enforce budget limits
+      }
+    }
+
+    // BUG-074: Validate scheduled ride is at least 15 minutes in the future
+    const MIN_ADVANCE_MS = 15 * 60 * 1000;
+    if (d.scheduledAt && d.scheduledAt.getTime() < Date.now() + MIN_ADVANCE_MS) {
+      isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
+      Toast.show({
+        type: 'error',
+        text1: i18next.t('rider:ride.schedule_too_soon_title', { defaultValue: 'Hora muy cercana' }),
+        text2: i18next.t('rider:ride.schedule_too_soon_msg', { defaultValue: 'Programa el viaje con al menos 15 minutos de antelación.' }),
+      });
+      return;
     }
 
     setLoading(true);
@@ -276,7 +335,8 @@ export function useRideActions() {
         estimated_distance_m: fareEstimate?.estimated_distance_m,
         estimated_duration_s: fareEstimate?.estimated_duration_s,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
-        discount_amount_cup: promoResult?.valid ? promoResult.discountAmount : undefined,
+        // BUG-068: Validate discount is non-negative before sending
+        discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discountAmount ?? 0) : undefined,
         scheduled_at: d.scheduledAt ? d.scheduledAt.toISOString() : undefined,
         waypoints: d.waypoints.length > 0
           ? d.waypoints.map((wp, i) => ({
@@ -292,7 +352,7 @@ export function useRideActions() {
         rider_preferences: Object.keys(d.ridePreferences).length > 0 ? d.ridePreferences : undefined,
       });
 
-      // Save delivery details if mensajeria
+      // Bug 30: Save delivery details as blocking step — cancel ride if it fails
       if (d.serviceType === 'mensajeria' || d.delivery.deliveryVehicleType) {
         try {
           await deliveryService.createDeliveryDetails({
@@ -318,7 +378,22 @@ export function useRideActions() {
             delivery_vehicle_type: d.delivery.deliveryVehicleType ?? undefined,
           });
         } catch (err) {
-          logger.error('Delivery details creation failed', { error: String(err) });
+          logger.error('Delivery details creation failed — cancelling ride', { error: String(err), rideId: ride.id });
+          // Cancel the orphaned ride so it doesn't exist without delivery metadata
+          try {
+            await rideService.cancelRide(ride.id, 'delivery_details_failed');
+          } catch (cancelErr) {
+            logger.error('Failed to cancel ride after delivery details error', { error: String(cancelErr) });
+          }
+          isSubmittingRef.current = false;
+          pendingRequestIdRef.current = null;
+          Toast.show({
+            type: 'error',
+            text1: i18next.t('rider:ride.delivery_details_failed_title', { defaultValue: 'Error al crear envío' }),
+            text2: i18next.t('rider:ride.delivery_details_failed_msg', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' }),
+          });
+          setLoading(false);
+          return;
         }
       }
 
@@ -337,6 +412,8 @@ export function useRideActions() {
 
       // Subscribe to ride updates
       channelRef.current?.unsubscribe();
+      // BUG-075: Wrap subscription in try-catch to prevent leaked null reference on error
+      try {
       channelRef.current = rideService.subscribeToRide(ride.id, async (updated) => {
         // Capture previous state BEFORE updating store
         const prevRide = useRideStore.getState().activeRide;
@@ -373,6 +450,14 @@ export function useRideActions() {
           scheduleLocalNotification(
             i18next.t('ride.trip_started_notif', { ns: 'rider' }),
             i18next.t('ride.trip_started_body', { ns: 'rider' }),
+          );
+        }
+        if (updated.status === 'arrived_at_destination') {
+          triggerHaptic('success');
+          playSound('destination_arrived');
+          scheduleLocalNotification(
+            i18next.t('ride.arrived_at_destination_title', { ns: 'rider' }),
+            i18next.t('ride.arrived_at_destination_body', { ns: 'rider' }),
           );
         }
         if (updated.status === 'completed') {
@@ -444,14 +529,23 @@ export function useRideActions() {
           trackEvent('ride_tropipay_paid', { ride_id: updated.id });
         }
 
-        // Bug 10: Show alert when driver cancels the ride
+        // Bug 10 + Bug 27: Show contextual alert when ride is cancelled
         if (updated.status === 'canceled' && prevRide?.status !== 'canceled') {
           triggerHaptic('error');
-          Toast.show({
-            type: 'error',
-            text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-            text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
-          });
+          if (prevRide?.status === 'in_progress') {
+            // Bug 27: Different message when cancellation happens mid-trip
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
+              text2: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
+            });
+          } else {
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+              text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
+            });
+          }
           scheduleLocalNotification(
             i18next.t('ride.driver_canceled_notif', { ns: 'rider' }),
             '',
@@ -468,6 +562,9 @@ export function useRideActions() {
           }
         }
       });
+      } catch (subErr) {
+        logger.error('Failed to subscribe to ride updates', { error: String(subErr), rideId: ride.id });
+      }
 
       // Search timeout — actually cancel the ride
       if (timeoutRef.current) clearTimeout(timeoutRef.current);

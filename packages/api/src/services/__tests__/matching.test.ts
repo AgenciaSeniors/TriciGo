@@ -40,6 +40,7 @@ describe('matchingService', () => {
         p_service_type: 'mototaxi',
         p_limit: 5,
         p_radius_m: 5000,
+        p_is_delivery: false,
       });
       expect(result).toEqual(mockDrivers);
     });
@@ -110,7 +111,7 @@ describe('matchingService', () => {
 
       expect(mockFrom).toHaveBeenCalledWith('driver_profiles');
       expect(mockSelect).toHaveBeenCalledWith('match_score, acceptance_rate');
-      expect(mockEq).toHaveBeenCalledWith('user_id', 'driver-1');
+      expect(mockEq).toHaveBeenCalledWith('id', 'driver-1');
       expect(mockSingle).toHaveBeenCalled();
       expect(result).toEqual({ match_score: 82.3, acceptance_rate: 95.0 });
     });

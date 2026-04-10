@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
@@ -10,7 +10,14 @@ import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import './track.css';
 
-const TrackingMap = dynamic(() => import('../TrackingMap'), { ssr: false });
+const TrackingMap = dynamic(() => import('../TrackingMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ width: '100%', height: '300px', background: '#f0f0f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: '#999', fontSize: '0.875rem' }}>Cargando mapa...</span>
+    </div>
+  ),
+});
 
 /* ── SVG Icons ── */
 const IconCheck = () => (
@@ -97,12 +104,30 @@ function StatusStepper({ steps, currentIdx }: { steps: { key: string; label: str
 export default function TrackRidePage() {
   const { t } = useTranslation('web');
   const params = useParams();
+  const router = useRouter();
   const rideId = params.id as string;
+
+  // Auth guard (BUG-004 fix)
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+      setAuthLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && !userId) router.replace('/login');
+  }, [authLoading, userId, router]);
+
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [deliveryDetails, setDeliveryDetails] = useState<{
     recipient_name?: string; recipient_phone?: string; package_description?: string;
     package_category?: string; estimated_weight_kg?: number; client_accompanies?: boolean;
@@ -111,6 +136,7 @@ export default function TrackRidePage() {
   const statusSteps = useStatusSteps();
 
   const fetchRide = useCallback(async () => {
+    if (!userId) return;
     try {
       const data = await rideService.getRideWithDriver(rideId);
       if (data) setRide(data);
@@ -120,7 +146,7 @@ export default function TrackRidePage() {
     } finally {
       setLoading(false);
     }
-  }, [rideId, t]);
+  }, [rideId, t, userId]);
 
   useEffect(() => {
     fetchRide();
@@ -130,9 +156,21 @@ export default function TrackRidePage() {
         return { ...prev, ...updated, pickup_location: prev.pickup_location, dropoff_location: prev.dropoff_location };
       });
     });
-    const interval = setInterval(fetchRide, 10_000);
+    channel.subscribe((status: string) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.error('Realtime channel error for ride', rideId);
+      }
+    });
+    const interval = setInterval(() => {
+      // Stop polling when ride reaches a terminal status
+      if (['completed', 'cancelled', 'canceled', 'failed', 'no_driver_found', 'disputed'].includes(ride?.status ?? '')) {
+        clearInterval(interval);
+        return;
+      }
+      fetchRide();
+    }, 10_000);
     return () => { channel.unsubscribe(); clearInterval(interval); };
-  }, [rideId, fetchRide]);
+  }, [rideId, fetchRide, ride?.status]);
 
   useEffect(() => {
     if (!ride || ride.ride_mode !== 'cargo') return;
@@ -153,12 +191,28 @@ export default function TrackRidePage() {
   }, [ride?.driver_id]);
 
   /* ── Loading State ── */
+  // Auth gate — block render until authenticated (BUG-004 fix)
+  if (authLoading || !userId) {
+    return (
+      <div className="track-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="track-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 40, height: 40, border: '3px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)' }}>{t('track.loading', { defaultValue: 'Cargando viaje...' })}</p>
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: '#00C853' }}>Go</span>
+          </div>
+          <p style={{ color: '#999', fontSize: '0.875rem' }}>Cargando datos del viaje...</p>
         </div>
       </div>
     );
@@ -210,14 +264,15 @@ export default function TrackRidePage() {
             dropoffLng={dropoffLng}
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
+            vehicleType={ride.vehicle_type ?? undefined}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 
           {/* ETA Badge floating on map */}
-          {!isTerminal && ride.estimated_duration_min && (
+          {!isTerminal && ride.estimated_duration_s > 0 && (
             <div className="track-eta-badge">
               <IconClock />
-              <span>~{ride.estimated_duration_min} min</span>
+              <span>~{Math.ceil(ride.estimated_duration_s / 60)} min</span>
             </div>
           )}
         </div>
@@ -394,6 +449,23 @@ export default function TrackRidePage() {
                 >
                   <IconWhatsApp /> Contactar
                 </a>
+              )}
+              {['searching', 'accepted', 'driver_en_route'].includes(ride.status) && (
+                <button
+                  className="track-action-btn track-action-btn--cancel"
+                  disabled={canceling}
+                  onClick={async () => {
+                    if (!confirm(t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje?' }))) return;
+                    setCanceling(true);
+                    try {
+                      await rideService.cancelRide(rideId, undefined, 'rider_canceled');
+                    } catch {
+                      setCanceling(false);
+                    }
+                  }}
+                >
+                  {canceling ? t('track.canceling', { defaultValue: 'Cancelando...' }) : <>{t('track.cancel_ride', { defaultValue: 'Cancelar viaje' })}</>}
+                </button>
               )}
             </div>
           )}

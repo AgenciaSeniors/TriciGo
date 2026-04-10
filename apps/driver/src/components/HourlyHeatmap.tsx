@@ -7,6 +7,7 @@ import type { Ride } from '@tricigo/types';
 
 interface HourlyHeatmapProps {
   trips: Ride[];
+  theme?: 'light' | 'dark';
 }
 
 const HOUR_LABELS = [
@@ -16,7 +17,14 @@ const HOUR_LABELS = [
   '6pm', '7pm', '8pm', '9pm', '10pm', '11pm',
 ];
 
-function getHeatColor(intensity: number): string {
+function getHeatColor(intensity: number, isLight = false): string {
+  if (isLight) {
+    if (intensity === 0) return '#F8FAFC';
+    if (intensity < 0.25) return '#FFF3ED';
+    if (intensity < 0.5) return '#FFDCC8';
+    if (intensity < 0.75) return '#FF9A66';
+    return colors.brand.orange;
+  }
   if (intensity === 0) return 'rgba(255,255,255,0.05)';
   if (intensity < 0.25) return 'rgba(249,115,22,0.2)';
   if (intensity < 0.5) return 'rgba(249,115,22,0.4)';
@@ -24,8 +32,9 @@ function getHeatColor(intensity: number): string {
   return colors.brand.orange;
 }
 
-export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
+export function HourlyHeatmap({ trips, theme = 'dark' }: HourlyHeatmapProps) {
   const { t } = useTranslation('driver');
+  const isLight = theme === 'light';
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
 
   const hourCounts = useMemo(() => {
@@ -49,12 +58,18 @@ export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
     .slice(0, 3);
 
   return (
-    <View className="bg-[#1a1a2e] border border-white/6 rounded-xl p-4 mb-4">
-      <Text variant="bodySmall" color="inverse" className="font-semibold mb-3">
+    <View
+      className="rounded-xl p-4 mb-4"
+      style={isLight
+        ? { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 }
+        : { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }
+      }
+    >
+      <Text variant="bodySmall" className="font-semibold mb-3" style={{ color: isLight ? '#0F172A' : '#FFFFFF' }}>
         {t('earnings.hourly_activity', { defaultValue: 'Actividad por hora' })}
       </Text>
 
-      {/* Heatmap grid — 4 rows × 6 columns */}
+      {/* Heatmap grid — 4 rows x 6 columns */}
       <View className="mb-3">
         {[0, 1, 2, 3].map((row) => (
           <View key={row} className="flex-row gap-1.5 mb-1.5">
@@ -68,21 +83,21 @@ export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
                   className="flex-1 items-center justify-center rounded-md"
                   style={{
                     height: 36,
-                    backgroundColor: getHeatColor(intensity),
+                    backgroundColor: getHeatColor(intensity, isLight),
                     borderWidth: isSelected ? 1.5 : 0,
-                    borderColor: isSelected ? '#fff' : 'transparent',
+                    borderColor: isSelected ? (isLight ? '#FF4D00' : '#fff') : 'transparent',
                   }}
                   onPress={() => setSelectedHour(isSelected ? null : hour)}
                 >
                   <Text
                     variant="caption"
-                    color="inverse"
-                    className="text-[10px] opacity-70"
+                    className="text-[10px]"
+                    style={{ color: isLight ? '#64748B' : 'rgba(255,255,255,0.7)' }}
                   >
                     {HOUR_LABELS[hour]}
                   </Text>
                   {hourCounts[hour]! > 0 && (
-                    <Text variant="caption" color="inverse" className="text-[10px] font-bold">
+                    <Text variant="caption" className="text-[10px] font-bold" style={{ color: isLight ? '#0F172A' : '#FFFFFF' }}>
                       {hourCounts[hour]}
                     </Text>
                   )}
@@ -103,12 +118,12 @@ export function HourlyHeatmap({ trips }: HourlyHeatmapProps) {
       {/* Peak hours */}
       {peakHours.length > 0 && (
         <View>
-          <Text variant="caption" color="inverse" className="opacity-50 mb-1.5">
+          <Text variant="caption" className="mb-1.5" style={{ color: isLight ? '#64748B' : 'rgba(255,255,255,0.5)' }}>
             {t('earnings.peak_hours', { defaultValue: 'Horas pico' })}
           </Text>
           <View className="flex-row gap-2 flex-wrap">
             {peakHours.map((ph) => (
-              <View key={ph.hour} className="bg-primary-500/20 px-2.5 py-1 rounded-full">
+              <View key={ph.hour} style={{ backgroundColor: isLight ? '#FFF3ED' : 'rgba(249,115,22,0.2)' }} className="px-2.5 py-1 rounded-full">
                 <Text variant="caption" color="accent" className="font-medium">
                   {HOUR_LABELS[ph.hour]} ({ph.count})
                 </Text>

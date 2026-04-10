@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC, haversineDistance, logger, formatArrivalTime } from '@tricigo/utils';
+import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
@@ -20,6 +20,9 @@ import { formatTimeAgo } from '@tricigo/utils/offlineLabels';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { useDriverToPickupRoute } from '@/hooks/useDriverToPickupRoute';
 import { useETA } from '@/hooks/useETA';
+import { useTripProgress } from '@/hooks/useTripProgress';
+import { TripProgressBar } from '@tricigo/ui/TripProgressBar';
+import { ArrivalBanner } from '@/components/ArrivalBanner';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { ETABadge } from '@tricigo/ui/ETABadge';
 import { IconButton } from '@tricigo/ui/IconButton';
@@ -45,6 +48,7 @@ export function RideActiveView() {
     { key: 'driver_en_route', label: t('ride.status_driver_en_route') },
     { key: 'arrived_at_pickup', label: t('ride.status_arrived_at_pickup') },
     { key: 'in_progress', label: t('ride.status_in_progress') },
+    { key: 'arrived_at_destination', label: t('ride.status_arrived_at_destination', { defaultValue: 'At destination' }) },
   ];
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
@@ -56,10 +60,11 @@ export function RideActiveView() {
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
   const driverPosition = driverPosState.position;
-  const routeCoordinates = useRoutePolyline(
+  const routeData = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
   );
+  const routeCoordinates = routeData.coordinates;
   const driverToPickupRoute = useDriverToPickupRoute(
     driverPosition,
     activeRide?.pickup_location ?? null,
@@ -72,6 +77,29 @@ export function RideActiveView() {
     rideStatus: activeRide?.status ?? null,
     estimatedDurationS: activeRide?.estimated_duration_s,
   });
+
+  // Trip progress (Uber-style progress bar during in_progress)
+  const tripProgress = useTripProgress({
+    driverLocation: driverPosition,
+    routeCoordinates: routeCoordinates,
+    totalDistanceM: routeData.distanceM,
+    etaMinutes,
+    rideStatus: activeRide?.status ?? null,
+  });
+
+  // Arrival banner states
+  const [showDestinationBanner, setShowDestinationBanner] = useState(false);
+  const prevStatusRef = useRef(activeRide?.status);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = activeRide?.status;
+    prevStatusRef.current = curr;
+
+    if (curr === 'arrived_at_destination' && prev !== 'arrived_at_destination') {
+      setShowDestinationBanner(true);
+    }
+  }, [activeRide?.status]);
 
   // INFRA-2: Mapbox Directions route ETA (more accurate than haversine)
   const [routeETA, setRouteETA] = useState<{ durationMinutes: number; distanceKm: number } | null>(null);
@@ -364,21 +392,40 @@ export function RideActiveView() {
         // Update local ride with new token
         useRideStore.getState().setActiveRide({ ...activeRide, share_token: token });
       }
-      const url = `https://tricigo.com/track/share/${token}`;
+      const url = buildShareUrl(token);
 
       await Share.share({
         message: t('ride.share_message', { url }),
         url, // iOS uses this field
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Share.share rejects on iOS if user cancels — ignore that
-      if (err?.message !== 'User did not share') {
+      const message = err instanceof Error ? err.message : '';
+      if (message !== 'User did not share') {
         Toast.show({ type: 'error', text1: t('ride.share_failed') });
       }
     } finally {
       setIsSharing(false);
     }
   }, [activeRide, t]);
+
+  // ── Share revocation ──
+  const [isRevoking, setIsRevoking] = useState(false);
+
+  const handleRevokeShare = useCallback(async () => {
+    if (!activeRide || !userId) return;
+    setIsRevoking(true);
+    try {
+      await rideService.revokeShareToken(activeRide.id, userId);
+      useRideStore.getState().setActiveRide({ ...activeRide, share_token: null });
+      Toast.show({ type: 'success', text1: t('ride.share_revoked', { defaultValue: 'Se dejó de compartir' }) });
+    } catch (err: unknown) {
+      Toast.show({ type: 'error', text1: t('ride.share_revoke_failed', { defaultValue: 'Error al dejar de compartir' }) });
+      logger.error('Failed to revoke share token', { error: String(err) });
+    } finally {
+      setIsRevoking(false);
+    }
+  }, [activeRide, userId, t]);
 
   // Safety sheet state
   const [safetySheetVisible, setSafetySheetVisible] = useState(false);
@@ -503,6 +550,7 @@ export function RideActiveView() {
     driver_en_route: t('ride.driver_arriving'),
     arrived_at_pickup: t('ride.driver_arrived'),
     in_progress: t('ride.in_progress'),
+    arrived_at_destination: t('ride.arrived_at_destination_title', { defaultValue: "You've arrived" }),
   };
 
   return (
@@ -652,26 +700,41 @@ export function RideActiveView() {
         {statusMessage[activeRide.status] ?? activeRide.status}
       </Text>
 
-      {/* ETA Badge — U2.4: Show distance + ETA during driver_en_route */}
-      {displayEtaMinutes !== null && (
+      {/* Trip Progress Bar — shown during in_progress and arrived_at_destination */}
+      {tripProgress.isActive && (
+        <View className="mb-4">
+          <TripProgressBar
+            progressPercent={tripProgress.progressPercent}
+            distanceRemainingKm={tripProgress.distanceRemainingKm}
+            etaMinutes={tripProgress.etaMinutes}
+            arrivalTime={tripProgress.arrivalTime}
+            isCalculating={isCalculating}
+            distanceLabel={t('ride.trip_progress_remaining', { distance: tripProgress.distanceRemainingKm, defaultValue: '{{distance}} km restantes' })}
+            etaLabel={tripProgress.etaMinutes != null
+              ? (tripProgress.etaMinutes === 0
+                ? t('ride.arriving', { defaultValue: 'Llegando' })
+                : t('ride.trip_progress_eta', { minutes: tripProgress.etaMinutes, defaultValue: '~{{minutes}} min' }))
+              : undefined}
+            arrivalLabel={tripProgress.arrivalTime != null ? t('ride.trip_progress_arrival', { time: tripProgress.arrivalTime, defaultValue: 'Llegas ~{{time}}' }) : undefined}
+          />
+        </View>
+      )}
+
+      {/* ETA Badge — pre-pickup statuses (accepted, driver_en_route, arrived_at_pickup) */}
+      {!tripProgress.isActive && displayEtaMinutes !== null && (
         <View className="items-center mb-4">
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
             <ETABadge
               label={
                 activeRide.status === 'arrived_at_pickup'
                   ? t('ride.eta_driver_arrived')
-                  : activeRide.status === 'in_progress'
-                    ? t('ride.eta_destination_clock', {
-                        minutes: displayEtaMinutes,
+                  : activeRide.status === 'driver_en_route' && driverPosition && activeRide.pickup_location
+                    ? t('ride.distance_eta_clock', {
+                        distance: displayDistanceKm !== null ? displayDistanceKm.toFixed(1) : (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
+                        eta: displayEtaMinutes,
                         time: formatArrivalTime(displayEtaMinutes),
                       })
-                    : activeRide.status === 'driver_en_route' && driverPosition && activeRide.pickup_location
-                      ? t('ride.distance_eta_clock', {
-                          distance: displayDistanceKm !== null ? displayDistanceKm.toFixed(1) : (haversineDistance(driverPosition, activeRide.pickup_location) / 1000).toFixed(1),
-                          eta: displayEtaMinutes,
-                          time: formatArrivalTime(displayEtaMinutes),
-                        })
-                      : t('ride.eta_driver_arriving', { minutes: displayEtaMinutes })
+                    : t('ride.eta_driver_arriving', { minutes: displayEtaMinutes })
               }
               isCalculating={isCalculating}
               urgent={displayEtaMinutes > 0 && displayEtaMinutes <= 3}
@@ -681,9 +744,22 @@ export function RideActiveView() {
         </View>
       )}
 
-      {/* Driver info */}
+      {/* Destination arrival banner */}
+      {showDestinationBanner && (
+        <ArrivalBanner
+          type="destination_arrival"
+          onDismiss={() => setShowDestinationBanner(false)}
+        />
+      )}
+
+      {/* Driver info — tappable to open profile */}
       {rideWithDriver?.driver_name && (
         <Animated.View className="mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5, transform: [{ translateY: slideUpAnim }] }}>
+          <Pressable
+            onPress={() => rideWithDriver.driver_user_id && router.push(`/driver-profile/${rideWithDriver.driver_user_id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={t('ride.view_driver_profile', { defaultValue: 'View driver profile' })}
+          >
           <DriverCard
             driverName={rideWithDriver.driver_name}
             driverAvatarUrl={rideWithDriver.driver_avatar_url}
@@ -735,9 +811,14 @@ export function RideActiveView() {
               </>
             }
           />
-          {/* I4.1: See more / See less toggle */}
-          <Pressable onPress={() => setDriverExpanded(!driverExpanded)}>
-            <Text variant="caption" color="accent" className="text-center mt-2">
+          </Pressable>
+          {/* I4.1: See more / See less toggle — min 44px touch target */}
+          <Pressable
+            onPress={() => setDriverExpanded(!driverExpanded)}
+            style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}
+            accessibilityRole="button"
+          >
+            <Text variant="caption" color="accent" className="text-center">
               {driverExpanded ? t('ride.see_less') : t('ride.see_more')}
             </Text>
           </Pressable>
@@ -774,15 +855,30 @@ export function RideActiveView() {
         </Text>
       </Pressable>
 
-      {/* Shared trip indicator */}
+      {/* Shared trip indicator + stop sharing */}
       {activeRide.share_token && (
-        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8, gap: 12 }}>
           <Text style={{
-            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
-            fontSize: 11,
+            color: isDark ? '#9CA3AF' : '#6B7280',
+            fontSize: 12,
           }}>
-            <Ionicons name="link-outline" size={11} /> {t('ride.trip_shared')}
+            <Ionicons name="link-outline" size={12} /> {t('ride.trip_shared')}
           </Text>
+          <Pressable
+            onPress={handleRevokeShare}
+            disabled={isRevoking}
+            style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t('ride.stop_sharing', { defaultValue: 'Dejar de compartir' })}
+          >
+            <Text style={{
+              color: isDark ? '#FCA5A5' : '#EF4444',
+              fontSize: 12,
+              fontWeight: '600',
+            }}>
+              {isRevoking ? '...' : t('ride.stop_sharing', { defaultValue: 'Dejar de compartir' })}
+            </Text>
+          </Pressable>
         </View>
       )}
 

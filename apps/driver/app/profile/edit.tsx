@@ -239,18 +239,18 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+            className="mr-3 w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel={t('back')}
           >
-            <Ionicons name="arrow-back" size={20} color="#FAFAFA" />
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('profile.edit_profile')}</Text>
+          <Text variant="h3" color="primary">{t('profile.edit_profile')}</Text>
         </View>
 
         {/* Avatar */}
@@ -269,7 +269,7 @@ export default function EditProfileScreen() {
         </View>
 
         {/* Name */}
-        <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} variant="dark" />
+        <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} variant="light" />
 
         {/* Email with validation */}
         <Input
@@ -278,7 +278,7 @@ export default function EditProfileScreen() {
           onChangeText={(v) => { setEmail(v); setEmailError(''); }}
           keyboardType="email-address"
           autoCapitalize="none"
-          variant="dark"
+          variant="light"
         />
         {emailError ? (
           <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{emailError}</Text>
@@ -290,7 +290,7 @@ export default function EditProfileScreen() {
           value={phone}
           onChangeText={(v) => { setPhone(v); setPhoneError(''); setOtpStep(false); setOtpCode(''); }}
           keyboardType="phone-pad"
-          variant="dark"
+          variant="light"
         />
         {phoneError ? (
           <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{phoneError}</Text>
@@ -298,8 +298,8 @@ export default function EditProfileScreen() {
 
         {/* OTP input */}
         {otpStep && (
-          <View className="mb-4 p-4 rounded-xl bg-[#1a1a2e] border border-white/6 border border-primary-500/30">
-            <Text variant="bodySmall" color="inverse" className="mb-2">
+          <View className="mb-4 p-4 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] border border-primary-500/30">
+            <Text variant="bodySmall" color="primary" className="mb-2">
               {td('profile.otp_sent', { phone: phone.trim(), defaultValue: 'Código enviado' })}
             </Text>
             <Input
@@ -309,14 +309,14 @@ export default function EditProfileScreen() {
               keyboardType="number-pad"
               maxLength={6}
               placeholder="000000"
-              variant="dark"
+              variant="light"
             />
           </View>
         )}
 
         {/* ── Driver Stats ──────────────────────────────────────────────────── */}
         {driverProfile && (
-          <Card forceDark variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
+          <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white border border-[#E2E8F0]">
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">
@@ -324,19 +324,19 @@ export default function EditProfileScreen() {
                     ? driverProfile.rating_avg.toFixed(1)
                     : '--'}
                 </Text>
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {td('earnings.rating', { defaultValue: 'Rating' })}
                 </Text>
               </View>
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">{driverProfile.status ? td(`common.status_${driverProfile.status}`, { defaultValue: driverProfile.status }) : '--'}</Text>
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {td('common.status_label', { defaultValue: 'Estado' })}
                 </Text>
               </View>
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">{driverProfile.total_rides ?? 0}</Text>
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {td('trips_history.title', { defaultValue: 'Viajes' })}
                 </Text>
               </View>
@@ -346,10 +346,10 @@ export default function EditProfileScreen() {
 
         {/* ── Vehicle Card ──────────────────────────────────────────────────── */}
         {vehicle && (
-          <Card forceDark variant="filled" padding="md" className="mb-4 bg-[#1a1a2e] border border-white/6">
+          <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white border border-[#E2E8F0]">
             {/* Header with edit link */}
             <View className="flex-row items-center justify-between mb-3">
-              <Text variant="label" color="inverse" className="opacity-70">
+              <Text variant="label" color="primary" className="opacity-70">
                 {t('profile.vehicle_info')}
               </Text>
               <Pressable onPress={() => router.push('/profile/edit-vehicle')}>
@@ -369,10 +369,10 @@ export default function EditProfileScreen() {
                 />
               )}
               <View className="flex-1">
-                <Text variant="body" color="inverse" className="font-bold">
+                <Text variant="body" color="primary" className="font-bold">
                   {VEHICLE_TYPE_LABELS[vehicle.type] ?? vehicle.type}
                 </Text>
-                <Text variant="bodySmall" color="inverse" className="opacity-50">
+                <Text variant="bodySmall" color="primary" className="opacity-50">
                   {vehicle.make} {vehicle.model} ({vehicle.year})
                 </Text>
               </View>
@@ -380,15 +380,15 @@ export default function EditProfileScreen() {
 
             {/* Badges: color, placa, capacidad */}
             <View className="flex-row flex-wrap gap-2 mb-2">
-              <View className="bg-[#252540] px-3 py-1.5 rounded-full">
-                <Text variant="caption" color="inverse">{vehicle.color}</Text>
+              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full">
+                <Text variant="caption" color="primary">{vehicle.color}</Text>
               </View>
-              <View className="bg-[#252540] px-3 py-1.5 rounded-full">
-                <Text variant="caption" color="inverse">{vehicle.plate_number}</Text>
+              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full">
+                <Text variant="caption" color="primary">{vehicle.plate_number}</Text>
               </View>
-              <View className="bg-[#252540] px-3 py-1.5 rounded-full flex-row items-center gap-1">
+              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full flex-row items-center gap-1">
                 <Ionicons name="people" size={12} color="#A3A3A3" />
-                <Text variant="caption" color="inverse">{vehicle.capacity} pasajeros</Text>
+                <Text variant="caption" color="primary">{vehicle.capacity} pasajeros</Text>
               </View>
             </View>
 
@@ -402,15 +402,15 @@ export default function EditProfileScreen() {
                   </Text>
                 </View>
                 {(vehicle.max_cargo_length_cm || vehicle.max_cargo_width_cm || vehicle.max_cargo_height_cm) ? (
-                  <Text variant="caption" color="inverse" className="opacity-40 mt-1 ml-1">
+                  <Text variant="caption" color="primary" className="opacity-40 mt-1 ml-1">
                     {vehicle.max_cargo_length_cm ?? '-'} × {vehicle.max_cargo_width_cm ?? '-'} × {vehicle.max_cargo_height_cm ?? '-'} cm
                   </Text>
                 ) : null}
                 {vehicle.accepted_cargo_categories?.length > 0 && (
                   <View className="flex-row flex-wrap gap-1 mt-2">
                     {vehicle.accepted_cargo_categories.map((cat) => (
-                      <View key={cat} className="bg-[#252540] px-2 py-1 rounded-full">
-                        <Text variant="caption" color="inverse" className="opacity-60">
+                      <View key={cat} className="bg-[#F1F5F9] px-2 py-1 rounded-full">
+                        <Text variant="caption" color="primary" className="opacity-60">
                           {PACKAGE_CATEGORY_LABELS[cat]?.[lang] ?? cat}
                         </Text>
                       </View>
@@ -423,20 +423,20 @@ export default function EditProfileScreen() {
         )}
 
         {/* ── Accepts deliveries toggle ─────────────────────────────────────── */}
-        <View className="flex-row items-center justify-between py-4 px-1 mb-4 border-t border-white/6">
+        <View className="flex-row items-center justify-between py-4 px-1 mb-4 border-t border-[#E2E8F0]">
           <View className="flex-1 mr-4">
-            <Text variant="body" color="inverse">
+            <Text variant="body" color="primary">
               {td('onboarding.accepts_deliveries', { defaultValue: 'Acepta envíos' })}
             </Text>
-            <Text variant="caption" color="inverse" className="opacity-50 mt-1">
+            <Text variant="caption" color="primary" className="opacity-50 mt-1">
               {td('profile.accepts_deliveries_desc', { defaultValue: 'Recibe pedidos de envío de paquetes' })}
             </Text>
           </View>
           <Switch
             value={acceptsCargo}
             onValueChange={handleCargoToggle}
-            trackColor={{ false: '#252540', true: colors.brand.orange }}
-            thumbColor="#fff"
+            trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
+            thumbColor="#FFFFFF"
             accessibilityLabel={td('onboarding.accepts_deliveries', { defaultValue: 'Acepta envíos' })}
           />
         </View>
