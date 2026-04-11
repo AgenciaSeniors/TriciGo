@@ -60,7 +60,13 @@
       ],
       "expo-secure-store",
       "expo-sharing",
-      "@stripe/stripe-react-native"
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.tricigo",
+          "enableGooglePay": true
+        }
+      ]
     ],
     "extra": {
       "router": {
