@@ -70,13 +70,6 @@
         {
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
         }
-      ],
-      [
-        "@stripe/stripe-react-native",
-        {
-          "merchantIdentifier": "merchant.com.tricigo.driver",
-          "enableGooglePay": true
-        }
       ]
     ],
     "extra": {

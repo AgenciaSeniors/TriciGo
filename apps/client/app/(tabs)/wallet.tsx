@@ -7,10 +7,9 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
-import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
-import type { LedgerTransaction, LedgerEntryType, StripeRechargeConfig } from '@tricigo/types';
+import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
@@ -18,10 +17,9 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, useColorScheme, Linking } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { LinearGradient } from 'expo-linear-gradient';
-import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
@@ -619,72 +617,10 @@ function NativeWalletScreen() {
   const MAX_RECHARGE_CUP = RIDE_CONFIG.MAX_RECHARGE_AMOUNT;
 
   const submitRecharge = useCallback(async () => {
-    if (isProcessing) return;
-    const amountNum = parseInt(rechargeAmount, 10);
-    if (!amountNum || amountNum <= 0 || !userId) return;
-    if (amountNum > MAX_RECHARGE_CUP) {
-      Toast.show({ type: 'error', text1: t('wallet.recharge_max_exceeded', { defaultValue: `El máximo por recarga es ${MAX_RECHARGE_CUP.toLocaleString()} CUP` }) });
-      return;
-    }
-    setIsProcessing(true);
-    setRechargeSubmitting(true);
-    try {
-      // 1. Create Stripe PaymentIntent via edge function
-      const result = await paymentService.createStripePaymentIntent(userId, amountNum);
-
-      // 2. Initialize Stripe Payment Sheet
-      const { error: initError } = await initPaymentSheet({
-        paymentIntentClientSecret: result.clientSecret,
-        merchantDisplayName: 'TriciGo',
-        style: 'automatic',
-        returnURL: 'tricigo://wallet?recharge=success',
-      });
-
-      if (initError) {
-        logger.error('Stripe initPaymentSheet error', { error: initError.message });
-        Toast.show({ type: 'error', text1: initError.message });
-        return;
-      }
-
-      // 3. Present the payment sheet
-      const { error: presentError } = await presentPaymentSheet();
-
-      if (presentError) {
-        if (presentError.code === 'Canceled') {
-          // User cancelled — not an error
-          Toast.show({ type: 'info', text1: t('wallet.recharge_cancelled', { defaultValue: 'Recarga cancelada' }) });
-          return;
-        }
-        logger.error('Stripe presentPaymentSheet error', { error: presentError.message });
-        Toast.show({ type: 'error', text1: presentError.message });
-        return;
-      }
-
-      // 4. Payment succeeded — poll for wallet credit
-      setRechargeSheetVisible(false);
-      Toast.show({ type: 'info', text1: t('wallet.recharge_processing', { defaultValue: 'Procesando recarga...' }) });
-
-      const finalIntent = await paymentService.pollIntentStatus(result.intentId, 15, 2000);
-      if (finalIntent.status === 'completed') {
-        triggerHaptic('success');
-        Toast.show({ type: 'success', text1: t('wallet.recharge_success', { defaultValue: 'Recarga exitosa' }) });
-        await fetchData();
-      } else if (finalIntent.status === 'failed') {
-        Toast.show({ type: 'error', text1: finalIntent.error_message ?? t('errors.recharge_failed') });
-      } else {
-        // Still processing — webhook will handle it
-        Toast.show({ type: 'success', text1: t('wallet.recharge_success', { defaultValue: 'Recarga exitosa' }) });
-        // Refresh in a few seconds
-        setTimeout(() => fetchData(), 5000);
-      }
-    } catch (err) {
-      logger.error('Error processing Stripe recharge', { error: String(err) });
-      Toast.show({ type: 'error', text1: getErrorMessage(err) });
-    } finally {
-      setRechargeSubmitting(false);
-      setIsProcessing(false);
-    }
-  }, [rechargeAmount, userId, t, isProcessing, fetchData]);
+    // Open web wallet for Stripe recharge (native Stripe SDK requires dev client builds)
+    setRechargeSheetVisible(false);
+    Linking.openURL('https://tricigo.com/wallet');
+  }, []);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
