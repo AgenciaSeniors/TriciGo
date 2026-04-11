@@ -70,7 +70,8 @@
         {
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
         }
-      ]
+      ],
+      "@stripe/stripe-react-native"
     ],
     "extra": {
       "router": {

@@ -59,7 +59,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "@stripe/stripe-react-native"
     ],
     "extra": {
       "router": {
