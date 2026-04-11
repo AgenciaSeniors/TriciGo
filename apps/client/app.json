@@ -20,7 +20,8 @@
       ],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
-        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos"
+        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,8 +31,6 @@
       },
       "package": "app.tricigo.client",
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ]
@@ -49,7 +48,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "TriciGo necesita tu ubicación para encontrar conductores cercanos."
+          "locationWhenInUsePermission": "TriciGo necesita tu ubicación para encontrar conductores cercanos."
         }
       ],
       "@react-native-community/datetimepicker",

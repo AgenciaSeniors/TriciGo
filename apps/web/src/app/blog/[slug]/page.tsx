@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useTranslation } from '@tricigo/i18n';
 import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
@@ -56,11 +57,15 @@ export default function BlogPostPage() {
       </Link>
 
       {post.cover_image_url && (
-        <img
-          src={post.cover_image_url}
-          alt=""
-          style={{ width: '100%', height: 300, objectFit: 'cover', borderRadius: '1rem', marginBottom: '1.5rem' }}
-        />
+        <div style={{ position: 'relative', width: '100%', height: 300, marginBottom: '1.5rem' }}>
+          <Image
+            src={post.cover_image_url}
+            alt={locale === 'en' ? post.title_en : post.title_es}
+            fill
+            style={{ objectFit: 'cover', borderRadius: '1rem' }}
+            sizes="(max-width: 800px) 100vw, 800px"
+          />
+        </div>
       )}
 
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>

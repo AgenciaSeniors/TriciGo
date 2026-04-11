@@ -33,14 +33,14 @@ export const metadata: Metadata = {
     title: 'TriciGo — Pide tu viaje en La Habana',
     description:
       'Solicita un viaje en La Habana con TriciGo. Triciclos, motos y autos al mejor precio.',
-    images: [{ url: '/og-image.svg', width: 1200, height: 630, alt: 'TriciGo - Pide tu taxi en Cuba' }],
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'TriciGo - Pide tu taxi en Cuba' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'TriciGo — Pide tu viaje en La Habana',
     description:
       'Solicita un viaje en La Habana con TriciGo. Rápido, seguro y al mejor precio.',
-    images: ['/og-image.svg'],
+    images: ['/og-image.png'],
   },
   metadataBase: new URL('https://tricigo.com'),
   alternates: {
@@ -57,7 +57,7 @@ const organizationJsonLd = {
   '@type': 'Organization',
   name: 'TriciGo',
   url: 'https://tricigo.com',
-  logo: 'https://tricigo.com/logo.png',
+  logo: 'https://tricigo.com/logo-wordmark.png',
   description:
     'Plataforma de transporte en La Habana. Solicita triciclos, motos y autos de forma rapida y segura.',
   address: {
