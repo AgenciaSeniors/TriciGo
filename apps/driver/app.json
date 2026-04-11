@@ -8,7 +8,7 @@
     "scheme": "tricigo-driver",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-logo.png",
+      "image": "./assets/logo-wordmark-white.png",
       "backgroundColor": "#111111",
       "resizeMode": "contain"
     },

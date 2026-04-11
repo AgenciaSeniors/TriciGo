@@ -2,6 +2,6 @@
   <rect width="1200" height="630" fill="#0A0A0A"/>
   <rect x="50" y="50" width="1100" height="530" rx="20" fill="#1A1A2E"/>
   <text x="600" y="280" text-anchor="middle" fill="#FF4D00" font-size="80" font-weight="bold" font-family="Arial">TriciGo</text>
-  <text x="600" y="370" text-anchor="middle" fill="#E5E5E5" font-size="32" font-family="Arial">Pide tu taxi en Cuba</text>
+  <text x="600" y="370" text-anchor="middle" fill="#E5E5E5" font-size="32" font-family="Arial">Muévete por Cuba</text>
   <text x="600" y="420" text-anchor="middle" fill="#9CA3AF" font-size="24" font-family="Arial">Triciclos · Motos · Autos</text>
 </svg>

@@ -8,8 +8,8 @@
     "scheme": "tricigo",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-logo.png",
-      "backgroundColor": "#FFFFFF",
+      "image": "./assets/logo-wordmark-white.png",
+      "backgroundColor": "#FF4D00",
       "resizeMode": "contain"
     },
     "ios": {

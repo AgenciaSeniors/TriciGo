@@ -22,8 +22,11 @@ export const metadata: Metadata = {
   keywords: ['taxi La Habana', 'transporte Cuba', 'triciclo taxi', 'pedir taxi Cuba', 'TriciGo', 'ride hailing Havana', 'taxi app Cuba', 'triciclo La Habana'],
   manifest: '/manifest.json',
   icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.png', type: 'image/png', sizes: '32x32' },
+    ],
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
     type: 'website',
