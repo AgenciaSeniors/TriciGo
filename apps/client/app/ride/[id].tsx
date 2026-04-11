@@ -142,7 +142,7 @@ export default function RideDetailScreen() {
 
   const handleShare = () => {
     if (ride.share_token) {
-      Share.share({ message: `https://tricigo.app/ride/${ride.share_token}` });
+      Share.share({ message: `https://tricigo.com/ride/${ride.share_token}` });
     }
   };
 

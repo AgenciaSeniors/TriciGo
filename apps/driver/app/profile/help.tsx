@@ -170,7 +170,7 @@ export default function DriverHelpScreen() {
                 <Text variant="body" color="primary" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="mail-outline" size={18} color={colors.neutral[500]} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">soporte@tricigo.app</Text>
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">soporte@tricigo.com</Text>
                 </View>
                 <View className="flex-row items-center">
                   <Ionicons name="call-outline" size={18} color={colors.neutral[500]} />

@@ -32,6 +32,6 @@ export const brand = {
   },
 
   // URLs / external
-  supportEmail: 'soporte@tricigo.app',
-  websiteUrl: 'https://tricigo.app',
+  supportEmail: 'soporte@tricigo.com',
+  websiteUrl: 'https://tricigo.com',
 } as const;

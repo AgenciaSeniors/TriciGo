@@ -433,7 +433,7 @@ export function RideCompleteView() {
           variant="outline"
           size="md"
           fullWidth
-          onPress={() => Share.share({ message: `https://tricigo.app/ride/${activeRide.share_token}` })}
+          onPress={() => Share.share({ message: `https://tricigo.com/ride/${activeRide.share_token}` })}
           className="mb-4"
         />
       )}

@@ -4,7 +4,7 @@
 // ============================================================
 
 /** Canonical base URL for public shared ride tracking */
-export const SHARE_BASE_URL = 'https://tricigo.app/track/share';
+export const SHARE_BASE_URL = 'https://tricigo.com/track/share';
 
 /**
  * Build a full share URL from a token.

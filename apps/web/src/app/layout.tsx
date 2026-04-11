@@ -70,7 +70,7 @@ const organizationJsonLd = {
   },
   contactPoint: {
     '@type': 'ContactPoint',
-    email: 'soporte@tricigo.app',
+    email: 'soporte@tricigo.com',
     contactType: 'customer service',
     availableLanguage: ['Spanish', 'English'],
   },

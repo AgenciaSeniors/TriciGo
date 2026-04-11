@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 /**
  * Web landing page for referral deep links.
- * URL: https://tricigo.app/refer/{code}
+ * URL: https://tricigo.com/refer/{code}
  *
  * On mobile with app installed: Universal Links opens the app directly.
  * On web/without app: Shows this landing page with download CTA.
@@ -60,7 +60,7 @@ export default function ReferralLandingPage() {
 
         {/* Home link */}
         <Link href="/" className="text-sm text-orange-500 hover:underline mt-4 inline-block">
-          Visitar tricigo.app
+          Visitar tricigo.com
         </Link>
       </div>
     </div>
