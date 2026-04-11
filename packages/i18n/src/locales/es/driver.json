@@ -39,6 +39,7 @@
     "scheduled_at": "Programado: {{time}}",
     "corporate_ride": "Corporativo",
     "payment_card": "Tarjeta",
+    "payment_stripe": "Tarjeta",
     "payment_mixed": "Mixto",
     "payment_corporate": "Corporativo",
     "today": "Hoy",

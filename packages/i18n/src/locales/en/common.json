@@ -104,6 +104,7 @@
     "payment_cash": "Cash",
     "payment_tricicoin": "TriciCoin",
     "payment_mixed": "Mixed",
+    "payment_stripe": "Card",
     "saved_locations_title": "Saved locations",
     "add_location": "Add location",
     "location_label": "Label",

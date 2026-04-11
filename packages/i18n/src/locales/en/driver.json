@@ -39,6 +39,7 @@
     "scheduled_at": "Scheduled: {{time}}",
     "corporate_ride": "Corporate",
     "payment_card": "Card",
+    "payment_stripe": "Card",
     "payment_mixed": "Mixed",
     "payment_corporate": "Corporate",
     "today": "Today",

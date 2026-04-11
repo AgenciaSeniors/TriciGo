@@ -404,6 +404,7 @@
     "tricicoin": "TriciCoin",
     "cash": "Efectivo",
     "mixed": "Mixto",
+    "stripe": "Tarjeta",
     "corporate": "Corporativo",
     "insufficient_balance": "Saldo insuficiente",
     "pending_title": "Pago pendiente",

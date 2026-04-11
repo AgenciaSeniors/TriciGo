@@ -104,6 +104,7 @@
     "payment_cash": "Efectivo",
     "payment_tricicoin": "TriciCoin",
     "payment_mixed": "Mixto",
+    "payment_stripe": "Tarjeta",
     "saved_locations_title": "Lugares guardados",
     "add_location": "Agregar lugar",
     "location_label": "Etiqueta",

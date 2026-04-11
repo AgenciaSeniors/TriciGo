@@ -7,9 +7,10 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
+import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
-import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
+import type { LedgerTransaction, LedgerEntryType, StripeRechargeConfig } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
@@ -20,6 +21,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { LinearGradient } from 'expo-linear-gradient';
+import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
@@ -195,11 +197,11 @@ function WebWalletScreen() {
     { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
   ];
 
-  // Recharge placeholder (Stripe coming soon)
+  // Stripe recharge for web (Expo web uses redirect flow — native uses payment sheet below)
   const submitRecharge = useCallback(async () => {
-    // TODO: Implement Stripe recharge
-    Toast.show({ type: 'info', text1: t('wallet.recharge_coming_soon', { defaultValue: 'Próximamente: recarga con tarjeta' }) });
-  }, [t]);
+    if (!userId) return;
+    Toast.show({ type: 'info', text1: t('wallet.recharge_web_hint', { defaultValue: 'Usa la version web (tricigo.com/wallet) para recargar con tarjeta' }) });
+  }, [t, userId]);
 
   // P2P search recipient
   const searchRecipient = useCallback(async () => {
@@ -627,18 +629,62 @@ function NativeWalletScreen() {
     setIsProcessing(true);
     setRechargeSubmitting(true);
     try {
-      await walletService.requestRecharge(userId, amountNum * 100);
+      // 1. Create Stripe PaymentIntent via edge function
+      const result = await paymentService.createStripePaymentIntent(userId, amountNum);
+
+      // 2. Initialize Stripe Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: result.clientSecret,
+        merchantDisplayName: 'TriciGo',
+        style: 'automatic',
+        returnURL: 'tricigo://wallet?recharge=success',
+      });
+
+      if (initError) {
+        logger.error('Stripe initPaymentSheet error', { error: initError.message });
+        Toast.show({ type: 'error', text1: initError.message });
+        return;
+      }
+
+      // 3. Present the payment sheet
+      const { error: presentError } = await presentPaymentSheet();
+
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          // User cancelled — not an error
+          Toast.show({ type: 'info', text1: t('wallet.recharge_cancelled', { defaultValue: 'Recarga cancelada' }) });
+          return;
+        }
+        logger.error('Stripe presentPaymentSheet error', { error: presentError.message });
+        Toast.show({ type: 'error', text1: presentError.message });
+        return;
+      }
+
+      // 4. Payment succeeded — poll for wallet credit
       setRechargeSheetVisible(false);
-      triggerHaptic('success');
-      Toast.show({ type: 'success', text1: t('wallet.recharge_success') });
+      Toast.show({ type: 'info', text1: t('wallet.recharge_processing', { defaultValue: 'Procesando recarga...' }) });
+
+      const finalIntent = await paymentService.pollIntentStatus(result.intentId, 15, 2000);
+      if (finalIntent.status === 'completed') {
+        triggerHaptic('success');
+        Toast.show({ type: 'success', text1: t('wallet.recharge_success', { defaultValue: 'Recarga exitosa' }) });
+        await fetchData();
+      } else if (finalIntent.status === 'failed') {
+        Toast.show({ type: 'error', text1: finalIntent.error_message ?? t('errors.recharge_failed') });
+      } else {
+        // Still processing — webhook will handle it
+        Toast.show({ type: 'success', text1: t('wallet.recharge_success', { defaultValue: 'Recarga exitosa' }) });
+        // Refresh in a few seconds
+        setTimeout(() => fetchData(), 5000);
+      }
     } catch (err) {
-      logger.error('Error requesting recharge', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('errors.recharge_failed') });
+      logger.error('Error processing Stripe recharge', { error: String(err) });
+      Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
       setRechargeSubmitting(false);
       setIsProcessing(false);
     }
-  }, [rechargeAmount, userId, t, isProcessing]);
+  }, [rechargeAmount, userId, t, isProcessing, fetchData]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
@@ -931,7 +977,7 @@ function NativeWalletScreen() {
           </Text>
           {/* UBER-4.2: Recharge preset amounts */}
           <View className="flex-row justify-between mb-3">
-            {[5000, 10000, 20000].map((amount) => (
+            {[500, 1000, 2000, 5000, 10000].map((amount) => (
               <Pressable
                 key={amount}
                 onPress={() => setRechargeAmount(String(amount))}
@@ -953,8 +999,15 @@ function NativeWalletScreen() {
             onChangeText={setRechargeAmount}
             keyboardType="numeric"
           />
+          {parseInt(rechargeAmount, 10) > 0 && (
+            <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
+              <Text variant="caption" color="secondary">
+                ≈ ${(parseInt(rechargeAmount, 10) / exchangeRate).toFixed(2)} USD + $2.00 fee = ${((parseInt(rechargeAmount, 10) / exchangeRate) + 2).toFixed(2)} USD total
+              </Text>
+            </View>
+          )}
           <Button
-            title={t('wallet.request_recharge')}
+            title={t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })}
             size="lg"
             fullWidth
             onPress={debouncedSubmitRecharge}
