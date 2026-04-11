@@ -537,7 +537,7 @@ export function useRideActions() {
           }
         }
 
-        // TropiPay payment confirmed via Realtime (use prevRide captured before update)
+        // Payment confirmed via Realtime
         if (
           prevRide?.payment_status === 'pending' &&
           (updated as any).payment_status === 'paid'
@@ -547,7 +547,7 @@ export function useRideActions() {
             type: 'success',
             text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
           });
-          trackEvent('ride_tropipay_paid', { ride_id: updated.id });
+          trackEvent('ride_payment_confirmed', { ride_id: updated.id });
         }
 
         // Bug 10 + Bug 27: Show contextual alert when ride is cancelled

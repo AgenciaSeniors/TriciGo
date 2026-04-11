@@ -10,6 +10,18 @@ type ConfigEntry = { key: string; value: string };
 
 /** Well-known config keys with input type + help text key */
 const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> = {
+  // ── Stripe payments ──
+  stripe_enabled: { type: 'text', helpKey: 'platform_config.stripe_enabled_help' },
+  stripe_publishable_key: { type: 'text', helpKey: 'platform_config.stripe_publishable_key_help' },
+  stripe_secret_key: { type: 'text', helpKey: 'platform_config.stripe_secret_key_help' },
+  stripe_webhook_secret: { type: 'text', helpKey: 'platform_config.stripe_webhook_secret_help' },
+  stripe_min_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_min_recharge_cup_help' },
+  stripe_max_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_max_recharge_cup_help' },
+  stripe_fee_usd: { type: 'number', helpKey: 'platform_config.stripe_fee_usd_help' },
+  stripe_fee_type: { type: 'text', helpKey: 'platform_config.stripe_fee_type_help' },
+  cash_enabled: { type: 'text', helpKey: 'platform_config.cash_enabled_help' },
+  wallet_enabled: { type: 'text', helpKey: 'platform_config.wallet_enabled_help' },
+  // ── Platform config ──
   max_driver_rate_multiplier: { type: 'number', helpKey: 'platform_config.max_driver_rate_multiplier_help' },
   default_per_km_rate_cup: { type: 'number', helpKey: 'platform_config.default_per_km_rate_cup_help' },
   commission_rate: { type: 'number', helpKey: 'platform_config.commission_rate_help' },

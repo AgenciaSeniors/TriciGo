@@ -1,53 +1,16 @@
 // ============================================================
 // TriciGo — Payment Service
-// Client-side service for TropiPay payment operations.
-// Creates payment links via edge function and tracks intents.
+// Client-side service for payment operations.
+// Tracks payment intents and initiates Stripe recharges.
 // ============================================================
 
-import type { PaymentIntent } from '@tricigo/types';
+import type { PaymentIntent, CreateStripeIntentResponse, StripeRechargeConfig } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { logger } from '@tricigo/utils';
 
 export const paymentService = {
   /**
-   * Create a TropiPay payment link for wallet recharge.
-   * Calls the create-tropipay-link edge function which handles
-   * TropiPay API authentication and payment card creation.
-   */
-  async createRechargeLink(
-    userId: string,
-    amountCup: number,
-  ): Promise<{ paymentUrl: string; shortUrl: string; intentId: string }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-tropipay-link', {
-      body: { user_id: userId, amount_cup: amountCup },
-    });
-    if (error) throw error;
-    return data as { paymentUrl: string; shortUrl: string; intentId: string };
-  },
-
-  /**
-   * Create a TropiPay payment link for corporate wallet recharge.
-   * Same flow as personal recharge but targets the corporate wallet.
-   */
-  async createCorporateRechargeLink(
-    corporateAccountId: string,
-    amountCup: number,
-    userId: string,
-  ): Promise<{ paymentUrl: string; shortUrl: string; intentId: string }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-tropipay-link', {
-      body: {
-        user_id: userId,
-        amount_cup: amountCup,
-        corporate_account_id: corporateAccountId,
-      },
-    });
-    if (error) throw error;
-    return data as { paymentUrl: string; shortUrl: string; intentId: string };
-  },
-
-  /**
-   * Get a single payment intent by ID (to check status after redirect).
+   * Get a single payment intent by ID (to check status after payment).
    */
   async getPaymentIntent(intentId: string): Promise<PaymentIntent | null> {
     const supabase = getSupabaseClient();
@@ -83,8 +46,7 @@ export const paymentService = {
   },
 
   /**
-   * Get pending/created intents for a user (useful for checking
-   * if there's an open payment link the user hasn't completed).
+   * Get pending/created intents for a user.
    */
   async getPendingIntents(userId: string): Promise<PaymentIntent[]> {
     const supabase = getSupabaseClient();
@@ -99,31 +61,113 @@ export const paymentService = {
     return data as PaymentIntent[];
   },
 
+  // ==================== STRIPE ====================
+
   /**
-   * Create a TropiPay payment link for a completed ride.
-   * Calls the create-ride-payment-link edge function which handles
-   * TropiPay API authentication and payment card creation.
+   * Create a Stripe PaymentIntent via the edge function.
+   * Returns the client_secret for Stripe Elements to confirm payment.
    */
-  async createRidePaymentLink(
-    rideId: string,
-  ): Promise<{
-    paymentUrl: string;
-    shortUrl: string;
-    intentId: string;
-    amountCup: number;
-    amountUsd: number;
-  }> {
+  async createStripePaymentIntent(
+    userId: string,
+    amountCup: number,
+    rechargeType: 'customer' | 'driver_quota' = 'customer',
+    corporateAccountId?: string,
+  ): Promise<CreateStripeIntentResponse> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-ride-payment-link', {
-      body: { ride_id: rideId },
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
+      ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+      ?? process.env.EXPO_PUBLIC_SUPABASE_URL
+      ?? '';
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/create-stripe-payment-intent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+          ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+          ?? '',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        amount_cup: amountCup,
+        recharge_type: rechargeType,
+        corporate_account_id: corporateAccountId,
+      }),
     });
-    if (error) throw error;
-    return data as {
-      paymentUrl: string;
-      shortUrl: string;
-      intentId: string;
-      amountCup: number;
-      amountUsd: number;
+
+    const json = await res.json();
+    if (!res.ok || !json.ok) {
+      const errorMsg = json.detail ?? json.error ?? 'Failed to create payment intent';
+      logger.error('stripe_create_intent_failed', { userId, amountCup, error: errorMsg });
+      throw new Error(errorMsg);
+    }
+
+    logger.info('stripe_intent_created', { userId, amountCup, intentId: json.intentId });
+    return json as CreateStripeIntentResponse;
+  },
+
+  /**
+   * Poll a payment intent status until completed or failed.
+   * Useful after Stripe Elements confirms — wait for webhook to process.
+   */
+  async pollIntentStatus(
+    intentId: string,
+    maxAttempts = 15,
+    intervalMs = 2000,
+  ): Promise<PaymentIntent> {
+    for (let i = 0; i < maxAttempts; i++) {
+      const intent = await this.getPaymentIntent(intentId);
+      if (!intent) throw new Error('Payment intent not found');
+
+      if (intent.status === 'completed' || intent.status === 'failed' || intent.status === 'refunded') {
+        return intent;
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    // Return last known state
+    const intent = await this.getPaymentIntent(intentId);
+    if (!intent) throw new Error('Payment intent not found');
+    return intent;
+  },
+
+  /**
+   * Get Stripe recharge configuration from platform_config.
+   */
+  async getStripeConfig(): Promise<StripeRechargeConfig> {
+    const supabase = getSupabaseClient();
+    const { data: configs } = await supabase
+      .from('platform_config')
+      .select('key, value')
+      .in('key', [
+        'stripe_enabled',
+        'stripe_publishable_key',
+        'stripe_min_recharge_cup',
+        'stripe_max_recharge_cup',
+        'stripe_fee_usd',
+        'stripe_fee_type',
+      ]);
+
+    const configMap: Record<string, string> = {};
+    (configs ?? []).forEach((c: { key: string; value: string }) => {
+      const raw = c.value;
+      configMap[c.key] = typeof raw === 'string' && raw.startsWith('"')
+        ? JSON.parse(raw)
+        : String(raw);
+    });
+
+    return {
+      enabled: configMap['stripe_enabled'] !== 'false',
+      publishableKey: configMap['stripe_publishable_key'] ?? '',
+      minRechargeCup: parseInt(configMap['stripe_min_recharge_cup'] ?? '500', 10),
+      maxRechargeCup: parseInt(configMap['stripe_max_recharge_cup'] ?? '50000', 10),
+      feeUsd: parseFloat(configMap['stripe_fee_usd'] ?? '2.00'),
+      feeType: (configMap['stripe_fee_type'] as 'fixed' | 'percentage') ?? 'fixed',
     };
   },
 };

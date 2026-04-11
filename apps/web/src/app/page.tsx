@@ -39,7 +39,7 @@ const faqJsonLd = {
       name: '¿Cómo pago mi viaje?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'Puedes pagar en efectivo (CUP), con TriciCoin (monedero digital) o con métodos mixtos. También aceptamos TropiPay.',
+        text: 'Puedes pagar en efectivo (CUP), con TriciCoin (monedero digital), con tarjeta de crédito/débito o con métodos mixtos.',
       },
     },
     {

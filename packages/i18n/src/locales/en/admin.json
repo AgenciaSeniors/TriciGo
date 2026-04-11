@@ -418,8 +418,8 @@
     "col_description": "Description",
     "col_type": "Type",
     "col_ref": "Ref",
-    "tab_tropipay": "TropiPay",
-    "tropipay_no_intents": "No TropiPay payments",
+    "tab_payments": "Payments",
+    "no_payment_intents": "No payments",
     "col_status": "Status",
     "col_usd_amount": "USD Amount",
     "col_reference": "Reference"
@@ -886,7 +886,17 @@
     "openweather_api_key_help": "API key for weather queries. Get one at openweathermap.org",
     "weather_surge_enabled": "Weather surge enabled",
     "weather_surge_enabled_help": "Enable/disable automatic fare increase during rain",
-    "weather_last_check": "Last weather check"
+    "weather_last_check": "Last weather check",
+    "stripe_enabled_help": "Enable/disable card payments",
+    "stripe_publishable_key_help": "Stripe publishable key (pk_...)",
+    "stripe_secret_key_help": "Stripe secret key (sk_...)",
+    "stripe_webhook_secret_help": "Stripe webhook secret (whsec_...)",
+    "stripe_min_recharge_cup_help": "Minimum recharge amount in CUP",
+    "stripe_max_recharge_cup_help": "Maximum recharge amount in CUP",
+    "stripe_fee_usd_help": "Service fee in USD per recharge",
+    "stripe_fee_type_help": "Fee type: fixed or percentage",
+    "cash_enabled_help": "Enable/disable cash payments",
+    "wallet_enabled_help": "Enable/disable wallet payments"
   },
 
   "exchange_rate": {

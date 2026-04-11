@@ -291,7 +291,7 @@
     "payment_confirmed_body": "${{amount}} CUP — {{method}}",
     "payment_method_cash": "Dinheiro",
     "payment_method_tricicoin": "Tricicoin",
-    "payment_method_tropipay": "TropiPay",
+    "payment_method_card": "Cartão",
     "payment_method_corporate": "Corporativo",
     "rate_reminder_title": "Como foi sua viagem?",
     "rate_reminder_body": "Sua opinião nos ajuda a melhorar. Avalie o motorista!",
@@ -400,9 +400,7 @@
     "tricicoin": "TriciCoin",
     "cash": "Dinheiro",
     "mixed": "Misto",
-    "tropipay": "Cartão",
     "corporate": "Corporativo",
-    "tropipay_desc": "Pague ao finalizar",
     "insufficient_balance": "Saldo insuficiente",
     "pending_title": "Pagamento pendente",
     "pending_desc": "Conclua o pagamento da sua viagem",
@@ -413,7 +411,7 @@
     "amount": "Valor a pagar",
     "creating_link": "Gerando link de pagamento...",
     "retry": "Tentar novamente",
-    "paid_tropipay": "Pago com TropiPay"
+    "paid_card": "Pago com cartão"
   },
 
   "chat": {

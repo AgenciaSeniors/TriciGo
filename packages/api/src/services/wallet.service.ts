@@ -287,7 +287,7 @@ export const walletService = {
 
   /**
    * Recharge driver quota via RPC.
-   * Called after TropiPay payment confirmation.
+   * Called after payment confirmation.
    *
    * @param driverUserId - Driver's user ID
    * @param amount - Amount in TRC whole units (= CUP)

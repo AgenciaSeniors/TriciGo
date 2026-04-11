@@ -18,6 +18,7 @@ import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
@@ -162,12 +163,21 @@ function RootLayoutInner() {
     return null;
   }
 
+  // Stripe publishable key — loaded from env, will be set via platform_config at runtime
+  const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? 'pk_test_placeholder';
+
   return (
     <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
-      <AppProviders>
-        <RootNavigator />
-        <Toast />
-      </AppProviders>
+      <StripeProvider
+        publishableKey={stripePublishableKey}
+        merchantIdentifier="merchant.com.tricigo"
+        urlScheme="tricigo"
+      >
+        <AppProviders>
+          <RootNavigator />
+          <Toast />
+        </AppProviders>
+      </StripeProvider>
     </ErrorBoundary>
   );
 }

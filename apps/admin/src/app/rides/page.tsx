@@ -106,7 +106,6 @@ export default function RidesPage() {
       options: [
         { label: t('rides.payment_cash'), value: 'cash' },
         { label: t('rides.payment_tricicoin'), value: 'tricicoin' },
-        { label: 'TropiPay', value: 'tropipay' },
       ],
     },
     { key: 'dateFrom', label: t('filters.date_from'), type: 'date' },

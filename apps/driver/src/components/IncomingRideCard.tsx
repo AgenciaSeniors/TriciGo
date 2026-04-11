@@ -331,7 +331,6 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
         <View style={{ backgroundColor: '#252540', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
           <Text variant="badge" color="inverse">
             {ride.payment_method === 'cash' ? t('common.cash')
-              : ride.payment_method === 'tropipay' ? 'TropiPay'
               : ride.payment_method === 'corporate' ? t('home.payment_corporate', { defaultValue: 'Corporativo' })
               : ride.payment_method === 'mixed' ? t('home.payment_mixed', { defaultValue: 'Mixto' })
               : t('trip.tricicoin')}

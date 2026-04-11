@@ -418,8 +418,8 @@
     "col_description": "Descripción",
     "col_type": "Tipo",
     "col_ref": "Ref",
-    "tab_tropipay": "TropiPay",
-    "tropipay_no_intents": "Sin pagos TropiPay",
+    "tab_payments": "Pagos",
+    "no_payment_intents": "Sin pagos",
     "col_status": "Estado",
     "col_usd_amount": "Monto USD",
     "col_reference": "Referencia"
@@ -886,7 +886,17 @@
     "openweather_api_key_help": "Clave para consultas de clima. Obtener en openweathermap.org",
     "weather_surge_enabled": "Surge por clima activo",
     "weather_surge_enabled_help": "Activar/desactivar el aumento automático de tarifa por lluvia",
-    "weather_last_check": "Último chequeo de clima"
+    "weather_last_check": "Último chequeo de clima",
+    "stripe_enabled_help": "Habilitar/deshabilitar pagos con tarjeta",
+    "stripe_publishable_key_help": "Clave publica de Stripe (pk_...)",
+    "stripe_secret_key_help": "Clave secreta de Stripe (sk_...)",
+    "stripe_webhook_secret_help": "Secreto del webhook de Stripe (whsec_...)",
+    "stripe_min_recharge_cup_help": "Monto minimo de recarga en CUP",
+    "stripe_max_recharge_cup_help": "Monto maximo de recarga en CUP",
+    "stripe_fee_usd_help": "Fee de servicio en USD por recarga",
+    "stripe_fee_type_help": "Tipo de fee: fixed o percentage",
+    "cash_enabled_help": "Habilitar/deshabilitar pagos en efectivo",
+    "wallet_enabled_help": "Habilitar/deshabilitar pagos con wallet"
   },
 
   "exchange_rate": {

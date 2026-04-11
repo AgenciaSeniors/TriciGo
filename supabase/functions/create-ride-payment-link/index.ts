@@ -1,3 +1,4 @@
+// DEPRECATED: TropiPay removed. Will be replaced by Stripe.
 // ============================================================
 // TriciGo — Create TropiPay Payment Link for Ride
 //

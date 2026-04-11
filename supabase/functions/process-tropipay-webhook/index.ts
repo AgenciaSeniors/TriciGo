@@ -1,3 +1,4 @@
+// DEPRECATED: TropiPay removed. Will be replaced by Stripe.
 // ============================================================
 // TriciGo — Process TropiPay Webhook Edge Function
 //
