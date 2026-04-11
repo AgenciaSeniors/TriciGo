@@ -6,9 +6,11 @@
   "build": {
     "base": {
       "node": "20.19.4",
-      "pnpm": "9.15.4"
+      "pnpm": "9.15.4",
+      "installCommand": "pnpm install"
     },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -22,6 +24,7 @@
       }
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -34,6 +37,7 @@
       }
     },
     "production": {
+      "extends": "base",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
