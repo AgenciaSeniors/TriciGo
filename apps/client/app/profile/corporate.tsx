@@ -254,19 +254,12 @@ export default function CorporateProfileScreen() {
     }
   };
 
-  const handleRecharge = async (accountId: string) => {
-    const amt = parseInt(rechargeAmount, 10);
-    if (!amt || amt <= 0 || !userId) return;
-    setRecharging(true);
-    try {
-      const result = await paymentService.createCorporateRechargeLink(accountId, amt, userId);
-      await Linking.openURL(result.paymentUrl);
-      setRechargeAmount('');
-    } catch (err) {
-      Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
-    } finally {
-      setRecharging(false);
-    }
+  // TODO: Replace with Stripe PaymentIntent creation
+  const handleRecharge = async (_accountId: string) => {
+    Alert.alert(
+      t('common:coming_soon', { defaultValue: 'Coming soon' }),
+      t('common:wallet.recharge_coming_soon', { defaultValue: 'Coming soon' }),
+    );
   };
 
   const handleToggleReports = useCallback(async (accountId: string) => {
@@ -716,7 +709,7 @@ export default function CorporateProfileScreen() {
                           <Button
                             title={recharging
                               ? t('corporate.generating_link', { defaultValue: 'Generando...' })
-                              : t('corporate.recharge_btn', { defaultValue: 'Recargar via TropiPay' })}
+                              : t('corporate.recharge_btn', { defaultValue: 'Recargar' })}
                             variant="primary"
                             size="md"
                             fullWidth

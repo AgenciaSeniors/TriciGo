@@ -295,7 +295,7 @@
     "payment_confirmed_body": "${{amount}} CUP — {{method}}",
     "payment_method_cash": "Cash",
     "payment_method_tricicoin": "Tricicoin",
-    "payment_method_tropipay": "TropiPay",
+    "payment_method_card": "Card",
     "payment_method_corporate": "Corporate",
     "rate_reminder_title": "How was your ride?",
     "rate_reminder_body": "Your feedback helps us improve. Rate your driver!",
@@ -404,9 +404,7 @@
     "tricicoin": "TriciCoin",
     "cash": "Cash",
     "mixed": "Mixed",
-    "tropipay": "Card",
     "corporate": "Corporate",
-    "tropipay_desc": "Pay after ride",
     "insufficient_balance": "Insufficient balance",
     "pending_title": "Payment pending",
     "pending_desc": "Complete your ride payment",
@@ -417,7 +415,7 @@
     "amount": "Amount to pay",
     "creating_link": "Creating payment link...",
     "retry": "Retry",
-    "paid_tropipay": "Paid with TropiPay"
+    "paid_card": "Paid with card"
   },
 
   "chat": {

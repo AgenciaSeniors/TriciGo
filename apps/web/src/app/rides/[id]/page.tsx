@@ -23,7 +23,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Efectivo',
   tricicoin: 'TriciCoin',
   mixed: 'Mixto',
-  tropipay: 'TropiPay',
+  tropipay: 'Tarjeta', // deprecated — legacy rides may still have this value
   corporate: 'Corporativo',
 };
 

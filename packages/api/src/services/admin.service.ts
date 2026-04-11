@@ -1481,12 +1481,12 @@ export const adminService = {
     return typeof data === 'number' ? data : 50.0;
   },
 
-  // ==================== TROPIPAY PAYMENT INTENTS ====================
+  // ==================== PAYMENT INTENTS ====================
 
   /**
-   * Get TropiPay payment intents (admin view).
+   * Get payment intents (admin view).
    */
-  async getTropiPayIntents(
+  async getPaymentIntents(
     page = 0,
     pageSize = 20,
     statusFilter?: string,

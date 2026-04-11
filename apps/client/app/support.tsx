@@ -12,7 +12,7 @@ import { colors } from '@tricigo/theme';
 
 const FAQ_ITEMS = [
   { qKey: 'support.faq_q1', aKey: 'support.faq_a1', defaultQ: '¿Cómo solicito un viaje?', defaultA: 'Abre la app, selecciona tu destino en el mapa o escríbelo en la barra de búsqueda, elige el tipo de vehículo y confirma tu solicitud.' },
-  { qKey: 'support.faq_q2', aKey: 'support.faq_a2', defaultQ: '¿Cómo recargo mi billetera?', defaultA: 'Ve a la sección Billetera, selecciona "Recargar con TropiPay" e ingresa el monto deseado en CUP.' },
+  { qKey: 'support.faq_q2', aKey: 'support.faq_a2', defaultQ: '¿Cómo recargo mi billetera?', defaultA: 'Ve a la sección Billetera, selecciona "Recargar" e ingresa el monto deseado.' },
   { qKey: 'support.faq_q3', aKey: 'support.faq_a3', defaultQ: '¿Cómo reporto un problema con un viaje?', defaultA: 'Ve a Perfil → Ayuda y crea un nuevo ticket seleccionando la categoría "Problema con viaje".' },
   { qKey: 'support.faq_q4', aKey: 'support.faq_a4', defaultQ: '¿Puedo transferir saldo a otro usuario?', defaultA: 'Sí. En la Billetera, usa la sección "Transferir a otro usuario" e ingresa el teléfono del destinatario.' },
   { qKey: 'support.faq_q5', aKey: 'support.faq_a5', defaultQ: '¿Cómo contacto al conductor?', defaultA: 'Durante un viaje activo, puedes chatear con tu conductor desde la pantalla del viaje o llamarlo directamente.' },

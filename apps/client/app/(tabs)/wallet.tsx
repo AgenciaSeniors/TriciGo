@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Linking, Image, Pressable, ScrollView } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -7,7 +7,6 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
-import { paymentService } from '@tricigo/api/services/payment';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
@@ -20,7 +19,6 @@ import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
-import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
@@ -99,15 +97,9 @@ function WebWalletScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const PAGE_SIZE = 20;
 
-  // Recharge (TropiPay) state
+  // Recharge state
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
-  const [rechargeAmount, setRechargeAmount] = useState('');
-  const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
-  const [rechargeError, setRechargeError] = useState('');
-  const [rechargeSuccess, setRechargeSuccess] = useState('');
 
-  // TropiPay iframe modal
-  const [tropipayUrl, setTropipayUrl] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // P2P Transfer state
@@ -203,48 +195,11 @@ function WebWalletScreen() {
     { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
   ];
 
-  // TropiPay recharge submit
+  // Recharge placeholder (Stripe coming soon)
   const submitRecharge = useCallback(async () => {
-    const amountNum = parseInt(rechargeAmount, 10);
-    if (!amountNum || amountNum <= 0 || !userId) return;
-    setRechargeSubmitting(true);
-    setRechargeError('');
-    setRechargeSuccess('');
-    try {
-      const result = await paymentService.createRechargeLink(userId, amountNum);
-      const url = result.paymentUrl;
-      if (url) {
-        setTropipayUrl(url);
-        // Poll balance every 5s to detect payment
-        const prevBalance = balance.available;
-        let pollCount = 0;
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(async () => {
-          pollCount++;
-          if (pollCount >= 60) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            return;
-          }
-          try {
-            const newBalance = await walletService.getBalance(userId!);
-            if (newBalance.available > prevBalance) {
-              if (pollRef.current) clearInterval(pollRef.current);
-              setBalance(newBalance);
-              setTropipayUrl(null);
-              setRechargeSuccess(t('wallet.tropipay_success', { defaultValue: 'Recarga exitosa' }));
-              setRechargeAmount('');
-              fetchData();
-            }
-          } catch { /* polling error, continue */ }
-        }, 5000);
-      }
-    } catch (err) {
-      logger.error('Error creating TropiPay link', { error: String(err) });
-      setRechargeError(t('wallet.tropipay_error_creating', { defaultValue: 'Error al crear enlace de pago' }));
-    } finally {
-      setRechargeSubmitting(false);
-    }
-  }, [rechargeAmount, userId, t, balance.available, fetchData]);
+    // TODO: Implement Stripe recharge
+    Toast.show({ type: 'info', text1: t('wallet.recharge_coming_soon', { defaultValue: 'Próximamente: recarga con tarjeta' }) });
+  }, [t]);
 
   // P2P search recipient
   const searchRecipient = useCallback(async () => {
@@ -428,54 +383,20 @@ function WebWalletScreen() {
             </View>
           )}
 
-          {/* ─── Recharge Section (TropiPay) ─── */}
+          {/* ─── Recharge Section ─── */}
           <View className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl p-5 mb-6">
             <Text variant="h4" className="mb-1">
-              {t('wallet.tropipay_title', { defaultValue: 'Recargar con TropiPay' })}
+              {t('wallet.recharge_title', { defaultValue: 'Recargar billetera' })}
             </Text>
             <Text variant="caption" color="tertiary" className="mb-4">
-              1 USD = {exchangeRate} CUP
+              {t('wallet.recharge_coming_soon', { defaultValue: 'Próximamente: recarga con tarjeta' })}
             </Text>
-
-            {rechargeSuccess ? (
-              <View className="bg-green-50 dark:bg-green-950 rounded-lg p-3 mb-3">
-                <Text variant="bodySmall" className="text-green-700 dark:text-green-300">{rechargeSuccess}</Text>
-              </View>
-            ) : null}
-            {rechargeError ? (
-              <View className="bg-red-50 dark:bg-red-950 rounded-lg p-3 mb-3">
-                <Text variant="bodySmall" className="text-red-700 dark:text-red-300">{rechargeError}</Text>
-              </View>
-            ) : null}
-
-            <Text variant="bodySmall" color="secondary" className="mb-2">
-              {t('wallet.tropipay_amount_label', { defaultValue: 'Monto en CUP' })}
-            </Text>
-            <Input
-              placeholder="1000"
-              value={rechargeAmount}
-              onChangeText={(text: string) => {
-                setRechargeAmount(text);
-                setRechargeError('');
-                setRechargeSuccess('');
-              }}
-              keyboardType="numeric"
-            />
-            {parseInt(rechargeAmount, 10) > 0 && (
-              <Text variant="caption" color="tertiary" className="mb-2 -mt-1">
-                {t('wallet.tropipay_amount_usd', {
-                  defaultValue: 'Aprox. ${{usd}} USD',
-                  usd: (parseInt(rechargeAmount, 10) / exchangeRate).toFixed(2),
-                })}
-              </Text>
-            )}
             <Button
-              title={t('wallet.tropipay_pay', { defaultValue: 'Recargar con TropiPay' })}
+              title={t('wallet.recharge', { defaultValue: 'Recargar' })}
               size="lg"
               fullWidth
               onPress={submitRecharge}
-              loading={rechargeSubmitting}
-              disabled={rechargeSubmitting || !rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
+              variant="outline"
             />
           </View>
 
@@ -572,66 +493,7 @@ function WebWalletScreen() {
         </View>
       </ScrollView>
 
-      {/* ─── TropiPay Iframe Modal ─── */}
-      {tropipayUrl && (
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 999,
-          justifyContent: 'center', alignItems: 'center',
-        }}>
-          <View style={{
-            width: '90%', maxWidth: 600, height: '80%',
-            borderRadius: 16, overflow: 'hidden',
-            backgroundColor: '#fff',
-          }}>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              paddingHorizontal: 16, paddingVertical: 12,
-              borderBottomWidth: 1, borderBottomColor: '#eee',
-            }}>
-              <Text variant="body" className="font-bold">Pago con TropiPay</Text>
-              <Pressable
-                onPress={() => {
-                  setTropipayUrl(null);
-                  if (pollRef.current) clearInterval(pollRef.current);
-                  fetchData();
-                }}
-                hitSlop={12}
-              >
-                <Text variant="body" style={{ fontSize: 20, color: '#666' }}>✕</Text>
-              </Pressable>
-            </View>
-            <iframe
-              src={tropipayUrl}
-              style={{ flex: 1, border: 'none', width: '100%', height: '100%' } as React.CSSProperties}
-              title="TropiPay"
-            />
-          </View>
-        </View>
-      )}
     </Screen>
-  );
-}
-
-function TropiPayWebView({ url }: { url: string }) {
-  if (Platform.OS === 'web') {
-    return (
-      <iframe src={url} style={{ flex: 1, border: 'none', width: '100%', height: '100%' }} title="TropiPay" />
-    );
-  }
-  return (
-    <WebView
-      source={{ uri: url }}
-      style={{ flex: 1 }}
-      javaScriptEnabled
-      domStorageEnabled
-      startInLoadingState
-      renderLoading={() => (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
-        </View>
-      )}
-    />
   );
 }
 
@@ -695,13 +557,7 @@ function NativeWalletScreen() {
   // Processing guard to prevent double-submit across all wallet actions
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // TropiPay recharge state
-  const [tropipaySheetVisible, setTropipaySheetVisible] = useState(false);
-  const [tropipayAmount, setTropipayAmount] = useState('');
-  const [tropipaySubmitting, setTropipaySubmitting] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
-  const [exchangeRateStale, setExchangeRateStale] = useState(false);
-  const [tropipayWebViewUrl, setTropipayWebViewUrl] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
@@ -719,18 +575,11 @@ function NativeWalletScreen() {
         setTransactions(txns as TransactionWithAmount[]);
       }
 
-      // Fetch exchange rate on mount so it's ready for TropiPay
+      // Fetch exchange rate
       try {
         const rate = await exchangeRateService.getUsdCupRate();
-        if (rate) {
-          setExchangeRate(rate);
-          setExchangeRateStale(false);
-        } else {
-          setExchangeRateStale(true);
-        }
-      } catch {
-        setExchangeRateStale(true);
-      }
+        if (rate) setExchangeRate(rate);
+      } catch { /* use default */ }
     } catch (err) {
       logger.error('Error fetching wallet', { error: String(err) });
     }
@@ -865,59 +714,6 @@ function NativeWalletScreen() {
   }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData, isProcessing]);
   const debouncedSubmitTransfer = useDebouncePress(submitTransfer);
 
-  // TropiPay handlers
-  const handleTropiPay = useCallback(async () => {
-    setTropipayAmount('');
-    setTropipaySheetVisible(true);
-    // Fetch current exchange rate for USD preview
-    try {
-      const rate = await exchangeRateService.getUsdCupRate();
-      if (rate) setExchangeRate(rate);
-    } catch {
-      // Use default rate
-    }
-  }, []);
-
-  const submitTropiPay = useCallback(async () => {
-    const amountNum = parseInt(tropipayAmount, 10);
-    if (!amountNum || amountNum <= 0 || !userId) return;
-    setTropipaySubmitting(true);
-    try {
-      const result = await paymentService.createRechargeLink(userId, amountNum);
-      setTropipaySheetVisible(false);
-      const url = result.paymentUrl;
-      if (url) {
-        setTropipayWebViewUrl(url);
-        // Poll balance every 5s for 5 minutes to detect payment
-        const prevBalance = balance.available;
-        let pollCount = 0;
-        const pollInterval = setInterval(async () => {
-          pollCount++;
-          if (pollCount >= 60) { // 5 minutes (60 × 5s)
-            clearInterval(pollInterval);
-            return;
-          }
-          try {
-            const newBalance = await walletService.getBalance(userId!);
-            if (newBalance.available > prevBalance) {
-              clearInterval(pollInterval);
-              setBalance(newBalance);
-              setTropipayWebViewUrl(null);
-              Toast.show({ type: 'success', text1: t('wallet.tropipay_success', { defaultValue: 'Recarga exitosa' }) });
-              fetchData();
-            }
-          } catch { /* polling error, continue */ }
-        }, 5000);
-      }
-    } catch (err) {
-      logger.error('Error creating TropiPay link', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('wallet.tropipay_error_creating') });
-    } finally {
-      setTropipaySubmitting(false);
-    }
-  }, [tropipayAmount, userId, t, balance.available, fetchData]);
-  const debouncedSubmitTropiPay = useDebouncePress(submitTropiPay);
-
   // Monthly spending insights (8.4)
   const monthlyInsights = useMemo(() => {
     const now = new Date();
@@ -1037,15 +833,6 @@ function NativeWalletScreen() {
             onPress={handleTransfer}
           />
         </View>
-        <Button
-          title={t('wallet.recharge_tropipay')}
-          variant="secondary"
-          size="md"
-          fullWidth
-          onPress={handleTropiPay}
-          className="mb-8"
-        />
-
         {/* Monthly spending insights (8.4) */}
         {transactions.length > 0 && (
           <View className="mb-6">
@@ -1263,75 +1050,6 @@ function NativeWalletScreen() {
         </View>
       </BottomSheet>
 
-      {/* TropiPay Recharge BottomSheet */}
-      <BottomSheet
-        visible={tropipaySheetVisible}
-        onClose={() => setTropipaySheetVisible(false)}
-      >
-        <View className="px-4 pb-6">
-          <Text variant="h4" className="mb-4">{t('wallet.tropipay_title')}</Text>
-          <Text variant="bodySmall" color="secondary" className="mb-3">
-            {t('wallet.tropipay_amount_label')}
-          </Text>
-          <Input
-            placeholder="1000"
-            value={tropipayAmount}
-            onChangeText={setTropipayAmount}
-            keyboardType="numeric"
-          />
-          {parseInt(tropipayAmount, 10) > 0 && (
-            <Text variant="caption" color="tertiary" className="mb-2 -mt-1">
-              {t('wallet.tropipay_amount_usd', {
-                usd: (parseInt(tropipayAmount, 10) / exchangeRate).toFixed(2),
-              })}
-            </Text>
-          )}
-          <Text variant="caption" color="tertiary" className="mb-4 text-center">
-            {t('wallet.tropipay_inline_hint', { defaultValue: 'Completa el pago a continuacion' })}
-          </Text>
-          <Button
-            title={t('wallet.tropipay_pay')}
-            size="lg"
-            fullWidth
-            onPress={debouncedSubmitTropiPay}
-            loading={tropipaySubmitting}
-            disabled={!tropipayAmount || parseInt(tropipayAmount, 10) <= 0}
-          />
-        </View>
-      </BottomSheet>
-
-      {/* TropiPay WebView Modal */}
-      {tropipayWebViewUrl && (
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 999,
-        }}>
-          <View style={{
-            flex: 1, marginTop: 50, marginBottom: 20, marginHorizontal: 12,
-            borderRadius: 16, overflow: 'hidden',
-            backgroundColor: isDark ? darkColors.background.secondary : '#fff',
-          }}>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
-              borderBottomColor: isDark ? darkColors.border.default : '#eee',
-            }}>
-              <Text variant="body" className="font-bold">Pago con TropiPay</Text>
-              <Pressable
-                onPress={() => {
-                  setTropipayWebViewUrl(null);
-                  // Refresh balance in case payment completed
-                  fetchData();
-                }}
-                hitSlop={12}
-              >
-                <Text variant="body" style={{ fontSize: 18, color: isDark ? darkColors.text.secondary : '#666' }}>✕</Text>
-              </Pressable>
-            </View>
-            <TropiPayWebView url={tropipayWebViewUrl} />
-          </View>
-        </View>
-      )}
     </Screen>
   );
 }

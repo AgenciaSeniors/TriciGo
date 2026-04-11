@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, formatCUP, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
+import { walletService, exchangeRateService, getSupabaseClient } from '@tricigo/api';
+import { formatTRC, formatTRCasUSD, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -63,15 +63,9 @@ export default function WalletPage() {
   const [filter, setFilter] = useState<FilterTab>('all');
 
   // ── Recharge state ──
-  const [rechargeCup, setRechargeCup] = useState('');
-  const [rechargeLoading, setRechargeLoading] = useState(false);
   const [rechargeSuccess, setRechargeSuccess] = useState<string | null>(null);
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
-
-  // ── TropiPay iframe state ──
-  const [tropipayUrl, setTropipayUrl] = useState<string | null>(null);
-  const [tropipayPolling, setTropipayPolling] = useState(false);
 
   // ── P2P Transfer state ──
   const [transferPhone, setTransferPhone] = useState('');
@@ -200,53 +194,11 @@ export default function WalletPage() {
     }
   }
 
-  async function handleRecharge() {
-    const amountCup = parseInt(rechargeCup, 10);
-    if (!userId || isNaN(amountCup) || amountCup <= 0) return;
-    setRechargeLoading(true);
+  function handleRecharge() {
+    // TODO: Implement Stripe recharge
     setRechargeSuccess(null);
     setRechargeError(null);
-    try {
-      const result = await paymentService.createRechargeLink(userId, amountCup);
-      setTropipayUrl(result.paymentUrl);
-      setRechargeCup('');
-      // Poll for balance change
-      setTropipayPolling(true);
-      const startBalance = balance.available;
-      const pollInterval = setInterval(async () => {
-        try {
-          const bal = await walletService.getBalance(userId);
-          if (bal.available !== startBalance) {
-            clearInterval(pollInterval);
-            setTropipayPolling(false);
-            setTropipayUrl(null);
-            setBalance(bal);
-            setRechargeSuccess('Recarga completada exitosamente.');
-            if (account) loadTransactions(account.id, 0).then(setTransactions);
-          }
-        } catch { /* ignore polling errors */ }
-      }, 5000);
-      // Stop polling after 5 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        setTropipayPolling(false);
-      }, 300000);
-    } catch (err) {
-      console.error('Recharge error:', err);
-      setRechargeError('Error al generar el link de pago. Intenta de nuevo.');
-    } finally {
-      setRechargeLoading(false);
-    }
-  }
-
-  function closeTropipayModal() {
-    setTropipayUrl(null);
-    setTropipayPolling(false);
-    // Refresh balance in case payment completed
-    if (userId) {
-      walletService.getBalance(userId).then(setBalance).catch(() => {});
-      loadTransactions(userId, filter);
-    }
+    alert('Próximamente: recarga con tarjeta');
   }
 
   async function handleFindRecipient() {
@@ -349,38 +301,17 @@ export default function WalletPage() {
         {/* ═══ Recharge section ═══ */}
         <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Recargar billetera</p>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem' }}>
-            Tasa actual: 1 USD = {exchangeRate} CUP
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>
+            Próximamente: recarga con tarjeta
           </p>
-          <div className="wallet-input-row">
-            <input
-              type="number"
-              placeholder="Monto en CUP"
-              aria-label="Monto de recarga en CUP"
-              value={rechargeCup}
-              onChange={(e) => setRechargeCup(e.target.value)}
-              className="input-base"
-              style={{ flex: 1 }}
-            />
-            <button
-              onClick={handleRecharge}
-              disabled={rechargeLoading || !rechargeCup}
-              aria-label="Solicitar recarga"
-              className="btn-base btn-primary-solid"
-              style={{
-                opacity: rechargeLoading || !rechargeCup ? 0.5 : 1,
-                cursor: rechargeLoading || !rechargeCup ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {rechargeLoading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : 'Pagar con TropiPay'}
-            </button>
-          </div>
-          {rechargeCup && !isNaN(parseInt(rechargeCup)) && parseInt(rechargeCup) > 0 && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.35rem 0 0' }}>
-              Recibiras aprox. {formatTRC(Math.round((parseInt(rechargeCup) / exchangeRate) * 100))}
-            </p>
-          )}
+          <button
+            onClick={handleRecharge}
+            aria-label="Recargar billetera"
+            className="btn-base btn-secondary-outline"
+            style={{ width: '100%', cursor: 'pointer' }}
+          >
+            Recargar
+          </button>
           {rechargeSuccess && <p style={{ fontSize: '0.8rem', color: '#16a34a', margin: '0.5rem 0 0' }}>{rechargeSuccess}</p>}
           {rechargeError && <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{rechargeError}</p>}
         </div>
@@ -569,50 +500,6 @@ export default function WalletPage() {
       </div>
     </main>
 
-      {/* ═══ TropiPay iframe modal ═══ */}
-      {tropipayUrl && (
-        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={closeTropipayModal}>
-          <div
-            className="modal-content"
-            style={{
-              height: '90vh', maxHeight: '700px',
-              display: 'flex', flexDirection: 'column',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <span style={{ fontWeight: 700, fontSize: 'var(--text-md)' }}>Pago con TropiPay</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {tropipayPolling && (
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <span className="spinner" style={{ width: 12, height: 12, borderTopColor: 'var(--warning)' }} />
-                    Esperando...
-                  </span>
-                )}
-                <button
-                  onClick={closeTropipayModal}
-                  style={{
-                    background: 'var(--bg-hover)', border: 'none',
-                    width: 32, height: 32, borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer', color: 'var(--text-secondary)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.1rem',
-                  }}
-                  aria-label="Cerrar"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <iframe
-              src={tropipayUrl}
-              style={{ flex: 1, border: 'none', width: '100%' }}
-              title="TropiPay Payment"
-              allow="payment"
-            />
-          </div>
-        </div>
-      )}
     </>
   );
 }

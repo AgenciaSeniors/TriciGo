@@ -23,6 +23,7 @@ export type RideStatus =
   | 'canceled'
   | 'disputed';
 
+// TODO: 'tropipay' deprecated — will be removed after DB migration
 export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'tropipay' | 'corporate';
 
 export type PaymentStatus = 'not_applicable' | 'pending' | 'created' | 'paid' | 'failed';

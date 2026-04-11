@@ -1,51 +1,14 @@
 // ============================================================
 // TriciGo — Payment Service
-// Client-side service for TropiPay payment operations.
-// Creates payment links via edge function and tracks intents.
+// Client-side service for payment operations.
+// Tracks payment intents and history.
+// TODO: Replace with Stripe PaymentIntent creation
 // ============================================================
 
 import type { PaymentIntent } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
 export const paymentService = {
-  /**
-   * Create a TropiPay payment link for wallet recharge.
-   * Calls the create-tropipay-link edge function which handles
-   * TropiPay API authentication and payment card creation.
-   */
-  async createRechargeLink(
-    userId: string,
-    amountCup: number,
-  ): Promise<{ paymentUrl: string; shortUrl: string; intentId: string }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-tropipay-link', {
-      body: { user_id: userId, amount_cup: amountCup },
-    });
-    if (error) throw error;
-    return data as { paymentUrl: string; shortUrl: string; intentId: string };
-  },
-
-  /**
-   * Create a TropiPay payment link for corporate wallet recharge.
-   * Same flow as personal recharge but targets the corporate wallet.
-   */
-  async createCorporateRechargeLink(
-    corporateAccountId: string,
-    amountCup: number,
-    userId: string,
-  ): Promise<{ paymentUrl: string; shortUrl: string; intentId: string }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-tropipay-link', {
-      body: {
-        user_id: userId,
-        amount_cup: amountCup,
-        corporate_account_id: corporateAccountId,
-      },
-    });
-    if (error) throw error;
-    return data as { paymentUrl: string; shortUrl: string; intentId: string };
-  },
-
   /**
    * Get a single payment intent by ID (to check status after redirect).
    */
@@ -99,31 +62,4 @@ export const paymentService = {
     return data as PaymentIntent[];
   },
 
-  /**
-   * Create a TropiPay payment link for a completed ride.
-   * Calls the create-ride-payment-link edge function which handles
-   * TropiPay API authentication and payment card creation.
-   */
-  async createRidePaymentLink(
-    rideId: string,
-  ): Promise<{
-    paymentUrl: string;
-    shortUrl: string;
-    intentId: string;
-    amountCup: number;
-    amountUsd: number;
-  }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('create-ride-payment-link', {
-      body: { ride_id: rideId },
-    });
-    if (error) throw error;
-    return data as {
-      paymentUrl: string;
-      shortUrl: string;
-      intentId: string;
-      amountCup: number;
-      amountUsd: number;
-    };
-  },
 };

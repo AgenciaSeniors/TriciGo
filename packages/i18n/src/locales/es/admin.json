@@ -418,8 +418,8 @@
     "col_description": "Descripción",
     "col_type": "Tipo",
     "col_ref": "Ref",
-    "tab_tropipay": "TropiPay",
-    "tropipay_no_intents": "Sin pagos TropiPay",
+    "tab_payments": "Pagos",
+    "no_payment_intents": "Sin pagos",
     "col_status": "Estado",
     "col_usd_amount": "Monto USD",
     "col_reference": "Referencia"

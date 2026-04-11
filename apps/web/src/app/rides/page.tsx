@@ -26,7 +26,6 @@ const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Efectivo',
   tricicoin: 'TriciCoin',
   mixed: 'Mixto',
-  tropipay: 'TropiPay',
   corporate: 'Corporativo',
 };
 

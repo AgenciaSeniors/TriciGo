@@ -1,8 +1,8 @@
 // ============================================================
 // TriciGo — Payment Intent Types
-// Tracks TropiPay payment link lifecycle for wallet recharges
-// and direct ride payments. Each intent maps to a single
-// TropiPay payment card.
+// Tracks payment lifecycle for wallet recharges and direct
+// ride payments.
+// TODO: Replace with Stripe PaymentIntent creation
 // ============================================================
 
 export type PaymentIntentType = 'recharge' | 'ride_payment';
@@ -19,9 +19,9 @@ export interface PaymentIntent {
   id: string;
   user_id: string;
 
-  /** TropiPay's internal payment card ID */
-  tropipay_id: string | null;
-  /** Full payment URL from TropiPay */
+  /** Stripe PaymentIntent ID (will replace legacy payment provider) */
+  stripe_payment_intent_id?: string | null;
+  /** Full payment URL */
   payment_url: string | null;
   /** Short URL for sharing */
   short_url: string | null;
@@ -40,11 +40,7 @@ export interface PaymentIntent {
   /** Set when payment completes (links to ledger_transactions) */
   transaction_id: string | null;
 
-  /** Our unique reference sent to TropiPay (idempotency) */
-  tropipay_reference: string;
-  /** Raw response from TropiPay API */
-  tropipay_response: Record<string, unknown> | null;
-  /** Raw webhook payload from TropiPay */
+  /** Raw webhook payload */
   webhook_payload: Record<string, unknown> | null;
   error_message: string | null;
 

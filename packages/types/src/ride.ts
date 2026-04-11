@@ -126,7 +126,7 @@ export interface Ride {
   // Quota deduction for this ride (TRC whole units, driver-side)
   quota_deduction_amount: number | null;
 
-  // TropiPay direct payment tracking
+  // Payment tracking
   payment_status: PaymentStatus;
   payment_intent_id: string | null;
 

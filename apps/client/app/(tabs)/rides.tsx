@@ -56,7 +56,6 @@ const WEB_PAYMENT_LABELS: Record<string, string> = {
   cash: 'Efectivo',
   tricicoin: 'TriciCoin',
   mixed: 'Mixto',
-  tropipay: 'TropiPay',
   corporate: 'Corporativo',
 };
 
@@ -371,7 +370,6 @@ function NativeRidesScreen() {
   const paymentMethods = [
     { value: 'cash', label: t('payment.cash', { defaultValue: 'Efectivo' }) },
     { value: 'tricicoin', label: t('payment.tricicoin', { defaultValue: 'TriciCoin' }) },
-    { value: 'tropipay', label: t('payment.tropipay', { defaultValue: 'TropiPay' }) },
   ];
 
   const filterLabels = useMemo(() => ({

@@ -38,7 +38,7 @@
     "waypoints_badge": "{{count}} paradas",
     "scheduled_at": "Programado: {{time}}",
     "corporate_ride": "Corporativo",
-    "payment_tropipay": "TropiPay",
+    "payment_card": "Tarjeta",
     "payment_mixed": "Mixto",
     "payment_corporate": "Corporativo",
     "today": "Hoy",
