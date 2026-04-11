@@ -108,6 +108,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@expo-google-fonts/montserrat':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -125,7 +128,7 @@ importers:
         version: 7.1.33(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       '@rnmapbox/maps':
         specifier: ^10.1.34
-        version: 10.2.10(expo@55.0.6)(mapbox-gl@3.20.0)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 10.2.10(expo@55.0.6)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       '@sentry/react-native':
         specifier: ^7.11.0
         version: 7.13.0(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -165,6 +168,9 @@ importers:
       expo-device:
         specifier: ~55.0.6
         version: 55.0.10(expo@55.0.6)
+      expo-font:
+        specifier: ^55.0.6
+        version: 55.0.6(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       expo-haptics:
         specifier: ~55.0.8
         version: 55.0.8(expo@55.0.6)
@@ -213,12 +219,6 @@ importers:
       i18next:
         specifier: ^24.2.2
         version: 24.2.3(typescript@5.9.3)
-      jspdf:
-        specifier: ^4.2.1
-        version: 4.2.1
-      mapbox-gl:
-        specifier: ^3.20.0
-        version: 3.20.0
       nativewind:
         specifier: ^4.1.23
         version: 4.2.2(react-native-reanimated@4.2.2(react-native-worklets@0.7.4(@babel/core@7.29.0)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-safe-area-context@5.6.2(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-svg@15.15.3(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(tailwindcss@3.4.19(yaml@2.8.2))
@@ -256,9 +256,6 @@ importers:
         specifier: ^5.0.3
         version: 5.0.11(@types/react@19.2.14)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0))
     devDependencies:
-      '@expo-google-fonts/montserrat':
-        specifier: ^0.4.2
-        version: 0.4.2
       '@tricigo/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -268,9 +265,6 @@ importers:
       babel-plugin-module-resolver:
         specifier: ^5.0.2
         version: 5.0.2
-      expo-font:
-        specifier: ^55.0.6
-        version: 55.0.6(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19(yaml@2.8.2)
@@ -280,6 +274,9 @@ importers:
 
   apps/driver:
     dependencies:
+      '@expo-google-fonts/inter':
+        specifier: ^0.4.2
+        version: 0.4.2
       '@expo/vector-icons':
         specifier: ^15.1.1
         version: 15.1.1(expo-font@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -294,7 +291,7 @@ importers:
         version: 7.1.33(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       '@rnmapbox/maps':
         specifier: ^10.1.34
-        version: 10.2.10(expo@55.0.6)(mapbox-gl@3.20.0)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 10.2.10(expo@55.0.6)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       '@sentry/react-native':
         specifier: ^7.11.0
         version: 7.13.0(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -331,6 +328,9 @@ importers:
       expo-dev-client:
         specifier: ~55.0.16
         version: 55.0.16(expo@55.0.6)(typescript@5.9.3)
+      expo-font:
+        specifier: ^55.0.6
+        version: 55.0.6(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       expo-haptics:
         specifier: ~55.0.8
         version: 55.0.8(expo@55.0.6)
@@ -379,9 +379,6 @@ importers:
       i18next:
         specifier: ^24.2.2
         version: 24.2.3(typescript@5.9.3)
-      mapbox-gl:
-        specifier: ^3.20.0
-        version: 3.20.0
       nativewind:
         specifier: ^4.1.23
         version: 4.2.2(react-native-reanimated@4.2.2(react-native-worklets@0.7.4(@babel/core@7.29.0)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-safe-area-context@5.6.2(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native-svg@15.15.3(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(tailwindcss@3.4.19(yaml@2.8.2))
@@ -422,9 +419,6 @@ importers:
         specifier: ^5.0.3
         version: 5.0.11(@types/react@19.2.14)(react@19.2.0)(use-sync-external-store@1.6.0(react@19.2.0))
     devDependencies:
-      '@expo-google-fonts/inter':
-        specifier: ^0.4.2
-        version: 0.4.2
       '@tricigo/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -434,9 +428,6 @@ importers:
       babel-plugin-module-resolver:
         specifier: ^5.0.2
         version: 5.0.2
-      expo-font:
-        specifier: ^55.0.6
-        version: 55.0.6(expo@55.0.6)(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       tailwindcss:
         specifier: ^3.4.17
         version: 3.4.19(yaml@2.8.2)
@@ -8352,7 +8343,7 @@ snapshots:
     dependencies:
       nanoid: 3.3.11
 
-  '@rnmapbox/maps@10.2.10(expo@55.0.6)(mapbox-gl@3.20.0)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
+  '@rnmapbox/maps@10.2.10(expo@55.0.6)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@turf/along': 6.5.0
       '@turf/distance': 6.5.0
@@ -8365,7 +8356,6 @@ snapshots:
       react-native: 0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
     optionalDependencies:
       expo: 55.0.6(@babel/core@7.29.0)(@expo/dom-webview@55.0.3)(@expo/metro-runtime@55.0.6)(expo-router@55.0.5)(react-dom@19.2.0(react@19.2.0))(react-native-webview@13.16.0(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
-      mapbox-gl: 3.20.0
       react-dom: 19.2.0(react@19.2.0)
 
   '@rolldown/binding-android-arm64@1.0.0-rc.9':
