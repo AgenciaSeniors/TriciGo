@@ -9,6 +9,8 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^3.6.0",
+    "@stripe/stripe-js": "^7.3.0",
     "@tricigo/api": "workspace:*",
     "@tricigo/i18n": "workspace:*",
     "@tricigo/types": "workspace:*",
