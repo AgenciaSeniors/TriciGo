@@ -59,7 +59,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-image"
     ],
     "extra": {
       "router": {
