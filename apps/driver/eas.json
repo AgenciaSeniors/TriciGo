@@ -12,7 +12,6 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
-      "installCommand": "pnpm install",
       "ios": {
         "simulator": true
       },
@@ -26,7 +25,6 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
-      "installCommand": "pnpm install",
       "android": {
         "buildType": "apk"
       },
@@ -40,7 +38,6 @@
     "production": {
       "extends": "base",
       "autoIncrement": true,
-      "installCommand": "pnpm install",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
