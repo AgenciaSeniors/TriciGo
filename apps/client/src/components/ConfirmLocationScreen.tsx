@@ -275,7 +275,7 @@ export function ConfirmLocationScreen({
       >
         <Pressable
           onPress={handleConfirm}
-          disabled={isGeocoding}
+          disabled={isGeocoding || !address}
           style={{
             backgroundColor: isGeocoding ? (isDark ? darkColors.background.tertiary : colors.neutral[300]) : pinColor,
             borderRadius: 14,

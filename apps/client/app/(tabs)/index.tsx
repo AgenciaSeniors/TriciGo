@@ -1473,18 +1473,12 @@ function NativeHomeScreen() {
   useEffect(() => {
     if (prevFlowStepRef.current !== flowStep) {
       prevFlowStepRef.current = flowStep;
-      // Fade out then fade in
-      Animated.timing(flowFadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }).start(() => {
-        Animated.timing(flowFadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }).start();
-      });
+      const sequence = Animated.sequence([
+        Animated.timing(flowFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(flowFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]);
+      sequence.start();
+      return () => sequence.stop();
     }
   }, [flowStep, flowFadeAnim]);
 
@@ -3569,7 +3563,8 @@ function SearchingView() {
   const searchFadeAnim = useRef(new Animated.Value(1)).current;
 
   const fadeAndSetPhase = useCallback((phase: number) => {
-    Animated.timing(searchFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+    Animated.timing(searchFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) return; // Component unmounted or animation interrupted
       setSearchPhase(phase);
       Animated.timing(searchFadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     });

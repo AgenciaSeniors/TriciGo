@@ -72,7 +72,9 @@ export function ConfettiOverlay() {
       ]);
     });
 
-    Animated.parallel(animations).start();
+    const anim = Animated.parallel(animations);
+    anim.start();
+    return () => anim.stop();
   }, []);
 
   return (

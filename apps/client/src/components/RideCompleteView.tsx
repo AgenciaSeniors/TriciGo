@@ -274,10 +274,12 @@ export function RideCompleteView() {
     if (submitted) {
       // U3.1: Bigger bounce for first ride
       if (isFirstRide) scaleAnim.setValue(0.5);
-      Animated.parallel([
+      const anim = Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
-      ]).start();
+      ]);
+      anim.start();
+      return () => anim.stop();
     }
   }, [submitted, fadeAnim, scaleAnim, isFirstRide]);
 
