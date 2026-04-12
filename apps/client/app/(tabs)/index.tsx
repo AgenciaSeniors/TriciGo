@@ -1456,6 +1456,10 @@ function NativeHomeScreen() {
   useRiderLocationSharing();
 
   const flowStep = useRideStore((s) => s.flowStep);
+  const draft = useRideStore((s) => s.draft);
+  const setPickup = useRideStore((s) => s.setPickup);
+  const setDropoff = useRideStore((s) => s.setDropoff);
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
 
   // Crossfade animation between flow steps
   const flowFadeAnim = useRef(new Animated.Value(1)).current;
@@ -1490,23 +1494,50 @@ function NativeHomeScreen() {
   // For non-idle flow steps, use the original Screen wrapper
   if (flowStep !== 'idle') {
     return (
-      <Screen bg="white" padded scroll>
-        <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
-          {flowStep === 'selecting' && <SelectingView />}
-          {flowStep === 'reviewing' && <ReviewingView />}
-          {flowStep === 'searching' && <SearchingView />}
-          {flowStep === 'active' && <RideActiveView />}
-          {flowStep === 'completed' && <RideCompleteView />}
-        </Animated.View>
-        {showOnboarding && (
-          <OnboardingOverlay
-            onComplete={() => {
-              setShowOnboarding(false);
-              AsyncStorage.setItem('@tricigo/onboarding_completed', 'true');
-            }}
-          />
+      <>
+        <Screen bg="white" padded scroll>
+          <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
+            {flowStep === 'selecting' && <SelectingView setMapPickerMode={setMapPickerMode} />}
+            {flowStep === 'reviewing' && <ReviewingView />}
+            {flowStep === 'searching' && <SearchingView />}
+            {flowStep === 'active' && <RideActiveView />}
+            {flowStep === 'completed' && <RideCompleteView />}
+          </Animated.View>
+          {showOnboarding && (
+            <OnboardingOverlay
+              onComplete={() => {
+                setShowOnboarding(false);
+                AsyncStorage.setItem('@tricigo/onboarding_completed', 'true');
+              }}
+            />
+          )}
+        </Screen>
+        {mapPickerMode && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+            <ConfirmLocationScreen
+              mode={mapPickerMode}
+              initialLocation={
+                mapPickerMode === 'pickup'
+                  ? draft.pickup?.location ?? null
+                  : draft.dropoff?.location ?? null
+              }
+              onConfirm={(address, location) => {
+                if (!isValidCoordinate(location.latitude, location.longitude)) {
+                  setMapPickerMode(null);
+                  return;
+                }
+                if (mapPickerMode === 'pickup') {
+                  setPickup(address, location);
+                } else {
+                  setDropoff(address, location);
+                }
+                setMapPickerMode(null);
+              }}
+              onClose={() => setMapPickerMode(null)}
+            />
+          </View>
         )}
-      </Screen>
+      </>
     );
   }
 
@@ -1999,7 +2030,7 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
 
 // ── Selecting View ─────────────────────────────────────────
 
-function SelectingView() {
+function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | null) => void }) {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const {
@@ -2048,7 +2079,6 @@ function SelectingView() {
   }, [draft.paymentMethod]);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
 
   // Nearest driver ETA
   const nearbyVehicles = useNearbyVehicles(
@@ -2897,33 +2927,6 @@ function SelectingView() {
         disabled={!canEstimate}
       />
 
-      {/* Confirm Location on Map — full-screen overlay */}
-      {mapPickerMode && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-          <ConfirmLocationScreen
-            mode={mapPickerMode}
-            initialLocation={
-              mapPickerMode === 'pickup'
-                ? draft.pickup?.location ?? null
-                : draft.dropoff?.location ?? null
-            }
-            onConfirm={(address, location) => {
-              if (!isValidCoordinate(location.latitude, location.longitude)) {
-                Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-                setMapPickerMode(null);
-                return;
-              }
-              if (mapPickerMode === 'pickup') {
-                setPickup(address, location);
-              } else {
-                setDropoff(address, location);
-              }
-              setMapPickerMode(null);
-            }}
-            onClose={() => setMapPickerMode(null)}
-          />
-        </View>
-      )}
     </View>
   );
 }
