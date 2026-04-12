@@ -122,6 +122,7 @@ export function ConfirmLocationScreen({
   }
 
   const initialCenter: [number, number] = initialLocation
+    && Number.isFinite(initialLocation.longitude) && Number.isFinite(initialLocation.latitude)
     ? [initialLocation.longitude, initialLocation.latitude]
     : HAVANA_CENTER;
 

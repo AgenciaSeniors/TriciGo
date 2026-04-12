@@ -1543,6 +1543,7 @@ function IdleView() {
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
@@ -1697,19 +1698,26 @@ function IdleView() {
             scaleBarEnabled={false}
             compassEnabled={false}
             scrollEnabled={true}
+            zoomEnabled={true}
             pitchEnabled={true}
             rotateEnabled={true}
           >
             <Mapbox.Camera
-              followUserLocation={true}
-              followZoomLevel={15}
-              animationMode="flyTo"
               defaultSettings={{
                 centerCoordinate: [-82.3666, 23.1136],
                 zoomLevel: 14,
               }}
+              animationMode="flyTo"
             />
-            <Mapbox.UserLocation visible={true} />
+            <Mapbox.UserLocation
+              visible={true}
+              onUpdate={(location: { coords: { latitude: number; longitude: number } }) => {
+                // Center map on first location fix only
+                if (location?.coords?.latitude && location?.coords?.longitude && !userLocationSet.current) {
+                  userLocationSet.current = true;
+                }
+              }}
+            />
           </Mapbox.MapView>
         );
       })()}

@@ -84,9 +84,11 @@ function computeBounds(coords: [number, number][]): {
   return { ne: [maxLng, maxLat], sw: [minLng, minLat] };
 }
 
-/** Convert GeoPoint to Mapbox [lng, lat] */
+/** Convert GeoPoint to Mapbox [lng, lat] with validation */
 function toCoord(p: GeoPoint): [number, number] {
-  return [p.longitude, p.latitude];
+  const lng = Number.isFinite(p?.longitude) ? p.longitude : -82.3666;
+  const lat = Number.isFinite(p?.latitude) ? p.latitude : 23.1136;
+  return [lng, lat];
 }
 
 function RideMapViewInner({
