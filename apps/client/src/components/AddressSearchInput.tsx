@@ -481,7 +481,7 @@ function AddressSearchInputInner({
                     {item.address}
                   </Text>
                 </View>
-                {item.distanceKm != null && (
+                {item.distanceKm != null && Number.isFinite(item.distanceKm) && item.distanceKm < 500 && (
                   <Text variant="caption" color="tertiary" className="ml-2">
                     {item.distanceKm < 1
                       ? `${Math.round(item.distanceKm * 1000)} m`
@@ -634,7 +634,7 @@ function AddressSearchInputInner({
                     {item.address}
                   </Text>
                 </View>
-                {item.distanceKm != null && (
+                {item.distanceKm != null && Number.isFinite(item.distanceKm) && item.distanceKm < 500 && (
                   <Text variant="caption" color="tertiary">
                     {item.distanceKm < 1
                       ? `${Math.round(item.distanceKm * 1000)} m`

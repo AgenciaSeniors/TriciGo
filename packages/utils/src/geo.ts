@@ -101,6 +101,11 @@ export function jitterLocation(
  * Haversine distance between two points in meters.
  */
 export function haversineDistance(from: GeoPoint, to: GeoPoint): number {
+  if (!from || !to ||
+      !Number.isFinite(from.latitude) || !Number.isFinite(from.longitude) ||
+      !Number.isFinite(to.latitude) || !Number.isFinite(to.longitude)) {
+    return 0;
+  }
   const R = 6_371_000; // Earth radius in meters
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 

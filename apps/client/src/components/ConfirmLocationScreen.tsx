@@ -36,9 +36,7 @@ export function ConfirmLocationScreen({
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
   const [address, setAddress] = useState<string | null>(null);
-  const [center, setCenter] = useState<GeoPoint>(
-    initialLocation ?? { latitude: 23.1136, longitude: -82.3666 },
-  );
+  const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
   const [isGeocoding, setIsGeocoding] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -96,15 +94,15 @@ export function ConfirmLocationScreen({
       const coords = feature?.geometry?.coordinates;
       if (!coords) return;
       const [lng, lat] = coords;
-      setCenter({ latitude: lat, longitude: lng });
+      centerRef.current = { latitude: lat, longitude: lng };
       geocodeCenter(lat, lng);
     },
     [geocodeCenter],
   );
 
   const handleConfirm = () => {
-    if (!address) return;
-    onConfirm(address, center);
+    const finalAddress = address || `${centerRef.current.latitude.toFixed(5)}, ${centerRef.current.longitude.toFixed(5)}`;
+    onConfirm(finalAddress, centerRef.current);
   };
 
   const isPickup = mode === 'pickup';
@@ -264,9 +262,9 @@ export function ConfirmLocationScreen({
       >
         <Pressable
           onPress={handleConfirm}
-          disabled={!address || isGeocoding}
+          disabled={isGeocoding}
           style={{
-            backgroundColor: !address || isGeocoding ? (isDark ? darkColors.background.tertiary : colors.neutral[300]) : pinColor,
+            backgroundColor: isGeocoding ? (isDark ? darkColors.background.tertiary : colors.neutral[300]) : pinColor,
             borderRadius: 14,
             paddingVertical: 16,
             alignItems: 'center',

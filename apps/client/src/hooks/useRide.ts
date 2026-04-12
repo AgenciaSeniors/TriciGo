@@ -129,6 +129,14 @@ export function useRideActions() {
   const requestEstimate = useCallback(async () => {
     if (!draft.pickup || !draft.dropoff) return;
 
+    // Validate coordinates are finite before estimation
+    if (!Number.isFinite(draft.pickup?.location?.latitude) ||
+        !Number.isFinite(draft.pickup?.location?.longitude) ||
+        !Number.isFinite(draft.dropoff?.location?.latitude) ||
+        !Number.isFinite(draft.dropoff?.location?.longitude)) {
+      return; // Skip estimation with invalid coords
+    }
+
     // Bug 8: Validate pickup ≠ dropoff (min 200m)
     const { haversineDistance } = await import('@tricigo/utils');
     const dist = haversineDistance(draft.pickup.location, draft.dropoff.location);

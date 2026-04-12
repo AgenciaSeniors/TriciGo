@@ -3087,28 +3087,28 @@ function ReviewingView() {
             <Text variant="h2" color="accent" className="font-bold">
               {formatFare(fareEstimate.estimated_fare_cup, fareEstimate.estimated_fare_trc)}
             </Text>
-            {fareEstimate.exchange_rate_usd_cup > 0 && (
+            {fareEstimate?.exchange_rate_usd_cup > 0 && (
               <Text variant="caption" color="tertiary">
-                ~${(fareEstimate.estimated_fare_cup / fareEstimate.exchange_rate_usd_cup).toFixed(2)} USD
+                ~${(fareEstimate?.estimated_fare_cup / fareEstimate?.exchange_rate_usd_cup).toFixed(2)} USD
               </Text>
             )}
           </View>
         </View>
         {/* Distance · Per-km rate · Exchange rate */}
         <View className="flex-row flex-wrap items-center mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 gap-x-3 gap-y-1">
-          {fareEstimate.estimated_distance_m > 0 && (
+          {fareEstimate?.estimated_distance_m > 0 && (
             <Text variant="caption" color="secondary">
-              {(fareEstimate.estimated_distance_m / 1000).toFixed(1)} km
+              {(fareEstimate?.estimated_distance_m / 1000).toFixed(1)} km
             </Text>
           )}
-          {fareEstimate.per_km_rate_cup > 0 && (
+          {fareEstimate?.per_km_rate_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              {formatFare(fareEstimate.per_km_rate_cup)}/km
+              {formatFare(fareEstimate?.per_km_rate_cup)}/km
             </Text>
           )}
-          {fareEstimate.exchange_rate_usd_cup > 0 && (
+          {fareEstimate?.exchange_rate_usd_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              1 USD = {formatCurrency(fareEstimate.exchange_rate_usd_cup)} CUP
+              1 USD = {formatCurrency(fareEstimate?.exchange_rate_usd_cup)} CUP
             </Text>
           )}
         </View>
