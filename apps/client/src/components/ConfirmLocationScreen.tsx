@@ -141,6 +141,10 @@ export function ConfirmLocationScreen({
         logoEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
+        scrollEnabled={true}
+        zoomEnabled={true}
+        pitchEnabled={false}
+        rotateEnabled={false}
         onRegionDidChange={handleRegionChange}
         onMapIdle={handleMapIdle}
       >

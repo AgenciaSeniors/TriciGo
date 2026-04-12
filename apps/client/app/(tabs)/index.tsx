@@ -2028,6 +2028,10 @@ function SelectingView() {
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   const { accounts: corporateAccounts } = useCorporateAccounts();
+
+  // Compute selectedEstimate from allFareEstimates for the current service type
+  const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
+
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
