@@ -59,9 +59,11 @@ import { WebActiveRideView } from '@/components/WebActiveRideView';
 // Surge is calculated backend-side but not shown to users
 // import { useSurgeZones } from '@/hooks/useSurgeZones';
 
-// Mapbox GL for native fullscreen map (Uber-style home)
-let MapboxGL: any = null;
-try { MapboxGL = require('@rnmapbox/maps').default; } catch {}
+// Mapbox GL loaded lazily inside components — NOT at module level
+// Module-level require can crash the entire JS context if native module fails
+function getMapboxGL(): any {
+  try { return require('@rnmapbox/maps').default; } catch { return null; }
+}
 
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -1682,22 +1684,24 @@ function IdleView() {
   return (
     <View style={{ flex: 1 }}>
       {/* ── Fullscreen Map Background ── */}
-      {MapboxGL ? (
-        <MapboxGL.MapView
-          style={StyleSheet.absoluteFillObject}
-          styleURL="mapbox://styles/mapbox/streets-v12"
-          attributionEnabled={false}
-          logoEnabled={false}
-        >
-          <MapboxGL.Camera
-            centerCoordinate={[-82.3666, 23.1136]}
-            zoomLevel={14}
-            animationMode="flyTo"
-          />
-        </MapboxGL.MapView>
-      ) : (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#e5e7eb' }]} />
-      )}
+      {(() => {
+        const Mapbox = getMapboxGL();
+        if (!Mapbox) return <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#e5e7eb' }]} />;
+        return (
+          <Mapbox.MapView
+            style={StyleSheet.absoluteFillObject}
+            styleURL="mapbox://styles/mapbox/streets-v12"
+            attributionEnabled={false}
+            logoEnabled={false}
+          >
+            <Mapbox.Camera
+              centerCoordinate={[-82.3666, 23.1136]}
+              zoomLevel={14}
+              animationMode="flyTo"
+            />
+          </Mapbox.MapView>
+        );
+      })()}
 
       {/* ── Floating Search Bar (top) ── */}
       <View style={[idleStyles.searchBarContainer, { top: insets.top + 12 }]}>
