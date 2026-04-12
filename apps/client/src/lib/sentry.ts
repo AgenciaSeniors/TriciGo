@@ -11,7 +11,7 @@ export function initSentry() {
   Sentry.init({
     dsn: SENTRY_DSN,
     environment: __DEV__ ? 'development' : 'production',
-    enabled: !__DEV__,
+    enabled: true,
     tracesSampleRate: 0.2,
     sendDefaultPii: false,
     beforeSend(event) {

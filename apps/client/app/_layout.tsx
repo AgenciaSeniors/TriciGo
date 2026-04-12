@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, ActivityIndicator, Platform, Alert, LogBox } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
@@ -26,6 +26,21 @@ import '../global.css';
 
 // Initialize Sentry as early as possible (safe for web)
 try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
+
+// DEBUG: Global error handler — shows Alert with crash details
+if (Platform.OS !== 'web') {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    try {
+      Alert.alert(
+        isFatal ? 'FATAL ERROR' : 'ERROR',
+        `${error?.name}: ${error?.message}\n\nStack: ${error?.stack?.substring(0, 300)}`,
+        [{ text: 'OK' }],
+      );
+    } catch { /* Alert itself might fail */ }
+    originalHandler(error, isFatal);
+  });
+}
 
 // Register sound assets for ride events (native only — .wav files don't resolve on web)
 if (Platform.OS !== 'web') {
@@ -163,7 +178,12 @@ function RootLayoutInner() {
   }
 
   return (
-    <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
+    <ErrorBoundary onError={(error) => {
+        Sentry.captureException(error);
+        if (Platform.OS !== 'web') {
+          Alert.alert('App Error', `${error?.name}: ${error?.message}\n\n${error?.stack?.substring(0, 300)}`);
+        }
+      }}>
       <AppProviders>
         <RootNavigator />
         <Toast />
