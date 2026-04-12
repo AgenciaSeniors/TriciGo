@@ -1221,6 +1221,22 @@ function TripCompleteView() {
               {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
             </Text>
           )}
+          {activeTrip.payment_method === 'mixed' && (
+            <View className="mt-3 p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
+              <Text variant="body" color="inverse" className="font-bold mb-1">
+                {t('trip.collect_cash_amount', {
+                  amount: formatCUP((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)),
+                  defaultValue: `Cobrar ₧${((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} en efectivo`,
+                })}
+              </Text>
+              <Text variant="caption" style={{ color: '#9CA3AF' }}>
+                {t('trip.wallet_portion', {
+                  amount: formatCUP((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)),
+                  defaultValue: `₧${((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} del wallet del pasajero`,
+                })}
+              </Text>
+            </View>
+          )}
         </Card>
 
         {/* Tip received */}

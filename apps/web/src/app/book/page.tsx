@@ -96,10 +96,11 @@ export default function BookPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('tricigo_payment_method');
-      if (saved === 'cash' || saved === 'tricicoin') return saved;
+      if (saved === 'cash' || saved === 'tricicoin' || saved === 'mixed') return saved as PaymentMethod;
     }
     return 'cash';
   });
+  const [walletRatio, setWalletRatio] = useState(0.5);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletBalanceError, setWalletBalanceError] = useState(false);
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
@@ -602,6 +603,19 @@ export default function BookPage() {
       const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
       if (walletBalance < requiredAmount) {
         router.push('/wallet');
+        return;
+      }
+    }
+
+    // Validate mixed payment balance
+    if (paymentMethod === 'mixed') {
+      if (walletBalanceError) {
+        alert(t('book.wallet_balance_error', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo.' }));
+        return;
+      }
+      const walletPart = selectedEstimate.estimated_fare_cup * walletRatio;
+      if (walletBalance < walletPart * 1.2) {
+        alert(t('book.insufficient_balance_mixed', { defaultValue: 'Saldo insuficiente para la parte wallet del pago mixto. Ajusta el porcentaje o recarga tu wallet.' }));
         return;
       }
     }
@@ -1543,7 +1557,59 @@ export default function BookPage() {
                     <img src="/images/coins/tricoin-small.png" alt="" style={{ width: 32, height: 32 }} />
                     {t('book.payment_tricicoin')}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('mixed' as PaymentMethod)}
+                    aria-label="Pago mixto"
+                    aria-pressed={paymentMethod === 'mixed'}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem',
+                      borderRadius: '0.5rem',
+                      border:
+                        paymentMethod === 'mixed'
+                          ? '2px solid var(--primary)'
+                          : '1px solid var(--border)',
+                      background: paymentMethod === 'mixed' ? '#FFF5F0' : 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: paymentMethod === 'mixed' ? 700 : 400,
+                    }}
+                  >
+                    {t('book.payment_mixed', { defaultValue: 'Mixto' })}
+                  </button>
                 </div>
+                {/* Mixed payment slider */}
+                {paymentMethod === 'mixed' && selectedEstimate && (
+                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.35rem' }}>
+                      {t('book.wallet_percentage', { defaultValue: 'Porcentaje desde wallet' })}
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={Math.round(walletRatio * 100)}
+                      onChange={(e) => {
+                        const maxRatio = walletBalance > 0 && selectedEstimate.estimated_fare_cup > 0
+                          ? Math.min(1, walletBalance / selectedEstimate.estimated_fare_cup)
+                          : 0;
+                        const raw = parseInt(e.target.value, 10) / 100;
+                        setWalletRatio(Math.min(raw, maxRatio));
+                      }}
+                      style={{ width: '100%', accentColor: 'var(--primary)' }}
+                    />
+                    <p style={{ fontSize: '0.8rem', color: '#374151', textAlign: 'center', margin: '0.35rem 0 0' }}>
+                      {(() => {
+                        const totalFare = selectedEstimate.estimated_fare_cup;
+                        const walletPart = Math.round(totalFare * walletRatio);
+                        const cashPart = totalFare - walletPart;
+                        return `₧${walletPart.toLocaleString()} wallet + ₧${cashPart.toLocaleString()} efectivo = ₧${totalFare.toLocaleString()} total`;
+                      })()}
+                    </p>
+                  </div>
+                )}
               </div>
               )}
               </>

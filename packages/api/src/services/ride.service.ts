@@ -75,6 +75,7 @@ export interface CreateRideParams {
   insurance_selected?: boolean;
   insurance_premium_cup?: number;
   rider_preferences?: RidePreferences;
+  wallet_ratio?: number;
   ride_mode?: 'passenger' | 'cargo';
   delivery_details?: {
     package_description: string;
@@ -407,6 +408,7 @@ export const rideService = {
         insurance_premium_cup: validParams.insurance_premium_cup ?? 0,
         rider_preferences: validParams.rider_preferences ?? null,
         ride_mode: validParams.ride_mode ?? 'passenger',
+        wallet_ratio: validParams.wallet_ratio ?? 0,
         status: 'searching' as RideStatus,
       })
       .select()

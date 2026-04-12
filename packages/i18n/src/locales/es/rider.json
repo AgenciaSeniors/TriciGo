@@ -404,6 +404,7 @@
     "tricicoin": "TriciCoin",
     "cash": "Efectivo",
     "mixed": "Mixto",
+    "mixed_desc": "Parte wallet, parte efectivo",
     "stripe": "Tarjeta",
     "corporate": "Corporativo",
     "insufficient_balance": "Saldo insuficiente",

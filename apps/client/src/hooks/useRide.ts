@@ -296,6 +296,38 @@ export function useRideActions() {
       }
     }
 
+    // Validate mixed payment wallet balance
+    if (d.paymentMethod === 'mixed' && fareEstimate) {
+      try {
+        const { walletService } = await import('@tricigo/api');
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          const walletPart = fareEstimate.estimated_fare_cup * (d.walletRatio ?? 0.5);
+          const bal = await walletService.getBalance(userId);
+          if (bal.available < walletPart * 1.2) {
+            isSubmittingRef.current = false;
+            pendingRequestIdRef.current = null;
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:ride.insufficient_balance_mixed_title', { defaultValue: 'Saldo insuficiente' }),
+              text2: i18next.t('rider:ride.insufficient_balance_mixed_msg', { defaultValue: 'No tienes suficiente saldo para la parte wallet del pago mixto. Ajusta el porcentaje o recarga tu wallet.' }),
+            });
+            return;
+          }
+        }
+      } catch (balErr) {
+        logger.warn('Mixed balance check failed', { error: String(balErr) });
+        isSubmittingRef.current = false;
+        pendingRequestIdRef.current = null;
+        Toast.show({
+          type: 'error',
+          text1: i18next.t('rider:ride.balance_check_failed_title', { defaultValue: 'Error de verificación' }),
+          text2: i18next.t('rider:ride.balance_check_failed_msg', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo o cambia a efectivo.' }),
+        });
+        return;
+      }
+    }
+
     // BUG-073: For corporate rides, re-fetch budget to account for pending rides
     if (d.paymentMethod === 'corporate' && d.corporateAccountId && fareEstimate) {
       try {

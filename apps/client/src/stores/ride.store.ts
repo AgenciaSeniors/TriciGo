@@ -88,6 +88,7 @@ interface RideRequestDraft {
   insuranceSelected: boolean;
   ridePreferences: RidePreferences;
   passengerCount: number;
+  walletRatio: number;
 }
 
 const defaultDraft: RideRequestDraft = {
@@ -102,6 +103,7 @@ const defaultDraft: RideRequestDraft = {
   insuranceSelected: false,
   ridePreferences: {},
   passengerCount: 1,
+  walletRatio: 0.5,
 };
 
 interface PromoResult {
@@ -177,6 +179,7 @@ interface RideState {
   setAcceptedDriver: (data: DriverAcceptedBroadcast | null) => void;
   setAcceptAnimating: (val: boolean) => void;
   clearSearchState: () => void;
+  setWalletRatio: (ratio: number) => void;
   setRatingReminderId: (id: string | null) => void;
   resetDraft: () => void;
   resetAll: () => void;
@@ -344,6 +347,9 @@ export const useRideStore = create<RideState>((set, get) => ({
   setAcceptedDriver: (acceptedDriverBroadcast) => set({ acceptedDriverBroadcast }),
   setAcceptAnimating: (isAcceptAnimating) => set({ isAcceptAnimating }),
   clearSearchState: () => set({ searchingDrivers: [], acceptedDriverBroadcast: null, isAcceptAnimating: false }),
+
+  setWalletRatio: (walletRatio) =>
+    set((s) => ({ draft: { ...s.draft, walletRatio: Math.max(0, Math.min(1, walletRatio)) } })),
 
   setRatingReminderId: (ratingReminderId) => set({ ratingReminderId }),
 

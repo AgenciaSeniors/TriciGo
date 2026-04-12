@@ -577,13 +577,14 @@ function WebHomeScreen() {
 
   // Ride state
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin' | 'mixed'>('cash');
 
   /** Format fare price based on current payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
     if (paymentMethod === 'tricicoin') {
       return formatTRC(trcAmount ?? cupAmount);
     }
+    // For 'mixed' and 'cash', show CUP
     return `₧${formatCurrency(cupAmount)}`;
   }, [paymentMethod]);
 
@@ -1256,12 +1257,12 @@ function WebHomeScreen() {
                   <div style={{ marginTop: 14 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Método de pago</label>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {(['cash', 'tricicoin'] as const).map((pm) => {
+                      {(['cash', 'tricicoin', 'mixed'] as const).map((pm) => {
                         const sel = paymentMethod === pm;
                         return (
                           <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
                             style={{ flex: 1, padding: '8px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 400 }}>
-                            {pm === 'cash' ? 'Efectivo' : 'TriciCoin'}
+                            {pm === 'cash' ? 'Efectivo' : pm === 'tricicoin' ? 'TriciCoin' : 'Mixto'}
                           </button>
                         );
                       })}
@@ -2006,6 +2007,7 @@ function SelectingView() {
     setDeliveryField,
     setPassengerCount,
     setCorporateAccount,
+    setWalletRatio,
     setFlowStep,
     addWaypoint,
     removeWaypoint,
@@ -2072,14 +2074,14 @@ function SelectingView() {
   // UBER-4.4: Load saved payment method on mount
   useEffect(() => {
     AsyncStorage.getItem('last_payment_method').then((saved) => {
-      if (saved && (saved === 'cash' || saved === 'tricicoin') && !draft.paymentMethod) {
+      if (saved && (saved === 'cash' || saved === 'tricicoin' || saved === 'mixed') && !draft.paymentMethod) {
         setPaymentMethod(saved);
       }
     }).catch(() => {});
   }, []);
 
   // UBER-4.4: Persist payment method when it changes
-  const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin') => {
+  const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin' | 'mixed') => {
     setPaymentMethod(method);
     AsyncStorage.setItem('last_payment_method', method).catch(() => {});
   }, [setPaymentMethod]);
@@ -2560,8 +2562,8 @@ function SelectingView() {
       {!draft.corporateAccountId && (
         <>
           <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
-          <View className="flex-row gap-3 mb-4" accessibilityRole="radiogroup">
-            {(['cash', 'tricicoin'] as const).map((pm) => (
+          <View className="flex-row gap-3 mb-2" accessibilityRole="radiogroup">
+            {(['cash', 'tricicoin', 'mixed'] as const).map((pm) => (
               <Pressable
                 key={pm}
                 className={`flex-1 py-3 rounded-xl items-center ${
@@ -2576,11 +2578,57 @@ function SelectingView() {
                   color={draft.paymentMethod === pm ? 'inverse' : 'secondary'}
                   className="text-center"
                 >
-                  {t(`payment.${pm}` as const)}
+                  {pm === 'mixed' ? t('payment.mixed', { defaultValue: 'Mixto' }) : t(`payment.${pm}` as const)}
                 </Text>
               </Pressable>
             ))}
           </View>
+          {/* Mixed payment ratio selector */}
+          {draft.paymentMethod === 'mixed' && selectedEstimate && (
+            <View className="mb-4 p-3 bg-neutral-50 rounded-xl">
+              <Text variant="caption" color="secondary" className="mb-2">
+                {t('payment.wallet_percentage', { defaultValue: 'Porcentaje desde wallet' })}
+              </Text>
+              <View className="flex-row gap-2 mb-2">
+                {[0.25, 0.5, 0.75].map((ratio) => {
+                  const maxRatio = walletBalance > 0 && selectedEstimate.estimated_fare_cup > 0
+                    ? Math.min(1, walletBalance / selectedEstimate.estimated_fare_cup)
+                    : 0;
+                  const disabled = ratio > maxRatio;
+                  const isSelected = Math.abs(draft.walletRatio - ratio) < 0.01;
+                  return (
+                    <Pressable
+                      key={ratio}
+                      className={`flex-1 py-2 rounded-lg items-center ${
+                        isSelected ? 'bg-primary-500' : disabled ? 'bg-neutral-200' : 'bg-white border border-neutral-200'
+                      }`}
+                      onPress={() => !disabled && setWalletRatio(ratio)}
+                      disabled={disabled}
+                      accessibilityLabel={`${Math.round(ratio * 100)}% wallet`}
+                    >
+                      <Text
+                        variant="caption"
+                        color={isSelected ? 'inverse' : disabled ? 'tertiary' : 'primary'}
+                        className="font-semibold"
+                      >
+                        {Math.round(ratio * 100)}%
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {(() => {
+                const totalFare = selectedEstimate.estimated_fare_cup;
+                const walletPart = Math.round(totalFare * draft.walletRatio);
+                const cashPart = totalFare - walletPart;
+                return (
+                  <Text variant="caption" color="secondary" className="text-center">
+                    {`₧${walletPart.toLocaleString()} wallet + ₧${cashPart.toLocaleString()} efectivo = ₧${totalFare.toLocaleString()} total`}
+                  </Text>
+                );
+              })()}
+            </View>
+          )}
         </>
       )}
 

@@ -160,6 +160,11 @@ export interface Ride {
 
   // Ride mode
   ride_mode: RideMode;
+
+  // Mixed payment
+  wallet_ratio: number | null;
+  wallet_amount_cup: number | null;
+  cash_amount_cup: number | null;
 }
 
 export interface Tip {
