@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import Toast from 'react-native-toast-message';
-import { referralService } from '@tricigo/api';
+import { referralService, getSupabaseClient } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { logger } from '@tricigo/utils';
@@ -71,6 +71,53 @@ export function useDeepLinkHandler() {
 
     processPendingLinks();
   }, [isAuthenticated, userId, setPromoCode]);
+
+  // Handle tricigo://auth/callback — OAuth redirect from Google/Apple sign-in
+  useEffect(() => {
+    function handleAuthCallback(event: { url: string }) {
+      try {
+        const url = event.url;
+        if (!url.includes('auth/callback')) return;
+
+        // Extract tokens from URL fragment (hash)
+        // Supabase OAuth redirects with: #access_token=...&refresh_token=...&...
+        const hashIndex = url.indexOf('#');
+        if (hashIndex === -1) return;
+
+        const hash = url.substring(hashIndex + 1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const supabase = getSupabaseClient();
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }).then(({ error }) => {
+            if (error) {
+              logger.error('[DeepLink] Failed to set session from OAuth callback', { error: error.message });
+              Toast.show({ type: 'error', text1: 'Error al iniciar sesión' });
+            }
+            // onAuthStateChange will fire SIGNED_IN and handle navigation
+          });
+        }
+      } catch (err) {
+        logger.error('[DeepLink] Error handling auth callback', { error: String(err) });
+      }
+    }
+
+    const subscription = Linking.addEventListener('url', handleAuthCallback);
+
+    // Handle cold start with auth callback URL
+    Linking.getInitialURL().then((url) => {
+      if (url && url.includes('auth/callback')) {
+        handleAuthCallback({ url });
+      }
+    }).catch(() => {});
+
+    return () => subscription.remove();
+  }, []);
 
   // Handle tricigo://book?lat=X&lng=Y&address=Z deep links
   useEffect(() => {

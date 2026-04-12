@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -149,7 +149,19 @@ export default function LoginScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
-                onPress={async () => { setSocialLoading(true); try { await authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web'
+                      ? window.location.origin
+                      : 'tricigo://auth/callback';
+                    await authService.signInWithGoogle(redirectTo);
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  // Safety timeout: reset loading after 30s if auth listener didn't fire
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">{socialLoading ? '...' : 'Google'}</Text>
@@ -158,7 +170,18 @@ export default function LoginScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-900 active:bg-neutral-800"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
-                onPress={async () => { setSocialLoading(true); try { await authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web'
+                      ? window.location.origin
+                      : 'tricigo://auth/callback';
+                    await authService.signInWithApple(redirectTo);
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
               >
                 <Ionicons name="logo-apple" size={20} color="#fff" />
                 <Text variant="body" className="font-medium" style={{ color: '#fff' }}>{socialLoading ? '...' : 'Apple'}</Text>
@@ -168,11 +191,23 @@ export default function LoginScreen() {
             {/* Legal text */}
             <Text variant="caption" color="tertiary" className="text-center mt-8 pb-8 leading-5">
               {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => Linking.openURL('https://tricigo.com/terms')}
+                accessibilityRole="link"
+              >
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
               </Text>
               {' '}{t('auth.and', { defaultValue: 'y' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => Linking.openURL('https://tricigo.com/privacy')}
+                accessibilityRole="link"
+              >
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
               </Text>
             </Text>

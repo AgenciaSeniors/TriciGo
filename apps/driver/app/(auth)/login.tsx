@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated } from 'react-native';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -190,7 +190,7 @@ export default function LoginScreen() {
             <View className="flex-row gap-3">
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[48px]"
-                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined)}
+                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback')}
                 accessibilityRole="button"
                 accessibilityLabel={t('auth.sign_in_google', { defaultValue: 'Iniciar sesión con Google' })}
               >
@@ -199,7 +199,7 @@ export default function LoginScreen() {
               </Pressable>
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[48px]"
-                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined)}
+                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback')}
                 accessibilityRole="button"
                 accessibilityLabel={t('auth.sign_in_apple', { defaultValue: 'Iniciar sesión con Apple' })}
               >
@@ -211,11 +211,23 @@ export default function LoginScreen() {
             {/* Legal text */}
             <Text variant="caption" color="secondary" className="text-center mt-8 pb-8 leading-5">
               {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => Linking.openURL('https://tricigo.com/terms')}
+                accessibilityRole="link"
+              >
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
               </Text>
               {' '}{t('auth.and', { defaultValue: 'y' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => Linking.openURL('https://tricigo.com/privacy')}
+                accessibilityRole="link"
+              >
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
               </Text>
             </Text>
