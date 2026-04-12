@@ -2,11 +2,13 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 
 export default function TabLayout() {
   const { t } = useTranslation('driver');
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -18,9 +20,9 @@ export default function TabLayout() {
           backgroundColor: '#141418',
           borderTopColor: 'rgba(255,255,255,0.06)',
           borderTopWidth: 1,
-          paddingBottom: 8,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 8,
-          height: 64,
+          height: 64 + insets.bottom,
           ...(Platform.OS === 'web'
             ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(20,20,24,0.92)' } as any
             : {}),

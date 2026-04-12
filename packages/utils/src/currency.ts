@@ -39,7 +39,7 @@ export function formatTRC(amount: number): string {
  *   formatTriciCoin(5000) → "5,000 TC"
  */
 export function formatTriciCoin(amount: number): string {
-  const formatted = Math.round(safeNum(amount)).toLocaleString('es-CU');
+  const formatted = Math.max(0, Math.round(safeNum(amount))).toLocaleString('es-CU');
   return `${formatted} TC`;
 }
 

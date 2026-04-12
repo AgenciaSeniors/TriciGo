@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -57,6 +58,10 @@ import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
 // Surge is calculated backend-side but not shown to users
 // import { useSurgeZones } from '@/hooks/useSurgeZones';
+
+// Mapbox GL for native fullscreen map (Uber-style home)
+let MapboxGL: any = null;
+try { MapboxGL = require('@rnmapbox/maps').default; } catch {}
 
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -1479,18 +1484,37 @@ function NativeHomeScreen() {
     });
   }, []);
 
+  // For non-idle flow steps, use the original Screen wrapper
+  if (flowStep !== 'idle') {
+    return (
+      <Screen bg="white" padded scroll>
+        <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
+          {flowStep === 'selecting' && <SelectingView />}
+          {flowStep === 'reviewing' && <ReviewingView />}
+          {flowStep === 'searching' && <SearchingView />}
+          {flowStep === 'active' && <RideActiveView />}
+          {flowStep === 'completed' && <RideCompleteView />}
+        </Animated.View>
+        {showOnboarding && (
+          <OnboardingOverlay
+            onComplete={() => {
+              setShowOnboarding(false);
+              AsyncStorage.setItem('@tricigo/onboarding_completed', 'true');
+            }}
+          />
+        )}
+      </Screen>
+    );
+  }
+
+  // Idle: Uber-style fullscreen map layout
   return (
-    <Screen bg="white" padded scroll>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
-        {flowStep === 'idle' && <IdleView />}
-        {flowStep === 'selecting' && <SelectingView />}
-        {flowStep === 'reviewing' && <ReviewingView />}
-        {flowStep === 'searching' && <SearchingView />}
-        {flowStep === 'active' && <RideActiveView />}
-        {flowStep === 'completed' && <RideCompleteView />}
+        <IdleView />
       </Animated.View>
       {/* Notification permission prompt (shows once on first visit) */}
-      {flowStep === 'idle' && <NotificationPermissionSheet />}
+      <NotificationPermissionSheet />
       {/* Onboarding tutorial (shows once on first app launch) */}
       {showOnboarding && (
         <OnboardingOverlay
@@ -1500,7 +1524,7 @@ function NativeHomeScreen() {
           }}
         />
       )}
-    </Screen>
+    </View>
   );
 }
 
@@ -1599,7 +1623,8 @@ function IdleView() {
         const { count } = await getSupabaseClient()
           .from('driver_profiles')
           .select('*', { count: 'exact', head: true })
-          .eq('is_online', true);
+          .eq('is_online', true)
+          .gt('last_heartbeat_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
         setDriverCount(count ?? 0);
       } catch {
         setDriverCount(0);
@@ -1639,196 +1664,288 @@ function IdleView() {
     }
   }, [handleRecentTap, setPickup, setDropoff, requestEstimate]);
 
+  const insets = useSafeAreaInsets();
+
   if (initialLoading) {
     return (
-      <View className="pt-4">
-        <Skeleton width="60%" height={28} className="mb-4" />
-        <Skeleton width="40%" height={20} className="mb-6" />
-        <SkeletonCard className="mb-4" />
-        <Skeleton width="100%" height={52} className="rounded-xl mb-4" />
-        <SkeletonCard className="mb-4" />
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+        <View style={{ flex: 1, backgroundColor: '#e5e7eb' }} />
+        <View style={idleStyles.bottomPanel}>
+          <Skeleton width="60%" height={28} style={{ marginBottom: 12 }} />
+          <Skeleton width="100%" height={52} style={{ borderRadius: 12, marginBottom: 12 }} />
+          <SkeletonCard />
+        </View>
       </View>
     );
   }
 
   return (
-    <View className="pt-4">
-      {/* Logo */}
-      <View className="mb-4">
-        <Image
-          source={require('../../assets/logo-wordmark.png')}
-          style={{ width: 90, height: 24 }}
-          resizeMode="contain"
-        />
+    <View style={{ flex: 1 }}>
+      {/* ── Fullscreen Map Background ── */}
+      {MapboxGL ? (
+        <MapboxGL.MapView
+          style={StyleSheet.absoluteFillObject}
+          styleURL="mapbox://styles/mapbox/streets-v12"
+          attributionEnabled={false}
+          logoEnabled={false}
+        >
+          <MapboxGL.Camera
+            centerCoordinate={[-82.3666, 23.1136]}
+            zoomLevel={14}
+            animationMode="flyTo"
+          />
+        </MapboxGL.MapView>
+      ) : (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#e5e7eb' }]} />
+      )}
+
+      {/* ── Floating Search Bar (top) ── */}
+      <View style={[idleStyles.searchBarContainer, { top: insets.top + 12 }]}>
+        <Pressable
+          style={idleStyles.searchBar}
+          onPress={() => setFlowStep('selecting')}
+          accessibilityRole="search"
+          accessibilityLabel={t('home.where_to')}
+          accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
+        >
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
+          <Text variant="body" color="tertiary" style={{ flex: 1 }}>
+            {t('home.where_to')}
+          </Text>
+          <Ionicons name="search" size={20} color={colors.neutral[400]} />
+        </Pressable>
       </View>
 
-      {/* Location permission denied banner */}
+      {/* ── Driver Count Badge (top-right, below search bar) ── */}
+      {driverCount !== null && driverCount > 0 && (
+        <View style={[idleStyles.driverBadge, { top: insets.top + 72 }]}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 6 }} />
+          <Text variant="caption" style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
+            {t('home.drivers_active', { count: driverCount })}
+          </Text>
+        </View>
+      )}
+
+      {/* ── Notification Bell (top-right, next to search) ── */}
+      {notifCenterEnabled && (
+        <Pressable
+          onPress={() => router.push('/notifications')}
+          style={[idleStyles.notifBell, { top: insets.top + 20 }]}
+          accessibilityRole="button"
+          accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
+        >
+          <Ionicons
+            name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
+            size={22}
+            color={colors.neutral[700]}
+          />
+          {unreadCount > 0 && (
+            <View style={idleStyles.notifBadge}>
+              <Text variant="caption" style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      )}
+
+      {/* ── Location permission denied banner (floating) ── */}
       {locationDenied && (
         <Pressable
           onPress={async () => {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status === 'granted') setLocationDenied(false);
           }}
-          className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4 flex-row items-center"
+          style={[idleStyles.locationBanner, { top: insets.top + 72 }]}
         >
-          <Ionicons name="location-outline" size={20} color="#D97706" />
-          <View className="flex-1 ml-3">
-            <Text variant="bodySmall" className="font-semibold text-yellow-800">
-              {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
-            </Text>
-            <Text variant="caption" className="text-yellow-700">
-              {t('home.location_denied_msg', { defaultValue: 'Activa la ubicación para encontrar conductores cercanos.' })}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color="#D97706" />
+          <Ionicons name="location-outline" size={18} color="#D97706" />
+          <Text variant="caption" style={{ color: '#92400E', flex: 1, marginLeft: 8, fontWeight: '600' }}>
+            {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color="#D97706" />
         </Pressable>
       )}
 
-      <View className="flex-row items-center justify-between mb-1">
-        <Text variant="h3">
-          {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
-        </Text>
-        {notifCenterEnabled && (
-          <Pressable
-            onPress={() => router.push('/notifications')}
-            className="relative p-2"
-            accessibilityRole="button"
-            accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
-          >
-            <Ionicons
-              name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
-              size={24}
-              color={colors.neutral[700]}
-            />
-            {unreadCount > 0 && (
-              <View className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-red-500 items-center justify-center px-1">
-                <Text variant="caption" className="text-white text-[10px] font-bold">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        )}
-      </View>
-
-      <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} className="mt-4 mb-6" />
-
-      {/* Pending split invites */}
-      <SplitInviteCard />
-
-      {/* Destination search */}
-      <Pressable
-        className="bg-neutral-100 rounded-xl px-4 py-4 flex-row items-center mb-4"
-        onPress={() => setFlowStep('selecting')}
-        accessibilityRole="search"
-        accessibilityLabel={t('home.where_to')}
-        accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
-      >
-        <View className="w-3 h-3 rounded-full bg-primary-500 mr-3" />
-        <Text variant="body" color="tertiary">
-          {t('home.where_to')}
-        </Text>
-      </Pressable>
-
-      {/* U2.1: Driver availability pulse */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-        {driverCount === null ? (
-          <Skeleton width={180} height={16} />
-        ) : driverCount > 0 ? (
-          <>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
-            <Text variant="bodySmall" color="secondary">
-              {t('home.drivers_active', { count: driverCount })}
-            </Text>
-          </>
-        ) : (
-          <>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' }} />
-            <Text variant="bodySmall" color="secondary">
-              {t('home.searching_drivers')}
-            </Text>
-          </>
-        )}
-      </View>
-
-      {/* Predicted destinations — U1.1 large one-tap cards */}
-      {predictions.length > 0 && (
-        <View className="mb-4">
-          <Text variant="caption" color="secondary" className="mb-2">
-            {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+      {/* ── Bottom Panel (fixed card above tab bar) ── */}
+      <View style={idleStyles.bottomPanel}>
+        {/* Greeting + Balance row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600' }}>
+            {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
           </Text>
-          {predictions.slice(0, 3).map((pred, idx) => (
-            <Pressable
-              key={`pred-${idx}`}
-              className="flex-row items-center bg-white border border-neutral-200 rounded-xl px-4 py-4 mb-2"
-              onPress={() => handleOneTapPrediction(pred)}
-              accessibilityRole="button"
-              accessibilityLabel={pred.address}
-            >
-              <View className="w-10 h-10 rounded-full bg-primary-50 items-center justify-center">
-                <Ionicons
-                  name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                  size={22}
-                  color={colors.brand.orange}
-                />
-              </View>
-              <View className="flex-1 ml-3">
-                <Text variant="h4" numberOfLines={1}>
-                  {pred.reason === 'time_pattern'
-                    ? t('prediction.time_pattern', { defaultValue: 'Según tu horario' })
-                    : pred.reason === 'frequent'
-                      ? t('prediction.frequent', { defaultValue: 'Destino frecuente' })
-                      : t('prediction.recent', { defaultValue: 'Viaje reciente' })}
-                </Text>
-                <Text variant="bodySmall" color="tertiary" numberOfLines={1} className="mt-0.5">
-                  {pred.address}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
-            </Pressable>
-          ))}
+          <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} />
         </View>
-      )}
 
-      {/* Recent places */}
-      {recentAddresses.length > 0 && (
-        <View className="mb-4">
-          <Text variant="caption" color="secondary" className="mb-2">
-            {t('home.recent_places', { defaultValue: 'Lugares recientes' })}
-          </Text>
-          {recentAddresses.slice(0, 3).map((addr, idx) => (
-            <Pressable
-              key={`recent-idle-${idx}`}
-              className="flex-row items-center bg-neutral-50 rounded-xl px-4 py-3 mb-2"
-              onPress={() => handleRecentTap(addr)}
-              accessibilityRole="button"
-              accessibilityLabel={addr.address}
-            >
-              <Ionicons name="time-outline" size={18} color={colors.neutral[500]} />
-              <Text variant="bodySmall" className="flex-1 ml-3" numberOfLines={1}>
-                {addr.address}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
-            </Pressable>
+        {/* Pending split invites */}
+        <SplitInviteCard />
+
+        {/* Predicted destinations — horizontal scroll cards */}
+        {predictions.length > 0 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text variant="caption" color="secondary" style={{ marginBottom: 8 }}>
+              {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {predictions.slice(0, 3).map((pred, idx) => (
+                <Pressable
+                  key={`pred-${idx}`}
+                  style={idleStyles.predictionCard}
+                  onPress={() => handleOneTapPrediction(pred)}
+                  accessibilityRole="button"
+                  accessibilityLabel={pred.address}
+                >
+                  <View style={idleStyles.predictionIcon}>
+                    <Ionicons
+                      name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
+                      size={18}
+                      color={colors.brand.orange}
+                    />
+                  </View>
+                  <Text variant="caption" numberOfLines={2} style={{ color: '#1a1a1a', flex: 1 }}>
+                    {pred.address}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Service types — horizontal scroll */}
+        <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
+          {t('home.services', { defaultValue: 'Servicios' })}
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole="radiogroup">
+          {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
+            <View key={slug} style={{ width: 72, marginRight: 10 }}>
+              <ServiceTypeCard
+                slug={slug}
+                name={t(`service_type.${slug}` as const)}
+                icon={vehicleSelectionImages[slug]}
+              />
+            </View>
           ))}
-        </View>
-      )}
-
-      {/* Service types */}
-      <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
-      <View className="flex-row gap-3" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
-          <ServiceTypeCard
-            key={slug}
-            slug={slug}
-            name={t(`service_type.${slug}` as const)}
-            icon={vehicleSelectionImages[slug]}
-          />
-        ))}
+        </ScrollView>
       </View>
     </View>
   );
 }
+
+// ── IdleView Styles (Uber-style fullscreen map) ──
+const idleStyles = StyleSheet.create({
+  searchBarContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 60,
+    zIndex: 10,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  notifBell: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  driverBadge: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  locationBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(254,243,199,0.95)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  bottomPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  predictionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginRight: 10,
+    width: 200,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  predictionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+});
 
 // X2.4: Geocoding coordinate validation
 function isValidCoordinate(lat: number, lng: number): boolean {

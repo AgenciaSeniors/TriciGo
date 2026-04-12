@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { useThemeStore } from '@/stores/theme.store';
@@ -12,6 +13,7 @@ export default function TabLayout() {
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -22,9 +24,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: isDark ? darkColors.background.primary : colors.background.primary,
           borderTopColor: isDark ? darkColors.border.default : colors.neutral[200],
-          paddingBottom: 8,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 8,
-          height: 60,
+          height: 60 + insets.bottom,
         },
         tabBarLabelStyle: {
           fontFamily: 'Montserrat',
