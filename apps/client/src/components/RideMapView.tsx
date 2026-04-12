@@ -8,11 +8,11 @@ import { WebMapView } from './WebMapView';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
-let MapboxGL: any;
-try {
-  MapboxGL = require('@rnmapbox/maps').default;
-} catch {
-  MapboxGL = null;
+let _MapboxGL: any = undefined;
+function getMapboxGL(): any {
+  if (_MapboxGL !== undefined) return _MapboxGL;
+  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
+  return _MapboxGL;
 }
 
 // Vehicle marker images (top-down view)
@@ -107,6 +107,7 @@ function RideMapViewInner({
   vehicleType,
   height = 200,
 }: RideMapViewProps) {
+  const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';

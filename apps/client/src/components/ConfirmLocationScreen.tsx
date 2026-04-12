@@ -9,11 +9,11 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 
-let MapboxGL: any;
-try {
-  MapboxGL = require('@rnmapbox/maps').default;
-} catch {
-  MapboxGL = null;
+let _MapboxGL: any = undefined;
+function getMapboxGL(): any {
+  if (_MapboxGL !== undefined) return _MapboxGL;
+  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
+  return _MapboxGL;
 }
 
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
@@ -31,6 +31,7 @@ export function ConfirmLocationScreen({
   onConfirm,
   onClose,
 }: ConfirmLocationScreenProps) {
+  const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';

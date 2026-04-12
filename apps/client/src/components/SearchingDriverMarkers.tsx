@@ -11,11 +11,11 @@ import { getInitials } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
-let MapboxGL: any;
-try {
-  MapboxGL = require('@rnmapbox/maps').default;
-} catch {
-  MapboxGL = null;
+let _MapboxGL: any = undefined;
+function getMapboxGL(): any {
+  if (_MapboxGL !== undefined) return _MapboxGL;
+  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
+  return _MapboxGL;
 }
 
 interface SearchingDriverMarkersProps {
@@ -36,6 +36,7 @@ function DriverMarker({
   driver: SearchingDriverPresence;
   isAccepted: boolean;
 }) {
+  const MapboxGL = getMapboxGL();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -118,6 +119,7 @@ export function SearchingDriverMarkers({
   drivers,
   acceptedDriverId,
 }: SearchingDriverMarkersProps) {
+  const MapboxGL = getMapboxGL();
   if (!MapboxGL || drivers.length === 0) return null;
 
   return (
