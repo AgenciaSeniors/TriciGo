@@ -1693,18 +1693,28 @@ function IdleView() {
             styleURL="mapbox://styles/mapbox/streets-v12"
             attributionEnabled={false}
             logoEnabled={false}
+            scaleBarEnabled={false}
+            compassEnabled={false}
+            scrollEnabled={true}
+            pitchEnabled={true}
+            rotateEnabled={true}
           >
             <Mapbox.Camera
-              centerCoordinate={[-82.3666, 23.1136]}
-              zoomLevel={14}
+              followUserLocation={true}
+              followZoomLevel={15}
               animationMode="flyTo"
+              defaultSettings={{
+                centerCoordinate: [-82.3666, 23.1136],
+                zoomLevel: 14,
+              }}
             />
+            <Mapbox.UserLocation visible={true} />
           </Mapbox.MapView>
         );
       })()}
 
       {/* ── Floating Search Bar (top) ── */}
-      <View style={[idleStyles.searchBarContainer, { top: insets.top + 12 }]}>
+      <View style={[idleStyles.searchBarContainer, { top: insets.top + 20 }]}>
         <Pressable
           style={idleStyles.searchBar}
           onPress={() => setFlowStep('selecting')}
@@ -2014,6 +2024,14 @@ function SelectingView() {
   const [pickupSuggestion, setPickupSuggestion] = useState<{
     latitude: number; longitude: number; address: string;
   } | null>(null);
+
+  /** Format fare based on payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (draft.paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return `₧${formatCurrency(cupAmount)}`;
+  }, [draft.paymentMethod]);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
   const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
@@ -2856,6 +2874,14 @@ function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
   const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
+
+  /** Format fare based on payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (draft.paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return `₧${formatCurrency(cupAmount)}`;
+  }, [draft.paymentMethod]);
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
   const [promoExpanded, setPromoExpanded] = useState(false);

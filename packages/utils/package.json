@@ -26,5 +26,9 @@
   },
   "dependencies": {
     "@tricigo/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "expo-haptics": "*",
+    "@react-native-async-storage/async-storage": "*"
   }
 }

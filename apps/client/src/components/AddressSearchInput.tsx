@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -179,8 +179,9 @@ function AddressSearchInputInner({
           // If no intersection found, fall through to normal search
         }
 
-        // ── Normal search (Mapbox + POIs + Nominatim) ──
-        const searchResults = await searchAddress(text, 5, userLocation);
+        // ── Normal search: try Supabase POIs first, fall back to Mapbox + Nominatim ──
+        const poiResults = await searchPoisSupabase(text, userLocation, 10);
+        const searchResults = poiResults.length > 0 ? poiResults : await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results

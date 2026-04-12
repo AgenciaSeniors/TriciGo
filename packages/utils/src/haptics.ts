@@ -1,20 +1,22 @@
 /**
  * Haptic feedback utilities.
- * Uses indirect require to prevent webpack (Next.js) from trying to bundle expo-haptics.
- * In Expo apps, the module loads normally. In Next.js/web, the require silently fails.
+ * On native (Expo), expo-haptics loads normally.
+ * On web (Next.js), the import fails silently and haptics are no-ops.
  */
 
-// Indirect require prevents webpack static analysis from tracing expo-haptics
-// eslint-disable-next-line @typescript-eslint/no-implied-eval
-const _require = typeof require !== 'undefined' ? require : undefined;
-const HAPTICS_MODULE = 'expo-' + 'haptics';
+let _haptics: any = null;
+let _hapticsLoaded = false;
 
 function getHaptics(): any {
+  if (_hapticsLoaded) return _haptics;
+  _hapticsLoaded = true;
   try {
-    return _require?.(HAPTICS_MODULE);
+    // Static require so Metro/Hermes can resolve the module at bundle time
+    _haptics = require('expo-haptics');
   } catch {
-    return null;
+    _haptics = null;
   }
+  return _haptics;
 }
 
 export async function triggerHaptic(

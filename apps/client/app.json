@@ -60,7 +60,12 @@
       ],
       "expo-secure-store",
       "expo-sharing",
-      "expo-image"
+      "expo-image",
+      "expo-splash-screen",
+      ["expo-image-picker", {
+        "photosPermission": "TriciGo necesita acceso a tus fotos para tu avatar.",
+        "cameraPermission": "TriciGo necesita acceso a la cámara para tu avatar."
+      }]
     ],
     "extra": {
       "router": {
