@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-  SafeAreaView,
   View,
   StatusBar,
   ScrollView,
   type ViewProps,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export interface ScreenProps extends ViewProps {
   /** Use scroll view for scrollable content */
