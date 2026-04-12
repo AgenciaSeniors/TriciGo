@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated, Linking } from 'react-native';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated, Linking, Modal, ActivityIndicator } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,6 +24,8 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [legalUrl, setLegalUrl] = useState<string | null>(null);
 
   // Entrance animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -190,7 +193,20 @@ export default function LoginScreen() {
             <View className="flex-row gap-3">
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[48px]"
-                onPress={() => authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback')}
+                disabled={socialLoading || loading}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback';
+                    const data = await authService.signInWithGoogle(redirectTo);
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={t('auth.sign_in_google', { defaultValue: 'Iniciar sesión con Google' })}
               >
@@ -199,7 +215,20 @@ export default function LoginScreen() {
               </Pressable>
               <Pressable
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[48px]"
-                onPress={() => authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback')}
+                disabled={socialLoading || loading}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback';
+                    const data = await authService.signInWithApple(redirectTo);
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={t('auth.sign_in_apple', { defaultValue: 'Iniciar sesión con Apple' })}
               >
@@ -215,7 +244,7 @@ export default function LoginScreen() {
                 variant="caption"
                 color="accent"
                 className="underline"
-                onPress={() => Linking.openURL('https://tricigo.com/terms')}
+                onPress={() => setLegalUrl('https://tricigo.com/terms')}
                 accessibilityRole="link"
               >
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
@@ -225,7 +254,7 @@ export default function LoginScreen() {
                 variant="caption"
                 color="accent"
                 className="underline"
-                onPress={() => Linking.openURL('https://tricigo.com/privacy')}
+                onPress={() => setLegalUrl('https://tricigo.com/privacy')}
                 accessibilityRole="link"
               >
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
@@ -234,6 +263,34 @@ export default function LoginScreen() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Legal WebView Modal */}
+      <Modal visible={!!legalUrl} animationType="slide" onRequestClose={() => setLegalUrl(null)}>
+        <View style={{ flex: 1, backgroundColor: '#111' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333' }}>
+            <Text variant="body" color="inverse" className="font-semibold">
+              {legalUrl?.includes('terms') ? t('auth.terms_link', { defaultValue: 'Términos de Servicio' }) : t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
+            </Text>
+            <Pressable onPress={() => setLegalUrl(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </Pressable>
+          </View>
+          {legalUrl && Platform.OS !== 'web' ? (
+            <WebView
+              source={{ uri: legalUrl }}
+              style={{ flex: 1 }}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#111' }}>
+                  <ActivityIndicator size="large" color={colors.brand.orange} />
+                </View>
+              )}
+            />
+          ) : legalUrl ? (
+            <iframe src={legalUrl} style={{ flex: 1, border: 'none', width: '100%', height: '100%' } as React.CSSProperties} />
+          ) : null}
+        </View>
+      </Modal>
     </Screen>
   );
 }

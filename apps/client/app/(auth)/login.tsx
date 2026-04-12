@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal, ActivityIndicator } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +23,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const [error, setError] = useState('');
+  const [legalUrl, setLegalUrl] = useState<string | null>(null);
 
   const handleSendCode = async () => {
     setError('');
@@ -155,11 +157,14 @@ export default function LoginScreen() {
                     const redirectTo = Platform.OS === 'web'
                       ? window.location.origin
                       : 'tricigo://auth/callback';
-                    await authService.signInWithGoogle(redirectTo);
+                    const data = await authService.signInWithGoogle(redirectTo);
+                    // On native, signInWithOAuth returns { url } — must open browser manually
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
                   } catch {
                     setSocialLoading(false);
                   }
-                  // Safety timeout: reset loading after 30s if auth listener didn't fire
                   setTimeout(() => setSocialLoading(false), 30000);
                 }}
               >
@@ -176,7 +181,10 @@ export default function LoginScreen() {
                     const redirectTo = Platform.OS === 'web'
                       ? window.location.origin
                       : 'tricigo://auth/callback';
-                    await authService.signInWithApple(redirectTo);
+                    const data = await authService.signInWithApple(redirectTo);
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
                   } catch {
                     setSocialLoading(false);
                   }
@@ -195,7 +203,7 @@ export default function LoginScreen() {
                 variant="caption"
                 color="accent"
                 className="underline"
-                onPress={() => Linking.openURL('https://tricigo.com/terms')}
+                onPress={() => setLegalUrl('https://tricigo.com/terms')}
                 accessibilityRole="link"
               >
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
@@ -205,7 +213,7 @@ export default function LoginScreen() {
                 variant="caption"
                 color="accent"
                 className="underline"
-                onPress={() => Linking.openURL('https://tricigo.com/privacy')}
+                onPress={() => setLegalUrl('https://tricigo.com/privacy')}
                 accessibilityRole="link"
               >
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
@@ -214,6 +222,34 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Legal WebView Modal */}
+      <Modal visible={!!legalUrl} animationType="slide" onRequestClose={() => setLegalUrl(null)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' }}>
+            <Text variant="body" className="font-semibold">
+              {legalUrl?.includes('terms') ? t('auth.terms_link', { defaultValue: 'Términos de Servicio' }) : t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
+            </Text>
+            <Pressable onPress={() => setLegalUrl(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color="#333" />
+            </Pressable>
+          </View>
+          {legalUrl && Platform.OS !== 'web' ? (
+            <WebView
+              source={{ uri: legalUrl }}
+              style={{ flex: 1 }}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                  <ActivityIndicator size="large" color={colors.brand.orange} />
+                </View>
+              )}
+            />
+          ) : legalUrl ? (
+            <iframe src={legalUrl} style={{ flex: 1, border: 'none', width: '100%', height: '100%' } as React.CSSProperties} />
+          ) : null}
+        </View>
+      </Modal>
     </Screen>
   );
 }

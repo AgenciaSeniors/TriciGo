@@ -22,6 +22,7 @@ import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
 import { Platform } from 'react-native';
 import '../global.css';
 
@@ -56,6 +57,9 @@ function RootNavigator() {
   const isProfileLoaded = useDriverStore((s) => s.isProfileLoaded);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const segments = useSegments();
+
+  // Handle OAuth deep link callbacks (tricigo-driver://auth/callback)
+  useAuthDeepLink();
 
   // Dark mode: sync NativeWind color scheme with theme store
   // Driver app uses forced dark backgrounds (Screen bg="dark") with light NativeWind
