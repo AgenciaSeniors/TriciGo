@@ -62,7 +62,12 @@ import { WebActiveRideView } from '@/components/WebActiveRideView';
 // Mapbox GL loaded lazily inside components — NOT at module level
 // Module-level require can crash the entire JS context if native module fails
 function getMapboxGL(): any {
-  try { return require('@rnmapbox/maps').default; } catch { return null; }
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    if (token) MapboxGL.setAccessToken(token);
+    return MapboxGL;
+  } catch { return null; }
 }
 
 // Coin icon for BalanceBadge
@@ -1590,7 +1595,7 @@ function IdleView() {
     let cancelled = false;
     (async () => {
       try {
-        const { status } = await Location.getForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setLocationDenied(true);
           return;

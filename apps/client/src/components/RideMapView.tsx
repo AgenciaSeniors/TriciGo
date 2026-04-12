@@ -180,15 +180,17 @@ function RideMapViewInner({
     const total = routeCoordinates.length;
     const batchSize = Math.max(1, Math.ceil(total / 15));
     let currentIndex = 0;
+    let rafId: number;
 
     const animate = () => {
       currentIndex = Math.min(currentIndex + batchSize, total);
       setAnimatedRouteCoords(routeCoordinates.slice(0, currentIndex));
       if (currentIndex < total) {
-        requestAnimationFrame(animate);
+        rafId = requestAnimationFrame(animate);
       }
     };
-    requestAnimationFrame(animate);
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
   }, [routeCoordinates]);
 
   // Build route GeoJSON from animated coordinates
