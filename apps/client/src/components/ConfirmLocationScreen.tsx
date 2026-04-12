@@ -89,15 +89,22 @@ export function ConfirmLocationScreen({
     };
   }, []);
 
+  // Only geocode when map stops moving (onMapIdle), not during drag
+  const handleMapIdle = useCallback(() => {
+    // centerRef is already updated by onRegionDidChange
+    geocodeCenter(centerRef.current.latitude, centerRef.current.longitude);
+  }, [geocodeCenter]);
+
+  // Track center silently during drag — no geocoding, no state updates
   const handleRegionChange = useCallback(
     (feature: any) => {
       const coords = feature?.geometry?.coordinates;
       if (!coords) return;
       const [lng, lat] = coords;
       centerRef.current = { latitude: lat, longitude: lng };
-      geocodeCenter(lat, lng);
+      // Don't geocode here — wait for onMapIdle
     },
-    [geocodeCenter],
+    [],
   );
 
   const handleConfirm = () => {
@@ -133,12 +140,14 @@ export function ConfirmLocationScreen({
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        scaleBarEnabled={false}
         onRegionDidChange={handleRegionChange}
+        onMapIdle={handleMapIdle}
       >
         <MapboxGL.Camera
           defaultSettings={{
             centerCoordinate: initialCenter,
-            zoomLevel: 16,
+            zoomLevel: 15,
           }}
         />
       </MapboxGL.MapView>
