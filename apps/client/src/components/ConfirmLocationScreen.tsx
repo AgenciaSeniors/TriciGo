@@ -52,7 +52,7 @@ export function ConfirmLocationScreen({
     );
     anim.start();
     return () => anim.stop();
-  }, [isGeocoding, shimmerAnim]);
+  }, [isGeocoding]);
 
   const shimmerOpacity = shimmerAnim.interpolate({
     inputRange: [0, 1],

@@ -70,12 +70,13 @@ function computeBounds(coords: [number, number][]): {
   ne: [number, number];
   sw: [number, number];
 } | null {
-  if (coords.length === 0) return null;
+  const validCoords = coords.filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+  if (validCoords.length === 0) return null;
   let minLng = Infinity;
   let maxLng = -Infinity;
   let minLat = Infinity;
   let maxLat = -Infinity;
-  for (const [lng, lat] of coords) {
+  for (const [lng, lat] of validCoords) {
     if (lng < minLng) minLng = lng;
     if (lng > maxLng) maxLng = lng;
     if (lat < minLat) minLat = lat;
@@ -151,12 +152,14 @@ function RideMapViewInner({
   useEffect(() => {
     if (!dropoffLocation) return;
     dropoffScale.setValue(0.3);
-    Animated.spring(dropoffScale, {
+    const animation = Animated.spring(dropoffScale, {
       toValue: 1,
       tension: 80,
       friction: 6,
       useNativeDriver: true,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [dropoffLocation, dropoffScale]);
 
   // Animated route drawing — progressively reveal route coordinates
@@ -260,10 +263,10 @@ function RideMapViewInner({
     if (Platform.OS === 'web') {
       return (
         <WebMapView
-          pickup={pickupLocation ? { latitude: pickupLocation[1], longitude: pickupLocation[0] } : null}
-          dropoff={dropoffLocation ? { latitude: dropoffLocation[1], longitude: dropoffLocation[0] } : null}
-          routeCoords={routeCoordinates as [number, number][] | undefined}
-          driverRoute={driverToPickupRoute?.map(c => [c.latitude, c.longitude] as [number, number])}
+          pickup={pickupLocation ? { latitude: pickupLocation.latitude, longitude: pickupLocation.longitude } : null}
+          dropoff={dropoffLocation ? { latitude: dropoffLocation.latitude, longitude: dropoffLocation.longitude } : null}
+          routeCoords={routeCoordinates?.map(c => [c.longitude, c.latitude] as [number, number])}
+          driverRoute={driverToPickupRoute?.map(c => [c.longitude, c.latitude] as [number, number])}
           style={{ height, borderRadius: 12, overflow: 'hidden' } as any}
         />
       );

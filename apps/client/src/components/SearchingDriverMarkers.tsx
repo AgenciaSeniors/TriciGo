@@ -81,12 +81,17 @@ function DriverMarker({
 
   if (!MapboxGL) return null;
 
+  const coordinate = toCoord(driver.location);
+  if (!Number.isFinite(coordinate[0]) || !Number.isFinite(coordinate[1])) {
+    return null;
+  }
+
   const borderColor = isAccepted ? colors.success.DEFAULT : colors.brand.orange;
 
   return (
     <MapboxGL.PointAnnotation
       id={`searching-driver-${driver.driverId}`}
-      coordinate={toCoord(driver.location)}
+      coordinate={coordinate}
     >
       <Animated.View
         style={{
