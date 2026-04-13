@@ -164,7 +164,7 @@ export function useRideActions() {
         dropoff_lng: draft.dropoff.location.longitude,
       });
       setFareEstimate(estimate);
-      setFlowStep('reviewing');
+      // Auto-estimate stays on 'selecting' — inline prices, no ReviewingView transition
 
       // Estimate other service types in background for comparison UI
       const allSlugs: import('@tricigo/types').ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
@@ -685,7 +685,7 @@ export function useRideActions() {
       scheduleSearchTimeout();
     } catch (err) {
       setError(getErrorMessage(err));
-      setFlowStep('reviewing');
+      setFlowStep('selecting');
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;

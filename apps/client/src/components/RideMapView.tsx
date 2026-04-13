@@ -183,7 +183,7 @@ function RideMapViewInner({
     let cancelled = false;
 
     const animate = () => {
-      if (cancelled) return;
+      if (cancelled || !routeCoordinates) return;
       currentIndex = Math.min(currentIndex + batchSize, total);
       setAnimatedRouteCoords(routeCoordinates.slice(0, currentIndex));
       if (currentIndex < total && !cancelled) {

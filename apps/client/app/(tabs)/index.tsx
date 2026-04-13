@@ -13,7 +13,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -590,7 +590,7 @@ function WebHomeScreen() {
       return formatTRC(trcAmount ?? cupAmount);
     }
     // For 'mixed' and 'cash', show CUP
-    return `₧${formatCurrency(cupAmount)}`;
+    return formatCUP(cupAmount);
   }, [paymentMethod]);
 
   const [allEstimates, setAllEstimates] = useState<Record<string, any>>({});
@@ -1729,7 +1729,7 @@ function IdleView() {
         return (
           <Mapbox.MapView
             style={StyleSheet.absoluteFillObject}
-            styleURL="mapbox://styles/mapbox/streets-v12"
+            styleURL={MAP_STYLE_LIGHT}
             attributionEnabled={false}
             logoEnabled={false}
             scaleBarEnabled={false}
@@ -2060,11 +2060,16 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     isLoading,
     isFareEstimating,
     error,
+    promoCode,
+    promoResult,
+    setPromoCode,
+    fareEstimate,
   } = useRideStore();
-  const { requestEstimate } = useRideActions();
+  const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   const { accounts: corporateAccounts } = useCorporateAccounts();
+  const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
 
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
@@ -2081,10 +2086,18 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     if (draft.paymentMethod === 'tricicoin') {
       return formatTRC(trcAmount ?? cupAmount);
     }
-    return `₧${formatCurrency(cupAmount)}`;
+    return formatCUP(cupAmount);
   }, [draft.paymentMethod]);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
+  const [promoExpanded, setPromoExpanded] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  // Fetch wallet balance for mixed payment ratio selector
+  useEffect(() => {
+    if (!user?.id) return;
+    walletService.getBalance(user.id).then((b) => setWalletBalance(b.available ?? 0)).catch(() => {});
+  }, [user?.id]);
 
   // Nearest driver ETA
   const nearbyVehicles = useNearbyVehicles(
@@ -2174,6 +2187,13 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
   }, [prefetchedPickup]);
+
+  // Auto-fetch estimates when both pickup and dropoff are set (web-like flow)
+  useEffect(() => {
+    if (draft.pickup?.location && draft.dropoff?.location && !isFareEstimating) {
+      requestEstimate();
+    }
+  }, [draft.pickup?.location?.latitude, draft.dropoff?.location?.latitude]);
 
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
@@ -2922,16 +2942,89 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         </Text>
       )}
 
-      <Button
-        title={draft.scheduledAt
-          ? t('ride.schedule_confirm', { defaultValue: 'Programar viaje' })
-          : t('ride.get_estimate', { defaultValue: 'Ver tarifa estimada' })}
-        size="lg"
-        fullWidth
-        onPress={requestEstimate}
-        loading={isFareEstimating}
-        disabled={!canEstimate}
-      />
+      {/* Promo code section — visible when estimates are ready */}
+      {selectedEstimate && (
+        <>
+          {!promoExpanded && !promoResult?.valid ? (
+            <Pressable
+              className="mb-4 py-2"
+              onPress={() => setPromoExpanded(true)}
+            >
+              <Text variant="bodySmall" color="accent" className="text-center underline">
+                {t('home.have_promo_code', { defaultValue: '¿Tienes un código?' })}
+              </Text>
+            </Pressable>
+          ) : (
+            <Card variant="outlined" padding="md" className="mb-4">
+              <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
+              <View className="flex-row gap-2">
+                <View className="flex-1">
+                  <Input
+                    placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
+                    value={promoCode}
+                    onChangeText={setPromoCode}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <Button
+                  title={t('ride.apply', { defaultValue: 'Aplicar' })}
+                  size="sm"
+                  variant="outline"
+                  onPress={validatePromo}
+                  loading={validatingPromo}
+                  disabled={!promoCode.trim()}
+                />
+              </View>
+              {promoResult && (
+                <Text
+                  variant="caption"
+                  color={promoResult.valid ? 'accent' : 'error'}
+                  className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
+                >
+                  {promoResult.valid
+                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
+                    : promoResult.error ?? t('ride.promo_invalid')}
+                </Text>
+              )}
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Main action button — changes based on estimate state */}
+      {selectedEstimate ? (
+        <Button
+          title={
+            draft.scheduledAt
+              ? t('ride.schedule_confirm', { defaultValue: 'Programar viaje' })
+              : t('home.request_with_details', {
+                  service: SERVICE_META[draft.serviceType]?.label ?? draft.serviceType,
+                  fare: formatCurrency(selectedEstimate.estimated_fare_cup),
+                  eta: Math.ceil((selectedEstimate.estimated_duration_s || 0) / 60),
+                  defaultValue: `Pedir ${SERVICE_META[draft.serviceType]?.label ?? draft.serviceType} · ${formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}`,
+                })
+          }
+          size="lg"
+          fullWidth
+          onPress={debouncedConfirmRide}
+          loading={isLoading || validatingPromo}
+          className="mb-3"
+        />
+      ) : (
+        <Button
+          title={
+            isFareEstimating
+              ? t('home.calculating', { defaultValue: 'Calculando...' })
+              : !canEstimate
+                ? t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })
+                : t('home.calculating', { defaultValue: 'Calculando...' })
+          }
+          size="lg"
+          fullWidth
+          disabled
+          loading={isFareEstimating}
+        />
+      )}
 
     </View>
   );
@@ -2949,7 +3042,7 @@ function ReviewingView() {
     if (draft.paymentMethod === 'tricicoin') {
       return formatTRC(trcAmount ?? cupAmount);
     }
-    return `₧${formatCurrency(cupAmount)}`;
+    return formatCUP(cupAmount);
   }, [draft.paymentMethod]);
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
@@ -3016,7 +3109,7 @@ function ReviewingView() {
   const confirmLabel = fareEstimate
     ? t('home.request_with_details', {
         service: selectedServiceLabel,
-        fare: formatCurrency(fareEstimate.estimated_fare_cup),
+        fare: formatCUP(fareEstimate.estimated_fare_cup),
         eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
@@ -3121,7 +3214,7 @@ function ReviewingView() {
           )}
           {fareEstimate?.exchange_rate_usd_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              1 USD = {formatCurrency(fareEstimate?.exchange_rate_usd_cup)} CUP
+              1 USD = {formatCUP(fareEstimate?.exchange_rate_usd_cup)} CUP
             </Text>
           )}
         </View>
