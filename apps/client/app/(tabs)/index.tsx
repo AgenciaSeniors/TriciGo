@@ -3113,7 +3113,7 @@ function ReviewingView() {
         eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
-  const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
   const nearbyVehicles = useNearbyVehicles(
     draft.pickup?.location?.latitude ?? null,
     draft.pickup?.location?.longitude ?? null,
@@ -3646,7 +3646,7 @@ function SearchingView() {
   const { isTablet } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
   const { cancelRide, requestEstimate } = useRideActions();
-  const routeCoordinates = useRoutePolyline(
+  const { coordinates: routeCoordinates } = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
   );
