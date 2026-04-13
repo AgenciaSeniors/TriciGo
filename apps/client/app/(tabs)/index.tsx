@@ -1603,11 +1603,10 @@ function IdleView() {
         const address = await reverseGeocode(loc.latitude, loc.longitude);
         if (!cancelled) {
           setUserCenter([pos.coords.longitude, pos.coords.latitude]);
-          if (address) {
-            setPrefetchedPickup({ address, location: loc });
-            if (!draft.pickup) {
-              setPickup(address, loc);
-            }
+          const displayAddress = address || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
+          setPrefetchedPickup({ address: displayAddress, location: loc });
+          if (!draft.pickup) {
+            setPickup(displayAddress, loc);
           }
         }
       } catch {
