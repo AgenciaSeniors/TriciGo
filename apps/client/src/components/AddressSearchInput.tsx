@@ -61,6 +61,8 @@ interface AddressSearchInputProps {
   showUseMyLocation?: boolean;
   /** Callback to open the "pick on map" screen */
   onPickOnMap?: () => void;
+  /** When true, component starts expanded with suggestions visible */
+  autoExpand?: boolean;
 }
 
 function AddressSearchInputInner({
@@ -72,6 +74,7 @@ function AddressSearchInputInner({
   predictions = [],
   showUseMyLocation = false,
   onPickOnMap,
+  autoExpand = false,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -79,7 +82,7 @@ function AddressSearchInputInner({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AddressSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(autoExpand);
   const [isLocating, setIsLocating] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);

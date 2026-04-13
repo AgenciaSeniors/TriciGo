@@ -57,6 +57,7 @@ export function useRoutePolyline(
 
       if (cancelled) return;
 
+      console.log('[useRoutePolyline] fetchRoute result:', result ? `${result.coordinates.length} coords, ${result.distance_m}m` : 'null');
       if (result) {
         cacheKeyRef.current = key;
         setCoordinates(

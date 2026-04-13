@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
@@ -61,9 +62,44 @@ interface RideMapViewProps {
   /** Vehicle type slug for driver marker (triciclo, moto, auto, confort) */
   vehicleType?: string;
   height?: number;
+  /** POIs to display on the map (fetched by useViewportPois) */
+  pois?: ViewportPoi[];
+  /** Called when the map camera changes — use to update viewport POIs */
+  onCameraChanged?: (bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number }, zoom: number) => void;
+  /** When true, map fills all available space via flex:1 instead of fixed height */
+  fullscreen?: boolean;
 }
 
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136]; // [lng, lat]
+
+/* ── POI category → color (matches web BookingMap) ── */
+const POI_COLORS: Record<string, string> = {
+  restaurant: '#E53935', cafe: '#E53935', bar: '#E53935', fast_food: '#E53935', bakery: '#E53935', nightclub: '#E53935',
+  hotel: '#1E88E5', guest_house: '#1E88E5', hostel: '#1E88E5', apartment: '#1E88E5', motel: '#1E88E5',
+  hospital: '#43A047', clinic: '#43A047', pharmacy: '#43A047', doctors: '#43A047', dentist: '#43A047',
+  supermarket: '#FB8C00', convenience: '#FB8C00', marketplace: '#FB8C00', mobile_phone: '#FB8C00', hairdresser: '#FB8C00', car_repair: '#FB8C00',
+  school: '#8E24AA', university: '#8E24AA', college: '#8E24AA', kindergarten: '#8E24AA',
+  bank: '#546E7A', post_office: '#546E7A', police: '#546E7A', embassy: '#546E7A', townhall: '#546E7A', fire_station: '#546E7A',
+  park: '#2E7D32', beach: '#2E7D32', attraction: '#2E7D32', museum: '#2E7D32', monument: '#2E7D32', theatre: '#2E7D32', cinema: '#2E7D32', library: '#2E7D32',
+  fuel: '#FF6F00', bus_station: '#FF6F00', ferry_terminal: '#FF6F00', aerodrome: '#FF6F00',
+};
+
+function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: pois.map((p) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+      properties: {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        subcategory: p.subcategory,
+        color: POI_COLORS[p.subcategory] || '#78909C',
+      },
+    })),
+  };
+}
 
 /** Compute bounding box from an array of [lng, lat] coordinates */
 function computeBounds(coords: [number, number][]): {
@@ -109,6 +145,9 @@ function RideMapViewInner({
   driverToPickupRoute,
   vehicleType,
   height = 200,
+  pois,
+  onCameraChanged,
+  fullscreen,
 }: RideMapViewProps) {
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
@@ -164,6 +203,7 @@ function RideMapViewInner({
 
   // Build route GeoJSON from coordinates (static — no animation)
   const routeGeoJSON = useMemo(() => {
+    console.log('[RideMapView] routeCoordinates:', routeCoordinates?.length ?? 'null');
     if (!routeCoordinates || routeCoordinates.length < 2) return null;
     return {
       type: 'Feature' as const,
@@ -206,6 +246,30 @@ function RideMapViewInner({
       })),
     };
   }, [nearbyVehicles]);
+
+  // POI GeoJSON for map layers
+  const poiGeoJSON = useMemo(() => {
+    if (!pois || pois.length === 0) return null;
+    return poisToGeoJSON(pois);
+  }, [pois]);
+
+  // Handle camera change — notify parent with viewport bounds + zoom
+  const handleCameraChanged = useCallback((event: any) => {
+    if (!onCameraChanged) return;
+    try {
+      const { properties, geometry } = event;
+      const zoom = properties?.zoomLevel ?? 13;
+      const visibleBounds = properties?.visibleBounds;
+      if (visibleBounds && visibleBounds.length === 2) {
+        // visibleBounds = [[neLng, neLat], [swLng, swLat]]
+        const [ne, sw] = visibleBounds;
+        onCameraChanged({
+          minLng: sw[0], minLat: sw[1],
+          maxLng: ne[0], maxLat: ne[1],
+        }, zoom);
+      }
+    } catch {}
+  }, [onCameraChanged]);
 
   // Compute camera bounds (includes searching driver positions)
   const bounds = useMemo(() => {
@@ -257,13 +321,15 @@ function RideMapViewInner({
   }
 
   return (
-    <View style={{ height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
+    <View style={fullscreen ? { flex: 1 } : { height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
         styleURL={MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        scaleBarEnabled={false}
+        onRegionDidChange={handleCameraChanged}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to Havana */}
         <MapboxGL.Camera
@@ -293,6 +359,62 @@ function RideMapViewInner({
                 }
               : {})}
         />
+
+        {/* POI dots + labels (rendered below routes and markers) */}
+        {poiGeoJSON && (
+          <MapboxGL.ShapeSource id="pois" shape={poiGeoJSON} cluster clusterMaxZoomLevel={14} clusterRadius={40}>
+            {/* Cluster circles — smaller */}
+            <MapboxGL.CircleLayer
+              id="poi-clusters"
+              filter={['has', 'point_count']}
+              style={{
+                circleColor: ['step', ['get', 'point_count'], '#51bbd6', 50, '#f1f075', 200, '#f28cb1'],
+                circleRadius: ['step', ['get', 'point_count'], 12, 50, 16, 200, 20],
+                circleStrokeWidth: 1.5,
+                circleStrokeColor: 'rgba(255,255,255,0.6)',
+              }}
+            />
+            {/* Cluster count labels */}
+            <MapboxGL.SymbolLayer
+              id="poi-cluster-count"
+              filter={['has', 'point_count']}
+              style={{
+                textField: ['get', 'point_count_abbreviated'],
+                textSize: 10,
+                textColor: '#333',
+              }}
+            />
+            {/* Individual POI dots — smaller */}
+            <MapboxGL.CircleLayer
+              id="poi-unclustered"
+              filter={['!', ['has', 'point_count']]}
+              style={{
+                circleColor: ['get', 'color'],
+                circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 7],
+                circleStrokeWidth: 1,
+                circleStrokeColor: 'rgba(255,255,255,0.9)',
+              }}
+            />
+            {/* POI name labels — smaller */}
+            <MapboxGL.SymbolLayer
+              id="poi-labels"
+              filter={['!', ['has', 'point_count']]}
+              minZoomLevel={14}
+              style={{
+                textField: ['get', 'name'],
+                textSize: ['interpolate', ['linear'], ['zoom'], 14, 8, 16, 10],
+                textOffset: [0, 1.0],
+                textAnchor: 'top',
+                textMaxWidth: 7,
+                textOptional: true,
+                textAllowOverlap: false,
+                textColor: '#555',
+                textHaloColor: 'rgba(255,255,255,0.95)',
+                textHaloWidth: 1,
+              }}
+            />
+          </MapboxGL.ShapeSource>
+        )}
 
         {/* Driver-to-pickup route (light blue dashed) */}
         {driverRouteGeoJSON && (

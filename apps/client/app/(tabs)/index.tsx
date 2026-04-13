@@ -26,6 +26,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
+import { useViewportPois } from '@/hooks/useViewportPois';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
@@ -2056,6 +2057,15 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
   mensajeria: { label: 'Envío', desc: 'Delivery', maxPax: 0, slug: 'mensajeria' },
 };
 
+// Vehicle selection icons (used in service cards)
+const VEHICLE_ICONS: Record<string, any> = {
+  moto_standard: require('../../assets/vehicles/selection/moto.png'),
+  triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  auto_confort: require('../../assets/vehicles/selection/confort.png'),
+  mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
+};
+
 // ── Selecting View ─────────────────────────────────────────
 
 function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | null) => void }) {
@@ -2094,11 +2104,13 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const insets = useSafeAreaInsets();
   const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
 
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
 
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
+  const [searchingField, setSearchingField] = useState<'pickup' | 'dropoff' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickupSuggestion, setPickupSuggestion] = useState<{
@@ -2212,6 +2224,13 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     }
   }, [prefetchedPickup]);
 
+  // Auto-open destination search when entering selecting flow without dropoff
+  useEffect(() => {
+    if (!draft.dropoff) {
+      setSearchingField('dropoff');
+    }
+  }, []); // Only on mount
+
   // Auto-fetch estimates when both pickup and dropoff are set (web-like flow)
   useEffect(() => {
     if (draft.pickup?.location && draft.dropoff?.location && !isFareEstimating) {
@@ -2234,45 +2253,124 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     <View style={{ flex: 1 }}>
       {/* Fullscreen map with route */}
       <RideMapView
+        fullscreen
         pickupLocation={draft.pickup?.location ?? null}
         dropoffLocation={draft.dropoff?.location ?? null}
         routeCoordinates={routeCoordinates ?? null}
         nearbyVehicles={[]}
         waypointLocations={draft.waypoints.filter((wp) => wp.location).map((wp) => wp.location!)}
+        pois={pois}
+        onCameraChanged={onPoiCameraChanged}
       />
 
-      {/* Floating top bar: [X] + addresses */}
-      <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Pressable onPress={() => setFlowStep('idle')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
-          <Ionicons name="close" size={22} color="#333" />
-        </Pressable>
-        <Pressable onPress={() => setMapPickerMode('dropoff')} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
-          <Text variant="caption" color="secondary" numberOfLines={1}>{draft.pickup?.address ? `📍 ${draft.pickup.address}` : t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}</Text>
-          <Text variant="body" numberOfLines={1} style={{ marginTop: 2 }}>{draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}</Text>
-        </Pressable>
-      </View>
+      {/* Floating top bar: [X] + compact address summary */}
+      {!searchingField && (
+        <View style={{ position: 'absolute', top: insets.top + 8, left: 12, right: 12, zIndex: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          {/* Close button */}
+          <Pressable onPress={() => setFlowStep('idle')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 4 }}>
+            <Ionicons name="close" size={22} color="#333" />
+          </Pressable>
 
-      {/* Bottom panel — services, payment, request */}
-      {(draft.pickup && draft.dropoff) && (
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '55%' }}>
-          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 12 }} />
+          {/* Two compact address rows — tap to open fullscreen search */}
+          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, overflow: 'hidden' }}>
+            <Pressable onPress={() => setSearchingField('pickup')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.pickup?.address ? '#1a1a1a' : '#999' }}>
+                {draft.pickup?.address || t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color="#aaa" />
+            </Pressable>
+            <View style={{ height: 1, backgroundColor: '#f0f0f0', marginHorizontal: 12 }} />
+            <Pressable onPress={() => setSearchingField('dropoff')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF4D00', marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.dropoff?.address ? '#1a1a1a' : '#999' }}>
+                {draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color="#aaa" />
+            </Pressable>
+          </View>
+
+          {/* Swap button (visible when both addresses set) */}
+          {draft.pickup && draft.dropoff && (
+            <Pressable onPress={() => { triggerHaptic('light'); swapPickupDropoff(); }} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, marginTop: 18 }}>
+              <Ionicons name="swap-vertical" size={18} color="#666" />
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* Fullscreen search panel — opens when user taps an address input */}
+      {searchingField && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, paddingTop: insets.top + 8, paddingHorizontal: 16 }}>
+          {/* Header: back arrow + field label */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Pressable onPress={() => setSearchingField(null)} style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </Pressable>
+            <Text variant="h4" style={{ flex: 1, marginLeft: 8 }}>
+              {searchingField === 'pickup'
+                ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
+                : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+            </Text>
+          </View>
+
+          {/* AddressSearchInput — always in search mode, auto-expanded with suggestions */}
+          <AddressSearchInput
+            autoExpand
+            placeholder={searchingField === 'pickup'
+              ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
+              : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+            onSelect={(address, location) => {
+              if (searchingField === 'pickup') {
+                setPickup(address, location);
+              } else {
+                setDropoff(address, location);
+              }
+              setSearchingField(null);
+            }}
+            savedLocations={savedLocations}
+            recentAddresses={recentAddresses}
+            predictions={searchingField === 'dropoff' ? predictions : undefined}
+            showUseMyLocation={searchingField === 'pickup'}
+            onPickOnMap={() => {
+              setSearchingField(null);
+              setMapPickerMode(searchingField);
+            }}
+          />
+        </View>
+      )}
+
+      {/* Bottom panel — services, payment, request (hidden during search) */}
+      {!searchingField && (draft.pickup && draft.dropoff) && (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 10, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 10 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((slug) => {
-                const est = allFareEstimates?.[slug];
-                const isSelected = draft.serviceType === slug;
-                return (
-                  <Pressable key={slug} onPress={() => setServiceType(slug)} style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? '#FF4D00' : '#e5e5e5', backgroundColor: isSelected ? '#FFF5F0' : '#fff', marginRight: 8, minWidth: 120, alignItems: 'center' }}>
-                    <Text variant="bodySmall" className="font-semibold">{t(`service_type.${slug}` as const)}</Text>
-                    {est ? (<Text variant="body" color="accent" className="font-bold mt-1">{formatCUP(est.estimated_fare_cup)}</Text>) : isFareEstimating ? (<Text variant="caption" color="tertiary" className="mt-1">...</Text>) : null}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            {/* Service cards — vertical stack like web */}
+            {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'] as const).map((slug) => {
+              const meta = SERVICE_META[slug];
+              const est = allFareEstimates?.[slug];
+              const isSelected = draft.serviceType === slug;
+              return (
+                <Pressable key={slug} onPress={() => setServiceType(slug)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? '#FF4D00' : '#e5e5e5', backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
+                  <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 10 }} resizeMode="contain" />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
+                    <Text variant="caption" color="tertiary">{meta?.desc}</Text>
+                  </View>
+                  {est ? (
+                    <Text variant="body" style={{ fontWeight: '700', color: isSelected ? '#FF4D00' : '#1a1a1a' }}>{formatCUP(est.estimated_fare_cup)}</Text>
+                  ) : isFareEstimating ? (
+                    <ActivityIndicator size="small" color="#ccc" />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+
+            {/* Payment method selector */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 8 }}>
               {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
-                <Pressable key={method} onPress={() => setPaymentMethod(method)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: draft.paymentMethod === method ? '#FF4D00' : '#f5f5f5', alignItems: 'center' }}>
-                  <Text variant="caption" style={{ color: draft.paymentMethod === method ? '#fff' : '#666' }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? '#FF4D00' : '#e5e5e5', backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
+                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? '#FF4D00' : '#666' }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
                 </Pressable>
               ))}
             </View>

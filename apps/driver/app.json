@@ -70,7 +70,8 @@
         {
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
         }
-      ]
+      ],
+      "expo-splash-screen"
     ],
     "extra": {
       "router": {

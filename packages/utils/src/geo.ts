@@ -614,13 +614,15 @@ export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
+  console.log('[fetchRoute] called:', JSON.stringify({ from, to }));
   // Check cache first
   const key = routeCacheKey(from, to);
   const cached = routeCache.get(key);
-  if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) return cached.result;
+  if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) { console.log('[fetchRoute] cache hit'); return cached.result; }
 
   // Try Mapbox first (traffic-aware, better accuracy)
   const mapboxResult = await fetchRouteMapbox(from, to);
+  console.log('[fetchRoute] mapbox result:', mapboxResult ? `${mapboxResult.coordinates.length} coords` : 'null');
   if (mapboxResult) {
     if (routeCache.size >= ROUTE_CACHE_MAX) {
       const oldest = routeCache.keys().next().value;
@@ -632,6 +634,7 @@ export async function fetchRoute(
 
   // Fallback to OSRM (free, no auth)
   const osrmResult = await fetchRouteOSRM(from, to);
+  console.log('[fetchRoute] OSRM result:', osrmResult ? `${osrmResult.coordinates.length} coords` : 'null');
   if (osrmResult) {
     if (routeCache.size >= ROUTE_CACHE_MAX) {
       const oldest = routeCache.keys().next().value;
@@ -656,19 +659,24 @@ export async function fetchRouteMapbox(
         process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
         process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
       )) || '';
-    if (!token) return null;
+    if (!token) { console.log('[fetchRouteMapbox] no token'); return null; }
 
     const url =
       `https://api.mapbox.com/directions/v5/mapbox/driving/` +
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson&access_token=${token}`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
+    console.log('[fetchRouteMapbox] fetching URL...');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    console.log('[fetchRouteMapbox] status:', res.status);
+    if (!res.ok) { const body = await res.text(); console.log('[fetchRouteMapbox] error body:', body.slice(0, 200)); return null; }
 
     const data = await res.json();
     const route = data?.routes?.[0];
-    if (!route) return null;
+    if (!route) { console.log('[fetchRouteMapbox] no route in response, code:', data?.code); return null; }
 
     const coordinates: [number, number][] = route.geometry.coordinates.map(
       (c: [number, number]) => [c[1], c[0]] as [number, number],
@@ -679,7 +687,8 @@ export async function fetchRouteMapbox(
       distance_m: Math.round(route.distance),
       duration_s: Math.round(route.duration),
     };
-  } catch {
+  } catch (err) {
+    console.log('[fetchRouteMapbox] exception:', String(err));
     return null;
   }
 }
@@ -697,12 +706,17 @@ export async function fetchRouteOSRM(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
+    console.log('[fetchRouteOSRM] fetching...');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    console.log('[fetchRouteOSRM] status:', res.status);
+    if (!res.ok) { const body = await res.text(); console.log('[fetchRouteOSRM] error:', body.slice(0, 200)); return null; }
 
     const data = await res.json();
     const route = data?.routes?.[0];
-    if (!route) return null;
+    if (!route) { console.log('[fetchRouteOSRM] no route, code:', data?.code); return null; }
 
     const coordinates: [number, number][] = route.geometry.coordinates.map(
       (c: [number, number]) => [c[1], c[0]] as [number, number],
@@ -713,7 +727,8 @@ export async function fetchRouteOSRM(
       distance_m: route.distance,
       duration_s: route.duration,
     };
-  } catch {
+  } catch (err) {
+    console.log('[fetchRouteOSRM] exception:', String(err));
     return null;
   }
 }
@@ -734,7 +749,10 @@ export async function fetchMultiStopRoute(
   const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const _ctrl = new AbortController();
+    const _t = setTimeout(() => _ctrl.abort(), 4000);
+    const res = await fetch(url, { signal: _ctrl.signal });
+    clearTimeout(_t);
     if (!res.ok) return null;
     const data = (await res.json()) as {
       routes?: Array<{
@@ -800,7 +818,10 @@ async function fetchETAsMapbox(
       `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}` +
       `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance&access_token=${token}`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const _ctrl2 = new AbortController();
+    const _t2 = setTimeout(() => _ctrl2.abort(), 10000);
+    const res = await fetch(url, { signal: _ctrl2.signal });
+    clearTimeout(_t2);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -831,7 +852,10 @@ async function fetchETAsOSRM(
       `https://router.project-osrm.org/table/v1/driving/${coords}` +
       `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const _ctrl3 = new AbortController();
+    const _t3 = setTimeout(() => _ctrl3.abort(), 10000);
+    const res = await fetch(url, { signal: _ctrl3.signal });
+    clearTimeout(_t3);
     if (!res.ok) return origins.map(() => null);
 
     const data = await res.json();

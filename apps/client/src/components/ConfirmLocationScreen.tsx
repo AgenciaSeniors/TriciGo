@@ -3,7 +3,7 @@ import { View, Pressable, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode } from '@tricigo/utils';
+import { reverseGeocode, MAP_STYLE_LIGHT } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -136,7 +136,7 @@ export function ConfirmLocationScreen({
       {/* Map */}
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL="mapbox://styles/mapbox/streets-v12"
+        styleURL={MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
