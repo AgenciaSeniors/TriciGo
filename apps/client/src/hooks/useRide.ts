@@ -134,7 +134,8 @@ export function useRideActions() {
         !Number.isFinite(draft.pickup?.location?.longitude) ||
         !Number.isFinite(draft.dropoff?.location?.latitude) ||
         !Number.isFinite(draft.dropoff?.location?.longitude)) {
-      return; // Skip estimation with invalid coords
+      Toast.show({ type: 'error', text1: 'Ubicación inválida', text2: 'Selecciona la recogida y destino de nuevo' });
+      return;
     }
 
     // Bug 8: Validate pickup ≠ dropoff (min 200m)

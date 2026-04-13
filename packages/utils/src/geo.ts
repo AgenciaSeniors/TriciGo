@@ -1525,6 +1525,11 @@ export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
+  // Validate coordinates are in Cuba
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+      lat < 19.8 || lat > 23.5 || lng < -85.0 || lng > -74.0) {
+    return null;
+  }
   try {
     // 1. Run Supabase cross-streets + Mapbox metadata + POI lookup in parallel
     //    Mapbox: ~50-100ms | Supabase cross-streets: ~5-10ms | Supabase POI: ~5-10ms

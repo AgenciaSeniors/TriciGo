@@ -108,7 +108,7 @@ export function ConfirmLocationScreen({
   );
 
   const handleConfirm = () => {
-    const finalAddress = address || `${centerRef.current.latitude.toFixed(5)}, ${centerRef.current.longitude.toFixed(5)}`;
+    const finalAddress = address || 'Ubicación seleccionada en el mapa';
     onConfirm(finalAddress, centerRef.current);
   };
 

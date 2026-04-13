@@ -1566,6 +1566,7 @@ function NativeHomeScreen() {
 function IdleView() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
+  const draft = useRideStore((s) => s.draft);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setPickup = useRideStore((s) => s.setPickup);
@@ -1573,6 +1574,7 @@ function IdleView() {
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const { recentAddresses } = useRecentAddresses();
@@ -1599,8 +1601,14 @@ function IdleView() {
         if (!pos || cancelled) return;
         const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
         const address = await reverseGeocode(loc.latitude, loc.longitude);
-        if (!cancelled && address) {
-          setPrefetchedPickup({ address, location: loc });
+        if (!cancelled) {
+          setUserCenter([pos.coords.longitude, pos.coords.latitude]);
+          if (address) {
+            setPrefetchedPickup({ address, location: loc });
+            if (!draft.pickup) {
+              setPickup(address, loc);
+            }
+          }
         }
       } catch {
         // Silently ignore — don't crash
@@ -1734,8 +1742,8 @@ function IdleView() {
           >
             <Mapbox.Camera
               defaultSettings={{
-                centerCoordinate: [-82.3666, 23.1136],
-                zoomLevel: 14,
+                centerCoordinate: userCenter ?? [-82.3666, 23.1136],
+                zoomLevel: userCenter ? 15 : 14,
               }}
               animationMode="flyTo"
             />
