@@ -1490,13 +1490,35 @@ function NativeHomeScreen() {
     });
   }, []);
 
-  // For non-idle flow steps, use the original Screen wrapper
+  // SelectingView renders fullscreen (no scroll) for map background
+  if (flowStep === 'selecting') {
+    return (
+      <>
+        <SelectingView setMapPickerMode={setMapPickerMode} />
+        {mapPickerMode && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+            <ConfirmLocationScreen
+              mode={mapPickerMode}
+              initialLocation={mapPickerMode === 'pickup' ? draft.pickup?.location ?? null : draft.dropoff?.location ?? null}
+              onConfirm={(address, location) => {
+                if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
+                if (mapPickerMode === 'pickup') { setPickup(address, location); } else { setDropoff(address, location); }
+                setMapPickerMode(null);
+              }}
+              onClose={() => setMapPickerMode(null)}
+            />
+          </View>
+        )}
+      </>
+    );
+  }
+
+  // Other non-idle flow steps use Screen with scroll
   if (flowStep !== 'idle') {
     return (
       <>
         <Screen bg="white" padded scroll>
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
-            {flowStep === 'selecting' && <SelectingView setMapPickerMode={setMapPickerMode} />}
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
             {flowStep === 'active' && <RideActiveView />}
@@ -2070,6 +2092,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const { predictions } = useDestinationPredictions();
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
+  const insets = useSafeAreaInsets();
+  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
 
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
@@ -2207,828 +2231,60 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const minScheduleDate = new Date(Date.now() + 30 * 60 * 1000); // at least 30 min from now
 
   return (
-    <View className="pt-4">
-      <ScreenHeader title={t('ride.select_route', { defaultValue: 'Seleccionar ruta' })} onBack={() => setFlowStep('idle')} />
-
-      {/* Pickup — address search with presets */}
-      <Text variant="label" className="mb-1">
-        {t('ride.pickup')}
-      </Text>
-      <AddressSearchInput
-        placeholder={t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
-        selectedAddress={draft.pickup?.address ?? null}
-        onSelect={(address, location) => {
-          if (!isValidCoordinate(location.latitude, location.longitude)) {
-            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-            return;
-          }
-          setPickup(address, location);
-        }}
-        savedLocations={savedLocations}
-        recentAddresses={recentAddresses}
-        showUseMyLocation
-        onPickOnMap={() => setMapPickerMode('pickup')}
+    <View style={{ flex: 1 }}>
+      {/* Fullscreen map with route */}
+      <RideMapView
+        pickupLocation={draft.pickup?.location ?? null}
+        dropoffLocation={draft.dropoff?.location ?? null}
+        routeCoordinates={routeCoordinates ?? null}
+        nearbyVehicles={[]}
+        waypointLocations={draft.waypoints.filter((wp) => wp.location).map((wp) => wp.location!)}
       />
 
-      {/* Predictive pickup suggestion banner */}
-      {pickupSuggestion && !suggestionDismissed && (
-        <View className="bg-primary-50 border border-primary-200 rounded-xl px-4 py-3 mt-2">
-          <View className="flex-row items-start">
-            <Ionicons name="location" size={18} color={colors.brand.orange} style={{ marginTop: 2 }} />
-            <View className="flex-1 ml-2">
-              <Text variant="bodySmall" className="text-neutral-800">
-                {t('ride.pickup_suggestion', { defaultValue: 'Punto de recogida sugerido' })}:{' '}
-                <Text variant="bodySmall" className="font-semibold">{pickupSuggestion.address}</Text>
-              </Text>
-              <Text variant="caption" color="secondary" className="mt-0.5">
-                {t('ride.pickup_suggestion_reason', { defaultValue: 'Los conductores te encontraran mas facilmente aqui' })}
-              </Text>
-              <View className="flex-row gap-3 mt-2">
-                <Pressable
-                  className="bg-primary-500 rounded-lg px-3 py-1.5"
-                  onPress={() => {
-                    setPickup(pickupSuggestion.address, {
-                      latitude: pickupSuggestion.latitude,
-                      longitude: pickupSuggestion.longitude,
-                    });
-                    setPickupSuggestion(null);
-                    triggerSelection();
-                  }}
-                >
-                  <Text variant="caption" color="inverse" className="font-semibold">
-                    {t('ride.use_suggested', { defaultValue: 'Usar punto sugerido' })}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  className="px-3 py-1.5"
-                  onPress={() => setSuggestionDismissed(true)}
-                >
-                  <Text variant="caption" color="secondary">
-                    {t('ride.keep_original', { defaultValue: 'Mantener original' })}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Nearest driver ETA indicator */}
-      {nearestDriverETA != null && draft.pickup && (
-        <View className="flex-row items-center px-3 py-2 mt-1 rounded-lg bg-green-50 border border-green-200">
-          <Ionicons name="car-outline" size={16} color="#16a34a" />
-          <Text variant="caption" style={{ color: '#16a34a', marginLeft: 6 }}>
-            {t('ride.nearest_driver_eta', {
-              defaultValue: 'Conductor más cercano a ~{{minutes}} min',
-              minutes: nearestDriverETA,
-            })}
-          </Text>
-        </View>
-      )}
-
-      {/* Swap button — only visible when both pickup and dropoff are set */}
-      {draft.pickup && draft.dropoff ? (
-        <View className="items-center py-1">
-          <Pressable
-            onPress={() => { swapPickupDropoff(); triggerSelection(); }}
-            className="bg-neutral-100 rounded-full p-2"
-            hitSlop={8}
-            accessibilityLabel={t('ride.swap_locations', { defaultValue: 'Intercambiar origen y destino' })}
-          >
-            <Ionicons name="swap-vertical" size={20} color={colors.brand.orange} />
-          </Pressable>
-        </View>
-      ) : (
-        <View className="h-2" />
-      )}
-
-      {/* Dropoff — address search with presets */}
-      <Text variant="label" className="mb-1">
-        {t('ride.dropoff')}
-      </Text>
-      <AddressSearchInput
-        placeholder={t('ride.enter_dropoff', { defaultValue: 'Destino' })}
-        selectedAddress={draft.dropoff?.address ?? null}
-        onSelect={(address, location) => {
-          if (!isValidCoordinate(location.latitude, location.longitude)) {
-            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-            return;
-          }
-          setDropoff(address, location);
-        }}
-        savedLocations={savedLocations}
-        recentAddresses={recentAddresses}
-        predictions={predictions}
-        onPickOnMap={() => setMapPickerMode('dropoff')}
-      />
-
-      <View className="h-4" />
-
-      {/* Service type — vertical list cards matching web design */}
-      <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
-      <View className="mb-4 gap-2" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as ServiceTypeSlug[]).map((slug) => {
-          const meta = SERVICE_META[slug];
-          const isSelected = draft.serviceType === slug || (slug === 'triciclo_basico' && draft.serviceType === 'triciclo_cargo');
-          const est = allFareEstimates?.[slug];
-          const vt = serviceTypeToVehicleType(slug);
-          const pickupEta = vt ? etaByVehicleType[vt] : null;
-
-          return (
-            <Pressable
-              key={slug}
-              onPress={() => { setServiceType(slug); triggerSelection(); }}
-              className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
-                isSelected
-                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
-              }`}
-              accessibilityRole="radio"
-              accessibilityLabel={meta?.label ?? slug}
-              accessibilityState={{ selected: isSelected }}
-            >
-              <View className="flex-row items-center flex-1">
-                <Image
-                  source={vehicleSelectionImages[slug]}
-                  style={{ width: 40, height: 40 }}
-                  resizeMode="contain"
-                />
-                <View className="ml-3 flex-1">
-                  <Text variant="body" className="font-semibold">
-                    {meta?.label ?? slug}
-                  </Text>
-                  <View className="flex-row items-center mt-0.5">
-                    <Text variant="caption" color="tertiary">
-                      {slug === 'mensajeria' ? t('ride.delivery_label', { defaultValue: 'Según vehículo' }) : meta?.desc}
-                    </Text>
-                    {pickupEta != null && (
-                      <Text variant="caption" style={{ color: '#16a34a', fontWeight: '600', marginLeft: 6 }}>
-                        · {pickupEta} min
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <View className="items-end">
-                {est ? (
-                  <>
-                    <Text
-                      variant="body"
-                      className="font-bold"
-                      color={isSelected ? 'accent' : 'primary'}
-                    >
-                      {formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}
-                    </Text>
-                    {est.estimated_duration_s != null && est.estimated_duration_s > 0 && (
-                      <Text variant="caption" color="tertiary">
-                        ~{Math.ceil(est.estimated_duration_s / 60)} min
-                      </Text>
-                    )}
-                  </>
-                ) : isFareEstimating ? (
-                  <View style={{ width: 60, height: 14, borderRadius: 4, backgroundColor: '#e5e7eb' }} />
-                ) : (
-                  <Text variant="caption" color="tertiary">—</Text>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
+      {/* Floating top bar: [X] + addresses */}
+      <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Pressable onPress={() => setFlowStep('idle')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+          <Ionicons name="close" size={22} color="#333" />
+        </Pressable>
+        <Pressable onPress={() => setMapPickerMode('dropoff')} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+          <Text variant="caption" color="secondary" numberOfLines={1}>{draft.pickup?.address ? `📍 ${draft.pickup.address}` : t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}</Text>
+          <Text variant="body" numberOfLines={1} style={{ marginTop: 2 }}>{draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}</Text>
+        </Pressable>
       </View>
 
-      {/* Triciclo mode toggle: Pasajero / Cargo */}
-      {(draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_cargo') && (
-        <View className="flex-row gap-2 mb-4 bg-neutral-100 rounded-xl p-1">
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_basico' ? 'bg-white shadow-sm' : ''}`}
-            onPress={() => setServiceType('triciclo_basico')}
-          >
-            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_basico' ? 'font-semibold' : 'text-neutral-500'}>
-              {t('ride.mode_passenger', { defaultValue: 'Pasajero' })}
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_cargo' ? 'bg-white shadow-sm' : ''}`}
-            onPress={() => setServiceType('triciclo_cargo')}
-          >
-            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_cargo' ? 'font-semibold' : 'text-neutral-500'}>
-              {t('ride.mode_cargo', { defaultValue: 'Mercancia' })}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Cargo info note */}
-      {draft.serviceType === 'triciclo_cargo' && (
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
-            <Text variant="label" className="ml-2">
-              {t('ride.cargo_title', { defaultValue: 'Servicio de carga' })}
-            </Text>
-          </View>
-          <Text variant="caption" color="secondary">
-            {t('ride.cargo_description', { defaultValue: 'Renta un triciclo para transportar mercancia. Se cobra por hora desde que llega el conductor. Minimo 1 hora.' })}
-          </Text>
-        </Card>
-      )}
-
-      {/* Delivery fields (only when mensajeria is selected) */}
-      {draft.serviceType === 'mensajeria' && (
-        <Card variant="outlined" padding="md" className="mb-4">
-          <Text variant="label" className="mb-3">
-            {t('ride.delivery_details', { defaultValue: 'Detalles del envio' })}
-          </Text>
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
-            value={draft.delivery.packageDescription}
-            onChangeText={(v) => setDeliveryField('packageDescription', v)}
-            className="mb-3"
-          />
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.package_category', { defaultValue: 'Categoría' })}
-            </Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-            <View className="flex-row gap-2">
-              {PACKAGE_CATEGORIES.map((cat) => {
-                const emoji = { documentos: '\u{1F4C4}', comida: '\u{1F354}', paquete_pequeno: '\u{1F4E6}', paquete_grande: '\u{1F4EB}', fragil: '\u26A0\uFE0F' }[cat] ?? '';
+      {/* Bottom panel — services, payment, request */}
+      {(draft.pickup && draft.dropoff) && (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '55%' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 12 }} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((slug) => {
+                const est = allFareEstimates?.[slug];
+                const isSelected = draft.serviceType === slug;
                 return (
-                  <Pressable
-                    key={cat}
-                    className={`px-3 py-1.5 rounded-full border ${
-                      draft.delivery.packageCategory === cat
-                        ? 'bg-primary-500 border-primary-500'
-                        : 'bg-neutral-50 border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700'
-                    }`}
-                    onPress={() => setDeliveryField('packageCategory', cat)}
-                  >
-                    <Text
-                      variant="caption"
-                      color={draft.delivery.packageCategory === cat ? 'inverse' : 'secondary'}
-                      className="font-medium"
-                    >
-                      {emoji} {t(`ride.package_cat_${cat}` as const, { defaultValue: cat.replace('_', ' ') })}
-                    </Text>
+                  <Pressable key={slug} onPress={() => setServiceType(slug)} style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? '#FF4D00' : '#e5e5e5', backgroundColor: isSelected ? '#FFF5F0' : '#fff', marginRight: 8, minWidth: 120, alignItems: 'center' }}>
+                    <Text variant="bodySmall" className="font-semibold">{t(`service_type.${slug}` as const)}</Text>
+                    {est ? (<Text variant="body" color="accent" className="font-bold mt-1">{formatCUP(est.estimated_fare_cup)}</Text>) : isFareEstimating ? (<Text variant="caption" color="tertiary" className="mt-1">...</Text>) : null}
                   </Pressable>
                 );
               })}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
+                <Pressable key={method} onPress={() => setPaymentMethod(method)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: draft.paymentMethod === method ? '#FF4D00' : '#f5f5f5', alignItems: 'center' }}>
+                  <Text variant="caption" style={{ color: draft.paymentMethod === method ? '#fff' : '#666' }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                </Pressable>
+              ))}
             </View>
           </ScrollView>
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
-            value={draft.delivery.recipientName}
-            onChangeText={(v) => setDeliveryField('recipientName', v)}
-            className="mb-3"
-          />
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
-            value={draft.delivery.recipientPhone}
-            onChangeText={(v) => setDeliveryField('recipientPhone', v)}
-            keyboardType="phone-pad"
-            className="mb-3"
-          />
-          {/* Delivery vehicle selector */}
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.delivery_vehicle', { defaultValue: 'Vehículo para el envío' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <View className="flex-row gap-2 mb-3 flex-wrap">
-            {([
-              { type: 'moto' as const, label: 'Moto', slug: 'moto_standard' as ServiceTypeSlug },
-              { type: 'triciclo' as const, label: 'Triciclo', slug: 'triciclo_basico' as ServiceTypeSlug },
-              { type: 'auto' as const, label: 'Auto', slug: 'auto_standard' as ServiceTypeSlug },
-            ]).map((v) => {
-              const isVSelected = draft.delivery.deliveryVehicleType === v.type;
-              const vEst = allFareEstimates?.[v.slug];
-              return (
-                <Pressable
-                  key={v.type}
-                  className={`flex-row items-center px-3 py-2 rounded-xl border ${
-                    isVSelected
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800'
-                  }`}
-                  onPress={() => setDeliveryField('deliveryVehicleType', v.type)}
-                >
-                  <Image
-                    source={vehicleSelectionImages[v.slug]}
-                    style={{ width: 22, height: 22, marginRight: 6 }}
-                    resizeMode="contain"
-                  />
-                  <Text
-                    variant="caption"
-                    color={isVSelected ? 'accent' : 'secondary'}
-                    className="font-semibold"
-                  >
-                    {v.label}
-                  </Text>
-                  {vEst && (
-                    <Text variant="caption" color="tertiary" className="ml-1" style={{ fontSize: 10 }}>
-                      {formatFare(vEst.estimated_fare_cup, vEst.estimated_fare_trc)}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View className="flex-row gap-3">
-            <View className="flex-1">
-              <View className="mb-1">
-                <Text variant="caption" color="secondary">
-                  {t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
-                  {' '}
-                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-                    ({t('home.optional', { defaultValue: 'opcional' })})
-                  </Text>
-                </Text>
-              </View>
-              <Input
-                placeholder={t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
-                value={draft.delivery.estimatedWeightKg}
-                onChangeText={(v) => setDeliveryField('estimatedWeightKg', v)}
-                keyboardType="numeric"
-              />
-            </View>
-            <View className="flex-1">
-              <View className="mb-1">
-                <Text variant="caption" color="secondary">
-                  {t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
-                  {' '}
-                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-                    ({t('home.optional', { defaultValue: 'opcional' })})
-                  </Text>
-                </Text>
-              </View>
-              <Input
-                placeholder={t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
-                value={draft.delivery.specialInstructions}
-                onChangeText={(v) => setDeliveryField('specialInstructions', v)}
-              />
-            </View>
-          </View>
-
-          {/* Client accompanies toggle */}
-          <Pressable
-            className={`flex-row items-center mt-3 px-4 py-3 rounded-xl border ${
-              draft.delivery.clientAccompanies
-                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                : 'border-neutral-200 dark:border-neutral-700'
-            }`}
-            onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)}
-          >
-            <View
-              style={{
-                width: 40, height: 22, borderRadius: 11,
-                backgroundColor: draft.delivery.clientAccompanies ? colors.brand.orange : '#ccc',
-                justifyContent: 'center',
-              }}
-            >
-              <View
-                style={{
-                  width: 18, height: 18, borderRadius: 9,
-                  backgroundColor: '#fff',
-                  marginLeft: draft.delivery.clientAccompanies ? 20 : 2,
-                }}
-              />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text variant="bodySmall" className="font-semibold">
-                {t('ride.client_accompanies', { defaultValue: 'Voy con el envío' })}
-              </Text>
-              <Text variant="caption" color="tertiary">
-                {t('ride.client_accompanies_desc', { defaultValue: 'Acompaña tu paquete sin costo adicional' })}
-              </Text>
-            </View>
-          </Pressable>
-        </Card>
+          <Button title={selectedEstimate ? `Pedir ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} className="mt-2" />
+        </View>
       )}
-
-      {/* Payment method */}
-      {!draft.corporateAccountId && (
-        <>
-          <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
-          <View className="flex-row gap-3 mb-2" accessibilityRole="radiogroup">
-            {(['cash', 'tricicoin', 'mixed'] as const).map((pm) => (
-              <Pressable
-                key={pm}
-                className={`flex-1 py-3 rounded-xl items-center ${
-                  draft.paymentMethod === pm ? 'bg-primary-500' : 'bg-neutral-100'
-                }`}
-                onPress={() => handlePaymentMethodChange(pm)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: draft.paymentMethod === pm }}
-              >
-                <Text
-                  variant="caption"
-                  color={draft.paymentMethod === pm ? 'inverse' : 'secondary'}
-                  className="text-center"
-                >
-                  {pm === 'mixed' ? t('payment.mixed', { defaultValue: 'Mixto' }) : t(`payment.${pm}` as const)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {/* Mixed payment ratio selector */}
-          {draft.paymentMethod === 'mixed' && selectedEstimate && (
-            <View className="mb-4 p-3 bg-neutral-50 rounded-xl">
-              <Text variant="caption" color="secondary" className="mb-2">
-                {t('payment.wallet_percentage', { defaultValue: 'Porcentaje desde wallet' })}
-              </Text>
-              <View className="flex-row gap-2 mb-2">
-                {[0.25, 0.5, 0.75].map((ratio) => {
-                  const maxRatio = walletBalance > 0 && selectedEstimate.estimated_fare_cup > 0
-                    ? Math.min(1, walletBalance / selectedEstimate.estimated_fare_cup)
-                    : 0;
-                  const disabled = ratio > maxRatio;
-                  const isSelected = Math.abs(draft.walletRatio - ratio) < 0.01;
-                  return (
-                    <Pressable
-                      key={ratio}
-                      className={`flex-1 py-2 rounded-lg items-center ${
-                        isSelected ? 'bg-primary-500' : disabled ? 'bg-neutral-200' : 'bg-white border border-neutral-200'
-                      }`}
-                      onPress={() => !disabled && setWalletRatio(ratio)}
-                      disabled={disabled}
-                      accessibilityLabel={`${Math.round(ratio * 100)}% wallet`}
-                    >
-                      <Text
-                        variant="caption"
-                        color={isSelected ? 'inverse' : disabled ? 'tertiary' : 'primary'}
-                        className="font-semibold"
-                      >
-                        {Math.round(ratio * 100)}%
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {(() => {
-                const totalFare = selectedEstimate.estimated_fare_cup;
-                const walletPart = Math.round(totalFare * draft.walletRatio);
-                const cashPart = totalFare - walletPart;
-                return (
-                  <Text variant="caption" color="secondary" className="text-center">
-                    {`₧${walletPart.toLocaleString()} wallet + ₧${cashPart.toLocaleString()} efectivo = ₧${totalFare.toLocaleString()} total`}
-                  </Text>
-                );
-              })()}
-            </View>
-          )}
-        </>
-      )}
-
-      {/* UX-1: Collapsible secondary options toggle */}
-      <Pressable
-        className="py-3 items-center"
-        onPress={() => setSelectingDetailsExpanded(!selectingDetailsExpanded)}
-      >
-        <Text variant="bodySmall" color="accent" className="underline">
-          {selectingDetailsExpanded
-            ? t('home.fewer_options', { defaultValue: 'Menos opciones' })
-            : t('home.more_options', { defaultValue: 'Más opciones' })
-          }
-        </Text>
-      </Pressable>
-
-      {/* UX-1: Collapsible secondary options */}
-      {selectingDetailsExpanded && (
-        <>
-          {/* Waypoints */}
-          {draft.waypoints.map((wp, idx) => (
-            <View key={`waypoint-${idx}`}>
-              <View className="h-2" />
-              <View className="flex-row items-center">
-                <View className="flex-1">
-                  <Text variant="label" className="mb-1">
-                    {t('ride.stop_n', { n: idx + 1 })}
-                  </Text>
-                  <AddressSearchInput
-                    placeholder={t('ride.stop_n', { n: idx + 1 })}
-                    selectedAddress={wp.address || null}
-                    onSelect={(address, location) => {
-                      if (!isValidCoordinate(location.latitude, location.longitude)) {
-                        Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-                        return;
-                      }
-                      updateWaypoint(idx, address, location);
-                    }}
-                  />
-                </View>
-                <Pressable
-                  onPress={() => removeWaypoint(idx)}
-                  className="ml-2 mt-5 p-2"
-                  accessibilityRole="button"
-                  accessibilityLabel={t('ride.remove_stop', { defaultValue: `Remove stop ${idx + 1}`, n: idx + 1 })}
-                >
-                  <Ionicons name="close-circle" size={24} color={colors.error.DEFAULT} />
-                </Pressable>
-              </View>
-            </View>
-          ))}
-
-          {/* Add stop button */}
-          {draft.waypoints.length < 3 && (
-            <Pressable
-              onPress={addWaypoint}
-              className="flex-row items-center mt-2 mb-2 py-2"
-              accessibilityRole="button"
-              accessibilityLabel={t('ride.add_stop')}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={colors.brand.orange} />
-              <Text variant="bodySmall" color="accent" className="ml-2">
-                {t('ride.add_stop')}
-              </Text>
-            </Pressable>
-          )}
-
-          {/* Passenger count selector */}
-          {draft.serviceType !== 'triciclo_cargo' && draft.serviceType !== 'mensajeria' && (
-            (() => {
-              const maxP = draft.serviceType === 'moto_standard' ? 1
-                : (draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_premium') ? 8
-                : 4; // auto_standard, auto_confort
-              if (maxP <= 1) return null;
-              return (
-                <View className="mb-4">
-                  <Text variant="label" className="mb-2">
-                    {t('ride.passengers', { defaultValue: 'Pasajeros' })}
-                  </Text>
-                  <View className="flex-row gap-2">
-                    {Array.from({ length: maxP }, (_, i) => i + 1).map((n) => (
-                      <Pressable
-                        key={n}
-                        className={`w-10 h-10 rounded-lg items-center justify-center ${draft.passengerCount === n ? 'bg-primary-500' : 'bg-neutral-100'}`}
-                        onPress={() => setPassengerCount(n)}
-                      >
-                        <Text variant="bodySmall" className={draft.passengerCount === n ? 'text-white font-bold' : 'text-neutral-600'}>
-                          {n}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <Text variant="caption" color="tertiary" className="mt-2">
-                    {t('home.passenger_capacity_hint', { defaultValue: 'Capacidad: Moto 1, Triciclo 2-3, Auto 1-4' })}
-                  </Text>
-                </View>
-              );
-            })()
-          )}
-
-          {/* Corporate account toggle */}
-          {corporateAccounts.length > 0 && (
-            <View className="mb-4">
-              <Text variant="label" className="mb-2">
-                {t('corporate.riding_as_label', { defaultValue: 'Cobrar a' })}
-              </Text>
-              <View className="flex-row gap-3" accessibilityRole="radiogroup">
-                <Pressable
-                  className={`flex-1 py-3 rounded-xl items-center ${
-                    !draft.corporateAccountId ? 'bg-primary-500' : 'bg-neutral-100'
-                  }`}
-                  onPress={() => setCorporateAccount(null)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: !draft.corporateAccountId }}
-                >
-                  <Text
-                    variant="caption"
-                    color={!draft.corporateAccountId ? 'inverse' : 'secondary'}
-                  >
-                    {t('corporate.personal')}
-                  </Text>
-                </Pressable>
-                {corporateAccounts.map((acc) => (
-                  <Pressable
-                    key={acc.id}
-                    className={`flex-1 py-3 rounded-xl items-center ${
-                      draft.corporateAccountId === acc.id ? 'bg-primary-500' : 'bg-neutral-100'
-                    }`}
-                    onPress={() => setCorporateAccount(acc.id)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: draft.corporateAccountId === acc.id }}
-                  >
-                    <Text
-                      variant="caption"
-                      color={draft.corporateAccountId === acc.id ? 'inverse' : 'secondary'}
-                      numberOfLines={1}
-                    >
-                      {acc.name}
-                    </Text>
-                    {acc.monthly_budget_trc > 0 && (
-                      <Text
-                        variant="caption"
-                        color={draft.corporateAccountId === acc.id ? 'inverse' : 'tertiary'}
-                        style={{ fontSize: 9 }}
-                      >
-                        {formatTRC(acc.monthly_budget_trc - acc.current_month_spent)} {t('corporate.remaining', { defaultValue: 'disp.' })}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-              {draft.corporateAccountId && (
-                <View className="mt-2 bg-primary-50 rounded-lg px-3 py-2">
-                  <Text variant="caption" color="accent">
-                    {t('corporate.riding_as', {
-                      company: corporateAccounts.find((a) => a.id === draft.corporateAccountId)?.name ?? '',
-                    })}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Schedule ride */}
-          <View className="mb-6">
-            <Pressable
-              className={`flex-row items-center rounded-xl px-4 py-3 ${
-                draft.scheduledAt ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-              }`}
-              onPress={() => {
-                if (draft.scheduledAt) {
-                  setScheduledAt(null);
-                } else {
-                  setShowDatePicker(true);
-                }
-              }}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={20}
-                color={draft.scheduledAt ? colors.brand.orange : colors.neutral[500]}
-              />
-              <Text
-                variant="body"
-                color={draft.scheduledAt ? 'accent' : 'secondary'}
-                className="ml-3 flex-1"
-              >
-                {draft.scheduledAt
-                  ? `${draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — ${draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}`
-                  : t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}
-              </Text>
-              {draft.scheduledAt && (
-                <Ionicons name="close-circle" size={20} color={colors.neutral[400]} />
-              )}
-            </Pressable>
-          </View>
-
-          {/* Date picker */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={draft.scheduledAt ?? minScheduleDate}
-              mode="date"
-              minimumDate={minScheduleDate}
-              onChange={(_e, date) => {
-                setShowDatePicker(false);
-                if (date) {
-                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(date);
-                  merged.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                  setScheduledAt(merged);
-                  // On Android, show time picker right after date
-                  if (Platform.OS === 'android') {
-                    setTimeout(() => setShowTimePicker(true), 300);
-                  } else {
-                    setShowTimePicker(true);
-                  }
-                }
-              }}
-            />
-          )}
-
-          {/* Time picker */}
-          {showTimePicker && (
-            <DateTimePicker
-              value={draft.scheduledAt ?? minScheduleDate}
-              mode="time"
-              minimumDate={minScheduleDate}
-              onChange={(_e, time) => {
-                setShowTimePicker(false);
-                if (time) {
-                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(time);
-                  merged.setHours(time.getHours(), time.getMinutes());
-                  setScheduledAt(merged);
-                }
-              }}
-            />
-          )}
-        </>
-      )}
-
-      {error && (
-        <Text variant="bodySmall" color="error" className="mb-4 text-center">
-          {error}
-        </Text>
-      )}
-
-      {/* Promo code section — visible when estimates are ready */}
-      {selectedEstimate && (
-        <>
-          {!promoExpanded && !promoResult?.valid ? (
-            <Pressable
-              className="mb-4 py-2"
-              onPress={() => setPromoExpanded(true)}
-            >
-              <Text variant="bodySmall" color="accent" className="text-center underline">
-                {t('home.have_promo_code', { defaultValue: '¿Tienes un código?' })}
-              </Text>
-            </Pressable>
-          ) : (
-            <Card variant="outlined" padding="md" className="mb-4">
-              <Text variant="label" className="mb-2">{t('ride.promo_code_label', { defaultValue: 'Código promocional' })}</Text>
-              <View className="flex-row gap-2">
-                <View className="flex-1">
-                  <Input
-                    placeholder={t('ride.promo_code_label', { defaultValue: 'Ingresa tu código' })}
-                    value={promoCode}
-                    onChangeText={setPromoCode}
-                    autoCapitalize="characters"
-                  />
-                </View>
-                <Button
-                  title={t('ride.apply', { defaultValue: 'Aplicar' })}
-                  size="sm"
-                  variant="outline"
-                  onPress={validatePromo}
-                  loading={validatingPromo}
-                  disabled={!promoCode.trim()}
-                />
-              </View>
-              {promoResult && (
-                <Text
-                  variant="caption"
-                  color={promoResult.valid ? 'accent' : 'error'}
-                  className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
-                >
-                  {promoResult.valid
-                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
-                    : promoResult.error ?? t('ride.promo_invalid')}
-                </Text>
-              )}
-            </Card>
-          )}
-        </>
-      )}
-
-      {/* Main action button — changes based on estimate state */}
-      {selectedEstimate ? (
-        <Button
-          title={
-            draft.scheduledAt
-              ? t('ride.schedule_confirm', { defaultValue: 'Programar viaje' })
-              : t('home.request_with_details', {
-                  service: SERVICE_META[draft.serviceType]?.label ?? draft.serviceType,
-                  fare: formatCurrency(selectedEstimate.estimated_fare_cup),
-                  eta: Math.ceil((selectedEstimate.estimated_duration_s || 0) / 60),
-                  defaultValue: `Pedir ${SERVICE_META[draft.serviceType]?.label ?? draft.serviceType} · ${formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}`,
-                })
-          }
-          size="lg"
-          fullWidth
-          onPress={debouncedConfirmRide}
-          loading={isLoading || validatingPromo}
-          className="mb-3"
-        />
-      ) : (
-        <Button
-          title={
-            isFareEstimating
-              ? t('home.calculating', { defaultValue: 'Calculando...' })
-              : !canEstimate
-                ? t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })
-                : t('home.calculating', { defaultValue: 'Calculando...' })
-          }
-          size="lg"
-          fullWidth
-          disabled
-          loading={isFareEstimating}
-        />
-      )}
-
     </View>
   );
 }
+
+// SelectingView old form code removed — now uses fullscreen map layout above
 
 // ── Reviewing View (BottomSheet) ───────────────────────────
 

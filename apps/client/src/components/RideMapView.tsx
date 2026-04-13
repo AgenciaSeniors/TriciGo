@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -162,51 +162,18 @@ function RideMapViewInner({
     return () => animation.stop();
   }, [dropoffLocation, dropoffScale]);
 
-  // Animated route drawing — progressively reveal route coordinates
-  const [animatedRouteCoords, setAnimatedRouteCoords] = useState<GeoPoint[] | null>(null);
-  const prevRouteKeyRef = useRef<string>('');
-
-  useEffect(() => {
-    if (!routeCoordinates || routeCoordinates.length < 2) {
-      setAnimatedRouteCoords(null);
-      prevRouteKeyRef.current = '';
-      return;
-    }
-
-    const routeKey = `${routeCoordinates[0]?.latitude},${routeCoordinates[routeCoordinates.length - 1]?.latitude}`;
-    if (routeKey === prevRouteKeyRef.current) return;
-    prevRouteKeyRef.current = routeKey;
-
-    const total = routeCoordinates.length;
-    const batchSize = Math.max(1, Math.ceil(total / 15));
-    let currentIndex = 0;
-    let cancelled = false;
-
-    const animate = () => {
-      if (cancelled || !routeCoordinates) return;
-      currentIndex = Math.min(currentIndex + batchSize, total);
-      setAnimatedRouteCoords(routeCoordinates.slice(0, currentIndex));
-      if (currentIndex < total && !cancelled) {
-        requestAnimationFrame(animate);
-      }
-    };
-    requestAnimationFrame(animate);
-    return () => { cancelled = true; };
-  }, [routeCoordinates]);
-
-  // Build route GeoJSON from animated coordinates
+  // Build route GeoJSON from coordinates (static — no animation)
   const routeGeoJSON = useMemo(() => {
-    const coords = animatedRouteCoords;
-    if (!coords || coords.length < 2) return null;
+    if (!routeCoordinates || routeCoordinates.length < 2) return null;
     return {
       type: 'Feature' as const,
       geometry: {
         type: 'LineString' as const,
-        coordinates: coords.map(toCoord),
+        coordinates: routeCoordinates.map(c => [c.longitude, c.latitude]),
       },
       properties: {},
     };
-  }, [animatedRouteCoords]);
+  }, [routeCoordinates]);
 
   // Build driver-to-pickup route GeoJSON
   const driverRouteGeoJSON = useMemo(() => {
