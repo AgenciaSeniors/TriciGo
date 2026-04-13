@@ -1525,9 +1525,8 @@ export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
-  // Validate coordinates are in Cuba
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
-      lat < 19.8 || lat > 23.5 || lng < -85.0 || lng > -74.0) {
+  // Validate coordinates are finite numbers
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return null;
   }
   try {

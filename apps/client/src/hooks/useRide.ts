@@ -555,7 +555,7 @@ export function useRideActions() {
               title: i18next.t('ride.rate_reminder_title', { ns: 'rider' }),
               body: i18next.t('ride.rate_reminder_body', { ns: 'rider' }),
               data: { type: 'ride', ride_id: updated.id, action: 'rate' },
-              sound: 'default',
+              sound: null,
             },
             trigger: { seconds: 300, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
           }).then((reminderId) => {

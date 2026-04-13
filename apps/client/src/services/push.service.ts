@@ -34,7 +34,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     await Notifications.setNotificationChannelAsync('rides', {
       name: 'Ride updates',
       importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default',
+      sound: null,
       vibrationPattern: [0, 250, 250, 250],
     });
   }
@@ -59,7 +59,7 @@ export async function scheduleLocalNotification(title: string, body: string): Pr
     content: {
       title,
       body,
-      sound: 'default',
+      sound: null,
       ...(Platform.OS === 'android' ? { channelId: 'rides' } : {}),
     },
     trigger: null, // immediate
