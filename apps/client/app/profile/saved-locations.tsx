@@ -23,6 +23,7 @@ import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CustomerProfile, SavedLocation } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
+import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 
 // Lazy-load map component (web only)
 let SavedLocationsMapWeb: React.ComponentType<{
@@ -55,6 +56,7 @@ export default function SavedLocationsScreen() {
   const [selectedAddress, setSelectedAddress] = useState<{ address: string; location: GeoPoint } | null>(null);
   const [saving, setSaving] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const { recentAddresses } = useRecentAddresses();
 
   const isWeb = Platform.OS === 'web';
@@ -265,33 +267,30 @@ export default function SavedLocationsScreen() {
           showUseMyLocation
         />
 
-        {/* Pick from map button (web only) */}
-        {isWeb && SavedLocationsMapWeb && (
-          <Pressable
-            onPress={() => {
+        {/* Pick from map button */}
+        <Pressable
+          onPress={() => {
+            if (isWeb && SavedLocationsMapWeb) {
               setMapSelectMode(!mapSelectMode);
               setSheetVisible(false);
-            }}
-            className="flex-row items-center justify-center py-3 mt-3 rounded-lg border"
-            style={{
-              borderColor: mapSelectMode ? colors.primary[500] : colors.neutral[200],
-              backgroundColor: mapSelectMode ? `${colors.primary[500]}10` : 'transparent',
-            }}
-          >
-            <Ionicons
-              name="location-outline"
-              size={18}
-              color={mapSelectMode ? colors.primary[500] : colors.neutral[600]}
-            />
-            <Text
-              variant="bodySmall"
-              className="ml-2 font-medium"
-              style={{ color: mapSelectMode ? colors.primary[500] : colors.neutral[600] }}
-            >
-              {t('profile.pick_from_map', { defaultValue: 'Elegir en el mapa' })}
-            </Text>
-          </Pressable>
-        )}
+            } else {
+              // Native: open ConfirmLocationScreen
+              setSheetVisible(false);
+              setShowMapPicker(true);
+            }
+          }}
+          className="flex-row items-center justify-center py-3 mt-3 rounded-lg border"
+          style={{
+            borderColor: colors.neutral[200],
+            backgroundColor: 'transparent',
+            minHeight: 44,
+          }}
+        >
+          <Ionicons name="map-outline" size={18} color={colors.brand.orange} />
+          <Text variant="bodySmall" className="ml-2 font-medium" style={{ color: colors.brand.orange }}>
+            {t('profile.pick_from_map', { defaultValue: 'Elegir en el mapa' })}
+          </Text>
+        </Pressable>
 
         {/* Selected address from map */}
         {selectedAddress && (
@@ -326,6 +325,25 @@ export default function SavedLocationsScreen() {
           </View>
         </View>
       </BottomSheet>
+
+      {/* Native map picker — fullscreen overlay */}
+      {showMapPicker && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+          <ConfirmLocationScreen
+            mode="pickup"
+            initialLocation={selectedAddress?.location ?? null}
+            onConfirm={(address, location) => {
+              setSelectedAddress({ address, location });
+              setShowMapPicker(false);
+              setSheetVisible(true);
+            }}
+            onClose={() => {
+              setShowMapPicker(false);
+              setSheetVisible(true);
+            }}
+          />
+        </View>
+      )}
     </Screen>
   );
 }

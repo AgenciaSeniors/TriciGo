@@ -549,7 +549,7 @@ function AddressSearchInputInner({
 
       {/* UBER-1.3: Suggestions panel (no active query) — merged ranked list */}
       {isExpanded && !hasActiveQuery && (
-        <ScrollView className="mt-2" keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        <View className="mt-2">
           {/* Pick on map */}
           {onPickOnMap && (
             <Pressable
@@ -677,7 +677,7 @@ function AddressSearchInputInner({
               </View>
             </ScrollView>
           </View>
-        </ScrollView>
+        </View>
       )}
     </View>
   );

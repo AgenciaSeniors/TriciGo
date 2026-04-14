@@ -134,17 +134,21 @@ export const authService = {
   async uploadAvatar(userId: string, fileUri: string): Promise<string> {
     const supabase = getSupabaseClient();
 
-    // Fetch the image as a blob
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
-
     const filePath = `${userId}/avatar.jpg`;
+
+    // React Native: use FormData to upload file URI (fetch+blob fails on Android)
+    const formData = new FormData();
+    formData.append('', {
+      uri: fileUri,
+      name: 'avatar.jpg',
+      type: 'image/jpeg',
+    } as any);
 
     // Upload (upsert) to avatars bucket
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
+      .upload(filePath, formData, {
+        contentType: 'multipart/form-data',
         upsert: true,
       });
     if (uploadError) throw uploadError;

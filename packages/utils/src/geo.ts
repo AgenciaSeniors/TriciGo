@@ -561,6 +561,14 @@ async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadat
     // Province: region, strip "provincia de" prefix
     const province = cleanProvinceName(ctx.region?.name || '');
 
+    // Validate result is geographically close to query point (<500m)
+    const geom = feature.geometry;
+    if (geom?.type === 'Point' && geom.coordinates) {
+      const [resLng, resLat] = geom.coordinates;
+      const distM = haversineDistance({ latitude: lat, longitude: lng }, { latitude: resLat, longitude: resLng });
+      if (distM > 500) return null; // Result too far — discard
+    }
+
     return { road, municipality, province, poiName: '' };
   } catch {
     return null;
@@ -1542,6 +1550,10 @@ export async function reverseGeocode(
 ): Promise<string | null> {
   // Validate coordinates are finite numbers
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  // Skip geocoding the Havana fallback center — it's not a real user location
+  if (Math.abs(lat - 23.1136) < 0.0001 && Math.abs(lng - (-82.3666)) < 0.0001) {
     return null;
   }
   try {

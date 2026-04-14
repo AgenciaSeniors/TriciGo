@@ -112,7 +112,7 @@ export default function RidePreferencesScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scroll>
       <ScreenHeader
         title={t('preferences.title')}
         onBack={() => router.back()}

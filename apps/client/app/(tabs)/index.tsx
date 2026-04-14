@@ -13,7 +13,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -1639,10 +1639,25 @@ function IdleView() {
           pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         }
         if (!pos || cancelled) return;
+
+        // Wait for GPS to stabilize — skip geocoding if accuracy > 100m
+        const accuracy = pos.coords.accuracy ?? 999;
+        if (accuracy > 100) {
+          // Try fresh GPS with higher accuracy
+          try {
+            const freshPos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            if (freshPos && (freshPos.coords.accuracy ?? 999) < 100) pos = freshPos;
+          } catch { /* use what we have */ }
+        }
+        if (cancelled) return;
+
         const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
 
         // Cache for future cold starts
         AsyncStorage.setItem('last_known_location', JSON.stringify(loc)).catch(() => {});
+
+        // Center map immediately even before geocoding finishes
+        if (!cancelled) setUserCenter([pos.coords.longitude, pos.coords.latitude]);
 
         const address = await reverseGeocode(loc.latitude, loc.longitude);
         if (!cancelled) {
@@ -1651,6 +1666,20 @@ function IdleView() {
           setPrefetchedPickup({ address: displayAddress, location: loc });
           if (!draft.pickup) {
             setPickup(displayAddress, loc);
+          }
+          // If geocoding failed (shows coordinates), retry after 2s
+          if (!address && !cancelled) {
+            setTimeout(async () => {
+              if (cancelled) return;
+              const retryAddress = await reverseGeocode(loc.latitude, loc.longitude);
+              if (retryAddress && !cancelled) {
+                setPrefetchedPickup({ address: retryAddress, location: loc });
+                const currentPickup = useRideStore.getState().draft.pickup;
+                if (currentPickup?.location.latitude === loc.latitude) {
+                  setPickup(retryAddress, loc);
+                }
+              }
+            }, 2000);
           }
         }
       } catch {
@@ -2294,34 +2323,34 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       {/* Floating top bar: [X] + compact address summary */}
       {!searchingField && (
         <View style={{ position: 'absolute', top: insets.top + 8, left: 12, right: 12, zIndex: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-          {/* Close button */}
-          <Pressable onPress={() => setFlowStep('idle')} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 4 }}>
-            <Ionicons name="close" size={22} color="#333" />
+          {/* Close button — 44px touch target */}
+          <Pressable onPress={() => setFlowStep('idle')} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 2 }}>
+            <Ionicons name="close" size={22} color={colors.neutral[700]} />
           </Pressable>
 
           {/* Two compact address rows — tap to open fullscreen search */}
           <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, overflow: 'hidden' }}>
-            <Pressable onPress={() => setSearchingField('pickup')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e', marginRight: 10 }} />
-              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.pickup?.address ? '#1a1a1a' : '#999' }}>
+            <Pressable onPress={() => setSearchingField('pickup')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: MAP_COLORS.pickup, marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.pickup?.address ? colors.neutral[900] : colors.neutral[400] }}>
                 {draft.pickup?.address || t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
               </Text>
-              <Ionicons name="pencil-outline" size={14} color="#aaa" />
+              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
             </Pressable>
-            <View style={{ height: 1, backgroundColor: '#f0f0f0', marginHorizontal: 12 }} />
-            <Pressable onPress={() => setSearchingField('dropoff')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF4D00', marginRight: 10 }} />
-              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.dropoff?.address ? '#1a1a1a' : '#999' }}>
+            <View style={{ height: 1, backgroundColor: colors.neutral[100], marginHorizontal: 12 }} />
+            <Pressable onPress={() => setSearchingField('dropoff')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand.orange, marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.dropoff?.address ? colors.neutral[900] : colors.neutral[400] }}>
                 {draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
               </Text>
-              <Ionicons name="pencil-outline" size={14} color="#aaa" />
+              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
             </Pressable>
           </View>
 
-          {/* Swap button (visible when both addresses set) */}
+          {/* Swap button — 40px + hitSlop for 56px touch area */}
           {draft.pickup && draft.dropoff && (
-            <Pressable onPress={() => { triggerHaptic('light'); swapPickupDropoff(); }} style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, marginTop: 18 }}>
-              <Ionicons name="swap-vertical" size={18} color="#666" />
+            <Pressable onPress={() => { triggerHaptic('light'); swapPickupDropoff(); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, marginTop: 14 }}>
+              <Ionicons name="swap-vertical" size={18} color={colors.neutral[500]} />
             </Pressable>
           )}
         </View>
@@ -2337,8 +2366,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         >
           {/* Header: back arrow + field label */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-            <Pressable onPress={() => setSearchingField(null)} style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="arrow-back" size={24} color="#333" />
+            <Pressable onPress={() => setSearchingField(null)} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="arrow-back" size={24} color={colors.neutral[700]} />
             </Pressable>
             <Text variant="h4" style={{ flex: 1, marginLeft: 8 }}>
               {searchingField === 'pickup'
@@ -2375,17 +2404,17 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
       {/* Route distance/duration badge (floating above bottom panel) */}
       {!searchingField && routeDistanceM && routeDurationS && (
-        <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: '#FF4D00', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+        <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
-            {(routeDistanceM / 1000).toFixed(1)} km · {Math.ceil(routeDurationS / 60)} min por carretera
+            {(routeDistanceM / 1000).toFixed(1)} km · {Math.ceil(routeDurationS / 60)} min por ruta
           </Text>
         </View>
       )}
 
       {/* Bottom panel — services, payment, request (hidden during search) */}
       {!searchingField && (draft.pickup && draft.dropoff) && (
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 10, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
-          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 10 }} />
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.neutral[300], marginBottom: 8 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
             {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'] as const).map((slug) => {
@@ -2394,24 +2423,24 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               const isSelected = draft.serviceType === slug;
               const eta = etaByVehicleType[slug];
               return (
-                <Pressable key={slug} onPress={() => setServiceType(slug)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? '#FF4D00' : '#e5e5e5', backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
-                  <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 10 }} resizeMode="contain" />
+                <Pressable key={slug} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : colors.neutral[200], backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
+                  <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 12 }} resizeMode="contain" />
                   <View style={{ flex: 1 }}>
                     <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
                     <Text variant="caption" color="tertiary">
-                      {meta?.desc}{eta ? <Text style={{ color: '#22c55e' }}> · {eta} min</Text> : null}
+                      {meta?.desc}{eta ? <Text style={{ color: MAP_COLORS.pickup }}> · {eta} min</Text> : null}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     {est ? (
                       <>
-                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? '#FF4D00' : '#1a1a1a' }}>{formatCUP(est.estimated_fare_cup)}</Text>
+                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : colors.neutral[900] }}>{formatCUP(est.estimated_fare_cup)}</Text>
                         {est.estimated_duration_s ? (
-                          <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min viaje</Text>
+                          <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
                         ) : null}
                       </>
                     ) : isFareEstimating ? (
-                      <ActivityIndicator size="small" color="#ccc" />
+                      <ActivityIndicator size="small" color={colors.neutral[300]} />
                     ) : null}
                   </View>
                 </Pressable>
@@ -2420,12 +2449,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
             {/* Paso 4: Fare estimate summary box */}
             {selectedEstimate && (
-              <View style={{ borderWidth: 2, borderColor: '#FF4D00', borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
+              <View style={{ borderWidth: 2, borderColor: colors.brand.orange, borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text variant="caption" color="secondary">Tarifa estimada</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF4D00' }}>{formatCUP(selectedEstimate.estimated_fare_cup)}</Text>
+                  <Text variant="caption" color="secondary">{t('ride.estimated_fare', { defaultValue: 'Tarifa estimada' })}</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatCUP(selectedEstimate.estimated_fare_cup)}</Text>
                 </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
                   <Text variant="caption" color="tertiary">{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</Text>
                   <Text variant="caption" color="tertiary">{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min</Text>
                   {selectedEstimate.exchange_rate_usd_cup ? (
@@ -2433,91 +2462,91 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                   ) : null}
                 </View>
                 {selectedEstimate.estimated_distance_m > 0 && (
-                  <Text variant="caption" color="tertiary" style={{ marginTop: 2 }}>
-                    Tarifa: {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP/km
+                  <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
+                    {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP por km
                   </Text>
                 )}
               </View>
             )}
 
             {/* Payment method selector */}
-            <Text variant="caption" color="secondary" style={{ marginBottom: 6, fontWeight: '600' }}>Método de pago</Text>
+            <Text variant="caption" color="secondary" style={{ marginBottom: 8, fontWeight: '600' }}>{t('ride.payment_method', { defaultValue: 'Método de pago' })}</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
               {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
-                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? '#FF4D00' : '#e5e5e5', backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center', minHeight: 44 }}>
-                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? '#FF4D00' : '#666' }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[200], backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[500] }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
                 </Pressable>
               ))}
             </View>
 
-            {/* Paso 7: Mixed payment slider */}
+            {/* Mixed payment slider */}
             {draft.paymentMethod === 'mixed' && selectedEstimate && (
-              <View style={{ backgroundColor: '#f9fafb', borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text variant="caption" color="secondary">Wallet: {Math.round(draft.walletRatio * 100)}%</Text>
+              <View style={{ backgroundColor: colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text variant="caption" color="secondary">Billetera: {Math.round(draft.walletRatio * 100)}%</Text>
                   <Text variant="caption" color="secondary">Efectivo: {Math.round((1 - draft.walletRatio) * 100)}%</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable onPress={() => setWalletRatio(Math.max(0, draft.walletRatio - 0.1))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#e5e5e5', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontWeight: '700' }}>−</Text>
+                  <Pressable onPress={() => { triggerHaptic('light'); setWalletRatio(Math.max(0, draft.walletRatio - 0.1)); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
                   </Pressable>
-                  <View style={{ flex: 1, height: 6, backgroundColor: '#e5e5e5', borderRadius: 3, overflow: 'hidden' }}>
-                    <View style={{ width: `${draft.walletRatio * 100}%`, height: '100%', backgroundColor: '#FF4D00', borderRadius: 3 }} />
+                  <View style={{ flex: 1, height: 6, backgroundColor: colors.neutral[200], borderRadius: 3, overflow: 'hidden' }}>
+                    <View style={{ width: `${draft.walletRatio * 100}%`, height: '100%', backgroundColor: colors.brand.orange, borderRadius: 3 }} />
                   </View>
-                  <Pressable onPress={() => setWalletRatio(Math.min(1, draft.walletRatio + 0.1))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#e5e5e5', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontWeight: '700' }}>+</Text>
+                  <Pressable onPress={() => { triggerHaptic('light'); setWalletRatio(Math.min(1, draft.walletRatio + 0.1)); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>+</Text>
                   </Pressable>
                 </View>
-                <Text variant="caption" color="tertiary" style={{ textAlign: 'center', marginTop: 6 }}>
-                  {formatCUP(selectedEstimate.estimated_fare_cup * draft.walletRatio)} wallet + {formatCUP(selectedEstimate.estimated_fare_cup * (1 - draft.walletRatio))} efectivo
+                <Text variant="caption" color="tertiary" style={{ textAlign: 'center', marginTop: 8 }}>
+                  {formatCUP(selectedEstimate.estimated_fare_cup * draft.walletRatio)} billetera + {formatCUP(selectedEstimate.estimated_fare_cup * (1 - draft.walletRatio))} efectivo
                 </Text>
               </View>
             )}
 
-            {/* Paso 5: Promo code */}
+            {/* Promo code */}
             <Pressable onPress={() => setPromoExpanded(!promoExpanded)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-              <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>Código promocional</Text>
-              <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color="#999" />
+              <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{t('ride.promo_code', { defaultValue: 'Código promocional' })}</Text>
+              <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.neutral[400]} />
             </Pressable>
             {promoExpanded && (
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <View style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
+                <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
                   <TextInput
                     value={promoCode}
                     onChangeText={setPromoCode}
-                    placeholder="Ingresa un código"
-                    placeholderTextColor="#999"
-                    style={{ fontSize: 14, color: '#333', paddingVertical: 10 }}
+                    placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
+                    placeholderTextColor={colors.neutral[400]}
+                    style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
                     autoCapitalize="characters"
                   />
                 </View>
-                <Button title="Aplicar" size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
+                <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
               </View>
             )}
             {promoResult?.valid && (
-              <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                <Text variant="caption" style={{ color: '#22c55e' }}>Descuento de {formatCUP(promoResult.discountAmount)} aplicado</Text>
+              <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={16} color={MAP_COLORS.pickup} />
+                <Text variant="caption" style={{ color: MAP_COLORS.pickup }}>{'¡'}Descuento de {formatCUP(promoResult.discountAmount)} aplicado!</Text>
               </View>
             )}
 
-            {/* Paso 6: Schedule ride */}
-            <Pressable onPress={() => setScheduledAt(draft.scheduledAt ? null : minScheduleDate)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, marginBottom: 4 }}>
-              <Ionicons name={draft.scheduledAt ? 'checkbox' : 'square-outline'} size={20} color={draft.scheduledAt ? '#FF4D00' : '#999'} />
-              <Text variant="caption" color="secondary">Programar viaje</Text>
+            {/* Schedule ride */}
+            <Pressable onPress={() => setScheduledAt(draft.scheduledAt ? null : minScheduleDate)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, marginBottom: 4 }}>
+              <Ionicons name={draft.scheduledAt ? 'checkbox' : 'square-outline'} size={22} color={draft.scheduledAt ? colors.brand.orange : colors.neutral[400]} />
+              <Text variant="caption" color="secondary">{t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}</Text>
             </Pressable>
             {draft.scheduledAt && (
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <Pressable onPress={() => setShowDatePicker(true)} style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
+                <Pressable onPress={() => setShowDatePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
                   <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleDateString('es')}</Text>
                 </Pressable>
-                <Pressable onPress={() => setShowTimePicker(true)} style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
+                <Pressable onPress={() => setShowTimePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
                   <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</Text>
                 </Pressable>
               </View>
             )}
           </ScrollView>
-          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Pedir'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} className="mt-2" />
+          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Solicitar'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
@@ -3135,6 +3164,60 @@ function ReviewingView() {
   );
 }
 
+// ── Radar pulse animation for searching state ──────────────
+function RadarPulseAnimation() {
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+  const ring3 = useRef(new Animated.Value(0)).current;
+  const rings = [ring1, ring2, ring3];
+
+  useEffect(() => {
+    rings.forEach((ring, i) => {
+      const loop = () => {
+        ring.setValue(0);
+        Animated.timing(ring, {
+          toValue: 1,
+          duration: 2000,
+          delay: i * 600,
+          useNativeDriver: true,
+        }).start(({ finished }) => { if (finished) loop(); });
+      };
+      loop();
+    });
+    return () => rings.forEach((r) => r.stopAnimation());
+  }, []);
+
+  return (
+    <View style={{ width: 100, height: 100, alignItems: 'center', justifyContent: 'center' }}>
+      {rings.map((ring, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            borderWidth: 2,
+            borderColor: 'rgba(255,77,0,0.3)',
+            opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+            transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 2.2] }) }],
+          }}
+        />
+      ))}
+      {/* Center dot with vehicle icon */}
+      <View style={{
+        width: 48, height: 48, borderRadius: 24,
+        backgroundColor: colors.brand.orange,
+        alignItems: 'center', justifyContent: 'center',
+        shadowColor: colors.brand.orange, shadowOpacity: 0.35,
+        shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+      }}>
+        <Ionicons name="car" size={22} color="#fff" />
+      </View>
+    </View>
+  );
+}
+
 // ── Searching View ─────────────────────────────────────────
 
 function SearchingView() {
@@ -3251,7 +3334,14 @@ function SearchingView() {
         />
       )}
 
-      {/* Interactive driver presence mini-card (replaces static ActivityIndicator) */}
+      {/* Radar pulse animation — 3 rings expanding from center */}
+      {!acceptedDriver && !searchTimedOut && (
+        <View style={{ alignItems: 'center', justifyContent: 'center', height: 100, marginBottom: 8 }}>
+          <RadarPulseAnimation />
+        </View>
+      )}
+
+      {/* Interactive driver presence mini-card */}
       {!acceptedDriver && (
         <DriverInfoMiniCard
           drivers={searchingDrivers}

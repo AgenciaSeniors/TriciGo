@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -71,6 +71,17 @@ interface RideMapViewProps {
 }
 
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136]; // [lng, lat]
+
+/* Ant-march dash animation — 28 frames (interpolated from web's 14 for smoother motion) */
+const DASH_SEQUENCE: number[][] = [
+  [0, 4, 3], [0.25, 4, 2.75], [0.5, 4, 2.5], [0.75, 4, 2.25],
+  [1, 4, 2], [1.25, 4, 1.75], [1.5, 4, 1.5], [1.75, 4, 1.25],
+  [2, 4, 1], [2.25, 4, 0.75], [2.5, 4, 0.5], [2.75, 4, 0.25],
+  [3, 4, 0], [0, 0.25, 3, 3.75], [0, 0.5, 3, 3.5], [0, 0.75, 3, 3.25],
+  [0, 1, 3, 3], [0, 1.25, 3, 2.75], [0, 1.5, 3, 2.5], [0, 1.75, 3, 2.25],
+  [0, 2, 3, 2], [0, 2.25, 3, 1.75], [0, 2.5, 3, 1.5], [0, 2.75, 3, 1.25],
+  [0, 3, 3, 1], [0, 3.25, 3, 0.75], [0, 3.5, 3, 0.5], [0, 3.75, 3, 0.25],
+];
 
 /* ── POI category → color (matches web BookingMap) ── */
 const POI_COLORS: Record<string, string> = {
@@ -152,6 +163,26 @@ function RideMapViewInner({
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();
+
+  // Ant-march animation — 60fps via requestAnimationFrame + setState throttled
+  const [dashStep, setDashStep] = useState(0);
+  const dashStepRef = useRef(0);
+  const lastFrameRef = useRef(0);
+  useEffect(() => {
+    if (!routeCoordinates || routeCoordinates.length < 2) return;
+    let rafId: number;
+    const animate = (timestamp: number) => {
+      // Advance one frame every ~30ms (~33fps — fast and fluid)
+      if (timestamp - lastFrameRef.current > 30) {
+        lastFrameRef.current = timestamp;
+        dashStepRef.current = (dashStepRef.current + 1) % DASH_SEQUENCE.length;
+        setDashStep(dashStepRef.current);
+      }
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [routeCoordinates]);
   const isDark = colorScheme === 'dark';
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
@@ -451,7 +482,7 @@ function RideMapViewInner({
                 lineColor: ROUTE.main.color,
                 lineWidth: ROUTE.main.width,
                 lineOpacity: ROUTE.main.opacity,
-                lineDasharray: [0, 4, 3],
+                lineDasharray: DASH_SEQUENCE[dashStep],
                 lineCap: 'round',
                 lineJoin: 'round',
               }}

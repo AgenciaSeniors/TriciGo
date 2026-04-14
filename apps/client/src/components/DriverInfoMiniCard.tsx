@@ -73,6 +73,53 @@ function DriverChip({ driver, index }: { driver: SearchingDriverPresence; index:
   );
 }
 
+/** Animated pulsing dot — 3 concentric rings expanding + fading in loop */
+function PulsingRadarDot() {
+  const rings = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ];
+
+  useEffect(() => {
+    rings.forEach((ring, i) => {
+      const delay = i * 600;
+      const animate = () => {
+        ring.setValue(0);
+        Animated.timing(ring, {
+          toValue: 1,
+          duration: 2000,
+          delay,
+          useNativeDriver: true,
+        }).start(({ finished }) => { if (finished) animate(); });
+      };
+      animate();
+    });
+    return () => rings.forEach((r) => r.stopAnimation());
+  }, []);
+
+  return (
+    <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+      {rings.map((ring, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            borderWidth: 1.5,
+            borderColor: colors.brand.orange,
+            opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+            transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 3] }) }],
+          }}
+        />
+      ))}
+      <View style={styles.pulsingDot} />
+    </View>
+  );
+}
+
 export function DriverInfoMiniCard({ drivers, isSearching }: DriverInfoMiniCardProps) {
   const { t } = useTranslation('rider');
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -89,12 +136,15 @@ export function DriverInfoMiniCard({ drivers, isSearching }: DriverInfoMiniCardP
 
   const count = drivers.length;
 
+  // Don't show the dark card when no drivers are reviewing — the radar animation is enough
+  if (count === 0) return null;
+
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       {/* Header: driver count */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.pulsingDot} />
+          <PulsingRadarDot />
           <Text style={styles.countText}>
             {count === 0
               ? t('searching.no_drivers_yet')
@@ -133,13 +183,18 @@ export function DriverInfoMiniCard({ drivers, isSearching }: DriverInfoMiniCardP
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(17, 17, 17, 0.95)',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
     marginHorizontal: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.neutral[200],
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   header: {
     flexDirection: 'row',
@@ -157,10 +212,9 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.brand.orange,
-    marginRight: 8,
   },
   countText: {
-    color: '#fff',
+    color: colors.neutral[900],
     fontSize: 13,
     fontWeight: '600',
     flex: 1,
@@ -185,11 +239,13 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.neutral[50],
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 10,
     gap: 6,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
   },
   chipAvatar: {
     width: 24,
@@ -210,7 +266,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   chipName: {
-    color: '#fff',
+    color: colors.neutral[900],
     fontSize: 12,
     fontWeight: '500',
     maxWidth: 60,

@@ -206,7 +206,6 @@ function NativeProfileScreen() {
     {
       title: t('profile.section_safety', { defaultValue: 'Seguridad' }),
       items: [
-        { icon: 'call-outline' as const, label: t('profile.emergency_contact'), onPress: () => router.push('/profile/emergency-contact'), iconBg: 'error' as const },
         { icon: 'people-outline' as const, label: t('trusted_contacts.title'), onPress: () => router.push('/profile/trusted-contacts'), iconBg: 'info' as const },
         { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety'), iconBg: 'success' as const },
       ],

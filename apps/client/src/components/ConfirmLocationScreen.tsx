@@ -1,13 +1,14 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, Pressable, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { reverseGeocode, MAP_STYLE_LIGHT } from '@tricigo/utils';
-import type { GeoPoint } from '@tricigo/utils';
+import type { GeoPoint, ViewportPoi } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
+import { useViewportPois } from '@/hooks/useViewportPois';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -17,6 +18,29 @@ function getMapboxGL(): any {
 }
 
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
+
+/* POI category colors (same as RideMapView) */
+const POI_COLORS: Record<string, string> = {
+  restaurant: '#E53935', cafe: '#E53935', bar: '#E53935', fast_food: '#E53935', bakery: '#E53935',
+  hotel: '#1E88E5', guest_house: '#1E88E5', hostel: '#1E88E5',
+  hospital: '#43A047', clinic: '#43A047', pharmacy: '#43A047', doctors: '#43A047',
+  supermarket: '#FB8C00', convenience: '#FB8C00', marketplace: '#FB8C00',
+  school: '#8E24AA', university: '#8E24AA',
+  bank: '#546E7A', post_office: '#546E7A', police: '#546E7A',
+  park: '#2E7D32', beach: '#2E7D32', museum: '#2E7D32', monument: '#2E7D32',
+  fuel: '#FF6F00', bus_station: '#FF6F00',
+};
+
+function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: pois.map((p) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
+      properties: { id: p.id, name: p.name, color: POI_COLORS[p.subcategory] || '#78909C' },
+    })),
+  };
+}
 
 interface ConfirmLocationScreenProps {
   mode: 'pickup' | 'dropoff';
@@ -39,6 +63,25 @@ export function ConfirmLocationScreen({
   const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
   const [isGeocoding, setIsGeocoding] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // POIs
+  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
+  const poiGeoJSON = useMemo(() => {
+    if (!pois || pois.length === 0) return null;
+    return poisToGeoJSON(pois);
+  }, [pois]);
+
+  const handleCameraForPois = useCallback((event: any) => {
+    try {
+      const { properties } = event;
+      const zoom = properties?.zoomLevel ?? 13;
+      const visibleBounds = properties?.visibleBounds;
+      if (visibleBounds && visibleBounds.length === 2) {
+        const [ne, sw] = visibleBounds;
+        onPoiCameraChanged({ minLng: sw[0], minLat: sw[1], maxLng: ne[0], maxLat: ne[1] }, zoom);
+      }
+    } catch {}
+  }, [onPoiCameraChanged]);
 
   // Shimmer animation for address bar
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -145,8 +188,7 @@ export function ConfirmLocationScreen({
         zoomEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
-        onRegionDidChange={handleRegionChange}
-        onMapIdle={handleMapIdle}
+        onMapIdle={(event: any) => { handleMapIdle(event); handleCameraForPois(event); }}
       >
         <MapboxGL.Camera
           defaultSettings={{
@@ -154,6 +196,33 @@ export function ConfirmLocationScreen({
             zoomLevel: 15,
           }}
         />
+
+        {/* POI layers */}
+        {poiGeoJSON && (
+          <MapboxGL.ShapeSource id="confirm-pois" shape={poiGeoJSON} cluster clusterMaxZoomLevel={14} clusterRadius={40}>
+            <MapboxGL.CircleLayer
+              id="confirm-poi-clusters"
+              filter={['has', 'point_count']}
+              style={{ circleColor: ['step', ['get', 'point_count'], '#51bbd6', 50, '#f1f075', 200, '#f28cb1'], circleRadius: ['step', ['get', 'point_count'], 12, 50, 16, 200, 20], circleStrokeWidth: 1.5, circleStrokeColor: 'rgba(255,255,255,0.6)' }}
+            />
+            <MapboxGL.SymbolLayer
+              id="confirm-poi-cluster-count"
+              filter={['has', 'point_count']}
+              style={{ textField: ['get', 'point_count_abbreviated'], textSize: 10, textColor: '#333' }}
+            />
+            <MapboxGL.CircleLayer
+              id="confirm-poi-unclustered"
+              filter={['!', ['has', 'point_count']]}
+              style={{ circleColor: ['get', 'color'], circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 7], circleStrokeWidth: 1, circleStrokeColor: 'rgba(255,255,255,0.9)' }}
+            />
+            <MapboxGL.SymbolLayer
+              id="confirm-poi-labels"
+              filter={['!', ['has', 'point_count']]}
+              minZoomLevel={14}
+              style={{ textField: ['get', 'name'], textSize: ['interpolate', ['linear'], ['zoom'], 14, 8, 16, 10], textOffset: [0, 1.0], textAnchor: 'top', textMaxWidth: 7, textOptional: true, textAllowOverlap: false, textColor: '#555', textHaloColor: 'rgba(255,255,255,0.95)', textHaloWidth: 1 }}
+            />
+          </MapboxGL.ShapeSource>
+        )}
       </MapboxGL.MapView>
 
       {/* Static center pin — overlaid on map center */}
