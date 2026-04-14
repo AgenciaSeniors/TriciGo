@@ -119,7 +119,15 @@ export function RideCompleteView() {
   }, [userId]);
 
   // Subscribe to real-time split updates (payment confirmations post-ride)
+  const splitChannelRef = useRef<any>(null);
   useEffect(() => {
+    // Clean up previous subscription
+    if (splitChannelRef.current) {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(splitChannelRef.current);
+      splitChannelRef.current = null;
+    }
+
     if (!activeRide?.id || !activeRide.is_split) return;
 
     // Fetch current splits state
@@ -127,15 +135,18 @@ export function RideCompleteView() {
       .then((existingSplits) => setSplits(existingSplits))
       .catch(() => {});
 
-    const channel = rideService.subscribeToSplits(
+    splitChannelRef.current = rideService.subscribeToSplits(
       activeRide.id,
-      (newSplit) => addSplit(newSplit),
-      (updatedSplit) => updateSplit(updatedSplit),
+      (newSplit) => { if (newSplit?.id) addSplit(newSplit); },
+      (updatedSplit) => { if (updatedSplit?.id) updateSplit(updatedSplit); },
     );
 
     return () => {
-      const supabase = getSupabaseClient();
-      supabase.removeChannel(channel);
+      if (splitChannelRef.current) {
+        const supabase = getSupabaseClient();
+        supabase.removeChannel(splitChannelRef.current);
+        splitChannelRef.current = null;
+      }
     };
   }, [activeRide?.id, activeRide?.is_split]);
 

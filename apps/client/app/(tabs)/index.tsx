@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -1593,6 +1593,7 @@ function IdleView() {
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setPickup = useRideStore((s) => s.setPickup);
+  const prefetchedPickup = useRideStore((s) => s.prefetchedPickup);
   const setPrefetchedPickup = useRideStore((s) => s.setPrefetchedPickup);
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
@@ -1612,6 +1613,19 @@ function IdleView() {
   // Check location permission + pre-fetch pickup address on mount
   useEffect(() => {
     let cancelled = false;
+
+    // Instant fallback: load cached position from AsyncStorage while GPS resolves
+    AsyncStorage.getItem('last_known_location').then((cached) => {
+      if (cached && !cancelled) {
+        try {
+          const { latitude, longitude } = JSON.parse(cached);
+          if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+            setUserCenter([longitude, latitude]);
+          }
+        } catch { /* ignore malformed cache */ }
+      }
+    }).catch(() => {});
+
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -1619,10 +1633,17 @@ function IdleView() {
           setLocationDenied(true);
           return;
         }
-        // Pre-fetch: get last known position + reverse geocode in background
-        const pos = await Location.getLastKnownPositionAsync();
+        // Try cached position first, fall back to fresh GPS
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }
         if (!pos || cancelled) return;
         const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+
+        // Cache for future cold starts
+        AsyncStorage.setItem('last_known_location', JSON.stringify(loc)).catch(() => {});
+
         const address = await reverseGeocode(loc.latitude, loc.longitude);
         if (!cancelled) {
           setUserCenter([pos.coords.longitude, pos.coords.latitude]);
@@ -1637,7 +1658,7 @@ function IdleView() {
       }
     })();
     return () => { cancelled = true; };
-  }, [setPrefetchedPickup]);
+  }, [setPrefetchedPickup, setPickup]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1704,12 +1725,20 @@ function IdleView() {
     setFlowStep('selecting');
   }, [setDropoff, setFlowStep]);
 
-  // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → reviewing
+  // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → selecting
   const handleOneTapPrediction = useCallback(async (pred: PredictedDestination) => {
     try {
+      // Use prefetched pickup if available (instant, no GPS wait)
+      if (prefetchedPickup) {
+        setPickup(prefetchedPickup.address, prefetchedPickup.location);
+        setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
+        setFlowStep('selecting');
+        return;
+      }
+
+      // Fallback: try GPS
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
-        // Fall back to old behavior if no location permission
         handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
         return;
       }
@@ -1720,13 +1749,12 @@ function IdleView() {
         { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
       );
       setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
-      // requestEstimate will transition to 'reviewing' on success
-      requestEstimate();
+      setFlowStep('selecting');
     } catch {
-      // Fallback: just go to selecting view
+      // Fallback: just go to selecting view with dropoff only
       handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
     }
-  }, [handleRecentTap, setPickup, setDropoff, requestEstimate]);
+  }, [handleRecentTap, setPickup, setDropoff, setFlowStep, prefetchedPickup]);
 
   const insets = useSafeAreaInsets();
 
@@ -2103,7 +2131,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const insets = useSafeAreaInsets();
-  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
   const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
 
   // Compute selectedEstimate from allFareEstimates for the current service type
@@ -2301,7 +2329,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
       {/* Fullscreen search panel — opens when user taps an address input */}
       {searchingField && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, paddingTop: insets.top + 8, paddingHorizontal: 16 }}>
+        <ScrollView
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, paddingTop: insets.top + 8 }}
+          contentContainerStyle={{ paddingHorizontal: 16, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+        >
           {/* Header: back arrow + field label */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <Pressable onPress={() => setSearchingField(null)} style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>
@@ -2337,6 +2370,15 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               setMapPickerMode(searchingField);
             }}
           />
+        </ScrollView>
+      )}
+
+      {/* Route distance/duration badge (floating above bottom panel) */}
+      {!searchingField && routeDistanceM && routeDurationS && (
+        <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: '#FF4D00', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+          <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
+            {(routeDistanceM / 1000).toFixed(1)} km · {Math.ceil(routeDurationS / 60)} min por carretera
+          </Text>
         </View>
       )}
 
@@ -2345,37 +2387,137 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 10, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
           <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 10 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Service cards — vertical stack like web */}
+            {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
             {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'] as const).map((slug) => {
               const meta = SERVICE_META[slug];
               const est = allFareEstimates?.[slug];
               const isSelected = draft.serviceType === slug;
+              const eta = etaByVehicleType[slug];
               return (
                 <Pressable key={slug} onPress={() => setServiceType(slug)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, marginBottom: 6, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? '#FF4D00' : '#e5e5e5', backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
                   <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 10 }} resizeMode="contain" />
                   <View style={{ flex: 1 }}>
                     <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
-                    <Text variant="caption" color="tertiary">{meta?.desc}</Text>
+                    <Text variant="caption" color="tertiary">
+                      {meta?.desc}{eta ? <Text style={{ color: '#22c55e' }}> · {eta} min</Text> : null}
+                    </Text>
                   </View>
-                  {est ? (
-                    <Text variant="body" style={{ fontWeight: '700', color: isSelected ? '#FF4D00' : '#1a1a1a' }}>{formatCUP(est.estimated_fare_cup)}</Text>
-                  ) : isFareEstimating ? (
-                    <ActivityIndicator size="small" color="#ccc" />
-                  ) : null}
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {est ? (
+                      <>
+                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? '#FF4D00' : '#1a1a1a' }}>{formatCUP(est.estimated_fare_cup)}</Text>
+                        {est.estimated_duration_s ? (
+                          <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min viaje</Text>
+                        ) : null}
+                      </>
+                    ) : isFareEstimating ? (
+                      <ActivityIndicator size="small" color="#ccc" />
+                    ) : null}
+                  </View>
                 </Pressable>
               );
             })}
 
+            {/* Paso 4: Fare estimate summary box */}
+            {selectedEstimate && (
+              <View style={{ borderWidth: 2, borderColor: '#FF4D00', borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text variant="caption" color="secondary">Tarifa estimada</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF4D00' }}>{formatCUP(selectedEstimate.estimated_fare_cup)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+                  <Text variant="caption" color="tertiary">{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</Text>
+                  <Text variant="caption" color="tertiary">{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min</Text>
+                  {selectedEstimate.exchange_rate_usd_cup ? (
+                    <Text variant="caption" color="tertiary">~${(selectedEstimate.estimated_fare_cup / selectedEstimate.exchange_rate_usd_cup).toFixed(2)} USD</Text>
+                  ) : null}
+                </View>
+                {selectedEstimate.estimated_distance_m > 0 && (
+                  <Text variant="caption" color="tertiary" style={{ marginTop: 2 }}>
+                    Tarifa: {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP/km
+                  </Text>
+                )}
+              </View>
+            )}
+
             {/* Payment method selector */}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 8 }}>
+            <Text variant="caption" color="secondary" style={{ marginBottom: 6, fontWeight: '600' }}>Método de pago</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
               {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
-                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? '#FF4D00' : '#e5e5e5', backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
+                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? '#FF4D00' : '#e5e5e5', backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center', minHeight: 44 }}>
                   <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? '#FF4D00' : '#666' }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
                 </Pressable>
               ))}
             </View>
+
+            {/* Paso 7: Mixed payment slider */}
+            {draft.paymentMethod === 'mixed' && selectedEstimate && (
+              <View style={{ backgroundColor: '#f9fafb', borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text variant="caption" color="secondary">Wallet: {Math.round(draft.walletRatio * 100)}%</Text>
+                  <Text variant="caption" color="secondary">Efectivo: {Math.round((1 - draft.walletRatio) * 100)}%</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable onPress={() => setWalletRatio(Math.max(0, draft.walletRatio - 0.1))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#e5e5e5', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700' }}>−</Text>
+                  </Pressable>
+                  <View style={{ flex: 1, height: 6, backgroundColor: '#e5e5e5', borderRadius: 3, overflow: 'hidden' }}>
+                    <View style={{ width: `${draft.walletRatio * 100}%`, height: '100%', backgroundColor: '#FF4D00', borderRadius: 3 }} />
+                  </View>
+                  <Pressable onPress={() => setWalletRatio(Math.min(1, draft.walletRatio + 0.1))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#e5e5e5', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700' }}>+</Text>
+                  </Pressable>
+                </View>
+                <Text variant="caption" color="tertiary" style={{ textAlign: 'center', marginTop: 6 }}>
+                  {formatCUP(selectedEstimate.estimated_fare_cup * draft.walletRatio)} wallet + {formatCUP(selectedEstimate.estimated_fare_cup * (1 - draft.walletRatio))} efectivo
+                </Text>
+              </View>
+            )}
+
+            {/* Paso 5: Promo code */}
+            <Pressable onPress={() => setPromoExpanded(!promoExpanded)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
+              <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>Código promocional</Text>
+              <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color="#999" />
+            </Pressable>
+            {promoExpanded && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <View style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
+                  <TextInput
+                    value={promoCode}
+                    onChangeText={setPromoCode}
+                    placeholder="Ingresa un código"
+                    placeholderTextColor="#999"
+                    style={{ fontSize: 14, color: '#333', paddingVertical: 10 }}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <Button title="Aplicar" size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
+              </View>
+            )}
+            {promoResult?.valid && (
+              <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+                <Text variant="caption" style={{ color: '#22c55e' }}>Descuento de {formatCUP(promoResult.discountAmount)} aplicado</Text>
+              </View>
+            )}
+
+            {/* Paso 6: Schedule ride */}
+            <Pressable onPress={() => setScheduledAt(draft.scheduledAt ? null : minScheduleDate)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, marginBottom: 4 }}>
+              <Ionicons name={draft.scheduledAt ? 'checkbox' : 'square-outline'} size={20} color={draft.scheduledAt ? '#FF4D00' : '#999'} />
+              <Text variant="caption" color="secondary">Programar viaje</Text>
+            </Pressable>
+            {draft.scheduledAt && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <Pressable onPress={() => setShowDatePicker(true)} style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleDateString('es')}</Text>
+                </Pressable>
+                <Pressable onPress={() => setShowTimePicker(true)} style={{ flex: 1, backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
+                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</Text>
+                </Pressable>
+              </View>
+            )}
           </ScrollView>
-          <Button title={selectedEstimate ? `Pedir ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} className="mt-2" />
+          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Pedir'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} className="mt-2" />
         </View>
       )}
     </View>

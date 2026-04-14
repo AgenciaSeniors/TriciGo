@@ -477,6 +477,7 @@ export function useRideActions() {
       // BUG-075: Wrap subscription in try-catch to prevent leaked null reference on error
       try {
       channelRef.current = rideService.subscribeToRide(ride.id, async (updated) => {
+        try {
         // Capture previous state BEFORE updating store
         const prevRide = useRideStore.getState().activeRide;
 
@@ -622,6 +623,9 @@ export function useRideActions() {
           } catch {
             // Will retry on next update
           }
+        }
+        } catch (cbErr) {
+          logger.error('Realtime callback error', { error: String(cbErr), rideId: updated.id });
         }
       });
       } catch (subErr) {

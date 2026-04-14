@@ -203,7 +203,6 @@ function RideMapViewInner({
 
   // Build route GeoJSON from coordinates (static — no animation)
   const routeGeoJSON = useMemo(() => {
-    console.log('[RideMapView] routeCoordinates:', routeCoordinates?.length ?? 'null');
     if (!routeCoordinates || routeCoordinates.length < 2) return null;
     return {
       type: 'Feature' as const,
@@ -329,7 +328,7 @@ function RideMapViewInner({
         logoEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
-        onRegionDidChange={handleCameraChanged}
+        onMapIdle={handleCameraChanged}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to Havana */}
         <MapboxGL.Camera
@@ -452,6 +451,7 @@ function RideMapViewInner({
                 lineColor: ROUTE.main.color,
                 lineWidth: ROUTE.main.width,
                 lineOpacity: ROUTE.main.opacity,
+                lineDasharray: [0, 4, 3],
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
