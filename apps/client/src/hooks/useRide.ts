@@ -663,6 +663,13 @@ export function useRideActions() {
               }),
               visibilityTime: 3000,
             });
+            // F001: Re-trigger matching with expanded radius (counter already incremented)
+            const radius = RIDE_CONFIG.SEARCH_RADIUS_PROGRESSION[searchRetryCountRef.current - 1] ?? 12000;
+            try {
+              await rideService.retryMatchDrivers(ar.id, radius);
+            } catch {
+              // Best-effort — don't block retry scheduling
+            }
             // Schedule next timeout round
             scheduleSearchTimeout();
             return;

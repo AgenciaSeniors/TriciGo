@@ -208,6 +208,7 @@ export interface RideLocationEvent {
   longitude: number;
   heading: number | null;
   speed: number | null;
+  accuracy: number | null;
   recorded_at: string;
 }
 

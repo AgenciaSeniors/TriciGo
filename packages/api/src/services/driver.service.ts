@@ -261,6 +261,7 @@ export const driverService = {
     latitude: number,
     longitude: number,
     heading?: number,
+    activeRideId?: string,
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
@@ -276,6 +277,13 @@ export const driverService = {
     supabase.channel(`driver-location-${driverId}`)
       .send({ type: 'broadcast', event: 'location', payload: { latitude, longitude, heading } })
       .catch(() => { /* best-effort: web tracking broadcast */ });
+
+    // Broadcast on ride-level channel for share tracking (no driver_id exposed)
+    if (activeRideId) {
+      supabase.channel(`ride-driver-location-${activeRideId}`)
+        .send({ type: 'broadcast', event: 'driver_location', payload: { latitude, longitude } })
+        .catch(() => { /* best-effort: share tracking broadcast */ });
+    }
   },
 
   /**

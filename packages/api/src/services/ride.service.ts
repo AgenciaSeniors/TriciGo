@@ -553,6 +553,70 @@ export const rideService = {
   },
 
   /**
+   * Retry driver matching with an expanded search radius.
+   * Called from the client when the initial search times out.
+   * Returns the number of drivers notified.
+   */
+  async retryMatchDrivers(rideId: string, radiusM: number): Promise<number> {
+    const supabase = getSupabaseClient();
+
+    // Fetch ride and validate status — select only needed columns
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('id, status, ride_mode, service_type, pickup_lat, pickup_lng, pickup_address, dropoff_address')
+      .eq('id', rideId)
+      .single();
+    if (error) throw error;
+    if (!ride) throw new ValidationError('Ride not found');
+
+    if (ride.status !== 'searching') {
+      logger.info('retry_match_skipped', { rideId, status: ride.status });
+      return 0;
+    }
+
+    try {
+      const isDelivery = ride.ride_mode === 'cargo';
+      const drivers = await matchingService.findBestDrivers({
+        pickup_lat: ride.pickup_lat,
+        pickup_lng: ride.pickup_lng,
+        service_type: ride.service_type,
+        limit: 10,
+        radius_m: radiusM,
+        is_delivery: isDelivery,
+      });
+
+      logger.info('retry_drivers_matched', { rideId, radiusM, driversFound: drivers.length, isDelivery });
+
+      if (drivers.length === 0) return 0;
+
+      // Notify each matched driver via push notification
+      const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
+      if (driverUserIds.length > 0) {
+        const title = isDelivery ? 'Nuevo env\u00edo disponible' : 'Nuevo viaje disponible';
+        const body = isDelivery
+          ? `Env\u00edo de ${ride.pickup_address} a ${ride.dropoff_address}`
+          : `De ${ride.pickup_address} a ${ride.dropoff_address}`;
+        await notificationService.sendToMultipleUsers(
+          driverUserIds,
+          isDelivery ? 'new_delivery' : 'new_ride',
+          {
+            title,
+            body,
+            data: { ride_id: ride.id, type: isDelivery ? 'new_delivery' : 'new_ride' },
+          },
+        ).catch((err) => {
+          logger.warn('retry_notify_failed', { error: String(err), rideId });
+        });
+      }
+
+      return driverUserIds.length;
+    } catch (err) {
+      logger.error('retry_match_failed', { error: (err as Error).message, rideId, radiusM });
+      return 0;
+    }
+  },
+
+  /**
    * Get a ride with driver details (manual join).
    */
   async getRideWithDriver(rideId: string): Promise<RideWithDriver | null> {

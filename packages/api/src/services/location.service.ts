@@ -82,7 +82,7 @@ export const locationService = {
       accuracy: e.accuracy ?? null,
       recorded_at: e.recorded_at,
     }));
-    const { error } = await supabase.from('ride_location_events').insert(rows);
+    const { error } = await supabase.from('ride_location_events').upsert(rows, { onConflict: 'ride_id,recorded_at', ignoreDuplicates: true });
     if (error) throw error;
   },
 

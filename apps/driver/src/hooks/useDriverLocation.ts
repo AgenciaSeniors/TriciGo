@@ -122,7 +122,7 @@ export function useDriverLocationTracking(
             if (online) {
               // Update driver profile location
               driverService
-                .updateLocation(driverId!, pos.latitude, pos.longitude, pos.heading ?? undefined)
+                .updateLocation(driverId!, pos.latitude, pos.longitude, pos.heading ?? undefined, activeRideId ?? undefined)
                 .catch(() => { /* best-effort: location broadcast */ });
 
               // F604: Send heartbeat every 60s (throttled by lastHeartbeat ref)
