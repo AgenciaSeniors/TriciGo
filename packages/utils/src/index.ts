@@ -46,4 +46,4 @@ export { CUBAN_CITY_PACKS } from './mapboxOffline';
 export type { SearchBoxResult } from './geo';
 export type { CubanParsed } from './geo';
 export { jitterLocation } from './geo';
-export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, computeSpecificity, enrichWithCrossStreets, isGenericStreetAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';
+export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, enrichWithCrossStreets, isGenericStreetAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';

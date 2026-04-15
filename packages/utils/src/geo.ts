@@ -1222,8 +1222,10 @@ export function parseCubanAddress(query: string): CubanParsed | null {
   m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s*$/i);
   if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
-  // PARTIAL: "X entre Y" (user still typing, waiting for " y Z")
+  // PARTIAL: "X entre Y" or "X e/ Y" (user still typing, waiting for " y Z")
   m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
+  m = query.match(/^(.+?)\s+e\/\s*(.+)$/i);
   if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
   // PARTIAL: "X entre " or "X e/ " (waiting for cross1)
@@ -1550,10 +1552,6 @@ export async function reverseGeocode(
 ): Promise<string | null> {
   // Validate coordinates are finite numbers
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-  // Skip geocoding the Havana fallback center — it's not a real user location
-  if (Math.abs(lat - 23.1136) < 0.0001 && Math.abs(lng - (-82.3666)) < 0.0001) {
     return null;
   }
   try {
@@ -2314,6 +2312,64 @@ export async function searchPoisSupabase(
       place_name: r.name as string,
       full_address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', '),
       category: (r.subcategory as string) || (r.category as string) || '',
+      source: 'supabase' as const,
+      specificity: computeSpecificity(r.name as string),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Search street names in the street_intersections table.
+ * Returns streets matching the query with their closest intersection, sorted by relevance + proximity.
+ */
+export async function searchStreetsSupabase(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null = null,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey || query.length < 2) return [];
+
+    const lat = proximity?.latitude ?? 23.1136;
+    const lng = proximity?.longitude ?? -82.3666;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_streets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ query, lat, lng, max_results: limit }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((r: Record<string, unknown>) => ({
+      address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
+      latitude: r.latitude as number,
+      longitude: r.longitude as number,
+      place_name: r.name as string,
+      full_address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
+      category: 'street',
       source: 'supabase' as const,
       specificity: computeSpecificity(r.name as string),
     }));

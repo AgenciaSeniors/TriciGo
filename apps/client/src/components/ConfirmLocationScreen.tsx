@@ -63,6 +63,7 @@ export function ConfirmLocationScreen({
   const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
   const [isGeocoding, setIsGeocoding] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapRef = useRef<any>(null);
 
   // POIs
   const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
@@ -111,13 +112,22 @@ export function ConfirmLocationScreen({
     debounceRef.current = setTimeout(async () => {
       if (!mountedRef.current) return;
       setIsGeocoding(true);
-      try {
-        const result = await reverseGeocode(lat, lng);
-        if (mountedRef.current) setAddress(result ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-      } catch {
-        if (mountedRef.current) setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-      } finally {
-        if (mountedRef.current) setIsGeocoding(false);
+      setAddress(null); // Show shimmer
+
+      // Retry up to 3 times
+      let result: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (!mountedRef.current) break;
+        if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+        try {
+          result = await reverseGeocode(lat, lng);
+          if (result) break;
+        } catch { /* continue to next attempt */ }
+      }
+
+      if (mountedRef.current) {
+        setAddress(result ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        setIsGeocoding(false);
       }
     }, 300);
   }, []);
@@ -132,23 +142,24 @@ export function ConfirmLocationScreen({
     };
   }, []);
 
-  // Only geocode when map stops moving (onMapIdle), not during drag
-  const handleMapIdle = useCallback(() => {
-    // centerRef is already updated by onRegionDidChange
+  // Geocode when map stops moving — get center from MapView ref
+  const handleMapIdle = useCallback(async () => {
+    try {
+      if (mapRef.current?.getCenter) {
+        const center = await mapRef.current.getCenter();
+        if (center && Array.isArray(center) && center.length === 2) {
+          const [lng, lat] = center;
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            centerRef.current = { latitude: lat, longitude: lng };
+            geocodeCenter(lat, lng);
+            return;
+          }
+        }
+      }
+    } catch { /* fallback below */ }
+    // Fallback: use whatever is in centerRef (initial location)
     geocodeCenter(centerRef.current.latitude, centerRef.current.longitude);
   }, [geocodeCenter]);
-
-  // Track center silently during drag — no geocoding, no state updates
-  const handleRegionChange = useCallback(
-    (feature: any) => {
-      const coords = feature?.geometry?.coordinates;
-      if (!coords) return;
-      const [lng, lat] = coords;
-      centerRef.current = { latitude: lat, longitude: lng };
-      // Don't geocode here — wait for onMapIdle
-    },
-    [],
-  );
 
   const handleConfirm = () => {
     const finalAddress = address || 'Ubicación seleccionada en el mapa';
@@ -178,6 +189,7 @@ export function ConfirmLocationScreen({
     <View style={{ flex: 1 }}>
       {/* Map */}
       <MapboxGL.MapView
+        ref={mapRef}
         style={{ flex: 1 }}
         styleURL={MAP_STYLE_LIGHT}
         attributionEnabled={false}
@@ -188,7 +200,7 @@ export function ConfirmLocationScreen({
         zoomEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
-        onMapIdle={(event: any) => { handleMapIdle(event); handleCameraForPois(event); }}
+        onMapIdle={(event: any) => { handleMapIdle(); handleCameraForPois(event); }}
       >
         <MapboxGL.Camera
           defaultSettings={{

@@ -1659,28 +1659,28 @@ function IdleView() {
         // Center map immediately even before geocoding finishes
         if (!cancelled) setUserCenter([pos.coords.longitude, pos.coords.latitude]);
 
-        const address = await reverseGeocode(loc.latitude, loc.longitude);
+        // Show placeholder while geocoding resolves
+        const placeholder = t('home.detecting_address', { defaultValue: 'Detectando dirección...' });
         if (!cancelled) {
-          setUserCenter([pos.coords.longitude, pos.coords.latitude]);
-          const displayAddress = address || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
-          setPrefetchedPickup({ address: displayAddress, location: loc });
-          if (!draft.pickup) {
-            setPickup(displayAddress, loc);
-          }
-          // If geocoding failed (shows coordinates), retry after 2s
-          if (!address && !cancelled) {
-            setTimeout(async () => {
-              if (cancelled) return;
-              const retryAddress = await reverseGeocode(loc.latitude, loc.longitude);
-              if (retryAddress && !cancelled) {
-                setPrefetchedPickup({ address: retryAddress, location: loc });
-                const currentPickup = useRideStore.getState().draft.pickup;
-                if (currentPickup?.location.latitude === loc.latitude) {
-                  setPickup(retryAddress, loc);
-                }
-              }
-            }, 2000);
-          }
+          setPrefetchedPickup({ address: placeholder, location: loc });
+          setPickup(placeholder, loc);
+        }
+
+        // Retry geocoding up to 3 times (Mapbox can fail on cold start)
+        let resolvedAddress: string | null = null;
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+          if (cancelled) break;
+          try {
+            resolvedAddress = await reverseGeocode(loc.latitude, loc.longitude);
+            if (resolvedAddress) break;
+          } catch { /* continue to next attempt */ }
+        }
+
+        if (!cancelled) {
+          const finalAddress = resolvedAddress || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
+          setPrefetchedPickup({ address: finalAddress, location: loc });
+          setPickup(finalAddress, loc);
         }
       } catch {
         // Silently ignore — don't crash
@@ -2274,12 +2274,14 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     }).catch(() => {});
   }, [user?.id]);
 
-  // Auto-populate pickup from pre-fetched location (if empty)
+  // Auto-populate pickup from pre-fetched location (if empty or has only coordinates)
   useEffect(() => {
-    if (!draft.pickup && prefetchedPickup) {
+    if (!prefetchedPickup) return;
+    const currentPickup = useRideStore.getState().draft.pickup;
+    if (!currentPickup || (currentPickup.address.match(/^-?\d+\.\d+/) && prefetchedPickup.address !== currentPickup.address)) {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
-  }, [prefetchedPickup]);
+  }, [prefetchedPickup, setPickup]);
 
   // Auto-open destination search when entering selecting flow without dropoff
   useEffect(() => {
@@ -2314,7 +2316,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         pickupLocation={draft.pickup?.location ?? null}
         dropoffLocation={draft.dropoff?.location ?? null}
         routeCoordinates={routeCoordinates ?? null}
-        nearbyVehicles={[]}
+        nearbyVehicles={nearbyVehicles ?? []}
         waypointLocations={draft.waypoints.filter((wp) => wp.location).map((wp) => wp.location!)}
         pois={pois}
         onCameraChanged={onPoiCameraChanged}
@@ -2372,7 +2374,9 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
             <Text variant="h4" style={{ flex: 1, marginLeft: 8 }}>
               {searchingField === 'pickup'
                 ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
-                : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+                : searchingField === 'waypoint'
+                  ? t('ride.add_stop_title', { defaultValue: 'Agregar parada' })
+                  : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
             </Text>
           </View>
 
@@ -2381,10 +2385,16 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
             autoExpand
             placeholder={searchingField === 'pickup'
               ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
-              : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+              : searchingField === 'waypoint'
+                ? t('ride.add_stop_placeholder', { defaultValue: 'Buscar parada intermedia' })
+                : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
             onSelect={(address, location) => {
               if (searchingField === 'pickup') {
                 setPickup(address, location);
+              } else if (searchingField === 'waypoint') {
+                // Update the last added waypoint (addWaypoint was called before opening search)
+                const wpIdx = draft.waypoints.length - 1;
+                if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
                 setDropoff(address, location);
               }
@@ -2417,7 +2427,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
           <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.neutral[300], marginBottom: 8 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
-            {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort'] as const).map((slug) => {
+            {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => {
               const meta = SERVICE_META[slug];
               const est = allFareEstimates?.[slug];
               const isSelected = draft.serviceType === slug;
@@ -2447,6 +2457,103 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               );
             })}
 
+            {/* Delivery form — shown when mensajeria selected */}
+            {draft.serviceType === 'mensajeria' && (
+              <View style={{ backgroundColor: colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                <Text variant="caption" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
+                  {t('delivery.details', { defaultValue: 'Datos del envío' })}
+                </Text>
+                {/* Delivery vehicle selector */}
+                <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.vehicle', { defaultValue: 'Vehículo de envío' })}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((vt) => {
+                    const vLabel = SERVICE_META[vt]?.label ?? vt;
+                    const isSel = draft.delivery.deliveryVehicleType === vt;
+                    return (
+                      <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isSel ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
+                        <Text variant="caption" style={{ fontWeight: isSel ? '700' : '400', color: isSel ? colors.brand.orange : colors.neutral[600], fontSize: 11 }}>{vLabel}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {/* Recipient */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_name', { defaultValue: 'Destinatario' })}</Text>
+                    <TextInput value={draft.delivery.recipientName} onChangeText={(v) => setDeliveryField('recipientName', v)} placeholder="Nombre" placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_phone', { defaultValue: 'Teléfono' })}</Text>
+                    <TextInput value={draft.delivery.recipientPhone} onChangeText={(v) => setDeliveryField('recipientPhone', v)} placeholder="+53 5..." placeholderTextColor={colors.neutral[400]} keyboardType="phone-pad" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                  </View>
+                </View>
+                {/* Package category chips */}
+                <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.package_category', { defaultValue: 'Categoría' })}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {(['documents', 'food', 'electronics', 'clothing', 'other'] as const).map((cat) => {
+                      const catLabels: Record<string, string> = { documents: 'Documentos', food: 'Alimentos', electronics: 'Electrónica', clothing: 'Ropa', other: 'Otro' };
+                      const isCatSel = draft.delivery.packageCategory === cat;
+                      return (
+                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat as PackageCategory)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isCatSel ? '#FFF5F0' : '#fff' }}>
+                          <Text variant="caption" style={{ color: isCatSel ? colors.brand.orange : colors.neutral[600], fontWeight: isCatSel ? '600' : '400' }}>{catLabels[cat]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+                {/* Description + Weight */}
+                <TextInput value={draft.delivery.packageDescription} onChangeText={(v) => setDeliveryField('packageDescription', v)} placeholder={t('delivery.description_placeholder', { defaultValue: 'Descripción del paquete' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                <TextInput value={draft.delivery.estimatedWeightKg ? String(draft.delivery.estimatedWeightKg) : ''} onChangeText={(v) => setDeliveryField('estimatedWeightKg', Number(v) || 0)} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                {/* Special instructions */}
+                <TextInput value={draft.delivery.specialInstructions} onChangeText={(v) => setDeliveryField('specialInstructions', v)} placeholder={t('delivery.instructions', { defaultValue: 'Instrucciones especiales (opcional)' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                {/* Client accompanies toggle */}
+                <Pressable onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                  <Ionicons name={draft.delivery.clientAccompanies ? 'checkbox' : 'square-outline'} size={20} color={draft.delivery.clientAccompanies ? colors.brand.orange : colors.neutral[400]} />
+                  <Text variant="caption" color="secondary">{t('delivery.accompany', { defaultValue: 'Acompaño el envío' })}</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Passenger count selector */}
+            {draft.serviceType !== 'mensajeria' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, marginBottom: 4 }}>
+                <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{t('ride.passengers', { defaultValue: 'Pasajeros' })}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.max(1, (draft.passengerCount || 1) - 1)); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
+                  </Pressable>
+                  <Text variant="body" style={{ fontWeight: '700', minWidth: 20, textAlign: 'center' }}>{draft.passengerCount || 1}</Text>
+                  <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.min(6, (draft.passengerCount || 1) + 1)); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>+</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {/* Waypoints — add stops */}
+            <View style={{ marginBottom: 8 }}>
+              {draft.waypoints.filter(wp => wp.address).map((wp, idx) => (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.neutral[50], borderRadius: 8, padding: 8, marginBottom: 4 }}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand.orange, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{idx + 1}</Text>
+                  </View>
+                  <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>{wp.address}</Text>
+                  <Pressable onPress={() => removeWaypoint(idx)} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={18} color={colors.neutral[400]} />
+                  </Pressable>
+                </View>
+              ))}
+              {draft.waypoints.length < 3 && (
+                <Pressable onPress={() => { addWaypoint(); setSearchingField('waypoint' as any); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 }}>
+                  <Ionicons name="add-circle-outline" size={18} color={colors.brand.orange} />
+                  <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600' }}>
+                    {t('ride.add_stop', { defaultValue: '+ Agregar parada' })} ({draft.waypoints.length}/3)
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
             {/* Paso 4: Fare estimate summary box */}
             {selectedEstimate && (
               <View style={{ borderWidth: 2, borderColor: colors.brand.orange, borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
@@ -2465,6 +2572,14 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                   <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
                     {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP por km
                   </Text>
+                )}
+                {(selectedEstimate as any).surge_multiplier > 1 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="trending-up" size={14} color="#ef4444" />
+                    <Text variant="caption" style={{ color: '#ef4444', fontWeight: '600' }}>
+                      Tarifa dinámica ×{((selectedEstimate as any).surge_multiplier as number).toFixed(1)}
+                    </Text>
+                  </View>
                 )}
               </View>
             )}

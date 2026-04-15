@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -182,9 +182,14 @@ function AddressSearchInputInner({
           // If no intersection found, fall through to normal search
         }
 
-        // ── Normal search: try Supabase POIs first, fall back to Mapbox + Nominatim ──
-        const poiResults = await searchPoisSupabase(text, userLocation, 10);
-        const searchResults = poiResults.length > 0 ? poiResults : await searchAddress(text, 5, userLocation);
+        // ── Normal search: Supabase POIs + Streets in parallel, fall back to Mapbox ──
+        const [poiResults, streetResults] = await Promise.all([
+          searchPoisSupabase(text, userLocation, 5),
+          searchStreetsSupabase(text, userLocation, 5),
+        ]);
+        // Merge: streets first (more relevant for Cuban addresses), then POIs, then Mapbox fallback
+        const merged = [...streetResults, ...poiResults];
+        const searchResults = merged.length > 0 ? merged : await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results
@@ -336,7 +341,21 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    // Immediately select with current address
     onSelect(item.address, { latitude: item.latitude, longitude: item.longitude });
+    // Background: enrich with Cuban cross-street format via reverseGeocode
+    if (item.latitude && item.longitude) {
+      reverseGeocode(item.latitude, item.longitude).then((enriched) => {
+        if (enriched && enriched !== item.address) {
+          // If the original was a POI name (not a street), prepend it
+          const isPoiName = !item.address.includes(' e/ ') && !item.address.includes(' entre ') && !item.address.match(/^(Calle|Avenida|Calzada|Carretera)\s/i);
+          const finalAddress = isPoiName && !enriched.includes(item.address)
+            ? `${item.address}, ${enriched}`
+            : enriched;
+          onSelect(finalAddress, { latitude: item.latitude, longitude: item.longitude });
+        }
+      }).catch(() => {});
+    }
   };
 
   // UBER-1.3: Merge and rank all sources into a single list of 3
