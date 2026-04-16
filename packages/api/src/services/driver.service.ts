@@ -84,24 +84,21 @@ export const driverService = {
   ): Promise<DriverDocument> {
     const supabase = getSupabaseClient();
 
-    // Validate file size (10MB for PDF, 5MB for images)
-    const maxSize = mimeType === 'application/pdf' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
-
-    // Upload file to Supabase Storage
+    // Upload file to Supabase Storage.
+    // Use FormData with the native file URI (works on both iOS and Android).
+    // fetch(uri).blob() fails on Android because fetch() doesn't support file:// or content:// schemes.
     const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
-    const response = await fetch(filePath);
-    const blob = await response.blob();
-
-    // Check blob size against limit
-    if (blob.size > maxSize) {
-      const maxMB = maxSize / (1024 * 1024);
-      throw new Error(`File size exceeds ${maxMB}MB limit for ${mimeType === 'application/pdf' ? 'PDF' : 'image'} uploads`);
-    }
+    const formData = new FormData();
+    formData.append('', {
+      uri: filePath,
+      name: fileName,
+      type: mimeType,
+    } as unknown as Blob);
 
     const { error: uploadError } = await supabase.storage
       .from('driver-documents')
-      .upload(storagePath, blob, {
-        contentType: mimeType,
+      .upload(storagePath, formData, {
+        contentType: 'multipart/form-data',
         upsert: true,
       });
     if (uploadError) throw uploadError;
