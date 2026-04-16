@@ -198,10 +198,22 @@ export const adminService = {
       users: { full_name: string; phone: string; email: string | null };
     };
 
+    // Keep only the most recent document per document_type.
+    // Drivers may re-upload (e.g. after rejection or earlier failures), which
+    // leaves stale rows in the table. The admin UI should only see the latest.
+    const allDocs = (documentsRes.data as DriverDocument[]) ?? [];
+    const latestByType = new Map<string, DriverDocument>();
+    for (const doc of allDocs) {
+      // Rows come back ordered by uploaded_at DESC, so the first occurrence per type is the latest.
+      if (!latestByType.has(doc.document_type)) {
+        latestByType.set(doc.document_type, doc);
+      }
+    }
+
     return {
       profile,
       vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
-      documents: (documentsRes.data as DriverDocument[]) ?? [],
+      documents: Array.from(latestByType.values()),
       scoreEvents: (scoreEventsRes.data as DriverScoreEvent[]) ?? [],
     };
   },
