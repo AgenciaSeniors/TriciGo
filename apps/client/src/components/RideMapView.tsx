@@ -359,6 +359,10 @@ function RideMapViewInner({
         logoEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={true}
+        rotateEnabled={true}
         onMapIdle={handleCameraChanged}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to Havana */}
