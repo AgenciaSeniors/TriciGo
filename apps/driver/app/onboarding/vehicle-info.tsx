@@ -226,7 +226,7 @@ export default function VehicleInfoScreen() {
                     >
                       <Image
                         source={config.image}
-                        style={{ width: 72, height: 72, marginBottom: 8 }}
+                        style={{ width: 72, height: 72, marginBottom: 8, borderRadius: 12 }}
                         resizeMode="contain"
                       />
                       <Text
@@ -266,7 +266,7 @@ export default function VehicleInfoScreen() {
                 <AnimatedCard delay={300} duration={400}>
                   <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
                     <Input label={t('onboarding.vehicle_make')} placeholder="Custom" value={make} onChangeText={setMake} error={errors.make} variant="dark" />
-                    <Input label={t('onboarding.vehicle_model')} placeholder="Triciclo Eléctrico" value={model} onChangeText={setModel} error={errors.model} variant="dark" />
+                    <Input label={t('onboarding.vehicle_model')} placeholder="Ej: YBR 125, Piaggio, Geely..." value={model} onChangeText={setModel} error={errors.model} variant="dark" />
                     <View className="flex-row gap-3">
                       <View className="flex-1">
                         <Input label={t('onboarding.vehicle_year')} placeholder="2024" keyboardType="number-pad" value={year} onChangeText={setYear} error={errors.year} variant="dark" />
