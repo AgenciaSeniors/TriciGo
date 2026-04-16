@@ -24,7 +24,7 @@ const colorClasses = {
   primary: 'text-neutral-950 dark:text-neutral-50',
   secondary: 'text-neutral-600 dark:text-neutral-400',
   tertiary: 'text-neutral-400 dark:text-neutral-500',
-  inverse: 'text-white dark:text-neutral-950',
+  inverse: 'text-white',
   accent: 'text-primary-500',
   error: 'text-error',
   muted: 'text-neutral-500 dark:text-neutral-400',
