@@ -1,43 +1,44 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { DriverProfileWithUser } from '@tricigo/types';
-import { formatAdminDate } from '@/lib/formatDate';
-import type { DriverStatus } from '@tricigo/types';
-import { FilterPanel, type FilterField } from '@/components/FilterPanel';
+import type { DriverProfileWithUser, DriverStatus } from '@tricigo/types';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { exportToCsv } from '@/lib/exportCsv';
+import {
+  Search,
+  Download,
+  ChevronRight,
+  ArrowLeft,
+  ArrowRight,
+  Star,
+  Car,
+  Bike,
+  Package,
+  X,
+  Users,
+} from 'lucide-react';
 
 const PAGE_SIZE = 20;
 
 type StatusFilter = DriverStatus | 'all';
 
-const STATUS_FILTERS: { labelKey: string; value: StatusFilter }[] = [
-  { labelKey: 'drivers.filter_all', value: 'all' },
-  { labelKey: 'drivers.filter_pending', value: 'pending_verification' },
-  { labelKey: 'drivers.filter_in_review', value: 'under_review' },
-  { labelKey: 'drivers.filter_approved', value: 'approved' },
-  { labelKey: 'drivers.filter_rejected', value: 'rejected' },
-  { labelKey: 'drivers.filter_suspended', value: 'suspended' },
-];
-
-const statusBadgeClasses: Record<DriverStatus, string> = {
-  pending_verification: 'bg-yellow-50 text-yellow-700',
-  under_review: 'bg-blue-50 text-blue-700',
-  approved: 'bg-green-50 text-green-700',
-  rejected: 'bg-red-50 text-red-700',
-  suspended: 'bg-orange-50 text-orange-700',
+// ─── Status visual tokens ────────────────────────────────────
+const STATUS_STYLES: Record<DriverStatus, { dot: string; text: string; gradient: string }> = {
+  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700', gradient: 'from-yellow-400 to-amber-600' },
+  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700',   gradient: 'from-blue-400 to-blue-600' },
+  approved:             { dot: 'bg-green-500',  text: 'text-green-700',  gradient: 'from-green-400 to-emerald-600' },
+  rejected:             { dot: 'bg-red-500',    text: 'text-red-700',    gradient: 'from-red-400 to-rose-600' },
+  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700', gradient: 'from-orange-400 to-orange-600' },
 };
 
-const statusLabelKeys: Record<DriverStatus, string> = {
+const STATUS_LABEL_KEYS: Record<DriverStatus, string> = {
   pending_verification: 'drivers.status_pending',
   under_review: 'drivers.status_in_review',
   approved: 'drivers.status_approved',
@@ -45,108 +46,133 @@ const statusLabelKeys: Record<DriverStatus, string> = {
   suspended: 'drivers.status_suspended',
 };
 
-const EMPTY_FILTERS: Record<string, string> = {
-  search: '',
-  ratingMin: '',
-  vehicleType: '',
-};
+// ─── Small helpers ───────────────────────────────────────────
+function getInitials(name?: string | null): string {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function vehicleIcon(type?: string) {
+  switch (type) {
+    case 'auto': return Car;
+    case 'moto': case 'triciclo': return Bike;
+    default: return Package;
+  }
+}
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const d = Math.floor(diff / 86_400_000);
+  if (d < 1) return 'hoy';
+  if (d === 1) return 'ayer';
+  if (d < 7) return `hace ${d} días`;
+  if (d < 30) return `hace ${Math.floor(d / 7)} sem`;
+  if (d < 365) return `hace ${Math.floor(d / 30)} mes`;
+  return `hace ${Math.floor(d / 365)} año`;
+}
 
 export default function DriversPage() {
   const router = useRouter();
   const { t } = useTranslation('admin');
+
+  // ─── State ─────────────────────────────────────────────────
   const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
-  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
-  const [selectedCity, setSelectedCity] = useState<string>('');
 
+  // Unified filter state
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
+  const [ratingMin, setRatingMin] = useState('');
+  const [vehicleType, setVehicleType] = useState('');
+  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCity, setSelectedCity] = useState('');
+
+  const hasFilters = !!(statusFilter !== 'all' || search || ratingMin || vehicleType || selectedCity);
+
+  // ─── Data loading ──────────────────────────────────────────
   useEffect(() => {
     const supabase = createBrowserClient();
     supabase.from('cities').select('id, name').eq('is_active', true).order('name')
       .then(({ data }) => { if (data) setCities(data); });
   }, []);
 
-  const filterFields: FilterField[] = [
-    {
-      key: 'search',
-      label: t('filters.search'),
-      type: 'text',
-      placeholder: t('filters.search_driver_placeholder'),
-    },
-    {
-      key: 'ratingMin',
-      label: t('filters.rating_min'),
-      type: 'select',
-      placeholder: t('filters.all'),
-      options: [
-        { label: '4.0+', value: '4.0' },
-        { label: '4.5+', value: '4.5' },
-        { label: '3.0+', value: '3.0' },
-      ],
-    },
-    {
-      key: 'vehicleType',
-      label: t('filters.vehicle_type'),
-      type: 'select',
-      placeholder: t('filters.all'),
-      options: [
-        { label: t('drivers.type_triciclo'), value: 'triciclo' },
-        { label: t('drivers.type_moto'), value: 'moto' },
-        { label: t('drivers.type_auto'), value: 'auto' },
-      ],
-    },
-  ];
-
-  const handleFilterChange = useCallback((key: string, value: string) => {
-    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
-    setPage(0);
-  }, []);
-
-  const handleClearFilters = useCallback(() => {
-    setAdvancedFilters({ ...EMPTY_FILTERS });
-    setPage(0);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    async function fetchDrivers() {
+    (async () => {
       try {
-        const filters: Record<string, any> = {};
+        const filters: Record<string, unknown> = {};
         if (statusFilter !== 'all') filters.status = statusFilter;
-        if (advancedFilters.search) filters.search = advancedFilters.search;
-        if (advancedFilters.ratingMin) filters.ratingMin = parseFloat(advancedFilters.ratingMin);
-        if (advancedFilters.vehicleType) filters.vehicleType = advancedFilters.vehicleType;
+        if (search) filters.search = search;
+        if (ratingMin) filters.ratingMin = parseFloat(ratingMin);
+        if (vehicleType) filters.vehicleType = vehicleType;
         if (selectedCity) filters.cityId = selectedCity;
 
         const data = await adminService.getAllDrivers(page, PAGE_SIZE, filters);
         if (!cancelled) setDrivers(data);
       } catch (err) {
-        // Error handled by UI
-        if (!cancelled) { setDrivers([]); setError(err instanceof Error ? err.message : 'Error al cargar conductores'); }
+        if (!cancelled) {
+          setDrivers([]);
+          setError(err instanceof Error ? err.message : 'Error al cargar conductores');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
+    })();
 
-    fetchDrivers();
     return () => { cancelled = true; };
-  }, [page, statusFilter, advancedFilters, selectedCity]);
+  }, [page, statusFilter, search, ratingMin, vehicleType, selectedCity]);
 
   const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(drivers, 'created_at');
 
   const canGoPrev = page > 0;
-  // Heuristic: if we got exactly PAGE_SIZE items, there may be more pages.
-  // This can show a false "next" on the last page when items are exactly PAGE_SIZE,
-  // but it's an acceptable trade-off to avoid an extra count query.
   const canGoNext = drivers.length === PAGE_SIZE;
 
+  // Summary counts (from current page — not global totals)
+  const pendingCount = sortedData.filter((d) => d.status === 'pending_verification' || d.status === 'under_review').length;
+  const onlineCount = sortedData.filter((d) => d.is_online).length;
+
+  // ─── Handlers ──────────────────────────────────────────────
+  const clearFilters = useCallback(() => {
+    setStatusFilter('all');
+    setSearch('');
+    setRatingMin('');
+    setVehicleType('');
+    setSelectedCity('');
+    setPage(0);
+  }, []);
+
+  const handleExport = useCallback(() => {
+    exportToCsv(
+      sortedData.map((d) => ({
+        ...d,
+        name: d.users?.full_name ?? '',
+        phone: d.users?.phone ?? '',
+        vehicle: d.vehicles?.[0] ? `${d.vehicles[0].type} — ${d.vehicles[0].plate_number}` : '',
+      })) as unknown as Record<string, unknown>[],
+      [
+        { key: 'name', label: t('drivers.col_name') },
+        { key: 'phone', label: t('drivers.col_phone') },
+        { key: 'vehicle', label: t('drivers.col_vehicle') },
+        { key: 'status', label: t('drivers.col_status') },
+        { key: 'rating_avg', label: t('drivers.col_rating') },
+        { key: 'created_at', label: t('drivers.col_registered') },
+      ],
+      'drivers',
+    );
+  }, [sortedData, t]);
+
+  // ─── Render ────────────────────────────────────────────────
   return (
-    <div>
+    <div className="min-h-screen">
       {error && (
         <AdminErrorBanner
           message={error}
@@ -155,190 +181,306 @@ export default function DriversPage() {
         />
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">{t('drivers.title')}</h1>
+      {/* ─── Page header ────────────────────────────────────── */}
+      <header className="mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              {t('drivers.title', { defaultValue: 'Conductores' })}
+            </h1>
+            <p className="mt-1 text-sm text-neutral-500">
+              {sortedData.length} {t('drivers.in_page', { defaultValue: 'en esta página' })}
+              {pendingCount > 0 && <> · <span className="text-yellow-700">{pendingCount} {t('drivers.pending_label', { defaultValue: 'pendientes' })}</span></>}
+              {onlineCount > 0 && <> · <span className="text-green-700">{onlineCount} {t('drivers.online_label', { defaultValue: 'en línea' })}</span></>}
+            </p>
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={sortedData.length === 0}
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <Download size={14} />
+            {t('common.export_csv', { defaultValue: 'Exportar CSV' })}
+          </button>
+        </div>
+      </header>
+
+      {/* ─── Unified filter bar ─────────────────────────────── */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder={t('filters.search_driver_placeholder', { defaultValue: 'Buscar nombre o teléfono...' })}
+            className="w-full h-9 pl-9 pr-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setPage(0); }}
+          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="all">{t('drivers.filter_all', { defaultValue: 'Todos los estados' })}</option>
+          <option value="pending_verification">{t('drivers.status_pending', { defaultValue: 'Pendiente' })}</option>
+          <option value="under_review">{t('drivers.status_in_review', { defaultValue: 'En revisión' })}</option>
+          <option value="approved">{t('drivers.status_approved', { defaultValue: 'Aprobado' })}</option>
+          <option value="rejected">{t('drivers.status_rejected', { defaultValue: 'Rechazado' })}</option>
+          <option value="suspended">{t('drivers.status_suspended', { defaultValue: 'Suspendido' })}</option>
+        </select>
+
+        <select
+          value={vehicleType}
+          onChange={(e) => { setVehicleType(e.target.value); setPage(0); }}
+          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">{t('filters.all_vehicles', { defaultValue: 'Todos los vehículos' })}</option>
+          <option value="triciclo">{t('drivers.type_triciclo', { defaultValue: 'Triciclo' })}</option>
+          <option value="moto">{t('drivers.type_moto', { defaultValue: 'Moto' })}</option>
+          <option value="auto">{t('drivers.type_auto', { defaultValue: 'Auto' })}</option>
+        </select>
+
+        <select
+          value={selectedCity}
+          onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
+          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">{t('cities.all_cities', { defaultValue: 'Todas las ciudades' })}</option>
+          {cities.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={ratingMin}
+          onChange={(e) => { setRatingMin(e.target.value); setPage(0); }}
+          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">{t('filters.any_rating', { defaultValue: 'Cualquier rating' })}</option>
+          <option value="3.0">3.0+</option>
+          <option value="4.0">4.0+</option>
+          <option value="4.5">4.5+</option>
+        </select>
+
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm text-neutral-600 hover:text-neutral-900 transition-colors"
+          >
+            <X size={14} />
+            {t('filters.clear_all', { defaultValue: 'Limpiar' })}
+          </button>
+        )}
+      </div>
+
+      {/* ─── Desktop table ──────────────────────────────────── */}
+      <div className="hidden md:block bg-white rounded-xl border border-neutral-200/80 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full" aria-label={t('drivers.title')}>
+            <thead>
+              <tr className="border-b border-neutral-100 bg-neutral-50/50">
+                <th className="w-14"></th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  {t('drivers.col_name', { defaultValue: 'Conductor' })}
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                  {t('drivers.col_vehicle', { defaultValue: 'Vehículo' })}
+                </th>
+                <SortableHeader
+                  label={t('drivers.col_status', { defaultValue: 'Estado' })}
+                  sortKey="status"
+                  currentSortKey={sortKey as string | null}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort as (key: string) => void}
+                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                />
+                <SortableHeader
+                  label={t('drivers.col_rating', { defaultValue: 'Rating' })}
+                  sortKey="rating_avg"
+                  currentSortKey={sortKey as string | null}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort as (key: string) => void}
+                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                />
+                <SortableHeader
+                  label={t('drivers.col_registered', { defaultValue: 'Registrado' })}
+                  sortKey="created_at"
+                  currentSortKey={sortKey as string | null}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort as (key: string) => void}
+                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                />
+                <th className="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="px-0 py-0"><AdminTableSkeleton rows={5} columns={7} /></td></tr>
+              ) : sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-16">
+                    <div className="flex flex-col items-center text-center gap-2">
+                      <Users size={28} className="text-neutral-300" />
+                      <p className="text-sm font-medium text-neutral-700">
+                        {t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}
+                      </p>
+                      {hasFilters && (
+                        <button onClick={clearFilters} className="text-sm text-primary-500 hover:text-primary-600 mt-1">
+                          {t('filters.clear_all', { defaultValue: 'Limpiar filtros' })}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                sortedData.map((driver) => {
+                  const vehicle = driver.vehicles?.[0];
+                  const VIcon = vehicleIcon(vehicle?.type);
+                  const status = STATUS_STYLES[driver.status];
+                  return (
+                    <tr
+                      key={driver.id}
+                      onClick={() => router.push(`/drivers/${driver.id}`)}
+                      className="group h-14 border-b border-neutral-50 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors border-l-2 border-l-transparent hover:border-l-primary-500"
+                    >
+                      <td className="pl-4">
+                        <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${status.gradient} flex items-center justify-center text-white text-xs font-semibold`}>
+                          {getInitials(driver.users?.full_name)}
+                        </div>
+                      </td>
+                      <td className="px-4">
+                        <div className="font-medium text-sm text-neutral-900 leading-tight">
+                          {driver.users?.full_name || t('common.no_name', { defaultValue: 'Sin nombre' })}
+                        </div>
+                        <div className="text-xs text-neutral-500 mt-0.5">{driver.users?.phone ?? '—'}</div>
+                      </td>
+                      <td className="px-4">
+                        {vehicle ? (
+                          <div className="flex items-center gap-2">
+                            <VIcon size={16} className="text-neutral-400" />
+                            <div>
+                              <div className="text-sm text-neutral-700 capitalize">{vehicle.type}</div>
+                              <div className="text-xs text-neutral-500">{vehicle.plate_number}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-neutral-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4">
+                        <div className="inline-flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+                          <span className={`text-sm ${status.text}`}>{t(STATUS_LABEL_KEYS[driver.status])}</span>
+                        </div>
+                        {driver.is_on_break && (
+                          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700">
+                            {t('drivers.on_break', { defaultValue: 'En descanso' })}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4">
+                        {driver.rating_avg > 0 ? (
+                          <div className="inline-flex items-center gap-1">
+                            <Star size={13} className="text-amber-500 fill-amber-500" />
+                            <span className="text-sm text-neutral-700 tabular-nums">
+                              {Number(driver.rating_avg).toFixed(1)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-neutral-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 text-sm text-neutral-500 tabular-nums">
+                        {formatRelative(driver.created_at)}
+                      </td>
+                      <td className="pr-4">
+                        <ChevronRight size={16} className="text-neutral-300 group-hover:text-neutral-500 transition-colors" />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ─── Mobile card list ───────────────────────────────── */}
+      <div className="md:hidden space-y-2">
+        {loading ? (
+          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+            <AdminTableSkeleton rows={5} columns={1} />
+          </div>
+        ) : sortedData.length === 0 ? (
+          <div className="bg-white rounded-xl border border-neutral-200 p-8 text-center">
+            <Users size={28} className="text-neutral-300 mx-auto mb-2" />
+            <p className="text-sm font-medium text-neutral-700">{t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}</p>
+          </div>
+        ) : (
+          sortedData.map((driver) => {
+            const vehicle = driver.vehicles?.[0];
+            const status = STATUS_STYLES[driver.status];
+            return (
+              <button
+                key={driver.id}
+                onClick={() => router.push(`/drivers/${driver.id}`)}
+                className="w-full text-left bg-white rounded-xl border border-neutral-200 p-3 flex items-center gap-3 hover:bg-neutral-50 transition-colors active:scale-[0.99]"
+              >
+                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${status.gradient} flex items-center justify-center text-white text-sm font-semibold shrink-0`}>
+                  {getInitials(driver.users?.full_name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-neutral-900 truncate">
+                    {driver.users?.full_name || '—'}
+                  </div>
+                  <div className="text-xs text-neutral-500 truncate mt-0.5">
+                    {driver.users?.phone ?? '—'} {vehicle && <>· {vehicle.plate_number}</>}
+                  </div>
+                  <div className="mt-1 inline-flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                    <span className={`text-xs ${status.text}`}>{t(STATUS_LABEL_KEYS[driver.status])}</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-neutral-300 shrink-0" />
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      {/* ─── Pagination ─────────────────────────────────────── */}
+      <div className="mt-6 flex items-center justify-between">
+        <p className="text-sm text-neutral-500 tabular-nums">
+          {!loading && sortedData.length > 0 && (
+            <>
+              {t('common.showing', { defaultValue: 'Mostrando' })} {page * PAGE_SIZE + 1}
+              –{page * PAGE_SIZE + sortedData.length}
+            </>
+          )}
+        </p>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              exportToCsv(
-                sortedData.map((d) => ({
-                  ...d,
-                  name: d.users?.full_name ?? '',
-                  phone: d.users?.phone ?? '',
-                  vehicle: d.vehicles?.[0] ? `${d.vehicles[0].type} — ${d.vehicles[0].plate_number}` : '',
-                })) as unknown as Record<string, unknown>[],
-                [
-                  { key: 'name', label: t('drivers.col_name') },
-                  { key: 'phone', label: t('drivers.col_phone') },
-                  { key: 'vehicle', label: t('drivers.col_vehicle') },
-                  { key: 'status', label: t('drivers.col_status') },
-                  { key: 'rating_avg', label: t('drivers.col_rating') },
-                  { key: 'created_at', label: t('drivers.col_registered') },
-                ],
-                'drivers',
-              );
-            }}
-            disabled={sortedData.length === 0}
-            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={!canGoPrev}
+            aria-label={t('common.previous', { defaultValue: 'Anterior' })}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {t('common.export_csv', { defaultValue: 'Export CSV' })}
+            <ArrowLeft size={14} />
+            {t('common.previous', { defaultValue: 'Anterior' })}
           </button>
-          <select
-            value={selectedCity}
-            onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
-            aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
-            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
-          >
-            <option value="">{t('cities.all_cities')}</option>
-            {cities.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Status filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {STATUS_FILTERS.map((filter) => (
+          <span className="text-sm text-neutral-500 tabular-nums px-2">{page + 1}</span>
           <button
-            key={filter.value}
-            onClick={() => {
-              setStatusFilter(filter.value);
-              setPage(0);
-            }}
-            aria-pressed={statusFilter === filter.value}
-            aria-label={t(filter.labelKey)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              statusFilter === filter.value
-                ? 'bg-primary-500 text-white'
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
-            }`}
+            onClick={() => setPage((p) => p + 1)}
+            disabled={!canGoNext}
+            aria-label={t('common.next', { defaultValue: 'Siguiente' })}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {t(filter.labelKey)}
+            {t('common.next', { defaultValue: 'Siguiente' })}
+            <ArrowRight size={14} />
           </button>
-        ))}
-      </div>
-
-      {/* Advanced filters */}
-      <FilterPanel
-        fields={filterFields}
-        values={advancedFilters}
-        onChange={handleFilterChange}
-        onClear={handleClearFilters}
-        clearLabel={t('filters.clear_all')}
-        toggleLabel={t('filters.advanced_filters')}
-      />
-
-      {/* Drivers table */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full" aria-label={t('drivers.title')}>
-          <thead>
-            <tr className="border-b border-neutral-100">
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_name')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('drivers.col_phone')}</th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('drivers.col_vehicle')}</th>
-              <SortableHeader label={t('drivers.col_status')} sortKey="status" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap" />
-              <SortableHeader label={t('drivers.col_rating')} sortKey="rating_avg" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
-              <SortableHeader label={t('drivers.col_registered')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">{t('common.actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={7} className="px-0 py-0">
-                  <AdminTableSkeleton rows={5} columns={7} />
-                </td>
-              </tr>
-            ) : sortedData.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="text-center py-12 text-neutral-400">
-                  {t('drivers.no_drivers')}
-                </td>
-              </tr>
-            ) : (
-              sortedData.map((driver) => {
-                const vehicle = driver.vehicles?.[0];
-                return (
-                  <tr
-                    key={driver.id}
-                    className="border-b border-neutral-50 hover:bg-neutral-50 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/drivers/${driver.id}`)}
-                  >
-                    <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
-                      {driver.users.full_name || '—'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {driver.users.phone}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">
-                      {vehicle ? `${vehicle.type} — ${vehicle.plate_number}` : '—'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          statusBadgeClasses[driver.status]
-                        }`}
-                      >
-                        {t(statusLabelKeys[driver.status])}
-                      </span>
-                      {(driver as any).is_on_break && (
-                        <span className="inline-block ml-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-                          {t('drivers.on_break', { defaultValue: 'En descanso' })}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {Number(driver.rating_avg).toFixed(1)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {formatAdminDate(driver.created_at)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/drivers/${driver.id}`}
-                        className="text-sm font-medium text-primary-500 hover:text-primary-600 transition-colors"
-                      >
-                        {t('common.view_detail')}
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
         </div>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={!canGoPrev}
-          aria-label={t('common.previous')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoPrev
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.previous')}
-        </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">{t('common.page')} {page + 1}</span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canGoNext}
-          aria-label={t('common.next')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoNext
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.next')}
-        </button>
       </div>
     </div>
   );

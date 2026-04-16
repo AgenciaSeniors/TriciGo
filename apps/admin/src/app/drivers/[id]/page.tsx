@@ -1,15 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { formatCUP } from '@tricigo/utils';
-import type { DriverProfile, DriverDocument, DriverScoreEvent, Vehicle, DriverStatus, SelfieCheck, ReviewTagSummaryItem } from '@tricigo/types';
+import type {
+  DriverProfile,
+  DriverDocument,
+  DriverScoreEvent,
+  Vehicle,
+  DriverStatus,
+  SelfieCheck,
+  ReviewTagSummaryItem,
+} from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import {
+  ArrowLeft,
+  FileText,
+  Car,
+  Bike,
+  Package,
+  Star,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  MoreVertical,
+  ExternalLink,
+  Shield,
+  TrendingUp,
+  TrendingDown,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+} from 'lucide-react';
 
 type DriverDetail = {
   profile: DriverProfile & { users: { full_name: string; phone: string; email: string | null } };
@@ -18,12 +46,13 @@ type DriverDetail = {
   scoreEvents: DriverScoreEvent[];
 };
 
-const statusBadgeClasses: Record<DriverStatus, string> = {
-  pending_verification: 'bg-yellow-50 text-yellow-700',
-  under_review: 'bg-blue-50 text-blue-700',
-  approved: 'bg-green-50 text-green-700',
-  rejected: 'bg-red-50 text-red-700',
-  suspended: 'bg-orange-50 text-orange-700',
+// ─── Status visual tokens ─────────────────────────────────────
+const STATUS_STYLES: Record<DriverStatus, { dot: string; text: string; bg: string; gradient: string }> = {
+  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700', bg: 'bg-yellow-50', gradient: 'from-yellow-400 to-amber-600' },
+  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700',   bg: 'bg-blue-50',   gradient: 'from-blue-400 to-blue-600' },
+  approved:             { dot: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',  gradient: 'from-green-400 to-emerald-600' },
+  rejected:             { dot: 'bg-red-500',    text: 'text-red-700',    bg: 'bg-red-50',    gradient: 'from-red-400 to-rose-600' },
+  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50', gradient: 'from-orange-400 to-orange-600' },
 };
 
 const STATUS_LABEL_KEY: Record<DriverStatus, string> = {
@@ -48,12 +77,27 @@ const DOC_TYPE_KEY: Record<string, string> = {
   vehicle_photo: 'drivers.doc_vehicle_photo',
 };
 
+function getInitials(name?: string | null): string {
+  if (!name) return '?';
+  return name.split(' ').filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('');
+}
+
+function vehicleIcon(type?: string) {
+  switch (type) {
+    case 'auto': return Car;
+    case 'moto': case 'triciclo': return Bike;
+    default: return Package;
+  }
+}
+
 export default function DriverDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+
+  // ─── State ─────────────────────────────────────────────────
   const [driver, setDriver] = useState<DriverDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -66,12 +110,16 @@ export default function DriverDetailPage() {
   const [churnRisk, setChurnRisk] = useState<{ churn_risk_score: number; risk_level: string; days_since_last_ride: number; earnings_this_week: number } | null>(null);
   const [docNotes, setDocNotes] = useState<Record<string, string>>({});
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
+  // ─── Data loading ──────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
-    async function load() {
+    (async () => {
       try {
         const [data, checks, reviewSummary] = await Promise.all([
           adminService.getDriverDetail(id),
@@ -82,7 +130,6 @@ export default function DriverDetailPage() {
           setDriver(data);
           setSelfieChecks(checks);
           if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
-          // Fetch churn risk
           adminService.getDriverChurnRisk(id).then((risk) => {
             if (!cancelled && risk) setChurnRisk(risk);
           }).catch(() => {});
@@ -92,16 +139,14 @@ export default function DriverDetailPage() {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
+    })();
 
-    load();
     return () => { cancelled = true; };
   }, [id]);
 
-  // Load document signed URLs
+  // Load signed URLs for documents
   useEffect(() => {
     if (!driver?.documents.length) return;
-
     driver.documents.forEach(async (doc) => {
       try {
         const url = await adminService.getDocumentUrl(doc.storage_path);
@@ -116,6 +161,29 @@ export default function DriverDetailPage() {
     });
   }, [driver?.documents]);
 
+  // Close actions menu on outside click
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [actionsMenuOpen]);
+
+  // Close modal on ESC
+  useEffect(() => {
+    if (!showReasonModal) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setShowReasonModal(null); setReason(''); }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [showReasonModal]);
+
+  // ─── Handlers ──────────────────────────────────────────────
   const refreshDriver = async () => {
     if (!id) return;
     const [data, checks] = await Promise.all([
@@ -132,8 +200,10 @@ export default function DriverDetailPage() {
       await adminService.verifyDocument(documentId, adminUserId, isVerified, docNotes[documentId] || undefined);
       setDocNotes((prev) => ({ ...prev, [documentId]: '' }));
       await refreshDriver();
-    } catch (err) {
-      // Error handled by UI
+      showToast('success', isVerified
+        ? t('drivers.doc_verified', { defaultValue: 'Documento verificado' })
+        : t('drivers.doc_rejected', { defaultValue: 'Documento rechazado' })
+      );
     } finally {
       setVerifyingDoc(null);
     }
@@ -142,12 +212,11 @@ export default function DriverDetailPage() {
   const handleApprove = async () => {
     if (!id) return;
     setActionLoading(true);
+    setActionsMenuOpen(false);
     try {
       await adminService.approveDriver(id, adminUserId);
       await refreshDriver();
       showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
-    } catch (err) {
-      // Error handled by UI
     } finally {
       setActionLoading(false);
     }
@@ -165,571 +234,701 @@ export default function DriverDetailPage() {
       await refreshDriver();
       setShowReasonModal(null);
       setReason('');
-      showToast('success', showReasonModal === 'reject' ? t('drivers.rejected_success', { defaultValue: 'Conductor rechazado' }) : t('drivers.suspended_success', { defaultValue: 'Conductor suspendido' }));
-    } catch (err) {
-      // Error handled by UI
+      showToast('success', showReasonModal === 'reject'
+        ? t('drivers.rejected_success', { defaultValue: 'Conductor rechazado' })
+        : t('drivers.suspended_success', { defaultValue: 'Conductor suspendido' })
+      );
     } finally {
       setActionLoading(false);
     }
   };
 
+  // ─── Loading / error states ────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <div className="flex items-center gap-2 text-neutral-400">
+          <Clock size={16} className="animate-spin" />
+          {t('common.loading', { defaultValue: 'Cargando...' })}
+        </div>
       </div>
     );
   }
 
   if (!driver) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-neutral-400">
-          {apiError ? t('drivers.error_loading', { defaultValue: 'Error al cargar datos del conductor' }) : t('drivers.driver_not_found')}
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <AlertTriangle size={32} className="text-neutral-300" />
+        <p className="text-sm text-neutral-500">
+          {apiError
+            ? t('drivers.error_loading', { defaultValue: 'Error al cargar datos del conductor' })
+            : t('drivers.driver_not_found', { defaultValue: 'Conductor no encontrado' })}
         </p>
+        <button
+          onClick={() => router.push('/drivers')}
+          className="text-sm text-primary-500 hover:text-primary-600"
+        >
+          {t('common.back', { defaultValue: 'Volver' })}
+        </button>
       </div>
     );
   }
 
   const { profile, vehicle, documents, scoreEvents } = driver;
   const status = profile.status as DriverStatus;
+  const statusStyle = STATUS_STYLES[status];
   const verifiedDocsCount = documents.filter((d) => d.is_verified).length;
   const totalDocsCount = documents.length;
   const allDocsVerified = totalDocsCount >= 5 && verifiedDocsCount === totalDocsCount;
+  const VIcon = vehicleIcon(vehicle?.type);
 
   return (
-    <div className="max-w-4xl">
-      <AdminBreadcrumb items={[{ label: 'Conductores', href: '/drivers' }, { label: profile.users.full_name || '—' }]} />
+    <div className="pb-16">
+      {/* ─── Top header ──────────────────────────────────── */}
+      <header className="mb-6">
+        <button
+          onClick={() => router.push('/drivers')}
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors mb-3"
+        >
+          <ArrowLeft size={14} />
+          {t('drivers.back_to_list', { defaultValue: 'Conductores' })}
+        </button>
 
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">{profile.users.full_name || '—'}</h1>
-          <span
-            className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-medium ${statusBadgeClasses[status]}`}
-          >
-            {STATUS_LABEL_KEY[status] ? t(STATUS_LABEL_KEY[status]!) : status}
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Personal Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
-          <h2 className="text-lg font-bold mb-4">{t('drivers.personal_info')}</h2>
-          <dl className="space-y-3">
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_name')}</dt>
-              <dd className="text-sm font-medium">{profile.users.full_name || '—'}</dd>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${statusStyle.gradient} flex items-center justify-center text-white text-lg font-semibold shrink-0`}>
+              {getInitials(profile.users.full_name)}
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_phone')}</dt>
-              <dd className="text-sm font-medium">{profile.users.phone}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_email')}</dt>
-              <dd className="text-sm font-medium">{profile.users.email || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_rating')}</dt>
-              <dd className="text-sm font-medium">{Number(profile.rating_avg).toFixed(1)} / 5.0</dd>
-              {topTags.length > 0 && (
-                <div className="mt-2">
-                  <dt className="text-xs text-neutral-400 mb-1">{t('drivers.top_review_tags')}</dt>
-                  <dd className="flex flex-wrap gap-1">
-                    {topTags.slice(0, 5).map((tag) => (
-                      <span
-                        key={tag.tag_key}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-xs text-neutral-600"
-                      >
-                        {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
-                        <span className="text-neutral-400">({tag.count})</span>
-                      </span>
-                    ))}
-                  </dd>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+                  {profile.users.full_name || '—'}
+                </h1>
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
+                  {t(STATUS_LABEL_KEY[status])}
                 </div>
-              )}
+              </div>
+              <p className="text-sm text-neutral-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                <Phone size={12} />
+                {profile.users.phone}
+                {profile.users.email && <>
+                  <span className="text-neutral-300">·</span>
+                  <Mail size={12} />
+                  {profile.users.email}
+                </>}
+                <span className="text-neutral-300">·</span>
+                <Calendar size={12} />
+                {formatAdminDate(profile.created_at)}
+              </p>
             </div>
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_completed_rides')}</dt>
-              <dd className="text-sm font-medium">{profile.total_rides_completed}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.auto_accept', { defaultValue: 'Auto-accept' })}</dt>
-              <dd className="text-sm font-medium">
-                {(profile as any).auto_accept_enabled ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">&#10003; {t('common.enabled', { defaultValue: 'Activado' })}</span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-500">&#10007; {t('common.disabled', { defaultValue: 'Desactivado' })}</span>
+          </div>
+
+          {/* Actions menu */}
+          <div className="relative" ref={actionsMenuRef}>
+            <button
+              onClick={() => setActionsMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+            >
+              {t('drivers.actions', { defaultValue: 'Acciones' })}
+              <MoreVertical size={14} />
+            </button>
+            {actionsMenuOpen && (
+              <div className="absolute right-0 mt-1 w-56 rounded-lg border border-neutral-200 bg-white shadow-lg overflow-hidden z-20">
+                {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
+                  <button
+                    onClick={handleApprove}
+                    disabled={actionLoading || !allDocsVerified}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                    title={!allDocsVerified ? `Debe verificar los documentos (${verifiedDocsCount}/${totalDocsCount})` : ''}
+                  >
+                    <CheckCircle2 size={14} />
+                    {t('drivers.action_approve', { defaultValue: 'Aprobar conductor' })}
+                    {!allDocsVerified && <span className="ml-auto text-xs text-neutral-400">{verifiedDocsCount}/{totalDocsCount}</span>}
+                  </button>
                 )}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm text-neutral-500">{t('drivers.label_registered')}</dt>
-              <dd className="text-sm font-medium">{formatAdminDate(profile.created_at)}</dd>
-            </div>
-          </dl>
+                {(status === 'under_review' || status === 'pending_verification') && (
+                  <button
+                    onClick={() => { setShowReasonModal('reject'); setActionsMenuOpen(false); }}
+                    disabled={actionLoading}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                  >
+                    <XCircle size={14} />
+                    {t('drivers.action_reject', { defaultValue: 'Rechazar conductor' })}
+                  </button>
+                )}
+                {status === 'approved' && (
+                  <button
+                    onClick={() => { setShowReasonModal('suspend'); setActionsMenuOpen(false); }}
+                    disabled={actionLoading}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors text-left"
+                  >
+                    <AlertTriangle size={14} />
+                    {t('drivers.action_suspend', { defaultValue: 'Suspender conductor' })}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+      </header>
 
-        {/* Vehicle */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
-          <h2 className="text-lg font-bold mb-4">{t('drivers.vehicle_section')}</h2>
-          {vehicle ? (
-            <dl className="space-y-3">
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_type')}</dt>
-                <dd className="text-sm font-medium">{VEHICLE_TYPE_KEY[vehicle.type] ? t(VEHICLE_TYPE_KEY[vehicle.type]!) : vehicle.type}</dd>
+      {/* ─── Main grid ───────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* ─── LEFT COLUMN ──────────────────────────────── */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Documents */}
+          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                {t('drivers.documents_section', { defaultValue: 'Documentos' })}
+              </h2>
+              <div className="text-xs text-neutral-500 tabular-nums">
+                {verifiedDocsCount}/{totalDocsCount || 5} {t('drivers.verified', { defaultValue: 'verificados' })}
               </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_make_model')}</dt>
-                <dd className="text-sm font-medium">{vehicle.make} {vehicle.model}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_year')}</dt>
-                <dd className="text-sm font-medium">{vehicle.year}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_color')}</dt>
-                <dd className="text-sm font-medium">{vehicle.color}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_plate')}</dt>
-                <dd className="text-sm font-medium">{vehicle.plate_number}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.label_capacity')}</dt>
-                <dd className="text-sm font-medium">{vehicle.capacity} {t('drivers.passengers')}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-neutral-500">{t('drivers.accepts_cargo', { defaultValue: 'Acepta carga' })}</dt>
-                <dd className="text-sm font-medium">
-                  {vehicle.accepts_cargo ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
-                      Si — {vehicle.max_cargo_weight_kg ?? '?'} kg max
-                    </span>
-                  ) : (
-                    <span className="text-neutral-400">No</span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="text-sm text-neutral-400">{t('drivers.no_vehicle')}</p>
-          )}
-        </div>
-      </div>
+            </div>
 
-      {/* Documents */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-        <h2 className="text-lg font-bold mb-4">{t('drivers.documents_section')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {(['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'] as const).map(
-            (docType) => {
-              const doc = documents.find((d) => d.document_type === docType);
-              const url = doc ? docUrls[doc.id] : null;
-              const docVerified = doc?.is_verified;
-              const docRejected = !doc?.is_verified && !!doc?.rejection_reason;
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'] as const).map((docType) => {
+                const doc = documents.find((d) => d.document_type === docType);
+                const url = doc ? docUrls[doc.id] : null;
+                const docVerified = doc?.is_verified;
+                const docRejected = !doc?.is_verified && !!doc?.rejection_reason;
 
-              return (
-                <div
-                  key={docType}
-                  className={`border rounded-lg p-4 ${
-                    docVerified ? 'border-green-200 bg-green-50/30' :
-                    docRejected ? 'border-red-200 bg-red-50/30' :
-                    'border-neutral-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">{DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]!) : docType}</p>
-                    {doc && (
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        docVerified ? 'bg-green-100 text-green-700' :
-                        docRejected ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {docVerified ? t('verification.doc_status_verified') :
-                         docRejected ? t('verification.doc_status_rejected') :
-                         t('verification.doc_status_pending')}
-                      </span>
-                    )}
-                  </div>
-
-                  {doc ? (
-                    <div>
-                      {/* Document preview — PDF or image */}
-                      {url && url !== '__error__' && (() => {
-                        const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf');
-                        return isPdf ? (
-                          <div>
-                            <div
-                              className="w-full h-32 flex flex-col items-center justify-center bg-neutral-800 rounded-md mb-2 cursor-pointer hover:bg-neutral-700 transition-colors gap-2"
-                              onClick={() => window.open(url, '_blank')}
-                            >
-                              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                              </svg>
-                              <span className="text-xs text-neutral-400">
-                                {doc.file_name || 'Documento PDF'}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => window.open(url, '_blank')}
-                              className="w-full px-3 py-1.5 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors mb-2 text-center"
-                            >
-                              {t('drivers.view_document', { defaultValue: 'Ver documento' })}
-                            </button>
-                          </div>
-                        ) : (
-                          <a href={url} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={url}
-                              alt={docType}
-                              className="w-full h-32 object-cover rounded-md mb-2 cursor-pointer hover:opacity-80 transition-opacity"
-                            />
-                          </a>
-                        );
-                      })()}
-                      {url === '__error__' && (
-                        <div className="w-full h-32 bg-red-50 border border-red-200 rounded-md mb-2 flex items-center justify-center">
-                          <span className="text-xs text-red-500">{t('verification.doc_load_error', { defaultValue: 'Error loading document' })}</span>
-                        </div>
-                      )}
-                      {!url && (
-                        <div className="w-full h-32 bg-neutral-100 rounded-md mb-2 flex items-center justify-center">
-                          <span className="text-xs text-neutral-400">{t('common.loading')}</span>
-                        </div>
-                      )}
-
-                      <p className="text-xs text-neutral-400 mb-2">
-                        {t('drivers.doc_uploaded_at')} {formatAdminDate(doc.uploaded_at)}
-                      </p>
-
-                      {/* Face match score */}
-                      {doc.face_match_score != null && (
-                        <div className="flex items-center gap-1 mb-2">
-                          <span className="text-xs text-neutral-500">{t('verification.face_match_score')}:</span>
-                          <span className={`text-xs font-medium ${
-                            doc.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {Math.round(doc.face_match_score * 100)}%
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Rejection reason */}
-                      {docRejected && doc.rejection_reason && (
-                        <p className="text-xs text-red-600 mb-2">
-                          {doc.rejection_reason}
+                return (
+                  <div
+                    key={docType}
+                    className={`rounded-lg border p-3 ${
+                      docVerified ? 'border-green-200/80 bg-green-50/30' :
+                      docRejected ? 'border-red-200/80 bg-red-50/30' :
+                      'border-neutral-200/80 bg-white'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} className="text-neutral-400" />
+                        <p className="text-sm font-medium text-neutral-900">
+                          {DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]) : docType}
                         </p>
-                      )}
-
-                      {/* Verification notes */}
-                      {doc.verification_notes && (
-                        <p className="text-xs text-neutral-500 italic mb-2">{doc.verification_notes}</p>
-                      )}
-
-                      {/* Verify/Reject controls */}
-                      {!docVerified && (
-                        <div className="mt-3 border-t border-neutral-100 pt-3">
-                          <input
-                            type="text"
-                            value={docNotes[doc.id] || ''}
-                            onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
-                            placeholder={t('verification.verification_notes')}
-                            aria-label={t('verification.verification_notes')}
-                            className="w-full border border-neutral-200 rounded px-2 py-1 text-xs mb-2 focus:outline-none focus:border-primary-500"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleVerifyDoc(doc.id, true)}
-                              disabled={verifyingDoc === doc.id}
-                              className="flex-1 px-3 py-1.5 rounded text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-                            >
-                              {t('verification.verify_doc')}
-                            </button>
-                            <button
-                              onClick={() => handleVerifyDoc(doc.id, false)}
-                              disabled={verifyingDoc === doc.id || !docNotes[doc.id]?.trim()}
-                              className="flex-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-                            >
-                              {t('verification.reject_doc')}
-                            </button>
-                          </div>
+                      </div>
+                      {doc && (
+                        <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          docVerified ? 'bg-green-100 text-green-700' :
+                          docRejected ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : <Clock size={10} />}
+                          {docVerified ? t('verification.doc_status_verified', { defaultValue: 'Verificado' }) :
+                           docRejected ? t('verification.doc_status_rejected', { defaultValue: 'Rechazado' }) :
+                           t('verification.doc_status_pending', { defaultValue: 'Pendiente' })}
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <span className="text-sm text-neutral-400">{t('drivers.not_uploaded')}</span>
-                  )}
-                </div>
-              );
-            },
-          )}
-        </div>
-      </div>
 
-      {/* Selfie Checks */}
-      {selfieChecks.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-          <h2 className="text-lg font-bold mb-4">{t('verification.selfie_checks')}</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-100">
-                  <th className="text-left py-2 text-neutral-500 font-medium">{t('common.date')}</th>
-                  <th className="text-left py-2 text-neutral-500 font-medium">{t('common.status')}</th>
-                  <th className="text-left py-2 text-neutral-500 font-medium">{t('verification.face_match_score')}</th>
-                  <th className="text-left py-2 text-neutral-500 font-medium">{t('verification.liveness')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selfieChecks.map((check) => (
-                  <tr key={check.id} className="border-b border-neutral-50">
-                    <td className="py-2 text-neutral-700">{formatAdminDate(check.requested_at)}</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        check.status === 'passed' ? 'bg-green-100 text-green-700' :
-                        check.status === 'failed' ? 'bg-red-100 text-red-700' :
-                        check.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                        check.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {check.status}
-                      </span>
-                    </td>
-                    <td className="py-2">
-                      {check.face_match_score != null ? (
-                        <span className={`font-medium ${check.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
-                          {Math.round(check.face_match_score * 100)}%
-                        </span>
-                      ) : (
-                        <span className="text-neutral-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-2">
-                      {check.liveness_passed != null ? (
-                        <span className={check.liveness_passed ? 'text-green-600' : 'text-red-600'}>
-                          {check.liveness_passed ? '✓' : '✗'}
-                        </span>
-                      ) : (
-                        <span className="text-neutral-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    {doc ? (
+                      <div>
+                        {/* Preview */}
+                        {url && url !== '__error__' && (() => {
+                          const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf');
+                          return isPdf ? (
+                            <button
+                              onClick={() => window.open(url, '_blank')}
+                              className="w-full h-28 flex flex-col items-center justify-center bg-neutral-100 border border-neutral-200 rounded-md mb-2 hover:bg-neutral-200 transition-colors gap-1.5 group"
+                            >
+                              <FileText size={24} className="text-red-500" />
+                              <span className="text-[10px] text-neutral-600 font-medium truncate max-w-[90%]">
+                                {doc.file_name || 'PDF'}
+                              </span>
+                              <span className="text-[10px] text-primary-600 group-hover:underline inline-flex items-center gap-1">
+                                {t('drivers.view_document', { defaultValue: 'Ver documento' })}
+                                <ExternalLink size={10} />
+                              </span>
+                            </button>
+                          ) : (
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="block mb-2">
+                              <img
+                                src={url}
+                                alt={docType}
+                                className="w-full h-28 object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity"
+                              />
+                            </a>
+                          );
+                        })()}
+                        {url === '__error__' && (
+                          <div className="w-full h-28 bg-red-50 border border-red-200 rounded-md mb-2 flex items-center justify-center">
+                            <span className="text-[10px] text-red-500">{t('verification.doc_load_error', { defaultValue: 'Error cargando' })}</span>
+                          </div>
+                        )}
+                        {!url && (
+                          <div className="w-full h-28 bg-neutral-100 rounded-md mb-2 flex items-center justify-center">
+                            <Clock size={14} className="text-neutral-400 animate-spin" />
+                          </div>
+                        )}
 
-      {/* Financial Eligibility */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-        <h2 className="text-lg font-bold mb-4">{t('drivers.financial_eligibility')}</h2>
-        <div className="flex items-center gap-3">
-          <span
-            className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-              profile.is_financially_eligible !== false
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-700'
-            }`}
-          >
-            {profile.is_financially_eligible !== false ? t('drivers.eligible') : t('drivers.not_eligible')}
-          </span>
-          {profile.negative_balance_since && (
-            <span className="text-sm text-neutral-500">
-              {t('drivers.negative_balance_since')} {formatAdminDate(profile.negative_balance_since)}
-            </span>
-          )}
-        </div>
-        {profile.is_financially_eligible === false && (
-          <p className="text-sm text-neutral-500 mt-2">
-            {t('drivers.negative_balance_warning')}
-          </p>
-        )}
-      </div>
+                        {/* Meta */}
+                        <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-2">
+                          <span>{formatAdminDate(doc.uploaded_at)}</span>
+                          {doc.face_match_score != null && (
+                            <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
+                              {Math.round(doc.face_match_score * 100)}%
+                            </span>
+                          )}
+                        </div>
 
-      {/* Churn Risk */}
-      {churnRisk && (
-        <div className={`rounded-xl border-2 p-4 mb-4 ${
-          churnRisk.risk_level === 'high' ? 'bg-red-50 border-red-200' :
-          churnRisk.risk_level === 'medium' ? 'bg-amber-50 border-amber-200' :
-          'bg-green-50 border-green-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-sm">
-                {t('drivers.churn_risk', { defaultValue: 'Riesgo de abandono' })}
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                {t('drivers.days_since_ride', { days: churnRisk.days_since_last_ride, defaultValue: `${churnRisk.days_since_last_ride} días sin viaje` })}
-                {churnRisk.earnings_this_week > 0 && ` · ${formatCUP(churnRisk.earnings_this_week)} esta semana`}
-              </p>
+                        {/* Rejection / Verification notes */}
+                        {docRejected && doc.rejection_reason && (
+                          <div className="px-2 py-1.5 mb-2 rounded bg-red-50 border border-red-100">
+                            <p className="text-[10px] text-red-700">{doc.rejection_reason}</p>
+                          </div>
+                        )}
+                        {docVerified && doc.verification_notes && (
+                          <div className="px-2 py-1.5 mb-2 rounded bg-green-50 border border-green-100">
+                            <p className="text-[10px] text-green-700 italic">{doc.verification_notes}</p>
+                          </div>
+                        )}
+
+                        {/* Verify/Reject controls */}
+                        {!docVerified && (
+                          <div className="mt-2 space-y-1.5">
+                            <input
+                              type="text"
+                              value={docNotes[doc.id] || ''}
+                              onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
+                              placeholder={t('verification.verification_notes', { defaultValue: 'Notas (opcional para aprobar, requerida para rechazar)' })}
+                              className="w-full border border-neutral-200 rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleVerifyDoc(doc.id, true)}
+                                disabled={verifyingDoc === doc.id}
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                              >
+                                <CheckCircle2 size={12} />
+                                {t('verification.verify_doc', { defaultValue: 'Verificar' })}
+                              </button>
+                              <button
+                                onClick={() => handleVerifyDoc(doc.id, false)}
+                                disabled={verifyingDoc === doc.id || !docNotes[doc.id]?.trim()}
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                              >
+                                <XCircle size={12} />
+                                {t('verification.reject_doc', { defaultValue: 'Rechazar' })}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-full h-28 bg-neutral-50 border border-dashed border-neutral-200 rounded-md flex flex-col items-center justify-center">
+                        <FileText size={20} className="text-neutral-300 mb-1" />
+                        <span className="text-[10px] text-neutral-400">{t('drivers.not_uploaded', { defaultValue: 'Sin subir' })}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-              churnRisk.risk_level === 'high' ? 'bg-red-100 text-red-700' :
-              churnRisk.risk_level === 'medium' ? 'bg-amber-100 text-amber-700' :
-              'bg-green-100 text-green-700'
-            }`}>
-              {churnRisk.risk_level === 'high' ? 'ALTO' :
-               churnRisk.risk_level === 'medium' ? 'MEDIO' : 'BAJO'}
-              {' '}{churnRisk.churn_risk_score}/100
-            </span>
-          </div>
-        </div>
-      )}
+          </section>
 
-      {/* Match Score */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-        <h2 className="text-lg font-bold mb-4">{t('drivers.match_score')}</h2>
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="bg-neutral-50 rounded-lg p-4">
-            <p className="text-xs text-neutral-500 mb-1">{t('drivers.match_score')}</p>
-            <p className={`text-2xl font-bold ${
-              Number(profile.match_score ?? 50) >= 70 ? 'text-green-600' :
-              Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-600' : 'text-red-600'
-            }`}>
-              {Number(profile.match_score ?? 50).toFixed(1)}
-            </p>
-          </div>
-          <div className="bg-neutral-50 rounded-lg p-4">
-            <p className="text-xs text-neutral-500 mb-1">{t('drivers.acceptance_rate')}</p>
-            <p className="text-2xl font-bold text-neutral-700">
-              {Number(profile.acceptance_rate ?? 100).toFixed(0)}%
-            </p>
-          </div>
-          <div className="bg-neutral-50 rounded-lg p-4">
-            <p className="text-xs text-neutral-500 mb-1">{t('drivers.rides_offered')}</p>
-            <p className="text-2xl font-bold text-neutral-700">
-              {profile.total_rides_offered ?? 0}
-            </p>
-          </div>
-        </div>
+          {/* Selfie Checks */}
+          {selfieChecks.length > 0 && (
+            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+                {t('verification.selfie_checks', { defaultValue: 'Verificaciones de selfie' })}
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-100">
+                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Fecha</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Estado</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Match</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Liveness</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selfieChecks.map((check) => (
+                      <tr key={check.id} className="border-b border-neutral-50 last:border-0 h-11">
+                        <td className="text-sm text-neutral-700">{formatAdminDate(check.requested_at)}</td>
+                        <td>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            check.status === 'passed' ? 'bg-green-100 text-green-700' :
+                            check.status === 'failed' ? 'bg-red-100 text-red-700' :
+                            check.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                            check.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              check.status === 'passed' ? 'bg-green-500' :
+                              check.status === 'failed' ? 'bg-red-500' :
+                              check.status === 'processing' ? 'bg-blue-500' :
+                              'bg-neutral-400'
+                            }`} />
+                            {check.status}
+                          </span>
+                        </td>
+                        <td>
+                          {check.face_match_score != null ? (
+                            <span className={`text-sm font-medium tabular-nums ${check.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
+                              {Math.round(check.face_match_score * 100)}%
+                            </span>
+                          ) : (
+                            <span className="text-sm text-neutral-400">—</span>
+                          )}
+                        </td>
+                        <td>
+                          {check.liveness_passed != null ? (
+                            check.liveness_passed
+                              ? <CheckCircle2 size={14} className="text-green-600" />
+                              : <XCircle size={14} className="text-red-600" />
+                          ) : (
+                            <span className="text-sm text-neutral-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
-        {/* Score events timeline */}
-        {scoreEvents.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-neutral-700 mb-2">{t('drivers.score_history')}</h3>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {scoreEvents.map((evt) => (
-                <div key={evt.id} className="flex items-center justify-between py-1.5 border-b border-neutral-50">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block w-2 h-2 rounded-full ${
+          {/* Score history timeline */}
+          {scoreEvents.length > 0 && (
+            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+                {t('drivers.score_history', { defaultValue: 'Historial de puntuación' })}
+              </h2>
+              <div className="space-y-1">
+                {(showAllEvents ? scoreEvents : scoreEvents.slice(0, 10)).map((evt) => (
+                  <div key={evt.id} className="flex items-center gap-3 py-1.5 border-b border-neutral-50 last:border-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${
                       evt.delta > 0 ? 'bg-green-500' : evt.delta < 0 ? 'bg-red-500' : 'bg-neutral-300'
                     }`} />
-                    <span className="text-sm text-neutral-600">{evt.event_type.replace(/_/g, ' ')}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-sm font-medium ${
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-neutral-700 truncate capitalize">
+                        {evt.event_type.replace(/_/g, ' ')}
+                      </p>
+                      <p className="text-[10px] text-neutral-400">{formatAdminDate(evt.created_at)}</p>
+                    </div>
+                    <span className={`text-sm font-medium tabular-nums shrink-0 ${
                       evt.delta > 0 ? 'text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
                     }`}>
                       {evt.delta > 0 ? '+' : ''}{Number(evt.delta).toFixed(1)}
                     </span>
-                    <span className="text-xs text-neutral-400">
-                      {formatAdminDate(evt.created_at)}
-                    </span>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
-        <h2 className="text-lg font-bold mb-4">{t('drivers.actions_section')}</h2>
-        <div className="flex flex-wrap gap-3">
-          {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleApprove}
-                disabled={actionLoading || !allDocsVerified}
-                className="px-6 py-2.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!allDocsVerified ? `Debe verificar todos los documentos (${verifiedDocsCount}/${totalDocsCount})` : ''}
-              >
-                {t('drivers.action_approve')}
-              </button>
-              {!allDocsVerified && (
-                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                  {verifiedDocsCount}/{totalDocsCount} {t('drivers.docs_verified', { defaultValue: 'docs verificados' })}
-                </span>
+                ))}
+              </div>
+              {scoreEvents.length > 10 && (
+                <button
+                  onClick={() => setShowAllEvents((v) => !v)}
+                  className="mt-2 text-sm text-primary-500 hover:text-primary-600"
+                >
+                  {showAllEvents
+                    ? t('common.show_less', { defaultValue: 'Ver menos' })
+                    : t('common.show_more', { defaultValue: `Ver ${scoreEvents.length - 10} más` })}
+                </button>
               )}
-            </div>
-          )}
-          {(status === 'under_review' || status === 'pending_verification') && (
-            <button
-              onClick={() => setShowReasonModal('reject')}
-              disabled={actionLoading}
-              className="px-6 py-2.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
-            >
-              {t('drivers.action_reject')}
-            </button>
-          )}
-          {status === 'approved' && (
-            <button
-              onClick={() => setShowReasonModal('suspend')}
-              disabled={actionLoading}
-              className="px-6 py-2.5 rounded-lg text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
-            >
-              {t('drivers.action_suspend')}
-            </button>
+            </section>
           )}
         </div>
-      </div>
 
-      {/* Reason modal */}
-      {showReasonModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="reason-modal-title">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 id="reason-modal-title" className="text-lg font-bold mb-4">
-              {showReasonModal === 'reject' ? t('drivers.reject_reason_title') : t('drivers.suspend_reason_title')}
-            </h3>
-            {showReasonModal === 'suspend' && (
-              <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
-                <p className="font-semibold">{t('drivers.suspend_warning_title', 'Consecuencias de la suspension')}</p>
-                <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
-                  <li>{t('drivers.suspend_warning_active_rides', 'Los viajes activos del conductor seran cancelados')}</li>
-                  <li>{t('drivers.suspend_warning_no_new', 'No podra aceptar nuevos viajes')}</li>
-                  <li>{t('drivers.suspend_warning_wallet', 'El acceso a la billetera quedara restringido')}</li>
-                </ul>
+        {/* ─── RIGHT COLUMN ─────────────────────────────── */}
+        <aside className="lg:col-span-2 space-y-6 lg:sticky lg:top-6 self-start">
+          {/* Personal info */}
+          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+              {t('drivers.personal_info', { defaultValue: 'Perfil' })}
+            </h2>
+            <dl className="space-y-2.5">
+              <Field icon={Phone} label={t('drivers.label_phone', { defaultValue: 'Teléfono' })} value={profile.users.phone} />
+              <Field icon={Mail} label={t('drivers.label_email', { defaultValue: 'Email' })} value={profile.users.email || '—'} />
+              {(profile as DriverProfile & { province?: string }).province && (
+                <Field icon={MapPin} label={t('drivers.label_province', { defaultValue: 'Provincia' })} value={(profile as DriverProfile & { province?: string }).province!} />
+              )}
+              {(profile as DriverProfile & { municipality?: string }).municipality && (
+                <Field icon={MapPin} label={t('drivers.label_municipality', { defaultValue: 'Municipio' })} value={(profile as DriverProfile & { municipality?: string }).municipality!} />
+              )}
+              {(profile as DriverProfile & { address?: string }).address && (
+                <Field icon={MapPin} label={t('drivers.label_address', { defaultValue: 'Dirección' })} value={(profile as DriverProfile & { address?: string }).address!} />
+              )}
+              {(profile as DriverProfile & { identity_number?: string }).identity_number && (
+                <Field icon={Shield} label={t('drivers.label_ci', { defaultValue: 'Cédula' })} value={(profile as DriverProfile & { identity_number?: string }).identity_number!} />
+              )}
+            </dl>
+
+            {/* Top review tags */}
+            {topTags.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-neutral-100">
+                <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">
+                  {t('drivers.top_review_tags', { defaultValue: 'Tags más comunes' })}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {topTags.slice(0, 5).map((tag) => (
+                    <span
+                      key={tag.tag_key}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-[10px] text-neutral-700"
+                    >
+                      {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
+                      <span className="text-neutral-400">{tag.count}</span>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
-            <textarea
-              className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:border-primary-500"
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t('drivers.explain_reason_placeholder')}
-              aria-label={t('drivers.explain_reason_placeholder')}
-            />
-            <div className="flex gap-3 mt-4 justify-end">
+          </section>
+
+          {/* Vehicle */}
+          {vehicle && (
+            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+                {t('drivers.vehicle_section', { defaultValue: 'Vehículo' })}
+              </h2>
+              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-neutral-100">
+                <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
+                  <VIcon size={20} className="text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-neutral-900 capitalize">
+                    {VEHICLE_TYPE_KEY[vehicle.type] ? t(VEHICLE_TYPE_KEY[vehicle.type]) : vehicle.type}
+                  </p>
+                  <p className="text-xs text-neutral-500">{vehicle.make} {vehicle.model}</p>
+                </div>
+              </div>
+              <dl className="space-y-2.5">
+                <Field label={t('drivers.label_year', { defaultValue: 'Año' })} value={String(vehicle.year)} />
+                <Field label={t('drivers.label_color', { defaultValue: 'Color' })} value={vehicle.color} />
+                <Field label={t('drivers.label_plate', { defaultValue: 'Placa' })} value={vehicle.plate_number} mono />
+                <Field label={t('drivers.label_capacity', { defaultValue: 'Capacidad' })} value={`${vehicle.capacity} ${t('drivers.passengers', { defaultValue: 'pasajeros' })}`} />
+              </dl>
+              {vehicle.accepts_cargo && (
+                <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                  <Package size={10} />
+                  {t('drivers.accepts_cargo', { defaultValue: 'Acepta carga' })} · {vehicle.max_cargo_weight_kg ?? '?'}kg
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Metrics */}
+          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+              {t('drivers.metrics', { defaultValue: 'Métricas' })}
+            </h2>
+            <div className="grid grid-cols-3 gap-3">
+              <Metric
+                label={t('drivers.label_rating', { defaultValue: 'Rating' })}
+                value={Number(profile.rating_avg).toFixed(1)}
+                icon={<Star size={12} className="fill-amber-500 text-amber-500" />}
+              />
+              <Metric
+                label={t('drivers.label_completed_rides', { defaultValue: 'Viajes' })}
+                value={String(profile.total_rides_completed)}
+              />
+              <Metric
+                label={t('drivers.acceptance_rate', { defaultValue: 'Aceptación' })}
+                value={`${Number(profile.acceptance_rate ?? 100).toFixed(0)}%`}
+              />
+            </div>
+            {/* Match score mini */}
+            <div className="mt-3 pt-3 border-t border-neutral-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-500">{t('drivers.match_score', { defaultValue: 'Match score' })}</span>
+                <span className={`text-sm font-semibold tabular-nums ${
+                  Number(profile.match_score ?? 50) >= 70 ? 'text-green-600' :
+                  Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {Number(profile.match_score ?? 50).toFixed(1)}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    Number(profile.match_score ?? 50) >= 70 ? 'bg-green-500' :
+                    Number(profile.match_score ?? 50) >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, Number(profile.match_score ?? 50)))}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-neutral-500 mt-1.5">
+                {profile.total_rides_offered ?? 0} {t('drivers.rides_offered', { defaultValue: 'viajes ofrecidos' })}
+              </p>
+            </div>
+          </section>
+
+          {/* Churn Risk */}
+          {churnRisk && (
+            <section className={`rounded-xl border p-4 ${
+              churnRisk.risk_level === 'high' ? 'bg-red-50 border-red-200' :
+              churnRisk.risk_level === 'medium' ? 'bg-amber-50 border-amber-200' :
+              'bg-green-50 border-green-200'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {churnRisk.risk_level === 'high' ? <TrendingDown size={14} className="text-red-600" /> : <TrendingUp size={14} className={churnRisk.risk_level === 'medium' ? 'text-amber-600' : 'text-green-600'} />}
+                  <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-700">
+                    {t('drivers.churn_risk', { defaultValue: 'Riesgo de abandono' })}
+                  </h3>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  churnRisk.risk_level === 'high' ? 'bg-red-100 text-red-700' :
+                  churnRisk.risk_level === 'medium' ? 'bg-amber-100 text-amber-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {churnRisk.risk_level === 'high' ? 'ALTO' :
+                   churnRisk.risk_level === 'medium' ? 'MEDIO' : 'BAJO'}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1 mb-1">
+                <span className="text-2xl font-bold text-neutral-900 tabular-nums">{churnRisk.churn_risk_score}</span>
+                <span className="text-xs text-neutral-500">/100</span>
+              </div>
+              <p className="text-xs text-neutral-600">
+                {churnRisk.days_since_last_ride} {t('drivers.days_since_ride_short', { defaultValue: 'días sin viaje' })}
+                {churnRisk.earnings_this_week > 0 && <> · {formatCUP(churnRisk.earnings_this_week)} esta semana</>}
+              </p>
+            </section>
+          )}
+
+          {/* Financial */}
+          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+              {t('drivers.financial_eligibility', { defaultValue: 'Estado financiero' })}
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                profile.is_financially_eligible !== false
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}>
+                {profile.is_financially_eligible !== false
+                  ? <><CheckCircle2 size={11} /> {t('drivers.eligible', { defaultValue: 'Elegible' })}</>
+                  : <><XCircle size={11} /> {t('drivers.not_eligible', { defaultValue: 'No elegible' })}</>}
+              </span>
+            </div>
+            {profile.negative_balance_since && (
+              <p className="text-[11px] text-neutral-500 mt-2">
+                {t('drivers.negative_balance_since', { defaultValue: 'Balance negativo desde' })} {formatAdminDate(profile.negative_balance_since)}
+              </p>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      {/* ─── Reason modal ──────────────────────────────── */}
+      {showReasonModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) { setShowReasonModal(null); setReason(''); }
+          }}
+        >
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl">
+            <div className="p-5 border-b border-neutral-100">
+              <h3 className="text-lg font-semibold text-neutral-900">
+                {showReasonModal === 'reject'
+                  ? t('drivers.reject_reason_title', { defaultValue: 'Rechazar conductor' })
+                  : t('drivers.suspend_reason_title', { defaultValue: 'Suspender conductor' })}
+              </h3>
+              <p className="text-sm text-neutral-500 mt-1">
+                {showReasonModal === 'reject'
+                  ? t('drivers.reject_helper', { defaultValue: 'Explica al conductor por qué su solicitud fue rechazada.' })
+                  : t('drivers.suspend_helper', { defaultValue: 'Esta acción tiene consecuencias importantes. Revisa antes de continuar.' })}
+              </p>
+            </div>
+
+            <div className="p-5">
+              {showReasonModal === 'suspend' && (
+                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={14} className="text-orange-600" />
+                    <p className="text-sm font-semibold text-orange-800">
+                      {t('drivers.suspend_warning_title', { defaultValue: 'Al suspender este conductor' })}
+                    </p>
+                  </div>
+                  <ul className="space-y-1 text-xs text-orange-700 ml-5 list-disc">
+                    <li>{t('drivers.suspend_warning_active_rides', { defaultValue: 'Sus viajes activos serán cancelados' })}</li>
+                    <li>{t('drivers.suspend_warning_no_new', { defaultValue: 'No podrá aceptar nuevos viajes' })}</li>
+                    <li>{t('drivers.suspend_warning_wallet', { defaultValue: 'Su billetera quedará restringida' })}</li>
+                  </ul>
+                </div>
+              )}
+
+              <textarea
+                autoFocus
+                className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                rows={4}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={t('drivers.explain_reason_placeholder', { defaultValue: 'Explica el motivo...' })}
+                aria-label={t('drivers.explain_reason_placeholder')}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-neutral-100 bg-neutral-50/50 rounded-b-xl">
               <button
-                onClick={() => {
-                  setShowReasonModal(null);
-                  setReason('');
-                }}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors"
+                onClick={() => { setShowReasonModal(null); setReason(''); }}
+                className="px-4 h-9 rounded-md text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
               >
-                {t('common.cancel')}
+                {t('common.cancel', { defaultValue: 'Cancelar' })}
               </button>
               <button
                 onClick={handleRejectOrSuspend}
                 disabled={!reason.trim() || actionLoading}
-                className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+                className={`px-4 h-9 rounded-md text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                   showReasonModal === 'reject'
                     ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-orange-500 hover:bg-orange-600'
+                    : 'bg-orange-600 hover:bg-orange-700'
                 }`}
               >
-                {actionLoading ? t('common.processing') : t('common.confirm')}
+                {actionLoading
+                  ? t('common.processing', { defaultValue: 'Procesando...' })
+                  : showReasonModal === 'reject'
+                    ? t('drivers.action_reject', { defaultValue: 'Rechazar' })
+                    : t('drivers.action_suspend', { defaultValue: 'Suspender' })}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Reusable helpers (internal) ───────────────────────────────
+function Field({
+  icon: Icon,
+  label,
+  value,
+  mono,
+}: {
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-xs text-neutral-500 flex items-center gap-1.5 shrink-0 pt-0.5">
+        {Icon && <Icon size={11} className="text-neutral-400" />}
+        {label}
+      </dt>
+      <dd className={`text-sm text-neutral-900 text-right ${mono ? 'font-mono' : ''}`}>{value}</dd>
+    </div>
+  );
+}
+
+function Metric({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return (
+    <div className="text-center">
+      <div className="flex items-center justify-center gap-1 text-lg font-bold text-neutral-900 tabular-nums">
+        {icon}
+        {value}
+      </div>
+      <div className="text-[10px] text-neutral-500 mt-0.5">{label}</div>
     </div>
   );
 }
