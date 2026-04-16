@@ -154,6 +154,7 @@ export function DriverTripView() {
   const needsDeliveryPhoto = isDeliveryRide && activeTrip?.status === 'in_progress' && !deliveryPhotoUploaded;
   const lastAdvancePressRef = useRef(0);
   const nearDropoffTrackedRef = useRef(false);
+  const prevNearDropoffRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // In-app navigation
@@ -359,7 +360,10 @@ export function DriverTripView() {
 
     if (dist < 80) {
       setNearDropoff(true);
-      triggerHaptic('medium');
+      if (!prevNearDropoffRef.current) {
+        prevNearDropoffRef.current = true;
+        triggerHaptic('light');
+      }
       if (!nearDropoffTrackedRef.current) {
         nearDropoffTrackedRef.current = true;
         trackValidationEvent('driver_near_dropoff', {
@@ -368,6 +372,7 @@ export function DriverTripView() {
       }
     } else {
       setNearDropoff(false);
+      prevNearDropoffRef.current = false;
       nearDropoffTrackedRef.current = false;
     }
   }, [driverLat, driverLng, activeTrip?.status, nextWaypoint]);
@@ -390,7 +395,7 @@ export function DriverTripView() {
     const now = Date.now();
     if (now - lastAdvancePressRef.current < 1000) return;
     lastAdvancePressRef.current = now;
-    triggerHaptic('light');
+    triggerHaptic('medium');
     advanceStatus();
   }, [advanceStatus]);
   const TRIP_STEPS = useTripSteps();

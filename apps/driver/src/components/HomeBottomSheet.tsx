@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Pressable,
@@ -12,6 +12,7 @@ import { AddressSearchBar } from '@/components/AddressSearchBar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@tricigo/theme';
+import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
@@ -131,6 +132,35 @@ function SheetContent({
   searchPulseAnim,
   t,
 }: SheetContentProps) {
+  // ── Address bar pulse animation ──
+  const addressPulseAnim = useRef(new Animated.Value(isOnline ? 0.3 : 1)).current;
+  useEffect(() => {
+    if (isOnline) {
+      addressPulseAnim.setValue(0.3);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(addressPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(addressPulseAnim, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+        ]),
+      ).start();
+    } else {
+      addressPulseAnim.stopAnimation();
+      addressPulseAnim.setValue(1);
+    }
+  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Earnings card press animations ──
+  const earningsScale1 = useRef(new Animated.Value(1)).current;
+  const earningsScale2 = useRef(new Animated.Value(1)).current;
+  const earningsScale3 = useRef(new Animated.Value(1)).current;
+  const earningsScales = [earningsScale1, earningsScale2, earningsScale3];
+  const handleEarningsPressIn = (index: number) => {
+    Animated.spring(earningsScales[index], { toValue: 0.98, damping: 15, stiffness: 300, useNativeDriver: true }).start();
+  };
+  const handleEarningsPressOut = (index: number) => {
+    Animated.spring(earningsScales[index], { toValue: 1, damping: 15, stiffness: 300, useNativeDriver: true }).start();
+  };
+
   // ── 1. Alert banners ──────────────────────────────────────────────────────
 
   const alertBanners = (
@@ -282,6 +312,17 @@ function SheetContent({
 
   const addressSearchBar = isOnline ? (
     <View style={styles.searchBarWrapper}>
+      <Animated.View style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        backgroundColor: '#FF4D00',
+        borderTopLeftRadius: 12,
+        borderBottomLeftRadius: 12,
+        opacity: addressPulseAnim,
+      }} />
       <AddressSearchBar
         onSelect={onAddressSelect}
         placeholder={t('home.search_placeholder', {
@@ -295,32 +336,50 @@ function SheetContent({
 
   const earningsCards = isOnline ? (
     <View style={styles.earningsCards}>
-      <View style={styles.statCard}>
-        <Ionicons name="trending-up" size={16} color="#FF8A5C" />
-        <RNText style={styles.statCardLabel}>
-          {t('home.today', { defaultValue: 'Hoy' })}
-        </RNText>
-        <RNText style={styles.statCardValue}>
-          ₧{todayEarnings.amount.toLocaleString()}
-        </RNText>
-      </View>
-      <View style={styles.statCard}>
-        <Ionicons name="car-outline" size={16} color="#FF8A5C" />
-        <RNText style={styles.statCardLabel}>
-          {t('home.trips_label', { defaultValue: 'Viajes' })}
-        </RNText>
-        <RNText style={styles.statCardValue}>{todayEarnings.trips}</RNText>
-      </View>
-      {perHour > 0 && (
-        <View style={[styles.statCard, styles.statCardAccent]}>
-          <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
+      <Pressable
+        style={{ flex: 1 }}
+        onPressIn={() => handleEarningsPressIn(0)}
+        onPressOut={() => handleEarningsPressOut(0)}
+      >
+        <Animated.View style={[styles.statCard, { transform: [{ scale: earningsScale1 }] }]}>
+          <Ionicons name="trending-up" size={16} color="#FF8A5C" />
           <RNText style={styles.statCardLabel}>
-            {t('home.per_hour_label', { defaultValue: 'Por hora' })}
+            {t('home.today', { defaultValue: 'Hoy' })}
           </RNText>
-          <RNText style={[styles.statCardValue, { color: colors.brand.orange }]}>
-            ₧{perHour.toLocaleString()}
+          <RNText style={styles.statCardValue}>
+            ₧{todayEarnings.amount.toLocaleString()}
           </RNText>
-        </View>
+        </Animated.View>
+      </Pressable>
+      <Pressable
+        style={{ flex: 1 }}
+        onPressIn={() => handleEarningsPressIn(1)}
+        onPressOut={() => handleEarningsPressOut(1)}
+      >
+        <Animated.View style={[styles.statCard, { transform: [{ scale: earningsScale2 }] }]}>
+          <Ionicons name="car-outline" size={16} color="#FF8A5C" />
+          <RNText style={styles.statCardLabel}>
+            {t('home.trips_label', { defaultValue: 'Viajes' })}
+          </RNText>
+          <RNText style={styles.statCardValue}>{todayEarnings.trips}</RNText>
+        </Animated.View>
+      </Pressable>
+      {perHour > 0 && (
+        <Pressable
+          style={{ flex: 1 }}
+          onPressIn={() => handleEarningsPressIn(2)}
+          onPressOut={() => handleEarningsPressOut(2)}
+        >
+          <Animated.View style={[styles.statCard, styles.statCardAccent, { transform: [{ scale: earningsScale3 }] }]}>
+            <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
+            <RNText style={styles.statCardLabel}>
+              {t('home.per_hour_label', { defaultValue: 'Por hora' })}
+            </RNText>
+            <RNText style={[styles.statCardValue, { color: colors.brand.orange }]}>
+              ₧{perHour.toLocaleString()}
+            </RNText>
+          </Animated.View>
+        </Pressable>
       )}
     </View>
   ) : null;
@@ -375,7 +434,7 @@ function SheetContent({
         <Pressable
           onPressIn={onCtaPressIn}
           onPressOut={onCtaPressOut}
-          onPress={onToggleOnline}
+          onPress={() => { triggerHaptic(isOnline ? 'medium' : 'heavy'); onToggleOnline(); }}
           disabled={toggling}
           accessibilityRole="switch"
           accessibilityState={{ checked: isOnline, disabled: toggling }}
@@ -602,10 +661,9 @@ const styles = StyleSheet.create({
   // ── Search bar wrapper (orange accent) ──
   searchBarWrapper: {
     marginBottom: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: '#FF4D00',
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative' as const,
   },
 
   // ── Stat cards (earnings) ──

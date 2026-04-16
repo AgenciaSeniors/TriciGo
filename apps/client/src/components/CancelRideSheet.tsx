@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { CancellationFeePreview } from '@tricigo/types';
@@ -36,6 +36,11 @@ function CancelRideSheetInner({
   rideStatus,
 }: CancelRideSheetProps) {
   const { t } = useTranslation('rider');
+
+  // Haptic warning on open
+  useEffect(() => {
+    if (visible) triggerHaptic('warning');
+  }, [visible]);
 
   const hasFee = (cancellationFee && !cancellationFee.is_free) || penaltyAmount > 0;
   const feeAmount = cancellationFee?.fee_cup ?? penaltyAmount;
@@ -79,7 +84,7 @@ function CancelRideSheetInner({
       {/* Fee info */}
       {hasFee ? (
         <View className="rounded-xl px-4 py-3 mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
-          <Text variant="body" className="font-semibold text-red-700 dark:text-red-300">
+          <Text variant="h4" className="font-bold text-red-700 dark:text-red-300">
             {t('ride.cancel_fee_amount', { amount: formatCUP(feeAmount) })}
           </Text>
           <Text variant="caption" className="text-red-600 dark:text-red-400 mt-0.5">
@@ -109,7 +114,7 @@ function CancelRideSheetInner({
         className="mb-2"
       />
       <Button
-        title={t('ride.cancel_go_back', { defaultValue: 'Volver' })}
+        title={t('ride.cancel_go_back', { defaultValue: 'Mantener viaje' })}
         variant="outline"
         size="lg"
         fullWidth

@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
-import { View, Animated, Pressable, Text as RNText } from 'react-native';
+import { View, Animated, Pressable, Text as RNText, Easing } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent, jitterLocation } from '@tricigo/utils';
+import { formatCUP, formatTRC, cupToTrcCentavos, haversineDistance, trackValidationEvent, jitterLocation, triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { presenceService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
@@ -163,11 +163,13 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: 30000, // 30 second countdown
+      easing: Easing.inOut(Easing.ease),
       useNativeDriver: false, // width animation can't use native driver
     }).start();
   }, [ride.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReject = useCallback(() => {
+    triggerHaptic('light');
     trackValidationEvent('driver_ride_rejected', {
       profit_level: profitLevel,
       seconds_remaining: autoAcceptSecondsLeft,
@@ -188,6 +190,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
     Animated.timing(countdownProgress, {
       toValue: 0,
       duration: autoAcceptDuration * 1000,
+      easing: Easing.inOut(Easing.ease),
       useNativeDriver: false,
     }).start();
 
@@ -210,6 +213,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   useEffect(() => {
     if (autoAcceptFiredRef.current && autoAcceptSecondsLeft === 0) {
       autoAcceptFiredRef.current = false;
+      triggerHaptic('success');
       trackValidationEvent('driver_ride_auto_accepted', {
         profit_level: profitLevel,
         countdown_duration: autoAcceptDuration,
@@ -232,6 +236,32 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       : t('home.available_ride', { defaultValue: 'Viaje disponible' });
 
   const fare = driverFare.cup || 0;
+
+  // F605: Full card skeleton guard — prevent flash of auto-accept countdown
+  const skeletonPulse = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    if (!autoAcceptLoaded) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(skeletonPulse, { toValue: 0.8, duration: 800, useNativeDriver: true }),
+          Animated.timing(skeletonPulse, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        ]),
+      ).start();
+    }
+  }, [autoAcceptLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!autoAcceptLoaded) {
+    return (
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
+        <Animated.View style={{
+          height: 320,
+          borderRadius: 16,
+          backgroundColor: 'rgba(255,255,255,0.04)',
+          opacity: skeletonPulse,
+        }} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
@@ -464,7 +494,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onPress={() => onAccept(ride.id)}
+          onPress={() => { triggerHaptic('medium'); onAccept(ride.id); }}
           accessibilityRole="button"
           accessibilityLabel={t('home.accept', { defaultValue: 'Aceptar viaje' })}
         >

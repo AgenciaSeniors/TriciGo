@@ -752,6 +752,12 @@
   }
 }
 
+/* ── Search Pulse Animation ── */
+@keyframes searchPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
 /* ── Reduced Motion ── */
 @media (prefers-reduced-motion: reduce) {
   .track-stepper-dot--active,

@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
-import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl } from '@tricigo/utils';
+import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
@@ -99,6 +99,24 @@ export function RideActiveView() {
     if (curr === 'arrived_at_destination' && prev !== 'arrived_at_destination') {
       setShowDestinationBanner(true);
     }
+  }, [activeRide?.status]);
+
+  // Haptic feedback on ride status transitions
+  const prevHapticStatusRef = useRef(activeRide?.status);
+  useEffect(() => {
+    if (!activeRide?.status) return;
+    const prev = prevHapticStatusRef.current;
+    prevHapticStatusRef.current = activeRide.status;
+    if (prev === activeRide.status) return;
+
+    const hapticMap: Record<string, string> = {
+      accepted: 'success',
+      arrived_at_pickup: 'success',
+      in_progress: 'medium',
+      arrived_at_destination: 'success',
+    };
+    const hapticType = hapticMap[activeRide.status];
+    if (hapticType) triggerHaptic(hapticType as any);
   }, [activeRide?.status]);
 
   // INFRA-2: Mapbox Directions route ETA (more accurate than haversine)
@@ -485,6 +503,7 @@ export function RideActiveView() {
   };
 
   const handleSOS = () => {
+    triggerHaptic('heavy');
     Alert.alert(
       t('ride.sos_title'),
       t('ride.sos_body'),

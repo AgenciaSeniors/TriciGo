@@ -52,7 +52,7 @@ const IconPackage = () => (
 function useStatusSteps() {
   const { t } = useTranslation('web');
   return useMemo(() => [
-    { key: 'searching' as RideStatus, label: t('track.step_searching', { defaultValue: 'Buscando conductor' }), stepNumber: 1 },
+    { key: 'searching' as RideStatus, label: t('track.step_searching', { defaultValue: 'Buscando el mejor conductor para ti...' }), stepNumber: 1 },
     { key: 'accepted' as RideStatus, label: t('track.step_accepted', { defaultValue: 'Conductor asignado' }), stepNumber: 2 },
     { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route', { defaultValue: 'En camino a recogerte' }), stepNumber: 3 },
     { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived', { defaultValue: 'Llego al punto' }), stepNumber: 4 },
@@ -335,10 +335,17 @@ export default function TrackRidePage() {
           {/* Nearby drivers count during searching */}
           {ride.status === 'searching' && (
             <div style={{ position: 'absolute', bottom: 16, left: 16, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '6px 12px', borderRadius: 20, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: nearbyVehicles.length > 0 ? '#00C853' : '#EF4444', display: 'inline-block' }} />
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: nearbyVehicles.length > 0 ? '#00C853' : 'var(--primary, #FF4D00)',
+                display: 'inline-block',
+                animation: nearbyVehicles.length === 0 ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
+              }} />
               {nearbyVehicles.length > 0
                 ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
-                : 'Sin conductores cercanos'}
+                : 'Buscando conductores cercanos...'}
             </div>
           )}
         </div>
@@ -623,10 +630,11 @@ export default function TrackRidePage() {
                   className="track-action-btn track-action-btn--cancel"
                   disabled={canceling}
                   onClick={async () => {
-                    if (!confirm(t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje?' }))) return;
+                    if (!confirm(t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje? Puede aplicarse una tarifa de cancelación.' }))) return;
                     setCanceling(true);
                     try {
                       await rideService.cancelRide(rideId, userId ?? undefined, 'rider_canceled');
+                      setCanceling(false);
                     } catch {
                       // Reset on error so user can retry
                     } finally {

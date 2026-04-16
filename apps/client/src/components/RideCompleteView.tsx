@@ -21,6 +21,7 @@ import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { DriverCard } from '@tricigo/ui/DriverCard';
 import { Input } from '@tricigo/ui/Input';
 import { Ionicons } from '@expo/vector-icons';
+import { ConfettiOverlay } from '@/components/ConfettiOverlay';
 import type { RideSplit } from '@tricigo/types';
 
 // Fallback tags in case DB fetch fails
@@ -89,6 +90,7 @@ export function RideCompleteView() {
   const [receiptEmailed, setReceiptEmailed] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [isFirstRide, setIsFirstRide] = useState(false);
+  const [showTipConfetti, setShowTipConfetti] = useState(false);
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
@@ -181,6 +183,7 @@ export function RideCompleteView() {
     try {
       await rideService.addTip(activeRide.id, userId, amount);
       setTipSent(true);
+      setShowTipConfetti(true);
       triggerHaptic('success');
       // U3.3: Tip thank-you animation (shrink → grow → settle)
       Animated.sequence([
@@ -223,7 +226,7 @@ export function RideCompleteView() {
         Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
         useRideStore.getState().setRatingReminderId(null);
       }
-      setTimeout(() => resetAll(), 5000);
+      // F009: User must tap "Listo" manually — no auto-reset
     } catch (err) {
       logger.error('Error submitting review', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
@@ -319,6 +322,7 @@ export function RideCompleteView() {
 
   return (
     <View className="flex-1 pt-8 items-center">
+      {showTipConfetti && <ConfettiOverlay />}
       {/* Success icon — U3.1: larger for first ride */}
       <View className={`${isFirstRide ? 'w-24 h-24' : 'w-20 h-20'} rounded-full bg-success items-center justify-center mb-4`}>
         <Text variant="h1" color="inverse">✓</Text>
@@ -490,7 +494,7 @@ export function RideCompleteView() {
               <AnimatedStar
                 key={star}
                 filled={!!selectedRating && star <= selectedRating}
-                onPress={() => { setSelectedRating(star); triggerSelection(); }}
+                onPress={() => { setSelectedRating(star); triggerSelection(); triggerHaptic('light'); }}
                 delay={index * 80}
               />
             ))}
@@ -500,8 +504,8 @@ export function RideCompleteView() {
           </Text>
 
           {/* Skip rating */}
-          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating')}>
-            <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating')}</Text>
+          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}>
+            <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}</Text>
           </Pressable>
 
           {/* Tip section (alongside rating) */}
@@ -515,7 +519,7 @@ export function RideCompleteView() {
                   <Pressable
                     key={amount}
                     className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800"
-                    onPress={() => handleTip(amount)}
+                    onPress={() => { triggerHaptic('medium'); handleTip(amount); }}
                     disabled={sendingTip}
                     accessibilityRole="button"
                     accessibilityLabel={`${t('ride.tip_title')} ${formatTRC(amount)}`}
@@ -553,6 +557,7 @@ export function RideCompleteView() {
                           isSelected ? prev.filter((t) => t !== tag) : [...prev, tag],
                         );
                         triggerSelection();
+                        triggerHaptic('light');
                       }}
                       className={`px-3 py-1.5 rounded-full border ${
                         isSelected

@@ -30,34 +30,42 @@ function toCoord(p: { latitude: number; longitude: number }): [number, number] {
   return [lng, lat];
 }
 
-/** Individual driver marker with entry animation */
+/** Individual driver marker with entry/exit animations */
 function DriverMarker({
   driver,
   isAccepted,
+  index,
+  hasAcceptedDriver,
 }: {
   driver: SearchingDriverPresence;
   isAccepted: boolean;
+  index: number;
+  hasAcceptedDriver: boolean;
 }) {
   const MapboxGL = getMapboxGL();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const exitRan = useRef(false);
 
   useEffect(() => {
-    // Entry animation: fade-in + scale-up
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 6,
-        tension: 80,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Staggered entry animation: fade-in + scale-up with index-based delay
+    const entryDelay = index * 80;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, entryDelay);
 
     // Pulsing border animation
     const pulse = Animated.loop(
@@ -76,8 +84,49 @@ function DriverMarker({
     );
     pulse.start();
 
-    return () => pulse.stop();
-  }, [fadeAnim, scaleAnim, pulseAnim]);
+    return () => {
+      clearTimeout(timer);
+      pulse.stop();
+    };
+  }, [fadeAnim, scaleAnim, pulseAnim, index]);
+
+  // Exit/highlight animation when a driver is accepted
+  useEffect(() => {
+    if (!hasAcceptedDriver || exitRan.current) return;
+    exitRan.current = true;
+
+    if (isAccepted) {
+      // Accepted driver: highlight pulse — scale to 1.2 then spring back to 1
+      Animated.sequence([
+        Animated.spring(scaleAnim, {
+          toValue: 1.2,
+          damping: 12,
+          stiffness: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          damping: 20,
+          stiffness: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Non-accepted drivers: fade out + scale down
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.3,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [hasAcceptedDriver, isAccepted, fadeAnim, scaleAnim]);
 
   if (!MapboxGL) return null;
 
@@ -131,11 +180,13 @@ export function SearchingDriverMarkers({
 
   return (
     <>
-      {drivers.map((driver) => (
+      {drivers.map((driver, index) => (
         <DriverMarker
           key={driver.driverId}
           driver={driver}
+          index={index}
           isAccepted={driver.driverId === acceptedDriverId}
+          hasAcceptedDriver={acceptedDriverId !== null}
         />
       ))}
     </>

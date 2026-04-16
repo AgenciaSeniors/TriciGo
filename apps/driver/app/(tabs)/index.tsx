@@ -470,7 +470,7 @@ function NativeDriverHomeScreen() {
 
   const handleToggleBreak = useCallback(async () => {
     if (!profile || togglingBreak) return;
-    if (activeTrip && activeTrip.status !== 'completed' && activeTrip.status !== 'cancelled') {
+    if (activeTrip && activeTrip.status !== 'completed' && activeTrip.status !== 'canceled') {
       Toast.show({ type: 'error', text1: t('driver.cannot_break_active_ride', { defaultValue: 'No puedes descansar durante un viaje activo' }) });
       return;
     }
