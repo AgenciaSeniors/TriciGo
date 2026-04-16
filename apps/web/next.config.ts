@@ -3,7 +3,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  transpilePackages: ['@tricigo/api', '@tricigo/types', '@tricigo/utils', 'expo', 'expo-haptics', 'expo-modules-core', '@expo/vector-icons'],
+  transpilePackages: ['@tricigo/api', '@tricigo/types', '@tricigo/utils'],
   typescript: {
     // Pre-existing type error in packages/utils/src/analytics.ts
     // dynamic import('@tricigo/api') doesn't resolve during build type-check
