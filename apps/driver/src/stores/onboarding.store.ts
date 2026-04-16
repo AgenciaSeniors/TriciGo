@@ -34,6 +34,7 @@ export interface DocumentDraft {
   document_type: DocumentType;
   uri: string;
   fileName: string;
+  mimeType: string | null;
   uploaded: boolean;
   uploading: boolean;
   error: string | null;
@@ -47,7 +48,7 @@ interface OnboardingState {
 
   setPersonalInfo: (info: Partial<PersonalInfoDraft>) => void;
   setVehicle: (vehicle: Partial<VehicleDraft>) => void;
-  setDocumentUri: (type: DocumentType, uri: string, fileName: string) => void;
+  setDocumentUri: (type: DocumentType, uri: string, fileName: string, mimeType?: string | null) => void;
   setDocumentUploaded: (type: DocumentType) => void;
   setDocumentUploading: (type: DocumentType, uploading: boolean) => void;
   setDocumentError: (type: DocumentType, error: string | null) => void;
@@ -56,11 +57,11 @@ interface OnboardingState {
 }
 
 const INITIAL_DOCUMENTS: DocumentDraft[] = [
-  { document_type: 'national_id', uri: '', fileName: '', uploaded: false, uploading: false, error: null },
-  { document_type: 'drivers_license', uri: '', fileName: '', uploaded: false, uploading: false, error: null },
-  { document_type: 'vehicle_registration', uri: '', fileName: '', uploaded: false, uploading: false, error: null },
-  { document_type: 'selfie', uri: '', fileName: '', uploaded: false, uploading: false, error: null },
-  { document_type: 'vehicle_photo', uri: '', fileName: '', uploaded: false, uploading: false, error: null },
+  { document_type: 'national_id', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'vehicle_registration', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'selfie', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'vehicle_photo', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
 ];
 
 const INITIAL_STATE = {
@@ -96,10 +97,10 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setVehicle: (vehicle) =>
     set((s) => ({ vehicle: { ...s.vehicle, ...vehicle } })),
 
-  setDocumentUri: (type, uri, fileName) =>
+  setDocumentUri: (type, uri, fileName, mimeType) =>
     set((s) => ({
       documents: s.documents.map((d) =>
-        d.document_type === type ? { ...d, uri, fileName, uploaded: false, error: null } : d,
+        d.document_type === type ? { ...d, uri, fileName, mimeType: mimeType ?? null, uploaded: false, error: null } : d,
       ),
     })),
 

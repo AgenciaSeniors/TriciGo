@@ -33,6 +33,7 @@
     "expo-haptics": "~55.0.8",
     "expo-image": "~55.0.8",
     "expo-image-manipulator": "^55.0.10",
+    "expo-document-picker": "~55.0.5",
     "expo-image-picker": "~55.0.12",
     "expo-linear-gradient": "^55.0.8",
     "expo-linking": "~55.0.7",

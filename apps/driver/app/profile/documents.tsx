@@ -3,6 +3,7 @@ import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -23,6 +24,9 @@ const DOC_TYPE_KEY: Record<string, string> = {
   selfie: 'onboarding.selfie',
   vehicle_photo: 'onboarding.vehicle_photo',
 };
+
+/** Document types that accept PDF uploads in addition to images */
+const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration'];
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
@@ -54,7 +58,7 @@ export default function DocumentsScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleReupload = useCallback(async (docType: DocumentType) => {
+  const reuploadImage = useCallback(async (docType: DocumentType) => {
     if (!driverId) return;
     setReuploading(docType);
 
@@ -79,7 +83,7 @@ export default function DocumentsScreen() {
 
       const asset = result.assets[0];
       const fileName = `${docType}-${Date.now()}.jpg`;
-      await driverService.uploadDocument(driverId, docType, asset.uri, fileName);
+      await driverService.uploadDocument(driverId, docType, asset.uri, fileName, asset.mimeType ?? 'image/jpeg');
       await fetchData();
     } catch (err) {
       Alert.alert('Error', t('common.error'));
@@ -87,6 +91,47 @@ export default function DocumentsScreen() {
       setReuploading(null);
     }
   }, [driverId, fetchData, t]);
+
+  const reuploadDocument = useCallback(async (docType: DocumentType) => {
+    if (!driverId) return;
+    setReuploading(docType);
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) {
+        setReuploading(null);
+        return;
+      }
+
+      const asset = result.assets[0];
+      const fileName = asset.name ?? `${docType}-${Date.now()}.pdf`;
+      await driverService.uploadDocument(driverId, docType, asset.uri, fileName, asset.mimeType ?? 'application/pdf');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Error', t('common.error'));
+    } finally {
+      setReuploading(null);
+    }
+  }, [driverId, fetchData, t]);
+
+  const handleReupload = useCallback((docType: DocumentType) => {
+    if (PDF_ELIGIBLE_TYPES.includes(docType)) {
+      Alert.alert(
+        t('onboarding.upload_method', { defaultValue: 'Método de subida' }),
+        t('onboarding.choose_upload', { defaultValue: '¿Cómo quieres subir este documento?' }),
+        [
+          { text: t('onboarding.from_gallery', { defaultValue: 'Foto / Galería' }), onPress: () => reuploadImage(docType) },
+          { text: t('onboarding.upload_pdf', { defaultValue: 'Documento (PDF)' }), onPress: () => reuploadDocument(docType) },
+          { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        ],
+      );
+    } else {
+      reuploadImage(docType);
+    }
+  }, [reuploadImage, reuploadDocument, t]);
 
   const getStatusBadgeProps = (doc: DriverDocument) => {
     if (doc.is_verified) {
@@ -140,13 +185,14 @@ export default function DocumentsScreen() {
             {documents.map((doc) => {
               const badgeProps = getStatusBadgeProps(doc);
               const isRejected = !doc.is_verified && !!doc.rejection_reason;
+              const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.toLowerCase().endsWith('.pdf');
 
               return (
                 <Card theme="light" key={doc.id} variant="surface" padding="md" className="mb-3">
                   <View className="flex-row items-center">
                     <View className="w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
                       <Ionicons
-                        name={doc.is_verified ? 'checkmark-circle' : isRejected ? 'close-circle' : 'document-text'}
+                        name={isPdf ? 'document-text' : doc.is_verified ? 'checkmark-circle' : isRejected ? 'close-circle' : 'document-text'}
                         size={20}
                         color={doc.is_verified ? colors.status.verified : isRejected ? colors.error.DEFAULT : colors.brand.orange}
                       />
@@ -155,8 +201,8 @@ export default function DocumentsScreen() {
                       <Text variant="body" color="primary">
                         {DOC_TYPE_KEY[doc.document_type] ? t(DOC_TYPE_KEY[doc.document_type]!) : doc.document_type}
                       </Text>
-                      <Text variant="caption" color="secondary" className="mt-0.5">
-                        {doc.file_name}
+                      <Text variant="caption" color="secondary" className="mt-0.5" numberOfLines={1}>
+                        {isPdf ? `PDF: ${doc.file_name}` : doc.file_name}
                       </Text>
                       {isRejected && doc.rejection_reason && (
                         <View className="flex-row items-start mt-1.5">

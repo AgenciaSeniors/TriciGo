@@ -80,17 +80,30 @@ export const driverService = {
     documentType: string,
     filePath: string,
     fileName: string,
+    mimeType: string = 'image/jpeg',
   ): Promise<DriverDocument> {
     const supabase = getSupabaseClient();
+
+    // Validate file size (10MB for PDF, 5MB for images)
+    const maxSize = mimeType === 'application/pdf' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
 
     // Upload file to Supabase Storage
     const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
     const response = await fetch(filePath);
     const blob = await response.blob();
 
+    // Check blob size against limit
+    if (blob.size > maxSize) {
+      const maxMB = maxSize / (1024 * 1024);
+      throw new Error(`File size exceeds ${maxMB}MB limit for ${mimeType === 'application/pdf' ? 'PDF' : 'image'} uploads`);
+    }
+
     const { error: uploadError } = await supabase.storage
       .from('driver-documents')
-      .upload(storagePath, blob);
+      .upload(storagePath, blob, {
+        contentType: mimeType,
+        upsert: true,
+      });
     if (uploadError) throw uploadError;
 
     // Create document record
@@ -101,6 +114,7 @@ export const driverService = {
         document_type: documentType,
         storage_path: storagePath,
         file_name: fileName,
+        mime_type: mimeType,
       })
       .select()
       .single();

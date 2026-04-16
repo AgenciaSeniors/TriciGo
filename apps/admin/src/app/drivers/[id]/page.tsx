@@ -355,16 +355,42 @@ export default function DriverDetailPage() {
 
                   {doc ? (
                     <div>
-                      {/* Image preview */}
-                      {url && url !== '__error__' && (
-                        <a href={url} target="_blank" rel="noopener noreferrer">
-                          <img
-                            src={url}
-                            alt={docType}
-                            className="w-full h-32 object-cover rounded-md mb-2 cursor-pointer hover:opacity-80 transition-opacity"
-                          />
-                        </a>
-                      )}
+                      {/* Document preview — PDF or image */}
+                      {url && url !== '__error__' && (() => {
+                        const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf');
+                        return isPdf ? (
+                          <div>
+                            <div
+                              className="w-full h-32 flex flex-col items-center justify-center bg-neutral-800 rounded-md mb-2 cursor-pointer hover:bg-neutral-700 transition-colors gap-2"
+                              onClick={() => window.open(url, '_blank')}
+                            >
+                              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                              </svg>
+                              <span className="text-xs text-neutral-400">
+                                {doc.file_name || 'Documento PDF'}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => window.open(url, '_blank')}
+                              className="w-full px-3 py-1.5 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors mb-2 text-center"
+                            >
+                              {t('drivers.view_document', { defaultValue: 'Ver documento' })}
+                            </button>
+                          </div>
+                        ) : (
+                          <a href={url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={url}
+                              alt={docType}
+                              className="w-full h-32 object-cover rounded-md mb-2 cursor-pointer hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        );
+                      })()}
                       {url === '__error__' && (
                         <div className="w-full h-32 bg-red-50 border border-red-200 rounded-md mb-2 flex items-center justify-center">
                           <span className="text-xs text-red-500">{t('verification.doc_load_error', { defaultValue: 'Error loading document' })}</span>
