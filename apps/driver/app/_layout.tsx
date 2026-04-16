@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useColorScheme } from 'nativewind';
@@ -184,12 +185,14 @@ function RootLayoutInner() {
   }
 
   return (
-    <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
-      <AppProviders>
-        <RootNavigator />
-        <Toast />
-      </AppProviders>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
+        <AppProviders>
+          <RootNavigator />
+          <Toast />
+        </AppProviders>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
