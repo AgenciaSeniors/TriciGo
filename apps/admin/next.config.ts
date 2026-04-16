@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
     '@tricigo/theme',
     '@tricigo/i18n',
     '@tricigo/utils',
+    'expo-haptics',
+    'expo-modules-core',
   ],
 };
 
