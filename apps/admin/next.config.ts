@@ -9,8 +9,10 @@ const nextConfig: NextConfig = {
     '@tricigo/theme',
     '@tricigo/i18n',
     '@tricigo/utils',
+    'expo',
     'expo-haptics',
     'expo-modules-core',
+    '@expo/vector-icons',
   ],
 };
 
