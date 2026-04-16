@@ -27,7 +27,7 @@
     "navigating_to_zone_in": "Navegando para zona ativa em {{seconds}}s",
     "stay_here": "Ficar aqui",
     "next_ride_estimated": "Próxima viagem ~{{minutes}} min",
-    "per_hour": "₧{{amount}}/h",
+    "per_hour": "${{amount}}/h",
     "ride_accepted": "Viagem aceita!",
     "profitable_ride": "Viagem rentável perto de você",
     "available_ride": "Viagem disponível",

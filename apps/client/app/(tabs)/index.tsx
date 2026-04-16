@@ -3056,7 +3056,7 @@ function ReviewingView() {
                 : t('home.usual_fare_range', {
                     low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString(),
                     high: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 1.15) - discount).toLocaleString(),
-                    defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
+                    defaultValue: 'Este viaje suele costar ${{low}} - ${{high}}',
                   })
               }
             </Text>

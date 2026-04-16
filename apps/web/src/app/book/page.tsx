@@ -1605,7 +1605,7 @@ export default function BookPage() {
                         const totalFare = selectedEstimate.estimated_fare_cup;
                         const walletPart = Math.round(totalFare * walletRatio);
                         const cashPart = totalFare - walletPart;
-                        return `₧${walletPart.toLocaleString()} wallet + ₧${cashPart.toLocaleString()} efectivo = ₧${totalFare.toLocaleString()} total`;
+                        return `$${walletPart.toLocaleString()} wallet + $${cashPart.toLocaleString()} efectivo = $${totalFare.toLocaleString()} total`;
                       })()}
                     </p>
                   </div>

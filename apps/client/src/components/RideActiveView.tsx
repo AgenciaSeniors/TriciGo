@@ -480,11 +480,11 @@ export function RideActiveView() {
     const fee = cancellationFeePreview?.fee_amount ?? 0;
     if (activeRide.status === 'driver_en_route') return {
       emotion: t('ride.driver_coming', { defaultValue: 'Tu conductor ya viene en camino' }),
-      fee: fee > 0 ? `· ${t('ride.cancel_ride')} (₧${fee})` : `· ${t('ride.cancel_ride')} ${t('cancel_fee_free', { ns: 'rider', defaultValue: 'gratis' })}`,
+      fee: fee > 0 ? `· ${t('ride.cancel_ride')} ($${fee})` : `· ${t('ride.cancel_ride')} ${t('cancel_fee_free', { ns: 'rider', defaultValue: 'gratis' })}`,
     };
     if (activeRide.status === 'arrived_at_pickup') return {
       emotion: t('ride.driver_waiting', { defaultValue: 'Tu conductor te está esperando' }),
-      fee: fee > 0 ? `· ${t('ride.cancel_ride')} (₧${fee})` : '',
+      fee: fee > 0 ? `· ${t('ride.cancel_ride')} ($${fee})` : '',
     };
     return { emotion: '', fee: '' };
   }, [activeRide?.status, cancellationFeePreview, t]);
@@ -931,7 +931,7 @@ export function RideActiveView() {
           />
           {/* UBER-2.3: Waypoint cost/time preview */}
           <Text variant="caption" color="secondary" className="text-center mt-1">
-            {t('ride.add_stop_preview', { defaultValue: 'Agregar parada · +~₧200 · +~5 min' })}
+            {t('ride.add_stop_preview', { defaultValue: 'Agregar parada · +~$200 · +~5 min' })}
           </Text>
         </View>
       )}

@@ -296,7 +296,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       {/* ── Net earnings — hero value ── */}
       <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
         <Text variant="stat" style={{ color: profitColor }}>
-          ₧{netEarnings.toLocaleString()}
+          ${netEarnings.toLocaleString()}
         </Text>
       </View>
 
@@ -413,7 +413,7 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
         <View style={{ alignItems: 'center' }}>
           <RNText style={{ color: '#9CA3AF', fontSize: 11, fontFamily: 'Inter' }}>Tarifa</RNText>
           <RNText style={{ color: colors.brand.orange, fontSize: 16, fontWeight: '700', fontFamily: 'Inter' }}>
-            ₧{fare.toLocaleString()}
+            ${fare.toLocaleString()}
           </RNText>
         </View>
       </View>

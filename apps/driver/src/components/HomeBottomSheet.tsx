@@ -347,7 +347,7 @@ function SheetContent({
             {t('home.today', { defaultValue: 'Hoy' })}
           </RNText>
           <RNText style={styles.statCardValue}>
-            ₧{todayEarnings.amount.toLocaleString()}
+            ${todayEarnings.amount.toLocaleString()}
           </RNText>
         </Animated.View>
       </Pressable>
@@ -376,7 +376,7 @@ function SheetContent({
               {t('home.per_hour_label', { defaultValue: 'Por hora' })}
             </RNText>
             <RNText style={[styles.statCardValue, { color: colors.brand.orange }]}>
-              ₧{perHour.toLocaleString()}
+              ${perHour.toLocaleString()}
             </RNText>
           </Animated.View>
         </Pressable>

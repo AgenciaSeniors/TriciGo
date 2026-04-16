@@ -924,7 +924,7 @@ function NativeWalletScreen() {
                 }`}
               >
                 <Text className={rechargeAmount === String(amount) ? 'text-white font-semibold' : 'text-neutral-700 dark:text-neutral-300'}>
-                  ₧{amount.toLocaleString()}
+                  ${amount.toLocaleString()}
                 </Text>
               </Pressable>
             ))}
