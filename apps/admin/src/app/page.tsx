@@ -61,7 +61,7 @@ export default function DashboardPage() {
       const [metricsData, rides, drivers, autoActionsData] = await Promise.all([
         adminService.getDashboardMetrics(),
         adminService.getRides({}, 0, 5),
-        adminService.getDriversByStatus('pending_verification', 0, 5),
+        adminService.getPendingDrivers(0, 5),
         adminService.getRecentAutoActions(5).catch(() => [] as AdminAction[]),
       ]);
       setMetrics(metricsData);

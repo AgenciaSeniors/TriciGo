@@ -87,6 +87,29 @@ export const adminService = {
   },
 
   /**
+   * Get all drivers awaiting admin review.
+   * Matches the same criteria as the pending_verifications count in
+   * get_admin_dashboard_metrics (status IN pending_verification, under_review).
+   */
+  async getPendingDrivers(
+    page = 0,
+    pageSize = 20,
+  ): Promise<DriverProfileWithUser[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
+      .in('status', ['pending_verification', 'under_review'])
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as DriverProfileWithUser[];
+  },
+
+  /**
    * Get all drivers with optional filters and pagination.
    */
   async getAllDrivers(
