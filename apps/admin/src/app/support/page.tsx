@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Headphones, Send } from 'lucide-react';
 import { supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
@@ -14,31 +14,11 @@ import { DataEmptyState } from '@/components/data/DataEmptyState';
 
 type Filter = TicketStatus | 'all';
 
-const TABS: StatusTab<Filter>[] = [
-  { id: 'all', label: 'Todos' },
-  { id: 'open', label: 'Abiertos', tone: 'info' },
-  { id: 'in_progress', label: 'En progreso', tone: 'warning' },
-  { id: 'waiting_user', label: 'Esperando usuario', tone: 'warning' },
-  { id: 'resolved', label: 'Resueltos', tone: 'success' },
-  { id: 'closed', label: 'Cerrados' },
-];
-
-const PRIORITY_META: Record<string, { label: string; className: string }> = {
-  low: { label: 'Baja', className: 'bg-surface-sunken text-ink-muted' },
-  normal: { label: 'Normal', className: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
-  high: { label: 'Alta', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
-  urgent: { label: 'Urgente', className: 'bg-red-600 text-white' },
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  ride_issue: 'Problema con viaje',
-  payment_issue: 'Pago',
-  driver_complaint: 'Queja conductor',
-  passenger_complaint: 'Queja pasajero',
-  account_issue: 'Cuenta',
-  app_bug: 'Bug en la app',
-  feature_request: 'Sugerencia',
-  other: 'Otro',
+const PRIORITY_CLASS: Record<string, string> = {
+  low: 'bg-surface-sunken text-ink-muted',
+  normal: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  high: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  urgent: 'bg-red-600 text-white',
 };
 
 export default function SupportPage() {
@@ -56,6 +36,29 @@ export default function SupportPage() {
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const TABS: StatusTab<Filter>[] = useMemo(() => [
+    { id: 'all', label: t('support.filter_all', { defaultValue: 'Todos' }) },
+    { id: 'open', label: t('support.filter_open', { defaultValue: 'Abiertos' }), tone: 'info' },
+    { id: 'in_progress', label: t('support.filter_in_progress', { defaultValue: 'En progreso' }), tone: 'warning' },
+    { id: 'waiting_user', label: t('support.filter_waiting_user', { defaultValue: 'Esperando usuario' }), tone: 'warning' },
+    { id: 'resolved', label: t('support.filter_resolved', { defaultValue: 'Resueltos' }), tone: 'success' },
+    { id: 'closed', label: t('support.filter_closed', { defaultValue: 'Cerrados' }) },
+  ], [t]);
+
+  const priorityLabel = useCallback((p: string): string => {
+    const fallbacks: Record<string, string> = { low: 'Baja', normal: 'Normal', high: 'Alta', urgent: 'Urgente' };
+    return t(`support.priority_${p}`, { defaultValue: fallbacks[p] ?? p });
+  }, [t]);
+
+  const categoryLabel = useCallback((c: string): string => {
+    const fallbacks: Record<string, string> = {
+      ride_issue: 'Problema con viaje', payment_issue: 'Pago', driver_complaint: 'Queja conductor',
+      passenger_complaint: 'Queja pasajero', account_issue: 'Cuenta', app_bug: 'Bug en la app',
+      feature_request: 'Sugerencia', other: 'Otro',
+    };
+    return t(`support.category_${c}`, { defaultValue: fallbacks[c] ?? c });
+  }, [t]);
+
   const fetchTickets = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -67,11 +70,11 @@ export default function SupportPage() {
       setTickets(data);
     } catch (err) {
       setTickets([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los tickets.');
+      setError(err instanceof Error ? err.message : t('support.load_error', { defaultValue: 'No pudimos cargar los tickets.' }));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, t]);
 
   useEffect(() => {
     void fetchTickets();
@@ -87,7 +90,7 @@ export default function SupportPage() {
       const msgs = await supportService.getMessages(ticket.id);
       setMessages(msgs);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cargar los mensajes.');
+      showToast('error', err instanceof Error ? err.message : t('support.messages_error', { defaultValue: 'No pudimos cargar los mensajes.' }));
     }
   };
 
@@ -103,7 +106,7 @@ export default function SupportPage() {
       });
       setMessages((prev) => [...prev, msg]);
       setReply('');
-      showToast('success', 'Respuesta enviada');
+      showToast('success', t('support.toast_sent', { defaultValue: 'Respuesta enviada' }));
 
       if (selected.status === 'open') {
         await supportService.updateTicket(selected.id, { status: 'in_progress' });
@@ -115,7 +118,7 @@ export default function SupportPage() {
         );
       }
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos enviar la respuesta.');
+      showToast('error', err instanceof Error ? err.message : t('support.send_error', { defaultValue: 'No pudimos enviar la respuesta.' }));
     } finally {
       setSending(false);
     }
@@ -130,9 +133,9 @@ export default function SupportPage() {
       if (selected?.id === ticketId) {
         setSelected((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
-      showToast('success', 'Estado actualizado');
+      showToast('success', t('support.toast_status_updated', { defaultValue: 'Estado actualizado' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cambiar el estado.');
+      showToast('error', err instanceof Error ? err.message : t('support.status_error', { defaultValue: 'No pudimos cambiar el estado.' }));
     }
   };
 
@@ -158,9 +161,9 @@ export default function SupportPage() {
           <DataEmptyState
             icon={Headphones}
             tone="danger"
-            title="No pudimos cargar los tickets"
+            title={t('support.load_error_title', { defaultValue: 'No pudimos cargar los tickets' })}
             body={error}
-            action={{ label: 'Reintentar', onClick: () => void fetchTickets() }}
+            action={{ label: t('support.retry', { defaultValue: 'Reintentar' }), onClick: () => void fetchTickets() }}
           />
         </div>
       );
@@ -170,8 +173,8 @@ export default function SupportPage() {
         <div className="p-6">
           <DataEmptyState
             icon={Headphones}
-            title="Sin tickets"
-            body="Nada pendiente en este alcance. Buen trabajo."
+            title={t('support.empty_title', { defaultValue: 'Sin tickets' })}
+            body={t('support.empty_body', { defaultValue: 'Nada pendiente en este alcance. Buen trabajo.' })}
           />
         </div>
       );
@@ -180,7 +183,7 @@ export default function SupportPage() {
       <ul className="divide-y divide-line">
         {tickets.map((ticket) => {
           const active = selected?.id === ticket.id;
-          const priority = PRIORITY_META[ticket.priority] ?? PRIORITY_META.normal!;
+          const priorityClass = PRIORITY_CLASS[ticket.priority] ?? PRIORITY_CLASS.normal!;
           return (
             <li key={ticket.id}>
               <button
@@ -207,12 +210,12 @@ export default function SupportPage() {
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-subtle">
                     <span className="truncate">
-                      {CATEGORY_LABEL[ticket.category] ?? ticket.category}
+                      {categoryLabel(ticket.category)}
                     </span>
                     <span
-                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${priority.className}`}
+                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${priorityClass}`}
                     >
-                      {priority.label}
+                      {priorityLabel(ticket.priority)}
                     </span>
                     <span className="ml-auto">{formatAdminDate(ticket.created_at)}</span>
                   </span>
@@ -230,13 +233,13 @@ export default function SupportPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Gente · soporte
+            {t('support.page_eyebrow', { defaultValue: 'Gente · soporte' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Soporte
+            {t('support.title', { defaultValue: 'Soporte' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Conversaciones con pasajeros y conductores. Respondé rápido, resolvé mejor.
+            {t('support.page_description', { defaultValue: 'Conversaciones con pasajeros y conductores. Respondé rápido, resolvé mejor.' })}
           </p>
         </div>
       </div>
@@ -256,10 +259,10 @@ export default function SupportPage() {
         <div className="admin-card overflow-hidden lg:col-span-2">
           <div className="border-b border-line px-4 py-2.5">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-              Bandeja
+              {t('support.tray_eyebrow', { defaultValue: 'Bandeja' })}
             </p>
             <h2 className="font-display text-[15px] font-semibold text-ink">
-              Tickets ({tickets.length})
+              {t('support.tray_title', { defaultValue: 'Tickets' })} ({tickets.length})
             </h2>
           </div>
           <div className="max-h-[660px] overflow-y-auto">{renderList()}</div>
@@ -270,8 +273,8 @@ export default function SupportPage() {
             <div className="flex min-h-[480px] items-center justify-center p-6">
               <DataEmptyState
                 icon={Headphones}
-                title="Elegí un ticket"
-                body="Seleccioná uno en la bandeja para ver la conversación y responder."
+                title={t('support.pick_title', { defaultValue: 'Elegí un ticket' })}
+                body={t('support.pick_body', { defaultValue: 'Seleccioná uno en la bandeja para ver la conversación y responder.' })}
               />
             </div>
           ) : (
@@ -279,7 +282,7 @@ export default function SupportPage() {
               <div className="flex flex-wrap items-start gap-3 border-b border-line px-5 py-4">
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                    {CATEGORY_LABEL[selected.category] ?? selected.category}
+                    {categoryLabel(selected.category)}
                   </p>
                   <h2 className="font-display text-[17px] font-semibold text-ink">
                     {selected.subject}
@@ -296,7 +299,7 @@ export default function SupportPage() {
                         onClick={() => void handleStatusChange(selected.id, 'resolved')}
                         className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
                       >
-                        Resolver
+                        {t('support.btn_resolve', { defaultValue: 'Resolver' })}
                       </button>
                     )}
                     {selected.status !== 'closed' && (
@@ -304,7 +307,7 @@ export default function SupportPage() {
                         onClick={() => void handleStatusChange(selected.id, 'closed')}
                         className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] font-medium text-ink-muted hover:text-ink"
                       >
-                        Cerrar
+                        {t('support.btn_close', { defaultValue: 'Cerrar' })}
                       </button>
                     )}
                   </div>
@@ -321,7 +324,9 @@ export default function SupportPage() {
                       }`}
                     >
                       <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-subtle">
-                        {msg.is_admin ? 'Soporte' : 'Usuario'} · {formatAdminDate(msg.created_at)}
+                        {msg.is_admin
+                          ? t('support.sender_support', { defaultValue: 'Soporte' })
+                          : t('support.sender_user', { defaultValue: 'Usuario' })} · {formatAdminDate(msg.created_at)}
                       </p>
                       <div
                         className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[13px] ${
@@ -336,7 +341,7 @@ export default function SupportPage() {
                   ))}
                   {messages.length === 0 && (
                     <p className="py-6 text-center text-[12.5px] italic text-ink-subtle">
-                      Sin mensajes todavía.
+                      {t('support.no_messages', { defaultValue: 'Sin mensajes todavía.' })}
                     </p>
                   )}
                   <div ref={messagesEndRef} />
@@ -353,8 +358,8 @@ export default function SupportPage() {
                       void handleReply();
                     }
                   }}
-                  placeholder="Escribí tu respuesta y apretá Enter…"
-                  aria-label="Respuesta"
+                  placeholder={t('support.reply_placeholder', { defaultValue: 'Escribí tu respuesta y apretá Enter…' })}
+                  aria-label={t('support.reply_aria', { defaultValue: 'Respuesta' })}
                   className="h-10 flex-1 rounded-full border border-line bg-surface px-4 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
                 />
                 <button
@@ -363,7 +368,9 @@ export default function SupportPage() {
                   className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink px-4 text-[12px] font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  {sending ? 'Enviando…' : 'Enviar'}
+                  {sending
+                    ? t('support.sending', { defaultValue: 'Enviando…' })
+                    : t('support.send', { defaultValue: 'Enviar' })}
                 </button>
               </div>
             </div>

@@ -15,15 +15,6 @@ const PAGE_SIZE = 20;
 
 type RatingFilter = 'all' | '5' | '4' | '3' | '2' | '1';
 
-const RATING_TABS: StatusTab<RatingFilter>[] = [
-  { id: 'all', label: 'Todas' },
-  { id: '5', label: '5 ★', tone: 'success' },
-  { id: '4', label: '4 ★', tone: 'success' },
-  { id: '3', label: '3 ★', tone: 'warning' },
-  { id: '2', label: '2 ★', tone: 'warning' },
-  { id: '1', label: '1 ★', tone: 'danger' },
-];
-
 interface ReviewRow extends Review {
   reviewer_name?: string;
   reviewee_name?: string;
@@ -37,9 +28,9 @@ interface ReviewStats {
   today: number;
 }
 
-function Stars({ rating }: { rating: number }) {
+function Stars({ rating, ariaLabel }: { rating: number; ariaLabel: string }) {
   return (
-    <span className="inline-flex items-center gap-0.5" role="img" aria-label={`${rating} de 5 estrellas`}>
+    <span className="inline-flex items-center gap-0.5" role="img" aria-label={ariaLabel}>
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
@@ -67,6 +58,15 @@ export default function ReviewsPage() {
   const [stats, setStats] = useState<ReviewStats>({ total: 0, average: 0, today: 0 });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
+
+  const RATING_TABS: StatusTab<RatingFilter>[] = useMemo(() => [
+    { id: 'all', label: t('reviews.filter_all', { defaultValue: 'Todas' }) },
+    { id: '5', label: '5 ★', tone: 'success' },
+    { id: '4', label: '4 ★', tone: 'success' },
+    { id: '3', label: '3 ★', tone: 'warning' },
+    { id: '2', label: '2 ★', tone: 'warning' },
+    { id: '1', label: '1 ★', tone: 'danger' },
+  ], [t]);
 
   const fetchStats = useCallback(async () => {
     const supabase = createBrowserClient();
@@ -160,11 +160,11 @@ export default function ReviewsPage() {
       setReviews(rows);
     } catch (err) {
       setReviews([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar las reseñas.');
+      setError(err instanceof Error ? err.message : t('reviews.load_error', { defaultValue: 'No pudimos cargar las reseñas.' }));
     } finally {
       setLoading(false);
     }
-  }, [page, ratingFilter, dateFrom, dateTo]);
+  }, [page, ratingFilter, dateFrom, dateTo, t]);
 
   useEffect(() => {
     void fetchStats();
@@ -187,9 +187,11 @@ export default function ReviewsPage() {
       setReviews((prev) =>
         prev.map((r) => (r.id === review.id ? { ...r, is_visible: newVisibility } : r)),
       );
-      showToast('success', newVisibility ? 'Reseña visible' : 'Reseña ocultada');
+      showToast('success', newVisibility
+        ? t('reviews.toast_visible', { defaultValue: 'Reseña visible' })
+        : t('reviews.toast_hidden', { defaultValue: 'Reseña ocultada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cambiar la visibilidad.');
+      showToast('error', err instanceof Error ? err.message : t('reviews.visibility_error', { defaultValue: 'No pudimos cambiar la visibilidad.' }));
     } finally {
       setActionLoading(null);
     }
@@ -208,9 +210,11 @@ export default function ReviewsPage() {
       setReviews((prev) =>
         prev.map((r) => (r.id === review.id ? { ...r, is_featured: newFeatured } : r)),
       );
-      showToast('success', newFeatured ? 'Reseña destacada' : 'Reseña sin destacar');
+      showToast('success', newFeatured
+        ? t('reviews.toast_featured', { defaultValue: 'Reseña destacada' })
+        : t('reviews.toast_unfeatured', { defaultValue: 'Reseña sin destacar' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cambiar el destacado.');
+      showToast('error', err instanceof Error ? err.message : t('reviews.featured_error', { defaultValue: 'No pudimos cambiar el destacado.' }));
     } finally {
       setActionLoading(null);
     }
@@ -232,7 +236,7 @@ export default function ReviewsPage() {
     () => [
       {
         id: 'reviewer',
-        header: 'De → para',
+        header: t('reviews.col_from_to', { defaultValue: 'De → para' }),
         cell: (r) => (
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium text-ink">
@@ -247,14 +251,19 @@ export default function ReviewsPage() {
       },
       {
         id: 'rating',
-        header: 'Estrellas',
-        cell: (r) => <Stars rating={r.rating} />,
+        header: t('reviews.col_stars', { defaultValue: 'Estrellas' }),
+        cell: (r) => (
+          <Stars
+            rating={r.rating}
+            ariaLabel={t('reviews.stars_aria', { defaultValue: `${r.rating} de 5 estrellas` }).replace('{n}', String(r.rating))}
+          />
+        ),
         sortKey: 'rating',
         width: '140px',
       },
       {
         id: 'comment',
-        header: 'Comentario',
+        header: t('reviews.col_comment', { defaultValue: 'Comentario' }),
         cell: (r) =>
           r.comment ? (
             <span className="block max-w-[260px] truncate text-ink-muted">{r.comment}</span>
@@ -266,7 +275,7 @@ export default function ReviewsPage() {
       },
       {
         id: 'tags',
-        header: 'Tags',
+        header: t('reviews.col_tags', { defaultValue: 'Tags' }),
         cell: (r) =>
           (r.tag_keys ?? []).length > 0 ? (
             <span className="flex flex-wrap gap-1">
@@ -290,16 +299,16 @@ export default function ReviewsPage() {
       },
       {
         id: 'status',
-        header: 'Estado',
+        header: t('reviews.col_status', { defaultValue: 'Estado' }),
         cell: (r) => (
           <span className="flex items-center gap-1">
             {r.is_visible ? (
               <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                Visible
+                {t('reviews.status_visible', { defaultValue: 'Visible' })}
               </span>
             ) : (
               <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
-                Oculta
+                {t('reviews.status_hidden', { defaultValue: 'Oculta' })}
               </span>
             )}
             {r.is_featured && (
@@ -313,14 +322,14 @@ export default function ReviewsPage() {
       },
       {
         id: 'created_at',
-        header: 'Fecha',
+        header: t('reviews.col_date', { defaultValue: 'Fecha' }),
         cell: (r) => <span className="text-ink-muted">{formatAdminDate(r.created_at)}</span>,
         sortKey: 'created_at',
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [],
+    [t],
   );
 
   return (
@@ -328,27 +337,27 @@ export default function ReviewsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Gente · reseñas
+            {t('reviews.page_eyebrow', { defaultValue: 'Gente · reseñas' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Reseñas
+            {t('reviews.title', { defaultValue: 'Reseñas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Opiniones de pasajeros y conductores. Moderá lo que se muestra y destacá lo mejor.
+            {t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Moderá lo que se muestra y destacá lo mejor.' })}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Total de reseñas" value={String(stats.total)} loading={false} />
+        <KpiCard label={t('reviews.kpi_total', { defaultValue: 'Total de reseñas' })} value={String(stats.total)} loading={false} />
         <KpiCard
-          label="Promedio"
+          label={t('reviews.kpi_average', { defaultValue: 'Promedio' })}
           value={stats.average > 0 ? stats.average.toFixed(1) : '—'}
           unit={stats.average > 0 ? '★' : undefined}
           tone="warning"
           loading={false}
         />
-        <KpiCard label="Hoy" value={String(stats.today)} tone="primary" loading={false} />
+        <KpiCard label={t('reviews.kpi_today', { defaultValue: 'Hoy' })} value={String(stats.today)} tone="primary" loading={false} />
       </div>
 
       <FilterBar<RatingFilter>
@@ -363,7 +372,9 @@ export default function ReviewsPage() {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Desde</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              {t('reviews.filter_desde', { defaultValue: 'Desde' })}
+            </span>
             <input
               type="date"
               value={dateFrom}
@@ -375,7 +386,9 @@ export default function ReviewsPage() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Hasta</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              {t('reviews.filter_hasta', { defaultValue: 'Hasta' })}
+            </span>
             <input
               type="date"
               value={dateTo}
@@ -398,7 +411,7 @@ export default function ReviewsPage() {
               }}
               className="text-[11.5px] font-medium text-ink-muted hover:text-ink"
             >
-              Limpiar fechas
+              {t('reviews.clear_dates', { defaultValue: 'Limpiar fechas' })}
             </button>
           </div>
         )}
@@ -413,8 +426,8 @@ export default function ReviewsPage() {
         onRetry={() => void fetchReviews()}
         empty={{
           icon: StarOff,
-          title: 'Sin reseñas aún',
-          body: 'Cuando lleguen las primeras opiniones, van a aparecer acá.',
+          title: t('reviews.empty_title', { defaultValue: 'Sin reseñas aún' }),
+          body: t('reviews.empty_body', { defaultValue: 'Cuando lleguen las primeras opiniones, van a aparecer acá.' }),
         }}
         sort={sort}
         onSortChange={setSort}
@@ -422,13 +435,13 @@ export default function ReviewsPage() {
         onPaginationChange={(next) => setPage(next.page)}
         rowActions={[
           {
-            label: 'Mostrar/Ocultar',
+            label: t('reviews.action_toggle_visibility', { defaultValue: 'Mostrar/Ocultar' }),
             onClick: (r) => {
               if (actionLoading !== r.id) void handleToggleVisibility(r);
             },
           },
           {
-            label: 'Destacar',
+            label: t('reviews.action_toggle_featured', { defaultValue: 'Destacar' }),
             onClick: (r) => {
               if (actionLoading !== r.id) void handleToggleFeatured(r);
             },
