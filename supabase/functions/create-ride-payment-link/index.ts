@@ -1,3 +1,4 @@
+// DEPRECATED: TropiPay removed. Will be replaced by Stripe.
 // ============================================================
 // TriciGo — Create TropiPay Payment Link for Ride
 //
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 5 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`create-ride-payment-link:${clientIP}`, 5, 60 * 1000);
+    const rl = await rateLimit(`create-ride-payment-link:${clientIP}`, 5, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

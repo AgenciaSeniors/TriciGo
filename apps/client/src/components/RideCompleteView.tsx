@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Pressable, Share, Animated, useColorScheme, type GestureResponderEvent } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -19,6 +21,7 @@ import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { DriverCard } from '@tricigo/ui/DriverCard';
 import { Input } from '@tricigo/ui/Input';
 import { Ionicons } from '@expo/vector-icons';
+import { ConfettiOverlay } from '@/components/ConfettiOverlay';
 import type { RideSplit } from '@tricigo/types';
 
 // Fallback tags in case DB fetch fails
@@ -87,6 +90,7 @@ export function RideCompleteView() {
   const [receiptEmailed, setReceiptEmailed] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [isFirstRide, setIsFirstRide] = useState(false);
+  const [showTipConfetti, setShowTipConfetti] = useState(false);
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
@@ -117,7 +121,15 @@ export function RideCompleteView() {
   }, [userId]);
 
   // Subscribe to real-time split updates (payment confirmations post-ride)
+  const splitChannelRef = useRef<any>(null);
   useEffect(() => {
+    // Clean up previous subscription
+    if (splitChannelRef.current) {
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(splitChannelRef.current);
+      splitChannelRef.current = null;
+    }
+
     if (!activeRide?.id || !activeRide.is_split) return;
 
     // Fetch current splits state
@@ -125,15 +137,18 @@ export function RideCompleteView() {
       .then((existingSplits) => setSplits(existingSplits))
       .catch(() => {});
 
-    const channel = rideService.subscribeToSplits(
+    splitChannelRef.current = rideService.subscribeToSplits(
       activeRide.id,
-      (newSplit) => addSplit(newSplit),
-      (updatedSplit) => updateSplit(updatedSplit),
+      (newSplit) => { if (newSplit?.id) addSplit(newSplit); },
+      (updatedSplit) => { if (updatedSplit?.id) updateSplit(updatedSplit); },
     );
 
     return () => {
-      const supabase = getSupabaseClient();
-      supabase.removeChannel(channel);
+      if (splitChannelRef.current) {
+        const supabase = getSupabaseClient();
+        supabase.removeChannel(splitChannelRef.current);
+        splitChannelRef.current = null;
+      }
     };
   }, [activeRide?.id, activeRide?.is_split]);
 
@@ -168,6 +183,7 @@ export function RideCompleteView() {
     try {
       await rideService.addTip(activeRide.id, userId, amount);
       setTipSent(true);
+      setShowTipConfetti(true);
       triggerHaptic('success');
       // U3.3: Tip thank-you animation (shrink → grow → settle)
       Animated.sequence([
@@ -200,10 +216,26 @@ export function RideCompleteView() {
       setSubmitted(true);
       triggerHaptic('success');
       trackEvent('ride_rated', { ride_id: activeRide.id, rating: selectedRating });
-      setTimeout(() => resetAll(), 5000);
+
+      // F009: Clear pending review — review submitted successfully
+      AsyncStorage.removeItem('@tricigo/pending_review_ride_id').catch(() => {});
+
+      // Cancel rating reminder if it was scheduled
+      const reminderId = useRideStore.getState().ratingReminderId;
+      if (reminderId) {
+        Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
+        useRideStore.getState().setRatingReminderId(null);
+      }
+      // F009: User must tap "Listo" manually — no auto-reset
     } catch (err) {
       logger.error('Error submitting review', { error: String(err) });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
+      // BUG-069: Clear rating reminder on review submission error to avoid stale notifications
+      const reminderId = useRideStore.getState().ratingReminderId;
+      if (reminderId) {
+        Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
+        useRideStore.getState().setRatingReminderId(null);
+      }
       setSubmitting(false);
     }
   };
@@ -256,10 +288,12 @@ export function RideCompleteView() {
     if (submitted) {
       // U3.1: Bigger bounce for first ride
       if (isFirstRide) scaleAnim.setValue(0.5);
-      Animated.parallel([
+      const anim = Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
-      ]).start();
+      ]);
+      anim.start();
+      return () => anim.stop();
     }
   }, [submitted, fadeAnim, scaleAnim, isFirstRide]);
 
@@ -288,6 +322,7 @@ export function RideCompleteView() {
 
   return (
     <View className="flex-1 pt-8 items-center">
+      {showTipConfetti && <ConfettiOverlay />}
       {/* Success icon — U3.1: larger for first ride */}
       <View className={`${isFirstRide ? 'w-24 h-24' : 'w-20 h-20'} rounded-full bg-success items-center justify-center mb-4`}>
         <Text variant="h1" color="inverse">✓</Text>
@@ -415,7 +450,7 @@ export function RideCompleteView() {
           variant="outline"
           size="md"
           fullWidth
-          onPress={() => Share.share({ message: `https://tricigo.app/ride/${activeRide.share_token}` })}
+          onPress={() => Share.share({ message: `https://tricigo.com/ride/${activeRide.share_token}` })}
           className="mb-4"
         />
       )}
@@ -459,7 +494,7 @@ export function RideCompleteView() {
               <AnimatedStar
                 key={star}
                 filled={!!selectedRating && star <= selectedRating}
-                onPress={() => { setSelectedRating(star); triggerSelection(); }}
+                onPress={() => { setSelectedRating(star); triggerSelection(); triggerHaptic('light'); }}
                 delay={index * 80}
               />
             ))}
@@ -469,8 +504,8 @@ export function RideCompleteView() {
           </Text>
 
           {/* Skip rating */}
-          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating')}>
-            <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating')}</Text>
+          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}>
+            <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}</Text>
           </Pressable>
 
           {/* Tip section (alongside rating) */}
@@ -484,7 +519,7 @@ export function RideCompleteView() {
                   <Pressable
                     key={amount}
                     className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800"
-                    onPress={() => handleTip(amount)}
+                    onPress={() => { triggerHaptic('medium'); handleTip(amount); }}
                     disabled={sendingTip}
                     accessibilityRole="button"
                     accessibilityLabel={`${t('ride.tip_title')} ${formatTRC(amount)}`}
@@ -522,6 +557,7 @@ export function RideCompleteView() {
                           isSelected ? prev.filter((t) => t !== tag) : [...prev, tag],
                         );
                         triggerSelection();
+                        triggerHaptic('light');
                       }}
                       className={`px-3 py-1.5 rounded-full border ${
                         isSelected

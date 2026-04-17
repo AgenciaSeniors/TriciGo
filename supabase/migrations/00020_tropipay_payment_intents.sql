@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS payment_intents (
   short_url TEXT,                      -- Short URL for sharing
 
   -- Financial fields
-  amount_cup INTEGER NOT NULL,         -- Amount in CUP centavos
+  amount_cup INTEGER NOT NULL,         -- Amount in whole CUP units
   amount_usd NUMERIC(10,2),           -- Equivalent USD amount (computed at creation)
   exchange_rate NUMERIC(10,2),         -- USD/CUP rate used at creation
 

@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-  SafeAreaView,
   View,
   StatusBar,
   ScrollView,
   type ViewProps,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export interface ScreenProps extends ViewProps {
   /** Use scroll view for scrollable content */
@@ -13,15 +13,20 @@ export interface ScreenProps extends ViewProps {
   /** Status bar style */
   statusBarStyle?: 'light-content' | 'dark-content';
   /** Background color variant */
-  bg?: 'white' | 'neutral' | 'dark';
+  bg?: 'white' | 'neutral' | 'dark' | 'mapDark' | 'lightPrimary';
   /** Add horizontal padding */
   padded?: boolean;
+  /** Optional RefreshControl for pull-to-refresh (requires scroll=true) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  refreshControl?: React.ReactElement<any>;
 }
 
 const bgClasses = {
   white: 'bg-white dark:bg-neutral-900',
   neutral: 'bg-neutral-50 dark:bg-neutral-950',
   dark: 'bg-[#0d0d1a]',
+  mapDark: 'bg-[#0a0a0f]',
+  lightPrimary: 'bg-[#F8FAFC]',
 } as const;
 
 export function Screen({
@@ -29,6 +34,7 @@ export function Screen({
   statusBarStyle = 'dark-content',
   bg = 'white',
   padded = true,
+  refreshControl,
   className,
   children,
   ...props
@@ -45,14 +51,15 @@ export function Screen({
   return (
     <SafeAreaView className={`flex-1 ${bgClasses[bg]}`}>
       <StatusBar
-        barStyle={bg === 'dark' ? 'light-content' : statusBarStyle}
-        backgroundColor={bg === 'dark' ? '#111111' : undefined}
+        barStyle={bg === 'dark' || bg === 'mapDark' ? 'light-content' : statusBarStyle}
+        backgroundColor={bg === 'dark' ? '#111111' : bg === 'mapDark' ? '#0a0a0f' : undefined}
       />
       {scroll ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
         >
           {content}
         </ScrollView>

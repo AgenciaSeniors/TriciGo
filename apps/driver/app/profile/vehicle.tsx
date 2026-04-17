@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Vehicle } from '@tricigo/types';
 import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
+
+const VEHICLE_IMAGES: Record<string, any> = {
+  triciclo: require('../../assets/vehicles/selection/triciclo.png'),
+  moto: require('../../assets/vehicles/selection/moto.png'),
+  auto: require('../../assets/vehicles/selection/auto.png'),
+};
 
 export default function VehicleScreen() {
   const { t } = useTranslation('common');
@@ -54,15 +62,21 @@ export default function VehicleScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchVehicle(); }} />;
 
   return (
-    <Screen scroll bg="dark" padded>
+    <Screen scroll bg="lightPrimary" padded>
       <View className="pt-4">
-        <Pressable onPress={() => router.back()} className="mb-2">
-          <Text variant="body" color="accent">{t('back')}</Text>
-        </Pressable>
-
-        <Text variant="h3" color="inverse" className="mb-6">
-          {t('profile.vehicle_info')}
-        </Text>
+        <View className="flex-row items-center mb-6">
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: '#F1F5F9' }}
+          >
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+          </Pressable>
+          <Text variant="h3" color="primary">{t('profile.vehicle_info')}</Text>
+        </View>
 
         {loading ? (
           <ActivityIndicator color="#22C55E" className="mt-8" />
@@ -71,21 +85,34 @@ export default function VehicleScreen() {
             No hay vehículo registrado
           </Text>
         ) : (
-          <Card variant="filled" padding="md" className="bg-neutral-800">
+          <>
+            {/* Vehicle type image */}
+            {vehicle.type && VEHICLE_IMAGES[vehicle.type] && (
+              <View className="items-center mb-4">
+                <Image
+                  source={VEHICLE_IMAGES[vehicle.type]}
+                  style={{ width: 160, height: 120, resizeMode: 'contain' }}
+                  accessibilityLabel={vehicle.type}
+                />
+              </View>
+            )}
+
+            <Card theme="light" variant="filled" padding="md" className="bg-white">
             {infoRows.map((row) => (
               <View
                 key={row.label}
-                className="flex-row justify-between py-3 border-b border-neutral-700"
+                className="flex-row justify-between py-3 border-b border-[#E2E8F0]"
               >
                 <Text variant="body" color="secondary">
                   {row.label}
                 </Text>
-                <Text variant="body" color="inverse" className="font-medium">
+                <Text variant="body" color="primary" className="font-medium">
                   {row.value}
                 </Text>
               </View>
             ))}
           </Card>
+          </>
         )}
       </View>
     </Screen>

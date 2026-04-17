@@ -1,8 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import {
   View,
   FlatList,
-  TextInput,
   Pressable,
   KeyboardAvoidingView,
   Platform,
@@ -12,98 +11,142 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
 import type { ChatMessage } from '@tricigo/types';
-import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
-import { getQuickRepliesForRole } from '@tricigo/utils';
+import { ChatBubble } from '@/components/chat/ChatBubble';
+import { ChatInput } from '@/components/chat/ChatInput';
+import { TypingIndicator } from '@/components/chat/TypingIndicator';
+
+/** Group messages by calendar date for date separator rendering. */
+function getDateLabel(dateStr: string): { key: string; isToday: boolean; isYesterday: boolean; dateString: string } {
+  const date = new Date(dateStr);
+  const now = new Date();
+
+  const stripTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayMs = 86_400_000;
+
+  const today = stripTime(now);
+  const target = stripTime(date);
+
+  const isToday = target === today;
+  const isYesterday = target === today - dayMs;
+  const dateString = date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return { key: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`, isToday, isYesterday, dateString };
+}
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
   const { t } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
-  const [text, setText] = useState('');
-  const flatListRef = useRef<FlatList<ChatMessage>>(null);
-
   const remoteTyping = useChatStore((s) => s.remoteTyping);
+  const flatListRef = useRef<FlatList<any>>(null);
 
   useChatInit(rideId!);
   const { sendMessage, notifyTyping } = useChatActions(rideId!);
 
-  const quickReplies = getQuickRepliesForRole('driver').map((qr) => ({
-    key: qr.key,
-    icon: qr.icon,
-    label: t(`chat.quick_${qr.key}` as any, { defaultValue: qr.key }),
-  }));
+  const userId = user?.id;
 
-  const handleSend = async () => {
+  /** Build a flat list of items that includes date separators interleaved with messages. */
+  type ListItem =
+    | { type: 'date'; key: string; isToday: boolean; isYesterday: boolean; dateString: string }
+    | { type: 'message'; data: ChatMessage };
+
+  const listItems: ListItem[] = useMemo(() => {
+    const items: ListItem[] = [];
+    let lastDateKey = '';
+
+    for (const msg of messages) {
+      const label = getDateLabel(msg.created_at);
+      if (label.key !== lastDateKey) {
+        items.push({ type: 'date', ...label });
+        lastDateKey = label.key;
+      }
+      items.push({ type: 'message', data: msg });
+    }
+
+    return items;
+  }, [messages]);
+
+  const handleSend = async (text: string) => {
     if (!text.trim()) return;
-    const msg = text;
-    setText('');
-    await sendMessage(msg);
+    await sendMessage(text);
   };
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isOwn = item.sender_id === user?.id;
-    return (
-      <View
-        className={`mb-2 max-w-[80%] ${isOwn ? 'self-end' : 'self-start'}`}
-        accessible={true}
-        accessibilityLabel={
-          isOwn
-            ? t('a11y.message_from_you', { ns: 'common', message: item.body })
-            : t('a11y.message_from_other', { ns: 'common', sender: t('trip.chat_passenger', { defaultValue: 'Pasajero' }), message: item.body })
-        }
-      >
-        <View
-          className={`px-4 py-2 rounded-2xl ${
-            isOwn ? 'bg-primary-500 rounded-br-sm' : 'bg-neutral-700 rounded-bl-sm'
-          }`}
-        >
-          <Text variant="body" color="inverse">
-            {item.body}
+  const renderItem = ({ item }: { item: ListItem }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={{ alignItems: 'center', marginVertical: 12 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              color: '#9CA3AF',
+              fontFamily: 'Inter',
+              backgroundColor: '#F1F5F9',
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              borderRadius: 12,
+              overflow: 'hidden',
+            }}
+          >
+            {item.isToday ? 'Hoy' : item.isYesterday ? 'Ayer' : item.dateString}
           </Text>
         </View>
-        <Text
-          variant="caption"
-          color="secondary"
-          className={`mt-1 ${isOwn ? 'text-right' : 'text-left'}`}
-        >
-          {new Date(item.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </Text>
-      </View>
+      );
+    }
+
+    const msg = item.data;
+    return (
+      <ChatBubble
+        message={msg.body}
+        timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        isOwn={msg.sender_id === userId}
+        isRead={false}
+        theme="light"
+      />
     );
   };
 
+  const riderName: string | undefined = undefined; // rider name not available in chat store
+
   return (
-    <Screen bg="dark">
+    <Screen bg="lightPrimary">
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
-        {/* Header */}
-        <View className="flex-row items-center px-4 py-3 border-b border-neutral-800">
-          <Pressable onPress={() => router.back()} className="mr-3" accessibilityRole="button" accessibilityLabel={t('common:back')}>
-            <Ionicons name="arrow-back" size={22} color={colors.primary[500]} />
+        {/* Chat Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}>
+          <Pressable onPress={() => router.back()} style={{ marginRight: 12, minWidth: 44, minHeight: 44, justifyContent: 'center' }}>
+            <Ionicons name="chevron-back" size={24} color="#0F172A" />
           </Pressable>
-          <Text variant="h4" color="inverse" className="flex-1">
-            {t('trip.chat_passenger', { defaultValue: 'Chat con pasajero' })}
-          </Text>
+          {/* Avatar */}
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+            <Ionicons name="person" size={20} color="#94A3B8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#0F172A', fontFamily: 'Inter' }}>
+              {riderName || t('chat.rider', { defaultValue: 'Pasajero' })}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#10B981', fontFamily: 'Inter' }}>
+              {t('chat.online', { defaultValue: 'En línea' })}
+            </Text>
+          </View>
+          <Pressable style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="call-outline" size={22} color="#0F172A" />
+          </Pressable>
         </View>
 
         {/* Messages */}
         <FlatList
           ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+          data={listItems}
+          keyExtractor={(item: any, index: number) => (item.type === 'date' ? `date-${item.key}` : item.data.id)}
+          renderItem={renderItem}
           accessibilityLiveRegion="polite"
           contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
           ListEmptyComponent={
@@ -119,44 +162,20 @@ export default function ChatScreen() {
         />
 
         {/* Typing indicator */}
-        {remoteTyping && (
-          <View className="px-4 py-1">
-            <Text variant="caption" color="secondary">
-              {t('chat.typing', { defaultValue: 'El pasajero está escribiendo...' })}
-            </Text>
-          </View>
-        )}
-
-        {/* Quick replies */}
-        <QuickReplyBar
-          replies={quickReplies}
-          onPress={(label) => sendMessage(label)}
-          variant="dark"
-        />
+        {remoteTyping && <TypingIndicator theme="light" />}
 
         {/* Input bar */}
-        <View className="flex-row items-center px-4 py-2 border-t border-neutral-800">
-          <TextInput
-            value={text}
-            onChangeText={(v) => { setText(v); notifyTyping(); }}
-            placeholder={t('chat.placeholder')}
-            accessibilityLabel={t('chat.placeholder')}
-            placeholderTextColor={colors.neutral[500]}
-            className="flex-1 bg-neutral-800 rounded-full px-4 py-2 text-base text-white"
-            multiline
-            maxLength={500}
-          />
-          <Pressable
-            onPress={handleSend}
-            disabled={!text.trim()}
-            accessibilityRole="button"
-            accessibilityLabel={t('chat.send', { defaultValue: 'Send' })}
-            accessibilityState={{ disabled: !text.trim() }}
-            className="ml-2 bg-primary-500 w-10 h-10 rounded-full items-center justify-center"
-          >
-            <Ionicons name="send" size={18} color="white" />
-          </Pressable>
-        </View>
+        <ChatInput
+          onSend={handleSend}
+          quickReplies={[
+            { id: '1', text: t('chat.quick_on_my_way', { defaultValue: 'Estoy en camino' }) },
+            { id: '2', text: t('chat.quick_arriving', { defaultValue: 'Estoy llegando' }) },
+            { id: '3', text: t('chat.quick_waiting', { defaultValue: 'Estoy esperando' }) },
+            { id: '4', text: t('chat.quick_thanks', { defaultValue: '¡Gracias!' }) },
+          ]}
+          theme="light"
+          placeholder={t('chat.input_placeholder', { defaultValue: 'Escribe un mensaje...' })}
+        />
       </KeyboardAvoidingView>
     </Screen>
   );

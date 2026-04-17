@@ -3,6 +3,11 @@
 // Admin panel operations. Uses service role where needed.
 // ============================================================
 
+/** Escape special characters for PostgreSQL ILIKE patterns */
+function escapeLikePattern(pattern: string): string {
+  return pattern.replace(/[%_\\]/g, '\\$&');
+}
+
 import type {
   AdminAction,
   AuditLog,
@@ -24,6 +29,7 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
+  WalletRedemption,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
@@ -81,6 +87,29 @@ export const adminService = {
   },
 
   /**
+   * Get all drivers awaiting admin review.
+   * Matches the same criteria as the pending_verifications count in
+   * get_admin_dashboard_metrics (status IN pending_verification, under_review).
+   */
+  async getPendingDrivers(
+    page = 0,
+    pageSize = 20,
+  ): Promise<DriverProfileWithUser[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
+      .in('status', ['pending_verification', 'under_review'])
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data as DriverProfileWithUser[];
+  },
+
+  /**
    * Get all drivers with optional filters and pagination.
    */
   async getAllDrivers(
@@ -108,7 +137,7 @@ export const adminService = {
       query = query.eq('status', filters.status);
     }
     if (filters.search) {
-      query = query.ilike('users.full_name', `%${filters.search}%`);
+      query = query.ilike('users.full_name', `%${escapeLikePattern(filters.search)}%`);
     }
     if (filters.ratingMin !== undefined && filters.ratingMin > 0) {
       query = query.gte('rating_avg', filters.ratingMin);
@@ -152,7 +181,8 @@ export const adminService = {
         .from('driver_documents')
         .select('*')
         .eq('driver_id', driverId)
-        .order('uploaded_at', { ascending: false }),
+        .order('uploaded_at', { ascending: false })
+        .limit(100),
       supabase
         .from('driver_score_events')
         .select('*')
@@ -168,10 +198,22 @@ export const adminService = {
       users: { full_name: string; phone: string; email: string | null };
     };
 
+    // Keep only the most recent document per document_type.
+    // Drivers may re-upload (e.g. after rejection or earlier failures), which
+    // leaves stale rows in the table. The admin UI should only see the latest.
+    const allDocs = (documentsRes.data as DriverDocument[]) ?? [];
+    const latestByType = new Map<string, DriverDocument>();
+    for (const doc of allDocs) {
+      // Rows come back ordered by uploaded_at DESC, so the first occurrence per type is the latest.
+      if (!latestByType.has(doc.document_type)) {
+        latestByType.set(doc.document_type, doc);
+      }
+    }
+
     return {
       profile,
       vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
-      documents: (documentsRes.data as DriverDocument[]) ?? [],
+      documents: Array.from(latestByType.values()),
       scoreEvents: (scoreEventsRes.data as DriverScoreEvent[]) ?? [],
     };
   },
@@ -343,7 +385,8 @@ export const adminService = {
       query = query.eq('role', filters.role);
     }
     if (filters.search) {
-      query = query.or(`full_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+      const escaped = escapeLikePattern(filters.search);
+      query = query.or(`full_name.ilike.%${escaped}%,phone.ilike.%${escaped}%`);
     }
     if (filters.dateFrom) {
       query = query.gte('created_at', filters.dateFrom);
@@ -402,7 +445,8 @@ export const adminService = {
       query = query.lt('created_at', filters.dateTo + 'T23:59:59');
     }
     if (filters.search) {
-      query = query.or(`pickup_address.ilike.%${filters.search}%,dropoff_address.ilike.%${filters.search}%`);
+      const escaped = escapeLikePattern(filters.search);
+      query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
     }
     if (filters.cityId) {
       query = query.eq('city_id', filters.cityId);
@@ -445,7 +489,8 @@ export const adminService = {
     let query = supabase
       .from('admin_actions')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(pageSize);
 
     if (filters.dateFrom) {
       query = query.gte('created_at', filters.dateFrom);
@@ -1169,6 +1214,63 @@ export const adminService = {
     };
   },
 
+  // ==================== WALLET REDEMPTIONS ====================
+
+  async getPendingRedemptions(
+    page = 0,
+    pageSize = 20,
+  ): Promise<(WalletRedemption & { driver_name: string })[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    // TODO: replace table name / join columns when the wallet_redemptions table is created
+    const { data, error } = await supabase
+      .from('wallet_redemptions')
+      .select('*, driver_profiles!inner(users!inner(full_name))')
+      .eq('status', 'pending')
+      .order('requested_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const profile = row.driver_profiles as Record<string, unknown> | undefined;
+      const usr = profile?.users as Record<string, string> | undefined;
+      return {
+        ...(row as unknown as WalletRedemption),
+        driver_name: usr?.full_name ?? 'Desconocido',
+      };
+    });
+  },
+
+  async processRedemption(
+    redemptionId: string,
+    adminId: string,
+    action: 'approved' | 'rejected',
+    reason?: string,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+
+    // TODO: implement full ledger debit when wallet_redemptions table is ready
+    await supabase
+      .from('wallet_redemptions')
+      .update({
+        status: action,
+        processed_by: adminId,
+        processed_at: new Date().toISOString(),
+        ...(action === 'rejected' ? { rejection_reason: reason ?? null } : {}),
+      })
+      .eq('id', redemptionId);
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: action === 'approved' ? 'approve_redemption' : 'reject_redemption',
+      target_type: 'wallet_redemption',
+      target_id: redemptionId,
+      reason: reason ?? null,
+    });
+  },
+
   // ==================== WALLET RECHARGES ====================
 
   async getPendingRecharges(
@@ -1414,12 +1516,12 @@ export const adminService = {
     return typeof data === 'number' ? data : 50.0;
   },
 
-  // ==================== TROPIPAY PAYMENT INTENTS ====================
+  // ==================== PAYMENT INTENTS ====================
 
   /**
-   * Get TropiPay payment intents (admin view).
+   * Get payment intents (admin view).
    */
-  async getTropiPayIntents(
+  async getPaymentIntents(
     page = 0,
     pageSize = 20,
     statusFilter?: string,

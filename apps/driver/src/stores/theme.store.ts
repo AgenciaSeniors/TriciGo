@@ -6,11 +6,12 @@ import { useEffect } from 'react';
 import { Appearance } from 'react-native';
 import { useStore } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createThemeStore, type ThemeMode } from '@tricigo/theme';
+import { createThemeStore, type ThemeMode, type ContextMode } from '@tricigo/theme';
 
 const THEME_STORAGE_KEY = '@tricigo/theme_mode';
 
-// Singleton store instance
+// Singleton store instance — driver uses forced dark backgrounds via Screen bg="dark"
+// but NativeWind stays in light mode so color="inverse" gives white text.
 const themeStore = createThemeStore('light');
 
 // Load persisted theme on startup
@@ -35,6 +36,14 @@ export function useThemeStore<T>(selector: (state: ReturnType<typeof themeStore.
 export function setThemeMode(mode: ThemeMode) {
   themeStore.getState().setMode(mode);
   AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => {});
+}
+
+/**
+ * Set context mode ('map' forces dark, 'standard' respects user preference).
+ * Not persisted — resets to 'standard' on app restart.
+ */
+export function setContextMode(mode: ContextMode) {
+  themeStore.getState().setContextMode(mode);
 }
 
 /**

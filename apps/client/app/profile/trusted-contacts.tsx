@@ -34,7 +34,7 @@ export default function TrustedContactsScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
   const loadContacts = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     try {
       const data = await trustedContactService.getContacts(user.id);
       setContacts(data);
@@ -142,11 +142,16 @@ export default function TrustedContactsScreen() {
                   <Text variant="caption" color="secondary">{contact.relationship}</Text>
                 ) : null}
 
-                {/* Auto-share toggle */}
+                {/* Auto-share toggle with description */}
                 <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                  <Text variant="caption" color="secondary">
-                    {t('trusted_contacts.auto_share')}
-                  </Text>
+                  <View className="flex-1 mr-3">
+                    <Text variant="caption" color="secondary">
+                      {t('trusted_contacts.auto_share')}
+                    </Text>
+                    <Text variant="caption" color="secondary" style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
+                      {t('trusted_contacts.auto_share_description', { defaultValue: 'Recibe enlace de seguimiento automáticamente al iniciar un viaje' })}
+                    </Text>
+                  </View>
                   <Switch
                     value={contact.auto_share}
                     onValueChange={() => handleToggleAutoShare(contact)}

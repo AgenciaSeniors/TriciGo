@@ -1,23 +1,33 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { fetchRoute, fetchMultiStopRoute } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
+
+export interface RoutePolylineResult {
+  coordinates: GeoPoint[] | null;
+  distanceM: number | null;
+  durationS: number | null;
+}
 
 /**
  * Hook that fetches an OSRM route polyline between pickup and dropoff,
  * optionally passing through intermediate waypoints.
- * Returns an array of GeoPoints for react-native-maps Polyline, or null.
+ * Returns coordinates + distance + duration from the route result.
  */
 export function useRoutePolyline(
   pickup: GeoPoint | null | undefined,
   dropoff: GeoPoint | null | undefined,
   waypoints?: GeoPoint[],
-): GeoPoint[] | null {
+): RoutePolylineResult {
   const [coordinates, setCoordinates] = useState<GeoPoint[] | null>(null);
+  const [distanceM, setDistanceM] = useState<number | null>(null);
+  const [durationS, setDurationS] = useState<number | null>(null);
   const cacheKeyRef = useRef<string>('');
 
   useEffect(() => {
     if (!pickup || !dropoff) {
       setCoordinates(null);
+      setDistanceM(null);
+      setDurationS(null);
       cacheKeyRef.current = '';
       return;
     }
@@ -52,15 +62,21 @@ export function useRoutePolyline(
         setCoordinates(
           result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng })),
         );
+        setDistanceM(result.distance_m);
+        setDurationS(result.duration_s);
       } else {
         setCoordinates(null);
+        setDistanceM(null);
+        setDurationS(null);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude, waypoints]);
+  // BUG-071: Memoize waypoints by value (JSON.stringify) to prevent recalculation on reference changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude, JSON.stringify(waypoints)]);
 
-  return coordinates;
+  return useMemo(() => ({ coordinates, distanceM, durationS }), [coordinates, distanceM, durationS]);
 }

@@ -57,8 +57,8 @@ const STATUS_LABELS: Record<string, Record<string, string>> = {
 };
 
 const PAYMENT_LABELS: Record<string, Record<string, string>> = {
-  es: { cash: 'Efectivo', tricicoin: 'TriciCoin', mixed: 'Mixto', tropipay: 'TropiPay' },
-  en: { cash: 'Cash', tricicoin: 'TriciCoin', mixed: 'Mixed', tropipay: 'TropiPay' },
+  es: { cash: 'Efectivo', tricicoin: 'TriciCoin', mixed: 'Mixto', stripe: 'Tarjeta', tropipay: 'Tarjeta (legacy)', corporate: 'Corporativo' },
+  en: { cash: 'Cash', tricicoin: 'TriciCoin', mixed: 'Mixed', stripe: 'Card', tropipay: 'Card (legacy)', corporate: 'Corporate' },
 };
 
 const SERVICE_LABELS: Record<string, Record<string, string>> = {

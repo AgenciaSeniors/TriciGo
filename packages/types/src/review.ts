@@ -53,3 +53,16 @@ export interface ReviewTagSummaryItem {
   tag_key: string;
   count: number;
 }
+
+/** Review with reviewer display info and tags for driver profile screen */
+export interface ReviewWithReviewer extends Review {
+  reviewer_first_name: string;
+  reviewer_avatar_url: string | null;
+  review_tags: Array<{
+    key: string;
+    label_es: string;
+    label_en: string;
+    label_pt: string;
+    sentiment: ReviewTagSentiment;
+  }>;
+}

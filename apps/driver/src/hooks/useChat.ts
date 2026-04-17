@@ -18,12 +18,33 @@ export function useChatInit(rideId: string) {
     let msgChannel: ReturnType<typeof chatService.subscribeToMessages> | null = null;
     let typingChannel: ReturnType<typeof chatService.subscribeToTyping> | null = null;
 
+    const seenIds = new Set<string>();
+    const pendingRealtime: Parameters<typeof addMessage>[0][] = [];
+    let fetched = false;
+
+    // Subscribe BEFORE fetching so no messages are lost in the gap
+    msgChannel = chatService.subscribeToMessages(rideId, (msg) => {
+      if (seenIds.has(msg.id)) return;
+      seenIds.add(msg.id);
+      if (fetched) {
+        addMessage(msg);
+      } else {
+        // Buffer realtime messages that arrive before fetch completes
+        pendingRealtime.push(msg);
+      }
+    });
+
     chatService
       .getMessages(rideId)
-      .then(setMessages)
+      .then((msgs) => {
+        msgs.forEach((m) => seenIds.add(m.id));
+        setMessages(msgs);
+        fetched = true;
+        // Flush any realtime messages that arrived during the fetch
+        pendingRealtime.forEach((m) => addMessage(m));
+        pendingRealtime.length = 0;
+      })
       .catch((err) => console.warn('[Chat] Failed to load messages:', err));
-
-    msgChannel = chatService.subscribeToMessages(rideId, addMessage);
 
     // Subscribe to typing events
     if (userId) {
@@ -37,9 +58,20 @@ export function useChatInit(rideId: string) {
       });
     }
 
+    // F607: Polling fallback — refetch messages every 30s in case realtime silently disconnects
+    const pollInterval = setInterval(() => {
+      chatService.getMessages(rideId).then((msgs) => {
+        const newMsgs = msgs.filter((m) => !seenIds.has(m.id));
+        if (newMsgs.length > 0) {
+          newMsgs.forEach((m) => { seenIds.add(m.id); addMessage(m); });
+        }
+      }).catch(() => { /* best-effort polling */ });
+    }, 30_000);
+
     return () => {
       msgChannel?.unsubscribe();
       typingChannel?.unsubscribe();
+      clearInterval(pollInterval);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       reset();
     };

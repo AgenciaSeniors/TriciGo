@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#fff',
     fontSize: 15,
-    fontFamily: 'Montserrat',
+    fontFamily: 'Inter',
     height: '100%',
   },
   dropdown: {

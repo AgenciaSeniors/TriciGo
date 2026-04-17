@@ -13,6 +13,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
@@ -108,16 +109,43 @@ export default function UsersPage() {
   const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(users, 'created_at');
 
   const canGoPrev = page > 0;
+  // Heuristic: if we got exactly PAGE_SIZE items, there may be more pages.
+  // This can show a false "next" on the last page when items are exactly PAGE_SIZE,
+  // but it's an acceptable trade-off to avoid an extra count query.
   const canGoNext = users.length === PAGE_SIZE;
+
+  function handleExportCsv() {
+    exportToCsv(
+      sortedData as unknown as Record<string, unknown>[],
+      [
+        { key: 'full_name', label: t('users.col_name') },
+        { key: 'phone', label: t('users.col_phone') },
+        { key: 'email', label: 'Email' },
+        { key: 'role', label: t('users.col_role') },
+        { key: 'is_active', label: t('users.col_status'), format: (v) => v ? 'Active' : 'Inactive' },
+        { key: 'created_at', label: t('users.col_registered') },
+      ],
+      'users',
+    );
+  }
 
   return (
     <div>
-      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('users.title')}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">{t('users.title')}</h1>
+        <button
+          onClick={handleExportCsv}
+          disabled={sortedData.length === 0}
+          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {t('common.export_csv', { defaultValue: 'Export CSV' })}
+        </button>
+      </div>
 
       {error && (
         <AdminErrorBanner
           message={error}
-          onRetry={() => { setError(null); setPage(p => p); }}
+          onRetry={() => { setError(null); setPage(0); }}
           onDismiss={() => setError(null)}
         />
       )}

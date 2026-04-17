@@ -3,6 +3,9 @@ import { View, Text, Animated, Pressable, StyleSheet, Platform, Image } from 're
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import type { NearbyVehicle, DemandHotspot } from '@tricigo/types';
+import { HotspotPulseMarker } from './HotspotPulseMarker';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -52,6 +55,20 @@ interface RideMapViewProps {
   onRecenter?: () => void;
   /** Vehicle type for the driver marker icon */
   vehicleType?: 'triciclo' | 'moto' | 'auto' | 'confort' | string;
+  /** When true, camera follows driver position with heading rotation */
+  followMode?: boolean;
+  /** Heading in degrees for camera rotation (from GPS compass) */
+  driverHeading?: number | null;
+  /** Callback when user interacts with map (disables follow mode) */
+  onUserInteraction?: () => void;
+  /** Bottom padding offset to shift controls above bottom sheet */
+  bottomOffset?: number;
+  /** Additional style for the map container */
+  containerStyle?: object;
+  /** Other online drivers to render as peer markers (top-down vehicle icons). */
+  nearbyDrivers?: NearbyVehicle[];
+  /** Demand hotspots with pulse animation (top 8). */
+  demandHotspots?: DemandHotspot[];
 }
 
 const vehicleMarkerImages: Record<string, any> = {
@@ -64,7 +81,7 @@ const vehicleMarkerImages: Record<string, any> = {
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136]; // [lng, lat]
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const STYLE_DARK_NAV = 'mapbox://styles/mapbox/navigation-night-v1';
-const STYLE_STREETS = 'mapbox://styles/mapbox/streets-v12';
+const STYLE_STREETS = MAP_STYLE_LIGHT;
 
 /** Compute bounding box from [lng, lat] coordinates */
 function computeBounds(coords: [number, number][]): {
@@ -100,6 +117,13 @@ function WebMapboxView({
   darkStyle = false,
   onRecenter,
   vehicleType,
+  followMode,
+  driverHeading,
+  onUserInteraction,
+  bottomOffset = 0,
+  containerStyle,
+  nearbyDrivers,
+  demandHotspots,
 }: RideMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -150,7 +174,7 @@ function WebMapboxView({
         height: 52px;
         border-radius: 50%;
         background: rgba(13,13,26,0.92);
-        border: 2.5px solid #FF4D00;
+        border: 2.5px solid ${MAP_COLORS.driverSelf};
         display: flex;
         align-items: center;
         justify-content: center;
@@ -167,11 +191,24 @@ function WebMapboxView({
         width: 20px;
         height: 20px;
         border-radius: 50%;
-        background: #FF4D00;
+        background: ${MAP_COLORS.driverSelf};
         border: 3px solid white;
         box-shadow: 0 0 12px rgba(255,77,0,0.6);
       }
     `;
+    // Also inject pickup/dropoff keyframes
+    if (!document.getElementById('tricigo-map-keyframes')) {
+      const kfStyle = document.createElement('style');
+      kfStyle.id = 'tricigo-map-keyframes';
+      kfStyle.textContent = `
+        @keyframes pulse-pickup { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(2.5);opacity:0} }
+        @keyframes drop-in { 0%{transform:scale(0.3);opacity:0} 60%{transform:scale(1.05)} 100%{transform:scale(1);opacity:1} }
+        @media (prefers-reduced-motion: reduce) {
+          .tricigo-pulse-pickup { animation: none !important; }
+        }
+      `;
+      document.head.appendChild(kfStyle);
+    }
     if (!document.getElementById('tricigo-marker-pulse')) {
       document.head.appendChild(style);
     }
@@ -195,9 +232,11 @@ function WebMapboxView({
       interactive: true,
     });
 
-    // Disable rotation for simpler UX
-    map.dragRotate.disable();
-    map.touchZoomRotate.disableRotation();
+    // Disable rotation unless follow mode is active
+    if (!followMode) {
+      map.dragRotate.disable();
+      map.touchZoomRotate.disableRotation();
+    }
 
     mapRef.current = map;
 
@@ -271,7 +310,7 @@ function WebMapboxView({
 
     if (pickupLocation) {
       const el = document.createElement('div');
-      el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#22c55e;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4), 0 0 12px rgba(34,197,94,0.4);';
+      el.innerHTML = `<div style="position:relative;width:${MARKER.driver.ringSize}px;height:${MARKER.driver.ringSize}px;display:flex;align-items:center;justify-content:center;"><div class="tricigo-pulse-pickup" style="position:absolute;width:${MARKER.pickup.size}px;height:${MARKER.pickup.size}px;border-radius:50%;background:${MAP_COLORS.pickup};animation:pulse-pickup 2s ease-out infinite;"></div><div style="width:${MARKER.pickup.size}px;height:${MARKER.pickup.size}px;border-radius:50%;background:${MAP_COLORS.pickup};border:3px solid white;box-shadow:${MARKER.pickup.shadow};display:flex;align-items:center;justify-content:center;position:relative;z-index:1;"><div style="width:${MARKER.pickup.innerDot}px;height:${MARKER.pickup.innerDot}px;border-radius:50%;background:white;"></div></div></div>`;
       pickupMarkerRef.current = new (mapboxgl as any).Marker({ element: el })
         .setLngLat([pickupLocation.longitude, pickupLocation.latitude])
         .addTo(map);
@@ -279,7 +318,7 @@ function WebMapboxView({
 
     if (dropoffLocation) {
       const el = document.createElement('div');
-      el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#ef4444;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4), 0 0 12px rgba(239,68,68,0.4);';
+      el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;animation:drop-in 0.4s ease-out;"><div style="width:${MARKER.dropoff.size}px;height:${MARKER.dropoff.size}px;border-radius:50%;background:${MAP_COLORS.dropoff};border:3px solid white;box-shadow:${MARKER.dropoff.shadow};display:flex;align-items:center;justify-content:center;"><div style="width:${MARKER.dropoff.innerDot}px;height:${MARKER.dropoff.innerDot}px;border-radius:50%;background:white;"></div></div><div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${MAP_COLORS.dropoff};margin-top:-1px;"></div></div>`;
       dropoffMarkerRef.current = new (mapboxgl as any).Marker({ element: el })
         .setLngLat([dropoffLocation.longitude, dropoffLocation.latitude])
         .addTo(map);
@@ -306,7 +345,7 @@ function WebMapboxView({
 
     if (riderLocation) {
       const el = document.createElement('div');
-      el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#3b82f6;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4), 0 0 12px rgba(59,130,246,0.4);';
+      el.innerHTML = `<div style="width:28px;height:28px;border-radius:50%;background:${MAP_COLORS.driver};border:3px solid white;box-shadow:${MARKER.driver.shadow};"></div>`;
       el.title = 'Rider';
       riderMarkerRef.current = new (mapboxgl as any).Marker({ element: el })
         .setLngLat([riderLocation.longitude, riderLocation.latitude])
@@ -321,7 +360,8 @@ function WebMapboxView({
 
     function addRoute() {
       if (map.getSource('route')) {
-        map.removeLayer('route-line');
+        if (map.getLayer('route-line')) map.removeLayer('route-line');
+        if (map.getLayer('route-shadow')) map.removeLayer('route-shadow');
         map.removeSource('route');
       }
       map.addSource('route', {
@@ -336,11 +376,18 @@ function WebMapboxView({
         },
       });
       map.addLayer({
+        id: 'route-shadow',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': ROUTE.shadow.color, 'line-width': ROUTE.shadow.width, 'line-opacity': ROUTE.shadow.opacity, 'line-blur': ROUTE.shadow.blur },
+      });
+      map.addLayer({
         id: 'route-line',
         type: 'line',
         source: 'route',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#FF4D00', 'line-width': 4, 'line-opacity': 0.85 },
+        paint: { 'line-color': ROUTE.main.color, 'line-width': ROUTE.main.width, 'line-opacity': ROUTE.main.opacity },
       });
     }
 
@@ -457,23 +504,49 @@ function WebMapboxView({
     else map.on('load', addSurgeLayer);
   }, [surgeZones]);
 
+  // Follow mode for web map
+  useEffect(() => {
+    if (!followMode || !driverLocation || !mapRef.current) return;
+    mapRef.current.easeTo({
+      center: [driverLocation.longitude, driverLocation.latitude],
+      zoom: 16.5,
+      pitch: 45,
+      bearing: driverHeading ?? 0,
+      duration: 1000,
+    });
+  }, [driverLocation?.latitude, driverLocation?.longitude, driverHeading, followMode]);
+
   return (
     <View style={{ flex: 1, height, position: 'relative' }}>
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
-      {/* Recenter button */}
-      {(onRecenter || driverLocation) && (
+      {/* Recenter button — prominent orange when follow mode is off */}
+      {!followMode && driverLocation && (
         <Pressable
-          style={({ pressed }) => [styles.recenterBtn, pressed && { opacity: 0.7 }]}
           onPress={() => {
             if (mapRef.current && driverLocation) {
               mapRef.current.flyTo({ center: [driverLocation.longitude, driverLocation.latitude], zoom: 15 });
             }
             onRecenter?.();
           }}
-          accessibilityLabel="Centrar en mi posición"
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: MAP_COLORS.driverSelf,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 4,
+          }}
           accessibilityRole="button"
+          accessibilityLabel="Recenter"
         >
-          <Ionicons name="locate" size={20} color="#fff" />
+          <Ionicons name="navigate" size={20} color="#fff" />
         </Pressable>
       )}
     </View>
@@ -494,6 +567,11 @@ function RideMapViewInner(
     darkStyle = false,
     onRecenter,
     vehicleType,
+    followMode,
+    driverHeading,
+    onUserInteraction,
+    nearbyDrivers,
+    demandHotspots,
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
@@ -537,6 +615,27 @@ function RideMapViewInner(
     return () => anim.stop();
   }, [driverLocation, ringAnim, ringOpacity]);
 
+  // Pickup pulse ring animation (native only)
+  const pickupPulseAnim = useRef(new Animated.Value(1)).current;
+  const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
+  useEffect(() => {
+    if (!pickupLocation) return;
+    const anim = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pickupPulseAnim, { toValue: 2.5, duration: 2000, useNativeDriver: true }),
+          Animated.timing(pickupPulseAnim, { toValue: 1, duration: 0, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pickupPulseOpacity, { toValue: 0, duration: 2000, useNativeDriver: true }),
+          Animated.timing(pickupPulseOpacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+        ]),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pickupLocation, pickupPulseAnim, pickupPulseOpacity]);
+
   // Build route GeoJSON
   const routeGeoJSON = useMemo(() => {
     if (!routeCoordinates || routeCoordinates.length < 2) return null;
@@ -559,6 +658,26 @@ function RideMapViewInner(
       })),
     };
   }, [heatmapData]);
+
+  // Build peer drivers GeoJSON (top-down vehicle icons for everyone else)
+  const peersGeoJSON = useMemo(() => {
+    if (!nearbyDrivers || nearbyDrivers.length === 0) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: nearbyDrivers.map((v) => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [v.longitude, v.latitude],
+        },
+        properties: {
+          id: v.driver_profile_id,
+          icon: `marker-${v.vehicle_type || 'auto'}`,
+          heading: v.heading ?? 0,
+        },
+      })),
+    };
+  }, [nearbyDrivers]);
 
   // Build surge zones GeoJSON for polygon overlay
   const surgeGeoJSON = useMemo(() => {
@@ -637,6 +756,11 @@ function RideMapViewInner(
           darkStyle={darkStyle}
           onRecenter={onRecenter}
           vehicleType={vehicleType}
+          followMode={followMode}
+          driverHeading={driverHeading}
+          onUserInteraction={onUserInteraction}
+          nearbyDrivers={nearbyDrivers}
+          demandHotspots={demandHotspots}
         />
       );
     }
@@ -691,33 +815,78 @@ function RideMapViewInner(
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        onRegionWillChange={(feature: any) => {
+          if (feature?.properties?.isUserInteraction && followMode) {
+            onUserInteraction?.();
+          }
+        }}
       >
         <MapboxGL.Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
-          bounds={
-            bounds
-              ? { ne: bounds.ne, sw: bounds.sw, paddingTop: 60, paddingRight: 60, paddingBottom: 120, paddingLeft: 60 }
-              : undefined
-          }
-          animationDuration={600}
+          {...(followMode && driverLocation
+            ? {
+                centerCoordinate: toCoord(driverLocation),
+                zoomLevel: 16.5,
+                pitch: 45,
+                heading: driverHeading ?? 0,
+                animationDuration: 1000,
+                animationMode: 'easeTo',
+              }
+            : bounds
+              ? {
+                  bounds: {
+                    ne: bounds.ne,
+                    sw: bounds.sw,
+                    paddingTop: 60,
+                    paddingRight: 60,
+                    paddingBottom: 120,
+                    paddingLeft: 60,
+                  },
+                  animationDuration: 600,
+                }
+              : {}
+          )}
         />
         {routeGeoJSON && (
           <MapboxGL.ShapeSource id="route" shape={routeGeoJSON}>
             <MapboxGL.LineLayer
+              id="routeShadow"
+              style={{ lineColor: ROUTE.shadow.color, lineWidth: ROUTE.shadow.width, lineOpacity: ROUTE.shadow.opacity, lineBlur: ROUTE.shadow.blur, lineCap: 'round', lineJoin: 'round' }}
+            />
+            <MapboxGL.LineLayer
               id="routeLine"
-              style={{ lineColor: colors.brand.orange, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }}
+              style={{ lineColor: ROUTE.main.color, lineWidth: ROUTE.main.width, lineOpacity: ROUTE.main.opacity, lineCap: 'round', lineJoin: 'round' }}
             />
           </MapboxGL.ShapeSource>
         )}
         {pickupLocation && (
           <MapboxGL.PointAnnotation id="pickup" coordinate={toCoord(pickupLocation)}>
-            <View style={styles.pickupMarker} />
+            <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center' }}>
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  width: MARKER.pickup.size, height: MARKER.pickup.size,
+                  borderRadius: MARKER.pickup.size / 2,
+                  backgroundColor: MAP_COLORS.pickup,
+                  transform: [{ scale: pickupPulseAnim }],
+                  opacity: pickupPulseOpacity,
+                }}
+              />
+              <View style={styles.pickupMarker}>
+                <View style={styles.pickupInnerDot} />
+              </View>
+            </View>
           </MapboxGL.PointAnnotation>
         )}
         {dropoffLocation && (
           <MapboxGL.PointAnnotation id="dropoff" coordinate={toCoord(dropoffLocation)}>
-            <View style={styles.dropoffMarker} />
+            <View style={{ alignItems: 'center' }}>
+              <View style={styles.dropoffMarker}>
+                <View style={styles.dropoffInnerDot} />
+              </View>
+              <View style={styles.dropoffTail} />
+            </View>
           </MapboxGL.PointAnnotation>
         )}
         {riderLocation && (
@@ -734,7 +903,7 @@ function RideMapViewInner(
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                 {vehicleType && vehicleMarkerImages[vehicleType] ? (
                   <View style={styles.vehicleIconContainer}>
-                    <Image source={vehicleMarkerImages[vehicleType]} style={styles.vehicleIcon} resizeMode="contain" />
+                    <Image source={vehicleMarkerImages[vehicleType]} style={styles.vehicleIcon} resizeMode="contain" accessibilityLabel={`${vehicleType} vehicle marker`} />
                   </View>
                 ) : (
                   <View style={styles.driverDot} />
@@ -780,15 +949,68 @@ function RideMapViewInner(
             />
           </MapboxGL.ShapeSource>
         )}
+        {/* Peer drivers — top-down vehicle icons rendered via SymbolLayer */}
+        {peersGeoJSON && (
+          <>
+            <MapboxGL.Images
+              images={{
+                'marker-triciclo': vehicleMarkerImages.triciclo,
+                'marker-moto': vehicleMarkerImages.moto,
+                'marker-auto': vehicleMarkerImages.auto,
+                'marker-confort': vehicleMarkerImages.confort,
+              }}
+            />
+            <MapboxGL.ShapeSource id="peers" shape={peersGeoJSON}>
+              <MapboxGL.SymbolLayer
+                id="peers-layer"
+                style={{
+                  iconImage: ['get', 'icon'],
+                  iconSize: 0.45,
+                  iconRotate: ['get', 'heading'],
+                  iconAllowOverlap: true,
+                  iconRotationAlignment: 'map',
+                  iconPitchAlignment: 'map',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          </>
+        )}
+        {/* Demand hotspots — top 8 pulse markers */}
+        {demandHotspots?.map((h) => (
+          <MapboxGL.PointAnnotation
+            key={`hotspot-${h.id}`}
+            id={`hotspot-${h.id}`}
+            coordinate={[h.lng, h.lat]}
+          >
+            <HotspotPulseMarker
+              intensity={h.intensity}
+              label={h.live_rides_count > 0 ? String(h.live_rides_count) : undefined}
+            />
+          </MapboxGL.PointAnnotation>
+        ))}
       </MapboxGL.MapView>
-      {(onRecenter || driverLocation) && (
+      {!followMode && driverLocation && (
         <Pressable
-          style={({ pressed }) => [styles.recenterBtn, pressed && { opacity: 0.7 }]}
           onPress={onRecenter}
-          accessibilityLabel="Centrar en mi posición"
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: MAP_COLORS.driverSelf,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 4,
+          }}
           accessibilityRole="button"
+          accessibilityLabel={t('map.recenter', { defaultValue: 'Recentrar' })}
         >
-          <Ionicons name="locate" size={20} color="#fff" />
+          <Ionicons name="navigate" size={20} color="#fff" />
         </Pressable>
       )}
     </View>
@@ -798,37 +1020,56 @@ function RideMapViewInner(
 // ── Styles ──────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   pickupMarker: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.success.DEFAULT, borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+    width: MARKER.pickup.size, height: MARKER.pickup.size, borderRadius: MARKER.pickup.size / 2,
+    backgroundColor: MAP_COLORS.pickup, borderWidth: 3, borderColor: 'white',
+    shadowColor: MAP_COLORS.pickup, shadowOpacity: 0.35, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 }, elevation: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pickupInnerDot: {
+    width: MARKER.pickup.innerDot, height: MARKER.pickup.innerDot,
+    borderRadius: MARKER.pickup.innerDot / 2, backgroundColor: 'white',
   },
   dropoffMarker: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.error.DEFAULT, borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+    width: MARKER.dropoff.size, height: MARKER.dropoff.size, borderRadius: MARKER.dropoff.size / 2,
+    backgroundColor: MAP_COLORS.dropoff, borderWidth: 3, borderColor: 'white',
+    shadowColor: MAP_COLORS.dropoff, shadowOpacity: 0.35, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 }, elevation: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dropoffInnerDot: {
+    width: MARKER.dropoff.innerDot, height: MARKER.dropoff.innerDot,
+    borderRadius: MARKER.dropoff.innerDot / 2, backgroundColor: 'white',
+  },
+  dropoffTail: {
+    width: 0, height: 0,
+    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    borderTopColor: MAP_COLORS.dropoff, marginTop: -1,
   },
   riderMarker: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#3b82f6', borderWidth: 3, borderColor: 'white',
-    shadowColor: '#3b82f6', shadowOpacity: 0.5, shadowRadius: 6, elevation: 4,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: MAP_COLORS.driver, borderWidth: 3, borderColor: 'white',
+    shadowColor: MAP_COLORS.driver, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6,
   },
   driverMarkerContainer: {
-    width: 60, height: 60, alignItems: 'center', justifyContent: 'center',
+    width: 64, height: 64, alignItems: 'center', justifyContent: 'center',
   },
   driverRing: {
-    position: 'absolute', width: 50, height: 50, borderRadius: 25,
-    backgroundColor: 'rgba(255,77,0,0.2)',
+    position: 'absolute', width: 60, height: 60, borderRadius: 30,
+    backgroundColor: 'rgba(255,77,0,0.15)',
   },
   driverDot: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.brand.orange, borderWidth: 3, borderColor: 'white',
-    shadowColor: colors.brand.orange, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
+    backgroundColor: MAP_COLORS.driverSelf, borderWidth: 3, borderColor: 'white',
+    shadowColor: MAP_COLORS.driverSelf, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
   },
   vehicleIconContainer: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(13,13,26,0.85)', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2.5, borderColor: colors.brand.orange,
-    shadowColor: colors.brand.orange, shadowOpacity: 0.7, shadowRadius: 10, elevation: 8,
+    width: MARKER.driver.size, height: MARKER.driver.size, borderRadius: MARKER.driver.size / 2,
+    backgroundColor: MAP_COLORS.driverContainer, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: MAP_COLORS.driverSelf,
+    shadowColor: MAP_COLORS.driverSelf, shadowOpacity: 0.35, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
   vehicleIcon: { width: 28, height: 28 },
   recenterBtn: {
@@ -863,7 +1104,7 @@ const webFallbackStyles = StyleSheet.create({
     position: 'absolute', top: '40%' as any, left: 0, right: 0, alignItems: 'center',
   },
   cityText: {
-    fontFamily: 'Montserrat', fontSize: 48, fontWeight: '800',
+    fontFamily: 'Inter', fontSize: 48, fontWeight: '800',
     color: 'rgba(255,255,255,0.035)', letterSpacing: 16,
   },
   glowOrange: {

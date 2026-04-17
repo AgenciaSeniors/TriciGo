@@ -136,7 +136,7 @@ export default function NotificationsScreen() {
   };
 
   const filtered = filter === 'unread'
-    ? notifications.filter(n => !n.read_at)
+    ? notifications.filter(n => !n.read)
     : notifications;
 
   // Group by date (memoized)

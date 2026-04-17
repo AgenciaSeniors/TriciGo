@@ -1,11 +1,14 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 
 export default function TabLayout() {
   const { t } = useTranslation('driver');
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -14,16 +17,21 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.brand.orange,
         tabBarInactiveTintColor: colors.neutral[500],
         tabBarStyle: {
-          backgroundColor: colors.brand.black,
-          borderTopColor: colors.neutral[800],
-          paddingBottom: 8,
+          backgroundColor: '#141418',
+          borderTopColor: 'rgba(255,255,255,0.06)',
+          borderTopWidth: 1,
+          paddingBottom: 8 + insets.bottom,
           paddingTop: 8,
-          height: 60,
+          height: 64 + insets.bottom,
+          ...(Platform.OS === 'web'
+            ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(20,20,24,0.92)' } as any
+            : {}),
         },
         tabBarLabelStyle: {
-          fontFamily: 'Montserrat',
+          fontFamily: 'Inter',
           fontSize: 11,
           fontWeight: '600',
+          letterSpacing: 0.2,
         },
       }}
     >
@@ -37,20 +45,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="trips"
-        options={{
-          title: t('trips_history.title'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="earnings"
         options={{
           title: t('earnings.title'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cash" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: t('wallet.title', { defaultValue: 'Billetera' }),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="trips"
+        options={{
+          title: t('trips_history.title'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="list" size={size} color={color} />
           ),
         }}
       />

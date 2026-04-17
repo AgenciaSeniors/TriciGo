@@ -18,11 +18,13 @@ export type RideStatus =
   | 'driver_en_route'
   | 'arrived_at_pickup'
   | 'in_progress'
+  | 'arrived_at_destination'
   | 'completed'
   | 'canceled'
   | 'disputed';
 
-export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'tropipay' | 'corporate';
+// 'tropipay' deprecated — kept for historical DB rows only
+export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'stripe' | 'tropipay' | 'corporate';
 
 export type PaymentStatus = 'not_applicable' | 'pending' | 'created' | 'paid' | 'failed';
 
@@ -49,6 +51,7 @@ export type WalletAccountType =
   | 'customer_cash'
   | 'driver_cash'
   | 'driver_hold'
+  | 'driver_quota'
   | 'platform_revenue'
   | 'platform_promotions'
   | 'corporate_cash';
@@ -59,6 +62,8 @@ export type LedgerEntryType =
   | 'ride_hold'
   | 'ride_hold_release'
   | 'commission'
+  | 'quota_deduction'
+  | 'quota_recharge'
   | 'transfer_in'
   | 'transfer_out'
   | 'promo_credit'

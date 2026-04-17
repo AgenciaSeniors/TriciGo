@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
-const mockSingle = vi.fn();
-const mockMaybeSingle = vi.fn();
-const mockSelect = vi.fn(() => ({ eq: vi.fn(() => ({ single: mockSingle, maybeSingle: mockMaybeSingle })) }));
-const mockFrom = vi.fn(() => ({ select: mockSelect }));
+const mockFrom = vi.fn();
 const mockRpc = vi.fn();
 const mockSupabase = { from: mockFrom, rpc: mockRpc };
 
@@ -15,15 +13,15 @@ vi.mock('../../client', () => ({
 import { disputeService } from '../dispute.service';
 
 const MOCK_DISPUTE = {
-  id: 'd-1',
-  ride_id: 'r-1',
-  opened_by: 'user-1',
-  reason: 'wrong_fare',
+  id: UUID.DISPUTE_1,
+  ride_id: UUID.RIDE_1,
+  opened_by: UUID.USER_1,
+  reason: 'pricing',
   description: 'Fare was higher than estimated',
   evidence_urls: [],
   status: 'open',
   priority: 'normal',
-  respondent_id: 'user-2',
+  respondent_id: UUID.USER_2,
   respondent_message: null,
   respondent_evidence_urls: [],
   respondent_replied_at: null,
@@ -50,14 +48,14 @@ describe('disputeService.createDispute', () => {
   it('creates a dispute and marks ride as disputed', async () => {
     // Mock ride fetch
     const mockRideSingle = vi.fn().mockResolvedValue({
-      data: { customer_id: 'user-1', driver_id: 'driver-1' },
+      data: { customer_id: UUID.USER_1, driver_id: UUID.DRIVER_1 },
       error: null,
     });
     const mockRideEq = vi.fn(() => ({ single: mockRideSingle }));
 
     // Mock driver profile fetch
     const mockDriverSingle = vi.fn().mockResolvedValue({
-      data: { user_id: 'user-2' },
+      data: { user_id: UUID.USER_2 },
       error: null,
     });
     const mockDriverEq = vi.fn(() => ({ single: mockDriverSingle }));
@@ -89,13 +87,13 @@ describe('disputeService.createDispute', () => {
       if (table === 'rides') {
         return { update: mockUpdate };
       }
-      return { select: mockSelect };
+      return createMockQueryChain();
     });
 
     const result = await disputeService.createDispute({
-      ride_id: 'r-1',
-      opened_by: 'user-1',
-      reason: 'wrong_fare',
+      ride_id: UUID.RIDE_1,
+      opened_by: UUID.USER_1,
+      reason: 'pricing',
       description: 'Fare was higher than estimated',
     });
 
@@ -112,10 +110,10 @@ describe('disputeService.createDispute', () => {
 
     await expect(
       disputeService.createDispute({
-        ride_id: 'r-1',
-        opened_by: 'user-1',
-        reason: 'wrong_fare',
-        description: 'test',
+        ride_id: UUID.RIDE_1,
+        opened_by: UUID.USER_1,
+        reason: 'pricing',
+        description: 'Fare issue test',
       }),
     ).rejects.toEqual(err);
   });
@@ -127,25 +125,19 @@ describe('disputeService.getDisputeByRide', () => {
   });
 
   it('returns dispute for a ride', async () => {
-    const mockMaybe = vi.fn().mockResolvedValue({ data: MOCK_DISPUTE, error: null });
-    const mockEq = vi.fn(() => ({ maybeSingle: mockMaybe }));
-    mockFrom.mockReturnValue({
-      select: vi.fn(() => ({ eq: mockEq })),
-    });
+    const chain = createMockQueryChain({ data: MOCK_DISPUTE, error: null });
+    mockFrom.mockReturnValue(chain);
 
-    const result = await disputeService.getDisputeByRide('r-1');
+    const result = await disputeService.getDisputeByRide(UUID.RIDE_1);
     expect(result).toEqual(MOCK_DISPUTE);
     expect(mockFrom).toHaveBeenCalledWith('ride_disputes');
   });
 
   it('returns null when no dispute exists', async () => {
-    const mockMaybe = vi.fn().mockResolvedValue({ data: null, error: null });
-    const mockEq = vi.fn(() => ({ maybeSingle: mockMaybe }));
-    mockFrom.mockReturnValue({
-      select: vi.fn(() => ({ eq: mockEq })),
-    });
+    const chain = createMockQueryChain({ data: null, error: null });
+    mockFrom.mockReturnValue(chain);
 
-    const result = await disputeService.getDisputeByRide('r-999');
+    const result = await disputeService.getDisputeByRide(UUID.RIDE_2);
     expect(result).toBeNull();
   });
 });
@@ -156,15 +148,12 @@ describe('disputeService.getMyDisputes', () => {
   });
 
   it('returns disputes where user is opener or respondent', async () => {
-    const mockOrder = vi.fn().mockResolvedValue({ data: [MOCK_DISPUTE], error: null });
-    const mockOr = vi.fn(() => ({ order: mockOrder }));
-    mockFrom.mockReturnValue({
-      select: vi.fn(() => ({ or: mockOr })),
-    });
+    const chain = createMockQueryChain({ data: [MOCK_DISPUTE], error: null });
+    mockFrom.mockReturnValue(chain);
 
-    const result = await disputeService.getMyDisputes('user-1');
+    const result = await disputeService.getMyDisputes(UUID.USER_1);
     expect(result).toHaveLength(1);
-    expect(mockOr).toHaveBeenCalledWith('opened_by.eq.user-1,respondent_id.eq.user-1');
+    expect(chain.or).toHaveBeenCalledWith(`opened_by.eq.${UUID.USER_1},respondent_id.eq.${UUID.USER_1}`);
   });
 });
 
@@ -174,28 +163,20 @@ describe('disputeService.getAllDisputes', () => {
   });
 
   it('returns all disputes without filter', async () => {
-    const mockLimit = vi.fn().mockResolvedValue({ data: [MOCK_DISPUTE], error: null });
-    const mockOrder = vi.fn(() => ({ limit: mockLimit }));
-    mockFrom.mockReturnValue({
-      select: vi.fn(() => ({ order: mockOrder })),
-    });
+    const chain = createMockQueryChain({ data: [MOCK_DISPUTE], error: null });
+    mockFrom.mockReturnValue(chain);
 
     const result = await disputeService.getAllDisputes();
     expect(result).toHaveLength(1);
-    expect(mockLimit).toHaveBeenCalledWith(50);
+    expect(chain.limit).toHaveBeenCalledWith(50);
   });
 
   it('filters by status when provided', async () => {
-    const mockLimit = vi.fn();
-    const mockEq = vi.fn().mockResolvedValue({ data: [], error: null });
-    mockLimit.mockReturnValue({ eq: mockEq });
-    const mockOrder = vi.fn(() => ({ limit: mockLimit }));
-    mockFrom.mockReturnValue({
-      select: vi.fn(() => ({ order: mockOrder })),
-    });
+    const chain = createMockQueryChain({ data: [], error: null });
+    mockFrom.mockReturnValue(chain);
 
     await disputeService.getAllDisputes({ status: 'open' });
-    expect(mockEq).toHaveBeenCalledWith('status', 'open');
+    expect(chain.eq).toHaveBeenCalledWith('status', 'open');
   });
 });
 
@@ -205,15 +186,13 @@ describe('disputeService.respondToDispute', () => {
   });
 
   it('updates respondent fields and status', async () => {
-    const mockRespondentEq = vi.fn().mockResolvedValue({ error: null });
-    const mockDisputeEq = vi.fn(() => ({ eq: mockRespondentEq }));
-    const mockUpdate = vi.fn(() => ({ eq: mockDisputeEq }));
-    mockFrom.mockReturnValue({ update: mockUpdate });
+    const chain = createMockQueryChain({ data: null, error: null });
+    mockFrom.mockReturnValue(chain);
 
-    await disputeService.respondToDispute('d-1', 'user-2', 'I dispute the claim', ['photo.jpg']);
+    await disputeService.respondToDispute(UUID.DISPUTE_1, UUID.USER_2, 'I dispute the claim', ['photo.jpg']);
 
     expect(mockFrom).toHaveBeenCalledWith('ride_disputes');
-    expect(mockUpdate).toHaveBeenCalledWith(
+    expect(chain.update).toHaveBeenCalledWith(
       expect.objectContaining({
         respondent_message: 'I dispute the claim',
         respondent_evidence_urls: ['photo.jpg'],
@@ -232,13 +211,13 @@ describe('disputeService.resolveDispute', () => {
     mockRpc.mockResolvedValue({ data: 'txn-123', error: null });
 
     const result = await disputeService.resolveDispute(
-      'd-1', 'admin-1', 'full_refund', 5000, 'Customer was right',
+      UUID.DISPUTE_1, UUID.ADMIN_1, 'full_refund', 5000, 'Customer was right',
     );
 
     expect(result).toBe('txn-123');
     expect(mockRpc).toHaveBeenCalledWith('process_dispute_refund', {
-      p_dispute_id: 'd-1',
-      p_admin_id: 'admin-1',
+      p_dispute_id: UUID.DISPUTE_1,
+      p_admin_id: UUID.ADMIN_1,
       p_refund_amount_trc: 5000,
       p_resolution: 'full_refund',
       p_resolution_notes: 'Customer was right',
@@ -247,38 +226,32 @@ describe('disputeService.resolveDispute', () => {
 
   it('handles no_action resolution without RPC', async () => {
     // Mock update for deny
-    const mockUpdateEq = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdate = vi.fn(() => ({ eq: mockUpdateEq }));
-
-    // Mock ride status restore
-    const mockRideStatusEq = vi.fn().mockResolvedValue({ error: null });
-    const mockRideEq = vi.fn(() => ({ eq: mockRideStatusEq }));
-    const mockRideUpdate = vi.fn(() => ({ eq: mockRideEq }));
+    const updateChain = createMockQueryChain({ data: null, error: null });
 
     // Mock dispute fetch for ride_id
-    const mockDisputeSingle = vi.fn().mockResolvedValue({
-      data: { ride_id: 'r-1' }, error: null,
-    });
-    const mockDisputeSelectEq = vi.fn(() => ({ single: mockDisputeSingle }));
+    const fetchChain = createMockQueryChain({ data: { ride_id: UUID.RIDE_1 }, error: null });
+
+    // Mock ride status restore
+    const rideChain = createMockQueryChain({ data: null, error: null });
 
     let callCount = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'ride_disputes') {
         callCount++;
-        if (callCount === 1) return { update: mockUpdate };
-        return { select: vi.fn(() => ({ eq: mockDisputeSelectEq })) };
+        if (callCount === 1) return updateChain;
+        return fetchChain;
       }
-      if (table === 'rides') return { update: mockRideUpdate };
-      return {};
+      if (table === 'rides') return rideChain;
+      return createMockQueryChain();
     });
 
     const result = await disputeService.resolveDispute(
-      'd-1', 'admin-1', 'no_action', 0, 'No grounds for refund',
+      UUID.DISPUTE_1, UUID.ADMIN_1, 'no_action', 0, 'No grounds for refund',
     );
 
     expect(result).toBeNull();
     expect(mockRpc).not.toHaveBeenCalled();
-    expect(mockUpdate).toHaveBeenCalledWith(
+    expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'denied',
         resolution: 'no_action',
@@ -294,18 +267,17 @@ describe('disputeService.updateDisputeStatus', () => {
   });
 
   it('updates status and assignment', async () => {
-    const mockEq = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-    mockFrom.mockReturnValue({ update: mockUpdate });
+    const chain = createMockQueryChain({ data: null, error: null });
+    mockFrom.mockReturnValue(chain);
 
-    await disputeService.updateDisputeStatus('d-1', {
+    await disputeService.updateDisputeStatus(UUID.DISPUTE_1, {
       status: 'under_review',
-      assigned_to: 'admin-1',
+      assigned_to: UUID.ADMIN_1,
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith({
+    expect(chain.update).toHaveBeenCalledWith({
       status: 'under_review',
-      assigned_to: 'admin-1',
+      assigned_to: UUID.ADMIN_1,
     });
   });
 });
@@ -316,24 +288,22 @@ describe('disputeService.addAdminNotes', () => {
   });
 
   it('updates admin notes', async () => {
-    const mockEq = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-    mockFrom.mockReturnValue({ update: mockUpdate });
+    const chain = createMockQueryChain({ data: null, error: null });
+    mockFrom.mockReturnValue(chain);
 
-    await disputeService.addAdminNotes('d-1', 'Reviewed evidence, driver was at fault');
+    await disputeService.addAdminNotes(UUID.DISPUTE_1, 'Reviewed evidence, driver was at fault');
 
-    expect(mockUpdate).toHaveBeenCalledWith({
+    expect(chain.update).toHaveBeenCalledWith({
       admin_notes: 'Reviewed evidence, driver was at fault',
     });
-    expect(mockEq).toHaveBeenCalledWith('id', 'd-1');
+    expect(chain.eq).toHaveBeenCalledWith('id', UUID.DISPUTE_1);
   });
 
   it('throws on error', async () => {
     const err = { message: 'Update failed', code: '42P01' };
-    const mockEq = vi.fn().mockResolvedValue({ error: err });
-    const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-    mockFrom.mockReturnValue({ update: mockUpdate });
+    const chain = createMockQueryChain({ data: null, error: err });
+    mockFrom.mockReturnValue(chain);
 
-    await expect(disputeService.addAdminNotes('d-1', 'notes')).rejects.toEqual(err);
+    await expect(disputeService.addAdminNotes(UUID.DISPUTE_1, 'notes')).rejects.toEqual(err);
   });
 });

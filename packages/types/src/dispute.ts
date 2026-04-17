@@ -48,6 +48,10 @@ export interface RideDispute {
   respondent_evidence_urls: string[];
   respondent_replied_at: string | null;
 
+  // Ride fare snapshot (for refund cap)
+  ride_final_fare_trc: number | null;
+  ride_estimated_fare_trc: number | null;
+
   // Resolution
   resolution: DisputeResolution | null;
   resolution_notes: string | null;

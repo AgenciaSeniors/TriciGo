@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
-import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport } from '@tricigo/utils';
+import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport, MAP_STYLE_LIGHT, ROUTE } from '@tricigo/utils';
 import type { LocationPreset, ViewportPoi } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
@@ -216,6 +216,10 @@ const PULSE_STYLES = `
     80% { transform: translateX(-50%) scale(0.85); opacity: 0.25; }
     100% { transform: translateX(-50%) scale(1); opacity: 0.3; }
   }
+  @keyframes pulse-geo {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.5); }
+  }
 `;
 
 /* ── Main component ── */
@@ -253,6 +257,7 @@ export default function BookingMap({
   const poiAbortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<{ minLng: number; minLat: number; maxLng: number; maxLat: number } | null>(null);
   const poiPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [bounceKey, setBounceKey] = useState(0);
   const [isMapMoving, setIsMapMoving] = useState(false);
@@ -268,7 +273,7 @@ export default function BookingMap({
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: MAP_STYLE_LIGHT,
       center,
       zoom,
       attributionControl: false,
@@ -362,32 +367,49 @@ export default function BookingMap({
         data: { type: 'FeatureCollection', features: [] },
       });
 
-      // Route shadow
+      // Route shadow (premium style)
       map.addLayer({
         id: 'route-shadow',
         type: 'line',
         source: 'route',
         paint: {
-          'line-color': '#000',
-          'line-width': 8,
-          'line-opacity': 0.15,
-          'line-blur': 3,
+          'line-color': ROUTE.shadow.color,
+          'line-width': ROUTE.shadow.width,
+          'line-opacity': ROUTE.shadow.opacity,
+          'line-blur': ROUTE.shadow.blur,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
 
-      // Route line
+      // Route line (animated dash, Uber-style)
       map.addLayer({
         id: 'route-line',
         type: 'line',
         source: 'route',
         paint: {
-          'line-color': '#FF4D00',
-          'line-width': 5,
-          'line-opacity': 0.9,
+          'line-color': ROUTE.main.color,
+          'line-width': ROUTE.main.width,
+          'line-opacity': ROUTE.main.opacity,
+          'line-dasharray': [0, 4, 3],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
+
+      // Animate dash offset (flowing route animation)
+      let dashStep = 0;
+      const dashArraySeq = [
+        [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5],
+        [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0], [0, 0.5, 3, 3.5],
+        [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5],
+        [0, 3, 3, 1], [0, 3.5, 3, 0.5],
+      ];
+      function animateDash() {
+        if (!map.getLayer('route-line')) return;
+        dashStep = (dashStep + 1) % dashArraySeq.length;
+        map.setPaintProperty('route-line', 'line-dasharray', dashArraySeq[dashStep]);
+        animFrameRef.current = requestAnimationFrame(animateDash);
+      }
+      animFrameRef.current = requestAnimationFrame(animateDash);
 
       // Preset location markers removed — always use reverse geocoding
     });
@@ -402,6 +424,10 @@ export default function BookingMap({
     mapRef.current = map;
 
     return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -895,6 +921,33 @@ export default function BookingMap({
             >
               {selectionStep === 'pickup' ? t('book.confirm_pickup', { defaultValue: 'Confirmar recogida' }) : t('book.confirm_dropoff', { defaultValue: 'Confirmar destino' })}
             </button>
+          </div>
+        )}
+
+        {/* Geolocation loading pill */}
+        {locationLoading && !pickup && !dropoff && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 60,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(26,26,46,0.9)',
+              backdropFilter: 'blur(8px)',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.5rem',
+              zIndex: 10,
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              color: '#e5e5e5',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', animation: 'pulse-geo 1.5s infinite' }} />
+            {t('book.detecting_location', { defaultValue: 'Detectando tu ubicación...' })}
           </div>
         )}
 

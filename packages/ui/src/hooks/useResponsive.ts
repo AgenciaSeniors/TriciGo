@@ -26,5 +26,9 @@ export function useResponsive() {
     screenWidth: width,
     /** Current screen height in pixels */
     screenHeight: height,
+    /** Desktop breakpoint (>= 1024px) */
+    isDesktop: width >= 1024,
+    /** Wide/ultrawide breakpoint (>= 1440px) */
+    isWide: width >= 1440,
   };
 }

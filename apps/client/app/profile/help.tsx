@@ -228,7 +228,7 @@ export default function HelpScreen() {
                 <Text variant="body" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
                   <Ionicons name="mail-outline" size={18} color={colors.neutral[600]} />
-                  <Text variant="bodySmall" color="secondary" className="ml-2">soporte@tricigo.app</Text>
+                  <Text variant="bodySmall" color="secondary" className="ml-2">soporte@tricigo.com</Text>
                 </View>
                 <View className="flex-row items-center">
                   <Ionicons name="call-outline" size={18} color={colors.neutral[600]} />

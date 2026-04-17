@@ -1,6 +1,12 @@
 export const RIDE_CONFIG = {
   MIN_DISTANCE_M: 200,
   SEARCH_TIMEOUT_MS: 120_000,
+  /** Maximum total search time before final cancellation (5 min) */
+  SEARCH_MAX_TOTAL_MS: 300_000,
+  /** Number of search retry rounds (expanding message each round) */
+  SEARCH_RETRY_ROUNDS: 2,
+  /** Radius progression for retry rounds (initial creation uses 5000m) */
+  SEARCH_RADIUS_PROGRESSION: [8000, 12000],
   FARE_ESTIMATE_TTL_MS: 300_000,
   MAX_WAYPOINTS: 3,
   MAX_TIP_AMOUNT: 100_000,

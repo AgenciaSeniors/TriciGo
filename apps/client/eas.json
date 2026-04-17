@@ -4,7 +4,12 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "base": {
+      "node": "20.19.4",
+      "pnpm": "9.15.4"
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -13,10 +18,12 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS"
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
       }
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -24,15 +31,18 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS"
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
       }
     },
     "production": {
+      "extends": "base",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS"
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
       }
     }
   },

@@ -13,9 +13,11 @@ export interface BarChartDataPoint {
 interface EarningsBarChartProps {
   data: BarChartDataPoint[];
   height?: number;
+  theme?: 'light' | 'dark';
 }
 
-export function EarningsBarChart({ data, height = 160 }: EarningsBarChartProps) {
+export function EarningsBarChart({ data, height = 160, theme = 'dark' }: EarningsBarChartProps) {
+  const isLight = theme === 'light';
   if (data.length === 0) return null;
 
   const screenWidth = Dimensions.get('window').width;
@@ -39,7 +41,13 @@ export function EarningsBarChart({ data, height = 160 }: EarningsBarChartProps) 
   }));
 
   return (
-    <View className="bg-[#1a1a2e] border border-white/6 rounded-xl p-3 mb-4">
+    <View
+      className="rounded-xl p-3 mb-4"
+      style={isLight
+        ? { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 }
+        : { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }
+      }
+    >
       <Svg width={chartWidth} height={height}>
         {/* Grid lines */}
         {gridLines.map((line, i) => (
@@ -49,13 +57,13 @@ export function EarningsBarChart({ data, height = 160 }: EarningsBarChartProps) 
               y1={line.y}
               x2={chartWidth}
               y2={line.y}
-              stroke="rgba(255,255,255,0.08)"
+              stroke={isLight ? '#F1F5F9' : 'rgba(255,255,255,0.08)'}
               strokeWidth={1}
             />
             <SvgText
               x={paddingLeft - 6}
               y={line.y + 4}
-              fill="rgba(255,255,255,0.35)"
+              fill={isLight ? '#64748B' : 'rgba(255,255,255,0.35)'}
               fontSize={9}
               textAnchor="end"
             >
@@ -78,13 +86,16 @@ export function EarningsBarChart({ data, height = 160 }: EarningsBarChartProps) 
                 width={barWidth}
                 height={barH}
                 rx={3}
-                fill={d.isToday ? colors.brand.orange : 'rgba(249,115,22,0.6)'}
+                fill={d.isToday
+                  ? colors.brand.orange
+                  : isLight ? '#E2E8F0' : 'rgba(249,115,22,0.6)'
+                }
               />
               {/* Label */}
               <SvgText
                 x={x + barWidth / 2}
                 y={height - 4}
-                fill="rgba(255,255,255,0.45)"
+                fill={isLight ? '#64748B' : 'rgba(255,255,255,0.45)'}
                 fontSize={data.length > 10 ? 7 : 9}
                 textAnchor="middle"
               >

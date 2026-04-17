@@ -10,7 +10,7 @@ declare const __DEV__: boolean | undefined;
 
 export const authService = {
   /**
-   * Send OTP to a phone number via SMSPM Edge Function.
+   * Send OTP to a phone number via Twilio SMS Edge Function.
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
@@ -20,7 +20,7 @@ export const authService = {
       return;
     }
 
-    // Send OTP via Edge Function (SMSPM)
+    // Send OTP via Edge Function (Twilio SMS)
     const { data, error } = await supabase.functions.invoke('send-sms-otp', {
       body: { phone },
     });
@@ -46,7 +46,7 @@ export const authService = {
     }
 
     // Verify OTP via Edge Function (validates against otp_codes table, creates session)
-    const { data, error } = await supabase.functions.invoke('verify-whatsapp-otp', {
+    const { data, error } = await supabase.functions.invoke('verify-otp', {
       body: { phone, code: token },
     });
 
@@ -76,6 +76,7 @@ export const authService = {
 
   /**
    * Get the current user profile from the users table.
+   * Uses getUser() to verify the token with the server, then fetches the DB profile.
    */
   async getCurrentUser(): Promise<User | null> {
     const supabase = getSupabaseClient();
@@ -88,6 +89,21 @@ export const authService = {
       .from('users')
       .select('*')
       .eq('id', authUser.id)
+      .single();
+    if (error) throw error;
+    return data as User;
+  },
+
+  /**
+   * Fast user profile fetch using a known user ID (skips auth.getUser() verification).
+   * Use this for session restoration when you already have a valid session.
+   */
+  async getUserById(userId: string): Promise<User | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
       .single();
     if (error) throw error;
     return data as User;
@@ -118,17 +134,21 @@ export const authService = {
   async uploadAvatar(userId: string, fileUri: string): Promise<string> {
     const supabase = getSupabaseClient();
 
-    // Fetch the image as a blob
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
-
     const filePath = `${userId}/avatar.jpg`;
+
+    // React Native: use FormData to upload file URI (fetch+blob fails on Android)
+    const formData = new FormData();
+    formData.append('', {
+      uri: fileUri,
+      name: 'avatar.jpg',
+      type: 'image/jpeg',
+    } as any);
 
     // Upload (upsert) to avatars bucket
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
+      .upload(filePath, formData, {
+        contentType: 'multipart/form-data',
         upsert: true,
       });
     if (uploadError) throw uploadError;

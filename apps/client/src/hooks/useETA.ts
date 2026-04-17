@@ -14,6 +14,8 @@ const MIN_MOVE_M = 50;
 export interface ETAResult {
   /** ETA in minutes, null if unknown */
   etaMinutes: number | null;
+  /** Distance remaining to destination in meters */
+  distanceRemainingM: number | null;
   /** Whether we're currently recalculating */
   isCalculating: boolean;
 }
@@ -44,6 +46,7 @@ export function useETA({
   estimatedDurationS,
 }: UseETAParams): ETAResult {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  const [distanceRemainingM, setDistanceRemainingM] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const lastCalcRef = useRef(0);
   const lastDriverPosRef = useRef<GeoPoint | null>(null);
@@ -67,6 +70,12 @@ export function useETA({
     } else if (rideStatus === 'arrived_at_pickup') {
       // Driver already at pickup — ETA is 0
       setEtaMinutes(0);
+      setDistanceRemainingM(0);
+      return;
+    } else if (rideStatus === 'arrived_at_destination') {
+      // Driver already at destination — ETA is 0
+      setEtaMinutes(0);
+      setDistanceRemainingM(0);
       return;
     } else {
       // Completed/canceled/etc — no ETA needed
@@ -99,13 +108,17 @@ export function useETA({
       if (!mountedRef.current) return;
 
       if (route) {
-        setEtaMinutes(Math.max(1, Math.round(route.duration_s / 60)));
+        // BUG-072: Show "< 1 min" (0) when ETA is under 1 minute instead of rounding up to 1
+        const rawMinutes = route.duration_s / 60;
+        setEtaMinutes(rawMinutes < 1 ? 0 : Math.round(rawMinutes));
+        setDistanceRemainingM(route.distance_m);
       } else {
         // Fallback: haversine + road factor + average speed
         const straight = haversineDistance(driverLocation, destination);
         const road = estimateRoadDistance(straight);
         const seconds = road / FALLBACK_SPEED_MS;
-        setEtaMinutes(Math.max(1, Math.round(seconds / 60)));
+        const rawMinutes = seconds / 60;
+        setEtaMinutes(rawMinutes < 1 ? 0 : Math.round(rawMinutes));
       }
     } catch {
       if (!mountedRef.current) return;
@@ -113,7 +126,8 @@ export function useETA({
       const straight = haversineDistance(driverLocation, destination);
       const road = estimateRoadDistance(straight);
       const seconds = road / FALLBACK_SPEED_MS;
-      setEtaMinutes(Math.max(1, Math.round(seconds / 60)));
+      const rawMinutes = seconds / 60;
+      setEtaMinutes(rawMinutes < 1 ? 0 : Math.round(rawMinutes));
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
@@ -123,11 +137,12 @@ export function useETA({
   useEffect(() => {
     // Set initial estimate from ride data if available
     if (etaMinutes === null && estimatedDurationS) {
-      setEtaMinutes(Math.max(1, Math.round(estimatedDurationS / 60)));
+      const rawMinutes = estimatedDurationS / 60;
+      setEtaMinutes(rawMinutes < 1 ? 0 : Math.round(rawMinutes));
     }
 
     calculateETA();
   }, [calculateETA, estimatedDurationS]);
 
-  return useMemo(() => ({ etaMinutes, isCalculating }), [etaMinutes, isCalculating]);
+  return useMemo(() => ({ etaMinutes, distanceRemainingM, isCalculating }), [etaMinutes, distanceRemainingM, isCalculating]);
 }

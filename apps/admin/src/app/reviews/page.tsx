@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Star } from 'lucide-react';
 import { formatAdminDate } from '@/lib/formatDate';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -151,17 +152,17 @@ export default function ReviewsPage() {
         if (tags) {
           tagsMap = tags.reduce((acc: Record<string, string[]>, tag: { review_id: string; tag_key: string }) => {
             if (!acc[tag.review_id]) acc[tag.review_id] = [];
-            acc[tag.review_id].push(tag.tag_key);
+            acc[tag.review_id]!.push(tag.tag_key);
             return acc;
           }, {});
         }
       }
 
       const rows: ReviewRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
-        ...(r as Review),
+        ...(r as unknown as Review),
         reviewer_name: (r.reviewer as { full_name?: string } | null)?.full_name ?? undefined,
         reviewee_name: (r.reviewee as { full_name?: string } | null)?.full_name ?? undefined,
-        tag_keys: tagsMap[(r as Review).id] ?? [],
+        tag_keys: tagsMap[(r as unknown as Review).id] ?? [],
         is_featured: (r as Record<string, unknown>).is_featured as boolean | undefined,
       }));
 
@@ -307,7 +308,7 @@ export default function ReviewsPage() {
       {loading ? (
         <AdminTableSkeleton rows={5} columns={4} />
       ) : reviews.length === 0 ? (
-        <AdminEmptyState icon="⭐" title={t('reviews.no_reviews')} />
+        <AdminEmptyState icon={<Star className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('reviews.no_reviews')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

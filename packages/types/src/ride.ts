@@ -7,6 +7,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PricingSnapshotType,
+  RideMode,
   RideStatus,
   ServiceTypeSlug,
   UserRole,
@@ -91,13 +92,14 @@ export interface Ride {
   accepted_at: string | null;
   driver_arrived_at: string | null;
   pickup_at: string | null;
+  arrived_at_destination_at: string | null;
   completed_at: string | null;
   canceled_at: string | null;
   canceled_by: string | null;
   cancellation_reason: string | null;
-  /** Fee charged for cancellation based on ride state (CUP centavos) */
+  /** Fee charged for cancellation based on ride state (CUP/TRC whole units) */
   cancellation_fee_cup: number;
-  /** Fee charged for cancellation in TRC centavos */
+  /** Fee charged for cancellation in TRC whole units (= CUP) */
   cancellation_fee_trc: number;
 
   // Safety
@@ -111,15 +113,20 @@ export interface Ride {
   surge_multiplier: number;
   tip_amount: number;
 
-  // Exchange rate snapshot (1 USD = X CUP at ride creation)
+  // Exchange rate snapshot (1 USD = X CUP/TRC at ride creation, from eltoque)
   exchange_rate_usd_cup: number | null;
-  // Fare in TRC centavos
+  // Fare in TRC whole units (= CUP since 1:1 peg)
   estimated_fare_trc: number | null;
   final_fare_trc: number | null;
-  // Driver custom rate at time of assignment (CUP whole pesos)
+  // Fare in USD (derived from exchange rate)
+  estimated_fare_usd: number | null;
+  final_fare_usd: number | null;
+  // Driver custom rate at time of assignment (CUP/TRC whole units)
   driver_custom_rate_cup: number | null;
+  // Quota deduction for this ride (TRC whole units, driver-side)
+  quota_deduction_amount: number | null;
 
-  // TropiPay direct payment tracking
+  // Payment tracking
   payment_status: PaymentStatus;
   payment_intent_id: string | null;
 
@@ -152,7 +159,30 @@ export interface Ride {
   wait_time_charge_cup: number;
 
   // Ride mode
-  ride_mode: string;
+  ride_mode: RideMode;
+
+  // Mixed payment
+  wallet_ratio: number | null;
+  wallet_amount_cup: number | null;
+  cash_amount_cup: number | null;
+
+  // Ride-offer window (only set when fetched via getSearchingRides
+  // for the authenticated driver). Present as timestamp ISO string.
+  offer_expires_at?: string;
+}
+
+/**
+ * Demand hotspot for the driver map. Produced by the
+ * `get_demand_hotspots` RPC (migration 00125).
+ */
+export interface DemandHotspot {
+  id: string;
+  lat: number;
+  lng: number;
+  /** 0..1 — combined historical + live score. Drives pulse color. */
+  intensity: number;
+  live_rides_count: number;
+  historical_rides_count: number;
 }
 
 export interface Tip {
@@ -196,6 +226,7 @@ export interface RideLocationEvent {
   longitude: number;
   heading: number | null;
   speed: number | null;
+  accuracy: number | null;
   recorded_at: string;
 }
 
@@ -230,7 +261,9 @@ export interface RideValidTransition {
 export interface CompleteRideResult {
   final_fare_cup: number;
   final_fare_trc: number;
+  final_fare_usd: number;
   exchange_rate_usd_cup: number;
+  /** @deprecated Use quota_deduction_amount instead */
   commission_amount: number;
   driver_earnings: number;
   payment_method: string;
@@ -241,6 +274,10 @@ export interface CompleteRideResult {
   insurance_selected?: boolean;
   insurance_premium_cup?: number;
   insurance_premium_trc?: number;
+  /** Amount deducted from driver's quota for this ride */
+  quota_deduction_amount: number;
+  /** Driver's remaining quota balance after deduction */
+  quota_balance_after: number;
 }
 
 /** Ride with joined rider info for driver display */
@@ -272,6 +309,34 @@ export interface RideWithRider extends Ride {
   rider_rating: number;
 }
 
+// ── Realtime Searching Types ──────────────────────────────
+
+/** Driver presence state during ride search (Supabase Presence) */
+export interface SearchingDriverPresence {
+  driverId: string;
+  name: string;
+  avatarUrl: string | null;
+  vehicleType: string;
+  rating: number;
+  location: GeoPoint; // jittered ~200m for privacy
+  joinedAt: number; // Date.now() timestamp
+}
+
+/** Broadcast payload when a driver accepts (fast path before DB RPC) */
+export interface DriverAcceptedBroadcast {
+  type: 'driver_accepted';
+  driverId: string;
+  name: string;
+  avatarUrl: string | null;
+  vehicleType: string;
+  rating: number;
+  location: GeoPoint; // real location (no jitter)
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+}
+
 /** Ride with joined driver info for client display */
 export interface RideWithDriver extends Ride {
   driver_user_id: string | null;
@@ -290,4 +355,54 @@ export interface RideWithDriver extends Ride {
   vehicle_photo_url: string | null;
   /** Vehicle manufacturing year */
   vehicle_year: number | null;
+  /** Vehicle type slug (triciclo, moto, auto, confort) */
+  vehicle_type: string | null;
+}
+
+/**
+ * Privacy-safe subset of ride data exposed via public share token.
+ * Does NOT include: driver phone, exact addresses, fare amounts,
+ * payment details, promo codes, or customer identifiers.
+ */
+export interface SharedRideView {
+  id: string;
+  status: RideStatus;
+  service_type: ServiceTypeSlug;
+
+  // Coordinates only (NOT full addresses)
+  pickup_location: GeoPoint;
+  dropoff_location: GeoPoint;
+
+  // Timing
+  estimated_duration_s: number;
+  accepted_at: string | null;
+  pickup_at: string | null;
+  arrived_at_destination_at: string | null;
+  completed_at: string | null;
+  canceled_at: string | null;
+
+  // Driver (safe fields only)
+  driver_first_name: string | null;
+  driver_avatar_url: string | null;
+  driver_rating: number | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_color: string | null;
+  vehicle_plate: string | null;
+  vehicle_photo_url: string | null;
+  vehicle_type: string | null;
+}
+
+/** Trip progress state for Uber-style progress bar */
+export interface TripProgress {
+  /** Percentage of trip completed (0-100) */
+  progressPercent: number;
+  /** Distance remaining in meters */
+  distanceRemainingM: number;
+  /** Total trip distance in meters */
+  totalDistanceM: number;
+  /** ETA in minutes */
+  etaMinutes: number | null;
+  /** Formatted arrival time (e.g., "3:45pm") */
+  arrivalTime: string | null;
 }

@@ -143,6 +143,11 @@ module.exports = {
         'shimmer': 'shimmer 1.8s linear infinite',
         'pulse-ring': 'pulse-ring 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite',
       },
+      screens: {
+        tablet: '600px',
+        desktop: '1024px',
+        wide: '1440px',
+      },
     },
   },
 };

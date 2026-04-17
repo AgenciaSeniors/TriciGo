@@ -1,7 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useColorScheme } from 'nativewind';
+import { useFonts } from 'expo-font';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+} from '@expo-google-fonts/inter';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -10,27 +20,35 @@ import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
-import MapboxGL from '@rnmapbox/maps';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { Platform } from 'react-native';
 import '../global.css';
 
-// Initialize Sentry as early as possible
-initSentry();
+// Initialize Sentry as early as possible (safe for web)
+try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
 
-// Register sound assets for ride events
-registerSoundAssets({
-  ride_accepted: require('../assets/sounds/ride_accepted.wav'),
-  trip_completed: require('../assets/sounds/trip_completed.wav'),
-  new_request: require('../assets/sounds/new_request.wav'),
-});
+// Register sound assets for ride events (native only — .wav files don't resolve on web)
+if (Platform.OS !== 'web') {
+  try {
+    registerSoundAssets({
+      ride_accepted: require('../assets/sounds/ride_accepted.wav'),
+      trip_completed: require('../assets/sounds/trip_completed.wav'),
+      new_request: require('../assets/sounds/new_request.wav'),
+    });
+  } catch { /* Sound registration failed — non-fatal */ }
+}
 
-// Initialize Mapbox (try-catch to prevent crash if token is missing)
-try {
-  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
-} catch {
-  // Mapbox will fail on map screens but app won't crash on startup
+// Initialize Mapbox (native only — @rnmapbox/maps has no web support)
+if (Platform.OS !== 'web') {
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+  } catch {
+    // Mapbox will fail on map screens but app won't crash on startup
+  }
 }
 
 function RootNavigator() {
@@ -41,13 +59,22 @@ function RootNavigator() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const segments = useSegments();
 
+  // Handle OAuth deep link callbacks (tricigo-driver://auth/callback)
+  useAuthDeepLink();
+
   // Dark mode: sync NativeWind color scheme with theme store
+  // Driver app uses forced dark backgrounds (Screen bg="dark") with light NativeWind
+  // so that color="inverse" gives white text on dark bg.
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const { setColorScheme } = useColorScheme();
   useSystemThemeSync();
 
   useEffect(() => {
     setColorScheme(resolvedScheme);
+    // Remove dark class if it was previously set, to avoid conflicts
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.documentElement.classList.remove('dark');
+    }
   }, [resolvedScheme, setColorScheme]);
 
   // Download Havana offline map tiles (runs once per week)
@@ -131,14 +158,41 @@ function RootNavigator() {
   );
 }
 
+// Keep splash screen visible while loading fonts
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function RootLayoutInner() {
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+  });
+
+  const onLayoutReady = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    onLayoutReady();
+  }, [onLayoutReady]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
-      <AppProviders>
-        <RootNavigator />
-        <Toast />
-      </AppProviders>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
+        <AppProviders>
+          <RootNavigator />
+          <Toast />
+        </AppProviders>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 

@@ -171,7 +171,7 @@ function renderWelcomeEmail(data: Record<string, unknown>): string {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td align="center" style="padding:8px 0 16px;">
-                    <a href="https://tricigo.app" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                    <a href="https://tricigo.com" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
                       Solicitar tu primer viaje
                     </a>
                   </td>
@@ -234,7 +234,7 @@ function renderWinBackEmail(data: Record<string, unknown>): string {
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td align="center" style="padding:8px 0 16px;">
-                    <a href="https://tricigo.app" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                    <a href="https://tricigo.com" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:8px;">
                       Volver a viajar
                     </a>
                   </td>
@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
   try {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
+    const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: verify JWT or internal service-role call ──
@@ -516,6 +516,15 @@ Deno.serve(async (req) => {
     if (!recipient_email || !subject || !template) {
       return new Response(
         JSON.stringify({ error: 'recipient_email, subject, and template are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // BUG-085: Validate email format before sending
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipient_email)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email format' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -568,7 +577,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: 'TriciGo <noreply@tricigo.app>',
+        from: 'TriciGo <noreply@tricigo.com>',
         to: recipient_email,
         subject,
         html,

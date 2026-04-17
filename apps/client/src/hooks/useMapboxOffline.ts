@@ -16,11 +16,11 @@ import {
 } from '@tricigo/utils/mapboxOffline';
 import { logger } from '@tricigo/utils';
 
-let MapboxGL: any;
-try {
-  MapboxGL = require('@rnmapbox/maps').default;
-} catch {
-  MapboxGL = null;
+let _MapboxGL: any = undefined;
+function getMapboxGL(): any {
+  if (_MapboxGL !== undefined) return _MapboxGL;
+  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
+  return _MapboxGL;
 }
 
 interface OfflinePackState {
@@ -35,6 +35,7 @@ interface OfflinePackState {
  * Only runs on native platforms (not web).
  */
 export function useMapboxOffline(): OfflinePackState {
+  const MapboxGL = getMapboxGL();
   const [state, setState] = useState<OfflinePackState>({
     progress: 0,
     isDownloading: false,
@@ -102,7 +103,7 @@ export function useMapboxOffline(): OfflinePackState {
         await AsyncStorage.setItem(OFFLINE_SYNC_KEY, String(Date.now()));
         setState({ progress: 100, isDownloading: false, error: null });
       } catch (err) {
-        logger.warn('[MapboxOffline] Failed to create pack:', err);
+        logger.warn('[MapboxOffline] Failed to create pack:', { error: String(err) });
         setState((s) => ({
           ...s,
           isDownloading: false,

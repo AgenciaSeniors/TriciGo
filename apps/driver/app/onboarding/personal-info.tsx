@@ -246,7 +246,7 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={100} duration={400}>
-              <Card variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
                 <Input
                   label={t('onboarding.full_name')}
                   placeholder="Juan Pérez"
@@ -319,7 +319,7 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={300} duration={400}>
-              <Card variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
                 <SelectField
                   label={t('onboarding.province')}
                   value={province}
@@ -362,7 +362,7 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={500} duration={400}>
-              <Card variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
                 <View className="flex-row items-center justify-between mb-2">
                   <Text variant="body" color="inverse" className="flex-1">
                     {t('onboarding.criminal_record')}

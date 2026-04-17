@@ -69,9 +69,43 @@ export const CUBA_CENTER: GeoPoint = { latitude: 21.5, longitude: -79.5 };
 export const CUBA_DEFAULT_ZOOM = 7;
 
 /**
+ * Offset a coordinate by a random amount within the given radius.
+ * Used to protect driver privacy during ride search — passengers
+ * see an approximate position (~200 m) rather than exact location.
+ *
+ * @param lat  — latitude in degrees
+ * @param lng  — longitude in degrees
+ * @param radiusMeters — maximum offset (default 200 m)
+ * @returns jittered { latitude, longitude }
+ */
+export function jitterLocation(
+  lat: number,
+  lng: number,
+  radiusMeters = 200,
+): GeoPoint {
+  // Random angle in radians (0 – 2 PI)
+  const angle = Math.random() * 2 * Math.PI;
+  // Random distance between 50 % and 100 % of radius
+  const dist = radiusMeters * (0.5 + Math.random() * 0.5);
+  // 1 degree ≈ 111 320 m at the equator
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng = 111_320 * Math.cos((lat * Math.PI) / 180);
+
+  return {
+    latitude: lat + (dist * Math.sin(angle)) / metersPerDegreeLat,
+    longitude: lng + (dist * Math.cos(angle)) / (metersPerDegreeLng || 1),
+  };
+}
+
+/**
  * Haversine distance between two points in meters.
  */
 export function haversineDistance(from: GeoPoint, to: GeoPoint): number {
+  if (!from || !to ||
+      !Number.isFinite(from.latitude) || !Number.isFinite(from.longitude) ||
+      !Number.isFinite(to.latitude) || !Number.isFinite(to.longitude)) {
+    return 0;
+  }
   const R = 6_371_000; // Earth radius in meters
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -97,13 +131,99 @@ export function estimateRoadDistance(straightLineM: number): number {
 }
 
 /**
+ * Project a point onto a polyline and return the position along the route.
+ * Used for trip progress calculation (Uber-style progress bar).
+ *
+ * @param point  — current driver position
+ * @param polyline — route geometry from OSRM/Mapbox
+ * @returns segment index, projected point, and cumulative distance from route start
+ */
+export function projectPointOnPolyline(
+  point: GeoPoint,
+  polyline: GeoPoint[],
+): { segmentIndex: number; projectedPoint: GeoPoint; distanceAlongRouteM: number } {
+  if (polyline.length < 2) {
+    return { segmentIndex: 0, projectedPoint: point, distanceAlongRouteM: 0 };
+  }
+
+  let bestDist = Infinity;
+  let bestSegment = 0;
+  let bestProjected: GeoPoint = polyline[0]!;
+  let bestT = 0;
+
+  // For each segment, find closest point on line segment to the given point
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const a = polyline[i]!;
+    const b = polyline[i + 1]!;
+
+    // Convert to approximate planar coords (meters) for projection
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const midLat = (a.latitude + b.latitude) / 2;
+    const mPerDegLat = 111_320;
+    const mPerDegLng = 111_320 * Math.cos(toRad(midLat));
+
+    const ax = a.longitude * mPerDegLng;
+    const ay = a.latitude * mPerDegLat;
+    const bx = b.longitude * mPerDegLng;
+    const by = b.latitude * mPerDegLat;
+    const px = point.longitude * mPerDegLng;
+    const py = point.latitude * mPerDegLat;
+
+    // Compute parameter t = dot(AP, AB) / dot(AB, AB), clamped to [0, 1]
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const dotAB = abx * abx + aby * aby;
+
+    let t = 0;
+    if (dotAB > 0) {
+      t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / dotAB));
+    }
+
+    // Projected point in planar coords
+    const projX = ax + t * abx;
+    const projY = ay + t * aby;
+
+    // Distance from point to projected
+    const dx = px - projX;
+    const dy = py - projY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestSegment = i;
+      bestT = t;
+      bestProjected = {
+        latitude: projY / mPerDegLat,
+        longitude: projX / mPerDegLng,
+      };
+    }
+  }
+
+  // Calculate cumulative distance from route start to projected point
+  let cumulativeM = 0;
+  for (let i = 0; i < bestSegment; i++) {
+    cumulativeM += haversineDistance(polyline[i]!, polyline[i + 1]!);
+  }
+  // Add partial segment distance
+  cumulativeM += haversineDistance(polyline[bestSegment]!, bestProjected);
+
+  return {
+    segmentIndex: bestSegment,
+    projectedPoint: bestProjected,
+    distanceAlongRouteM: cumulativeM,
+  };
+}
+
+/**
  * Average speeds in km/h per service type.
  * Calibrated for Cuban urban conditions:
  * - Narrow streets, potholes, long traffic lights
  * - Dense traffic in Havana center
  * - Triciclos limited to ~10-12 km/h actual
  */
-const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
+export const AVG_SPEEDS: Record<ServiceTypeSlug, number> = {
   triciclo_basico: 10,
   triciclo_premium: 10,
   triciclo_cargo: 8,
@@ -128,6 +248,112 @@ export function estimateDuration(
   // 15% buffer for traffic lights, stops, and urban delays
   const URBAN_DELAY_FACTOR = 1.15;
   return Math.round(rawDuration * URBAN_DELAY_FACTOR);
+}
+
+/**
+ * Speed profiles (km/h) by distance tier for more accurate duration estimates.
+ * - urban: dense city streets, traffic lights, narrow roads
+ * - suburban: wider avenues, fewer stops, less congestion
+ * - intercity: highways and main roads between cities
+ * - null means vehicle type is not available for that tier (falls back to suburban)
+ */
+export const SPEED_PROFILES: Record<ServiceTypeSlug, { urban: number; suburban: number; intercity: number | null }> = {
+  triciclo_basico:  { urban: 10, suburban: 12, intercity: null },
+  triciclo_premium: { urban: 10, suburban: 12, intercity: null },
+  triciclo_cargo:   { urban: 8,  suburban: 10, intercity: null },
+  moto_standard:    { urban: 25, suburban: 40, intercity: 55 },
+  auto_standard:    { urban: 20, suburban: 35, intercity: 50 },
+  auto_confort:     { urban: 22, suburban: 38, intercity: 55 },
+  mensajeria:       { urban: 15, suburban: 25, intercity: 40 },
+};
+
+/** Distance thresholds for speed tier blending */
+const URBAN_THRESHOLD_M = 8_000;      // first 0-8 km at urban speed
+const SUBURBAN_THRESHOLD_M = 35_000;  // next 8-35 km at suburban speed
+const TRAFFIC_DELAY_FACTOR = 1.10;    // 10% buffer for stops, lights, congestion
+
+/**
+ * Calculate trip duration in seconds using tiered speed profiles.
+ * Uses the REAL road distance from the routing API and splits it across
+ * urban/suburban/intercity speed tiers for accurate estimates.
+ *
+ * Example (100 km, moto_standard):
+ *   - First 8 km at 25 km/h (urban) = 1152s
+ *   - Next 27 km at 40 km/h (suburban) = 2430s
+ *   - Last 65 km at 55 km/h (intercity) = 4255s
+ *   - Total: 7837s × 1.10 delay = 8621s (~144 min)
+ */
+export function calculateTripDuration(
+  distanceM: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  if (distanceM <= 0) return 0;
+
+  const profile = SPEED_PROFILES[serviceType] ?? SPEED_PROFILES.triciclo_basico;
+  const urbanSpeedMs = (profile.urban * 1000) / 3600;
+  const suburbanSpeedMs = (profile.suburban * 1000) / 3600;
+  const intercitySpeed = profile.intercity ?? profile.suburban;
+  const intercitySpeedMs = (intercitySpeed * 1000) / 3600;
+
+  let totalSeconds = 0;
+  let remaining = distanceM;
+
+  // Tier 1: Urban (first 8 km)
+  const urbanDist = Math.min(remaining, URBAN_THRESHOLD_M);
+  totalSeconds += urbanDist / urbanSpeedMs;
+  remaining -= urbanDist;
+
+  // Tier 2: Suburban (8-35 km)
+  if (remaining > 0) {
+    const suburbanDist = Math.min(remaining, SUBURBAN_THRESHOLD_M - URBAN_THRESHOLD_M);
+    totalSeconds += suburbanDist / suburbanSpeedMs;
+    remaining -= suburbanDist;
+  }
+
+  // Tier 3: Intercity (35 km+)
+  if (remaining > 0) {
+    totalSeconds += remaining / intercitySpeedMs;
+  }
+
+  return Math.round(totalSeconds * TRAFFIC_DELAY_FACTOR);
+}
+
+/** Assumed average speed (km/h) of Mapbox/OSRM driving profile in urban Havana */
+const MAPBOX_URBAN_AVG_KMH = 25;
+
+/**
+ * Adjust a raw car-based ETA (from Mapbox Matrix API) for a specific vehicle type.
+ * Since pickup ETAs are short urban routes, uses the urban speed tier only.
+ */
+export function adjustETAForVehicle(
+  rawDurationS: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  if (rawDurationS <= 0) return 0;
+  const profile = SPEED_PROFILES[serviceType] ?? SPEED_PROFILES.triciclo_basico;
+  const ratio = MAPBOX_URBAN_AVG_KMH / profile.urban;
+  return Math.round(rawDurationS * ratio);
+}
+
+/**
+ * Assumed average speed (km/h) of the Mapbox/OSRM "driving" profile.
+ * Based on typical urban routing results for Havana (~30 km/h).
+ * @deprecated Use calculateTripDuration() instead for accurate tiered duration.
+ */
+const ROUTING_API_ASSUMED_SPEED_KMH = 30;
+
+/**
+ * Adjust a route duration returned by a car-based routing API
+ * to account for the actual average speed of a given vehicle type.
+ * @deprecated Use calculateTripDuration(distanceM, serviceType) instead.
+ */
+export function adjustRouteDuration(
+  routeDurationS: number,
+  serviceType: ServiceTypeSlug,
+): number {
+  const vehicleSpeedKmh = AVG_SPEEDS[serviceType] ?? 10;
+  const ratio = ROUTING_API_ASSUMED_SPEED_KMH / vehicleSpeedKmh;
+  return Math.round(routeDurationS * ratio);
 }
 
 /**
@@ -262,7 +488,7 @@ async function throttledFetch(url: string, headers?: Record<string, string>): Pr
     await new Promise<void>((r) => setTimeout(r, wait));
   }
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
   try {
     return await fetch(url, { headers, signal: controller.signal });
   } finally {
@@ -335,6 +561,14 @@ async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadat
     // Province: region, strip "provincia de" prefix
     const province = cleanProvinceName(ctx.region?.name || '');
 
+    // Validate result is geographically close to query point (<500m)
+    const geom = feature.geometry;
+    if (geom?.type === 'Point' && geom.coordinates) {
+      const [resLng, resLat] = geom.coordinates;
+      const distM = haversineDistance({ latitude: lat, longitude: lng }, { latitude: resLat, longitude: resLng });
+      if (distM > 500) return null; // Result too far — discard
+    }
+
     return { road, municipality, province, poiName: '' };
   } catch {
     return null;
@@ -376,7 +610,7 @@ const ROUTE_CACHE_MAX = 30;
 
 function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
   // ~50m precision: same intersection pair → cache hit
-  return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}_${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
+  return `${(from.lat ?? 0).toFixed(4)},${(from.lng ?? 0).toFixed(4)}_${(to.lat ?? 0).toFixed(4)},${(to.lng ?? 0).toFixed(4)}`;
 }
 
 /**
@@ -437,7 +671,10 @@ export async function fetchRouteMapbox(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson&access_token=${token}`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -471,7 +708,10 @@ export async function fetchRouteOSRM(
       `${from.lng},${from.lat};${to.lng},${to.lat}` +
       `?overview=full&geometries=geojson`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -508,7 +748,10 @@ export async function fetchMultiStopRoute(
   const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`;
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const _ctrl = new AbortController();
+    const _t = setTimeout(() => _ctrl.abort(), 4000);
+    const res = await fetch(url, { signal: _ctrl.signal });
+    clearTimeout(_t);
     if (!res.ok) return null;
     const data = (await res.json()) as {
       routes?: Array<{
@@ -574,7 +817,10 @@ async function fetchETAsMapbox(
       `https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${coords}` +
       `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance&access_token=${token}`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const _ctrl2 = new AbortController();
+    const _t2 = setTimeout(() => _ctrl2.abort(), 10000);
+    const res = await fetch(url, { signal: _ctrl2.signal });
+    clearTimeout(_t2);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -605,7 +851,10 @@ async function fetchETAsOSRM(
       `https://router.project-osrm.org/table/v1/driving/${coords}` +
       `?sources=${sourceIdxs}&destinations=${destIdx}&annotations=duration,distance`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const _ctrl3 = new AbortController();
+    const _t3 = setTimeout(() => _ctrl3.abort(), 10000);
+    const res = await fetch(url, { signal: _ctrl3.signal });
+    clearTimeout(_t3);
     if (!res.ok) return origins.map(() => null);
 
     const data = await res.json();
@@ -963,25 +1212,27 @@ export function parseCubanAddress(query: string): CubanParsed | null {
 
   // COMPLETE: "X entre Y y Z" or "X e/ Y y Z"
   m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), cross2: m[3]!.trim() };
   m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), cross2: m[3].trim() };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), cross2: m[3]!.trim() };
 
   // PARTIAL: "X entre Y y " or "X e/ Y y " (about to type cross2)
   m = query.match(/^(.+?)\s+entre\s+(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
   m = query.match(/^(.+?)\s+e\/\s*(.+?)\s+y\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
-  // PARTIAL: "X entre Y" (user still typing, waiting for " y Z")
+  // PARTIAL: "X entre Y" or "X e/ Y" (user still typing, waiting for " y Z")
   m = query.match(/^(.+?)\s+entre\s+(.+)$/i);
-  if (m) return { main: m[1].trim(), cross1: m[2].trim(), partial: 'waiting_cross2' };
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
+  m = query.match(/^(.+?)\s+e\/\s*(.+)$/i);
+  if (m) return { main: m[1]!.trim(), cross1: m[2]!.trim(), partial: 'waiting_cross2' };
 
   // PARTIAL: "X entre " or "X e/ " (waiting for cross1)
   m = query.match(/^(.+?)\s+entre\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+  if (m) return { main: m[1]!.trim(), cross1: '', partial: 'waiting_cross1' };
   m = query.match(/^(.+?)\s+e\/\s*$/i);
-  if (m) return { main: m[1].trim(), cross1: '', partial: 'waiting_cross1' };
+  if (m) return { main: m[1]!.trim(), cross1: '', partial: 'waiting_cross1' };
 
   return null;
 }
@@ -1081,7 +1332,7 @@ export async function enrichWithCrossStreets(
   // Resolve exact intersection coordinates from Supabase (~5ms)
   const intersection = await lookupIntersectionPoint(
     mainStreet,
-    crossStreets[0],
+    crossStreets[0] ?? '',
     crossStreets[1],
     { latitude: lat, longitude: lng },
   ).catch(() => null);
@@ -1106,12 +1357,12 @@ function wayBearingNear(
   let bestIdx = 0;
   let bestDist = Infinity;
   for (let i = 0; i < geom.length - 1; i++) {
-    const d = pointToSegmentDistanceM(lat, lng, geom[i].lat, geom[i].lon, geom[i + 1].lat, geom[i + 1].lon);
+    const d = pointToSegmentDistanceM(lat, lng, geom[i]!.lat, geom[i]!.lon, geom[i + 1]!.lat, geom[i + 1]!.lon);
     if (d < bestDist) { bestDist = d; bestIdx = i; }
   }
   const cosLat = Math.cos(lat * Math.PI / 180);
-  const dlat = (geom[bestIdx + 1].lat - geom[bestIdx].lat);
-  const dlng = (geom[bestIdx + 1].lon - geom[bestIdx].lon) * cosLat;
+  const dlat = (geom[bestIdx + 1]!.lat - geom[bestIdx]!.lat);
+  const dlng = (geom[bestIdx + 1]!.lon - geom[bestIdx]!.lon) * cosLat;
   return Math.atan2(dlng, dlat) * 180 / Math.PI;
 }
 
@@ -1299,6 +1550,10 @@ export async function reverseGeocode(
   lat: number,
   lng: number,
 ): Promise<string | null> {
+  // Validate coordinates are finite numbers
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
   try {
     // 1. Run Supabase cross-streets + Mapbox metadata + POI lookup in parallel
     //    Mapbox: ~50-100ms | Supabase cross-streets: ~5-10ms | Supabase POI: ~5-10ms
@@ -1429,7 +1684,10 @@ export async function snapToNearestRoad(
     if (!token) return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
 
     const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${lng},${lat};${lng + 0.001},${lat + 0.001}?access_token=${token}&geometries=geojson`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const _ctrl4 = new AbortController();
+    const _t4 = setTimeout(() => _ctrl4.abort(), 5000);
+    const res = await fetch(url, { signal: _ctrl4.signal });
+    clearTimeout(_t4);
     if (!res.ok) return { latitude: lat, longitude: lng, distanceMoved: 0, address: null };
     const data = await res.json();
     const waypoint = data?.waypoints?.[0];
@@ -2054,6 +2312,64 @@ export async function searchPoisSupabase(
       place_name: r.name as string,
       full_address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', '),
       category: (r.subcategory as string) || (r.category as string) || '',
+      source: 'supabase' as const,
+      specificity: computeSpecificity(r.name as string),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Search street names in the street_intersections table.
+ * Returns streets matching the query with their closest intersection, sorted by relevance + proximity.
+ */
+export async function searchStreetsSupabase(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null = null,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey || query.length < 2) return [];
+
+    const lat = proximity?.latitude ?? 23.1136;
+    const lng = proximity?.longitude ?? -82.3666;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_streets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ query, lat, lng, max_results: limit }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((r: Record<string, unknown>) => ({
+      address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
+      latitude: r.latitude as number,
+      longitude: r.longitude as number,
+      place_name: r.name as string,
+      full_address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
+      category: 'street',
       source: 'supabase' as const,
       specificity: computeSpecificity(r.name as string),
     }));

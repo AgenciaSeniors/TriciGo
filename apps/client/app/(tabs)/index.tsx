@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -12,7 +13,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
@@ -25,6 +26,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
+import { useViewportPois } from '@/hooks/useViewportPois';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
@@ -51,8 +53,23 @@ import { reverseGeocode } from '@tricigo/utils';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
+import { useSearchingDrivers } from '@/hooks/useSearchingDrivers';
+import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
+import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
+import { WebActiveRideView } from '@/components/WebActiveRideView';
 // Surge is calculated backend-side but not shown to users
 // import { useSurgeZones } from '@/hooks/useSurgeZones';
+
+// Mapbox GL loaded lazily inside components — NOT at module level
+// Module-level require can crash the entire JS context if native module fails
+function getMapboxGL(): any {
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    if (token) MapboxGL.setAccessToken(token);
+    return MapboxGL;
+  } catch { return null; }
+}
 
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -99,6 +116,437 @@ interface LocationPreset {
   label?: string;
 }
 
+/* ── CSS keyframes for web searching animations ── */
+const WEB_SEARCHING_CSS = `
+  @keyframes ws-ripple {
+    0% { transform: translate(-50%,-50%) scale(0.8); opacity: 0.5; }
+    100% { transform: translate(-50%,-50%) scale(2.4); opacity: 0; }
+  }
+  @keyframes ws-progress {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+  @keyframes ws-fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes ws-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,0,0.3); }
+    50% { box-shadow: 0 0 0 12px rgba(255,77,0,0); }
+  }
+  @keyframes ws-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+`;
+
+const WEB_SEARCH_MESSAGES = [
+  'Buscando el mejor conductor para ti...',
+  'Verificando conductores cercanos...',
+  'Conductores evaluando tu solicitud...',
+  'Ampliando el radio de búsqueda...',
+  'Pocos conductores disponibles, esperando...',
+];
+
+/* ── Premium Web Searching State ── */
+function WebSearchingState({
+  pickup, dropoff, pickupAddress, dropoffAddress, routeCoords,
+  selectedEstimate, serviceType, onReset, font, paymentMethod,
+}: {
+  pickup: LocationPreset | null;
+  dropoff: LocationPreset | null;
+  pickupAddress: string;
+  dropoffAddress: string;
+  routeCoords: [number, number][];
+  selectedEstimate: any;
+  serviceType: string;
+  onReset: () => void;
+  font: { fontFamily: string };
+  paymentMethod: string;
+}) {
+  const [searchPhase, setSearchPhase] = useState(0);
+  const [searchTimedOut, setSearchTimedOut] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  // ── Interactive searching: real-time driver presence ──
+  const activeRideId = useRideStore((s) => s.activeRide?.id ?? null);
+  const { searchingDrivers, acceptedDriver } = useSearchingDrivers(activeRideId);
+
+  // Progressive messages
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setSearchPhase(1), 15000),
+      setTimeout(() => setSearchPhase(2), 30000),
+      setTimeout(() => setSearchPhase(3), 60000),
+      setTimeout(() => setSearchPhase(4), 90000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Timeout
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearchTimedOut(true), 120_000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // Elapsed timer
+  useEffect(() => {
+    const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const searchMessage = WEB_SEARCH_MESSAGES[searchPhase] ?? WEB_SEARCH_MESSAGES[0];
+  const fmtCUP = (v: number) => `${Math.round(v).toLocaleString('es-CU')} CUP`;
+  const fmtPrice = (cupAmount: number, trcAmount?: number) =>
+    paymentMethod === 'tricicoin' ? formatTRC(trcAmount ?? cupAmount) : fmtCUP(cupAmount);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', ...font }}>
+      <style dangerouslySetInnerHTML={{ __html: WEB_SEARCHING_CSS }} />
+
+      {/* ═══ LEFT: Map ═══ */}
+      <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
+        {pickup && dropoff && (
+          <WebMapView
+            pickup={{ latitude: pickup.latitude, longitude: pickup.longitude }}
+            dropoff={{ latitude: dropoff.latitude, longitude: dropoff.longitude }}
+            routeCoords={routeCoords}
+            style={{ width: '100%', height: '100%' }}
+          />
+        )}
+
+        {/* ETA Badge floating on map */}
+        {selectedEstimate?.estimated_duration_s && !searchTimedOut && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 20px', borderRadius: 999,
+            background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+            fontSize: 14, fontWeight: 700, color: '#1a1a1a', zIndex: 10,
+            animation: 'ws-fadeIn 0.4s ease both',
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+            ~{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min
+          </div>
+        )}
+      </div>
+
+      {/* ═══ RIGHT: Searching Panel ═══ */}
+      <div style={{
+        width: 440, minWidth: 380, maxWidth: 480,
+        display: 'flex', flexDirection: 'column',
+        backgroundColor: '#fff', borderLeft: '1px solid #e5e5e5',
+        overflowY: 'auto', padding: '32px 28px',
+        gap: 20, ...font,
+      }}>
+        {/* Header */}
+        <div style={{ animation: 'ws-fadeIn 0.3s ease both' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
+            {serviceType === 'mensajeria' ? 'Seguimiento de envío' : 'Seguimiento de viaje'}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+            {searchTimedOut ? 'Sin conductor disponible' : '¡Viaje solicitado!'}
+          </div>
+        </div>
+
+        {/* Ripple Animation or Timeout */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '20px 0', animation: 'ws-fadeIn 0.4s ease both 0.05s',
+        }}>
+          {searchTimedOut ? (
+            <>
+              <div style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'rgba(156,163,175,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 16,
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 6 }}>
+                No encontramos conductor
+              </div>
+              <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center' as const, marginBottom: 16 }}>
+                Intenta de nuevo o prueba con otro tipo de vehículo
+              </div>
+              <button onClick={onReset} style={{
+                width: '100%', padding: '14px 24px', borderRadius: 12,
+                background: colors.brand.orange, color: '#fff',
+                fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer',
+                ...font,
+              }}>
+                Solicitar otro viaje
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Ripple circles */}
+              <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 16 }}>
+                {[0, 0.6, 1.2].map((delay, i) => (
+                  <div key={i} style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    width: 80, height: 80, borderRadius: '50%',
+                    border: '2px solid rgba(255,77,0,0.3)',
+                    animation: `ws-ripple 2.4s ease-out ${delay}s infinite`,
+                  }} />
+                ))}
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #FF4D00, #FF6B2C)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(255,77,0,0.3)',
+                  animation: 'ws-glow 2s ease-in-out infinite',
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L19 21L12 17L5 21L12 2Z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Driver accepted — celebration overlay */}
+              {acceptedDriver && (
+                <div style={{
+                  animation: 'ws-fadeIn 0.4s ease both',
+                  background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+                  borderRadius: 14, padding: 20, width: '100%',
+                  border: '2px solid #22c55e', textAlign: 'center' as const,
+                  marginBottom: 12,
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>&#10003;</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#15803d', marginBottom: 4 }}>
+                    Conductor encontrado!
+                  </div>
+                  <div style={{ fontSize: 14, color: '#16a34a', marginBottom: 12 }}>
+                    {acceptedDriver.name} va en camino
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: '#fff', borderRadius: 12, padding: '10px 14px',
+                  }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: '50%',
+                      background: colors.brand.orange,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontWeight: 700, fontSize: 16,
+                      border: '2px solid #22c55e',
+                    }}>
+                      {acceptedDriver.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'left' as const }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{acceptedDriver.name}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>{acceptedDriver.rating.toFixed(1)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Searching drivers count + chips */}
+              {!acceptedDriver && searchingDrivers.length > 0 && (
+                <div style={{
+                  width: '100%', background: '#fafafa',
+                  border: '1px solid #f0f0f0', borderRadius: 12,
+                  padding: '12px 14px', marginBottom: 12,
+                  animation: 'ws-fadeIn 0.3s ease both',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: colors.brand.orange,
+                      animation: 'ws-pulse 2s ease-in-out infinite',
+                    }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>
+                      {searchingDrivers.length} {searchingDrivers.length === 1 ? 'conductor revisando' : 'conductores revisando'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    {searchingDrivers
+                      .filter((d, i, arr) => arr.findIndex(x => x.driverId === d.driverId) === i)
+                      .map((d) => (
+                      <div key={d.driverId} style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        background: '#fff', borderRadius: 20,
+                        padding: '5px 10px', border: '1px solid #e5e5e5',
+                        animation: 'ws-fadeIn 0.3s ease both',
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: colors.brand.orange,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontWeight: 700, fontSize: 9,
+                        }}>
+                          {d.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: '#1a1a1a' }}>
+                          {d.name.split(' ')[0]}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{d.rating.toFixed(1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 4 }}>
+                {acceptedDriver ? '' : 'Buscando conductor'}
+              </div>
+              {!acceptedDriver && (
+              <div key={searchPhase} style={{
+                fontSize: 13, color: '#6b7280', textAlign: 'center' as const,
+                animation: 'ws-fadeIn 0.3s ease both',
+              }}>
+                {searchMessage}
+              </div>
+              )}
+
+              {/* Progress bar */}
+              <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
+                <div style={{ height: 3, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', backgroundColor: colors.brand.orange,
+                    borderRadius: 2, animation: 'ws-progress 120s linear forwards',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: '#9ca3af' }}>
+                  <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
+                  <span>2:00</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Status Stepper */}
+        {!searchTimedOut && (
+          <div style={{
+            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.1s',
+          }}>
+            {[
+              { label: 'Buscando conductor', active: true },
+              { label: 'Conductor asignado', active: false },
+              { label: 'En camino a recogerte', active: false },
+              { label: 'Viaje en curso', active: false },
+            ].map((step, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: idx < 3 ? 12 : 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24, flexShrink: 0 }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                    ...(step.active
+                      ? { background: colors.brand.orange, color: '#fff', animation: 'ws-glow 2s ease-in-out infinite' }
+                      : { background: '#f0f0f0', color: '#9ca3af', border: '2px solid #e5e5e5' }),
+                  }}>
+                    {idx + 1}
+                  </div>
+                  {idx < 3 && (
+                    <div style={{
+                      width: 2, flex: 1, minHeight: 12, marginTop: 4,
+                      background: step.active ? colors.brand.orange : '#e5e5e5',
+                      ...(step.active ? {} : {
+                        background: 'repeating-linear-gradient(to bottom, #e5e5e5 0px, #e5e5e5 3px, transparent 3px, transparent 6px)',
+                      }),
+                    }} />
+                  )}
+                </div>
+                <span style={{
+                  fontSize: 13, paddingTop: 3, lineHeight: '1.3',
+                  ...(step.active
+                    ? { fontWeight: 700, color: '#1a1a1a' }
+                    : { fontWeight: 500, color: '#9ca3af' }),
+                }}>
+                  {step.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Route Card */}
+        <div style={{
+          background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+          padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.15s',
+        }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, gap: 2 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+              <div style={{ width: 2, flex: 1, minHeight: 20, background: '#e5e5e5', borderRadius: 1 }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Desde</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{pickupAddress || 'Origen'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Hasta</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{dropoffAddress || 'Destino'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Fare Card */}
+        {selectedEstimate && (
+          <div style={{
+            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            animation: 'ws-fadeIn 0.4s ease both 0.2s',
+          }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>Tarifa estimada</div>
+              {selectedEstimate.estimated_distance_m && (
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                  {(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: colors.brand.orange, letterSpacing: '-0.02em' }}>
+              {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
+            </div>
+          </div>
+        )}
+
+        {/* Cancel button */}
+        {!searchTimedOut && (
+          <button onClick={onReset} style={{
+            width: '100%', padding: '14px 24px', borderRadius: 12,
+            background: 'transparent', color: '#6b7280',
+            fontWeight: 600, fontSize: 14, cursor: 'pointer',
+            border: '1.5px solid #e5e5e5', ...font,
+            transition: 'all 0.2s ease',
+            animation: 'ws-fadeIn 0.4s ease both 0.25s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.color = '#6b7280'; }}
+          >
+            Cancelar búsqueda
+          </button>
+        )}
+
+        {/* Live indicator */}
+        {!searchTimedOut && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 8, fontSize: 11, color: '#9ca3af', fontWeight: 500,
+            animation: 'ws-fadeIn 0.4s ease both 0.3s',
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#22c55e',
+              animation: 'ws-pulse 2s ease-in-out infinite',
+            }} />
+            Búsqueda en tiempo real
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Web version of home screen — full booking flow matching tricigo.com
 function WebHomeScreen() {
   const { t } = useTranslation('rider');
@@ -135,7 +583,17 @@ function WebHomeScreen() {
 
   // Ride state
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin' | 'mixed'>('cash');
+
+  /** Format fare price based on current payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    // For 'mixed' and 'cash', show CUP
+    return formatCUP(cupAmount);
+  }, [paymentMethod]);
+
   const [allEstimates, setAllEstimates] = useState<Record<string, any>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [deliveryVehicle, setDeliveryVehicle] = useState<ServiceTypeSlug>('moto_standard');
@@ -334,6 +792,16 @@ function WebHomeScreen() {
   // Request ride handler
   const handleRequest = async () => {
     if (!pickup || !dropoff || !selectedEstimate) return;
+
+    // Validate TriciCoin balance
+    if (paymentMethod === 'tricicoin') {
+      const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
+      if (walletBalance < requiredAmount) {
+        router.push('/(tabs)/wallet');
+        return;
+      }
+    }
+
     if (serviceType === 'mensajeria') {
       if (!deliveryName.trim()) { setError('Ingresa el nombre del destinatario'); return; }
       if (!deliveryPhone.trim() || !/^\+?[\d\s-]{6,}$/.test(deliveryPhone.trim())) { setError('Ingresa un teléfono válido'); return; }
@@ -363,7 +831,7 @@ function WebHomeScreen() {
         }
       } catch { /* proceed with original */ }
 
-      await rideService.createRide({
+      const ride = await rideService.createRide({
         service_type: activeSlug,
         payment_method: paymentMethod,
         pickup_latitude: pickup.latitude,
@@ -390,6 +858,17 @@ function WebHomeScreen() {
           },
         }),
       });
+      // Store the ride and subscribe to realtime updates so status changes propagate
+      useRideStore.getState().setActiveRide(ride);
+      useRideStore.getState().setFlowStep('searching');
+
+      // Subscribe to ride updates for status transitions (searching → accepted → etc)
+      const channel = rideService.subscribeToRide(ride.id, (updated) => {
+        useRideStore.getState().updateRideFromRealtime(updated);
+      });
+      // Store channel ref for cleanup (best-effort — cleanup on unmount handled by useRideInit)
+      (window as any).__tricigo_web_ride_channel = channel;
+
       setRequestSuccess(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -463,23 +942,42 @@ function WebHomeScreen() {
 
   // Format CUP helper
   const fmtCUP = (cup: number) => `${Math.round(cup).toLocaleString('es-CU')} CUP`;
+  const fmtPrice = (cupAmount: number, trcAmount?: number) =>
+    paymentMethod === 'tricicoin' ? formatTRC(trcAmount ?? cupAmount) : fmtCUP(cupAmount);
 
-  // Success state
+  // ── Phase 5: Web active ride view ──
+  const flowStep = useRideStore((s) => s.flowStep);
+
+  // Reset requestSuccess when ride completes or is canceled
+  useEffect(() => {
+    if (requestSuccess && (flowStep === 'completed' || flowStep === 'idle')) {
+      setRequestSuccess(false);
+    }
+  }, [flowStep, requestSuccess]);
+
+  // Show completed view (rating)
+  if (flowStep === 'completed') {
+    return <WebActiveRideView onReset={handleReset} />;
+  }
+
+  if (flowStep === 'active') {
+    return <WebActiveRideView onReset={handleReset} />;
+  }
+
+  // Success state — Premium searching UI
   if (requestSuccess) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <Text style={{ fontSize: 48, marginBottom: 16 }}>✅</Text>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: '#1a1a1a', textAlign: 'center', ...font }}>
-          ¡Viaje solicitado!
-        </Text>
-        <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginTop: 8, ...font }}>
-          Buscando conductor disponible...
-        </Text>
-        <Pressable onPress={handleReset} style={{ marginTop: 24, backgroundColor: colors.brand.orange, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, ...font }}>Solicitar otro viaje</Text>
-        </Pressable>
-      </View>
-    );
+    return <WebSearchingState
+      pickup={pickup}
+      dropoff={dropoff}
+      pickupAddress={pickupAddress}
+      dropoffAddress={dropoffAddress}
+      routeCoords={routeCoords}
+      selectedEstimate={selectedEstimate}
+      serviceType={serviceType}
+      onReset={handleReset}
+      font={font}
+      paymentMethod={paymentMethod}
+    />;
   }
 
   return (
@@ -628,7 +1126,7 @@ function WebHomeScreen() {
                         ) : est ? (
                           <>
                             <div style={{ fontWeight: 700, fontSize: 15, color: isSelected ? colors.brand.orange : '#1a1a1a' }}>
-                              {fmtCUP(est.estimated_fare_cup)}
+                              {fmtPrice(est.estimated_fare_cup, est.estimated_fare_trc)}
                             </div>
                             <div style={{ fontSize: 11, color: '#9ca3af' }}>
                               ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
@@ -737,15 +1235,15 @@ function WebHomeScreen() {
                       {promoResult?.valid && promoResult.discount > 0 ? (
                         <>
                           <span style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginRight: 8 }}>
-                            {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                            {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                           </span>
                           <span style={{ fontSize: 22, fontWeight: 800, color: '#22c55e' }}>
-                            {fmtCUP(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                            {fmtPrice(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
                           </span>
                         </>
                       ) : (
                         <span style={{ fontSize: 22, fontWeight: 800, color: colors.brand.orange }}>
-                          {fmtCUP(selectedEstimate.estimated_fare_cup)}
+                          {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                         </span>
                       )}
                     </div>
@@ -765,12 +1263,12 @@ function WebHomeScreen() {
                   <div style={{ marginTop: 14 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Método de pago</label>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {(['cash', 'tricicoin'] as const).map((pm) => {
+                      {(['cash', 'tricicoin', 'mixed'] as const).map((pm) => {
                         const sel = paymentMethod === pm;
                         return (
                           <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
                             style={{ flex: 1, padding: '8px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 400 }}>
-                            {pm === 'cash' ? 'Efectivo' : 'TriciCoin'}
+                            {pm === 'cash' ? 'Efectivo' : pm === 'tricicoin' ? 'TriciCoin' : 'Mixto'}
                           </button>
                         );
                       })}
@@ -815,7 +1313,7 @@ function WebHomeScreen() {
               </div>
               {promoResult && (
                 <p style={{ fontSize: 12, marginTop: 4, color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
-                  {promoResult.valid ? `Descuento: -${fmtCUP(promoResult.discount)}` : promoResult.error}
+                  {promoResult.valid ? `Descuento: -${fmtPrice(promoResult.discount)}` : promoResult.error}
                 </p>
               )}
             </div>
@@ -860,8 +1358,9 @@ function WebHomeScreen() {
               {isRequesting
                 ? 'Solicitando...'
                 : selectedEstimate
-                  ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtCUP(
+                  ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtPrice(
                       promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup,
+                      promoResult?.valid ? undefined : selectedEstimate.estimated_fare_trc,
                     )}`
                 : 'Solicitar viaje'}
             </button>
@@ -963,6 +1462,10 @@ function NativeHomeScreen() {
   useRiderLocationSharing();
 
   const flowStep = useRideStore((s) => s.flowStep);
+  const draft = useRideStore((s) => s.draft);
+  const setPickup = useRideStore((s) => s.setPickup);
+  const setDropoff = useRideStore((s) => s.setDropoff);
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
 
   // Crossfade animation between flow steps
   const flowFadeAnim = useRef(new Animated.Value(1)).current;
@@ -971,18 +1474,12 @@ function NativeHomeScreen() {
   useEffect(() => {
     if (prevFlowStepRef.current !== flowStep) {
       prevFlowStepRef.current = flowStep;
-      // Fade out then fade in
-      Animated.timing(flowFadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }).start(() => {
-        Animated.timing(flowFadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }).start();
-      });
+      const sequence = Animated.sequence([
+        Animated.timing(flowFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(flowFadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]);
+      sequence.start();
+      return () => sequence.stop();
     }
   }, [flowStep, flowFadeAnim]);
 
@@ -994,18 +1491,86 @@ function NativeHomeScreen() {
     });
   }, []);
 
+  // SelectingView renders fullscreen (no scroll) for map background
+  if (flowStep === 'selecting') {
+    return (
+      <>
+        <SelectingView setMapPickerMode={setMapPickerMode} />
+        {mapPickerMode && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+            <ConfirmLocationScreen
+              mode={mapPickerMode}
+              initialLocation={mapPickerMode === 'pickup' ? draft.pickup?.location ?? null : draft.dropoff?.location ?? null}
+              onConfirm={(address, location) => {
+                if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
+                if (mapPickerMode === 'pickup') { setPickup(address, location); } else { setDropoff(address, location); }
+                setMapPickerMode(null);
+              }}
+              onClose={() => setMapPickerMode(null)}
+            />
+          </View>
+        )}
+      </>
+    );
+  }
+
+  // Other non-idle flow steps use Screen with scroll
+  if (flowStep !== 'idle') {
+    return (
+      <>
+        <Screen bg="white" padded scroll>
+          <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
+            {flowStep === 'reviewing' && <ReviewingView />}
+            {flowStep === 'searching' && <SearchingView />}
+            {flowStep === 'active' && <RideActiveView />}
+            {flowStep === 'completed' && <RideCompleteView />}
+          </Animated.View>
+          {showOnboarding && (
+            <OnboardingOverlay
+              onComplete={() => {
+                setShowOnboarding(false);
+                AsyncStorage.setItem('@tricigo/onboarding_completed', 'true');
+              }}
+            />
+          )}
+        </Screen>
+        {mapPickerMode && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+            <ConfirmLocationScreen
+              mode={mapPickerMode}
+              initialLocation={
+                mapPickerMode === 'pickup'
+                  ? draft.pickup?.location ?? null
+                  : draft.dropoff?.location ?? null
+              }
+              onConfirm={(address, location) => {
+                if (!isValidCoordinate(location.latitude, location.longitude)) {
+                  setMapPickerMode(null);
+                  return;
+                }
+                if (mapPickerMode === 'pickup') {
+                  setPickup(address, location);
+                } else {
+                  setDropoff(address, location);
+                }
+                setMapPickerMode(null);
+              }}
+              onClose={() => setMapPickerMode(null)}
+            />
+          </View>
+        )}
+      </>
+    );
+  }
+
+  // Idle: Uber-style fullscreen map layout
   return (
-    <Screen bg="white" padded scroll>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
-        {flowStep === 'idle' && <IdleView />}
-        {flowStep === 'selecting' && <SelectingView />}
-        {flowStep === 'reviewing' && <ReviewingView />}
-        {flowStep === 'searching' && <SearchingView />}
-        {flowStep === 'active' && <RideActiveView />}
-        {flowStep === 'completed' && <RideCompleteView />}
+        <IdleView />
       </Animated.View>
       {/* Notification permission prompt (shows once on first visit) */}
-      {flowStep === 'idle' && <NotificationPermissionSheet />}
+      <NotificationPermissionSheet />
       {/* Onboarding tutorial (shows once on first app launch) */}
       {showOnboarding && (
         <OnboardingOverlay
@@ -1015,7 +1580,7 @@ function NativeHomeScreen() {
           }}
         />
       )}
-    </Screen>
+    </View>
   );
 }
 
@@ -1024,13 +1589,17 @@ function NativeHomeScreen() {
 function IdleView() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
+  const draft = useRideStore((s) => s.draft);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setPickup = useRideStore((s) => s.setPickup);
+  const prefetchedPickup = useRideStore((s) => s.prefetchedPickup);
   const setPrefetchedPickup = useRideStore((s) => s.setPrefetchedPickup);
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
+  const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
@@ -1044,27 +1613,81 @@ function IdleView() {
   // Check location permission + pre-fetch pickup address on mount
   useEffect(() => {
     let cancelled = false;
+
+    // Instant fallback: load cached position from AsyncStorage while GPS resolves
+    AsyncStorage.getItem('last_known_location').then((cached) => {
+      if (cached && !cancelled) {
+        try {
+          const { latitude, longitude } = JSON.parse(cached);
+          if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+            setUserCenter([longitude, latitude]);
+          }
+        } catch { /* ignore malformed cache */ }
+      }
+    }).catch(() => {});
+
     (async () => {
       try {
-        const { status } = await Location.getForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setLocationDenied(true);
           return;
         }
-        // Pre-fetch: get last known position + reverse geocode in background
-        const pos = await Location.getLastKnownPositionAsync();
+        // Try cached position first, fall back to fresh GPS
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        }
         if (!pos || cancelled) return;
+
+        // Wait for GPS to stabilize — skip geocoding if accuracy > 100m
+        const accuracy = pos.coords.accuracy ?? 999;
+        if (accuracy > 100) {
+          // Try fresh GPS with higher accuracy
+          try {
+            const freshPos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            if (freshPos && (freshPos.coords.accuracy ?? 999) < 100) pos = freshPos;
+          } catch { /* use what we have */ }
+        }
+        if (cancelled) return;
+
         const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        const address = await reverseGeocode(loc.latitude, loc.longitude);
-        if (!cancelled && address) {
-          setPrefetchedPickup({ address, location: loc });
+
+        // Cache for future cold starts
+        AsyncStorage.setItem('last_known_location', JSON.stringify(loc)).catch(() => {});
+
+        // Center map immediately even before geocoding finishes
+        if (!cancelled) setUserCenter([pos.coords.longitude, pos.coords.latitude]);
+
+        // Show placeholder while geocoding resolves
+        const placeholder = t('home.detecting_address', { defaultValue: 'Detectando dirección...' });
+        if (!cancelled) {
+          setPrefetchedPickup({ address: placeholder, location: loc });
+          setPickup(placeholder, loc);
+        }
+
+        // Retry geocoding up to 3 times (Mapbox can fail on cold start)
+        let resolvedAddress: string | null = null;
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+          if (cancelled) break;
+          try {
+            resolvedAddress = await reverseGeocode(loc.latitude, loc.longitude);
+            if (resolvedAddress) break;
+          } catch { /* continue to next attempt */ }
+        }
+
+        if (!cancelled) {
+          const finalAddress = resolvedAddress || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
+          setPrefetchedPickup({ address: finalAddress, location: loc });
+          setPickup(finalAddress, loc);
         }
       } catch {
         // Silently ignore — don't crash
       }
     })();
     return () => { cancelled = true; };
-  }, [setPrefetchedPickup]);
+  }, [setPrefetchedPickup, setPickup]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -1114,7 +1737,8 @@ function IdleView() {
         const { count } = await getSupabaseClient()
           .from('driver_profiles')
           .select('*', { count: 'exact', head: true })
-          .eq('is_online', true);
+          .eq('is_online', true)
+          .gt('last_heartbeat_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
         setDriverCount(count ?? 0);
       } catch {
         setDriverCount(0);
@@ -1130,12 +1754,20 @@ function IdleView() {
     setFlowStep('selecting');
   }, [setDropoff, setFlowStep]);
 
-  // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → reviewing
+  // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → selecting
   const handleOneTapPrediction = useCallback(async (pred: PredictedDestination) => {
     try {
+      // Use prefetched pickup if available (instant, no GPS wait)
+      if (prefetchedPickup) {
+        setPickup(prefetchedPickup.address, prefetchedPickup.location);
+        setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
+        setFlowStep('selecting');
+        return;
+      }
+
+      // Fallback: try GPS
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
-        // Fall back to old behavior if no location permission
         handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
         return;
       }
@@ -1146,195 +1778,314 @@ function IdleView() {
         { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
       );
       setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
-      // requestEstimate will transition to 'reviewing' on success
-      requestEstimate();
+      setFlowStep('selecting');
     } catch {
-      // Fallback: just go to selecting view
+      // Fallback: just go to selecting view with dropoff only
       handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
     }
-  }, [handleRecentTap, setPickup, setDropoff, requestEstimate]);
+  }, [handleRecentTap, setPickup, setDropoff, setFlowStep, prefetchedPickup]);
+
+  const insets = useSafeAreaInsets();
 
   if (initialLoading) {
     return (
-      <View className="pt-4">
-        <Skeleton width="60%" height={28} className="mb-4" />
-        <Skeleton width="40%" height={20} className="mb-6" />
-        <SkeletonCard className="mb-4" />
-        <Skeleton width="100%" height={52} className="rounded-xl mb-4" />
-        <SkeletonCard className="mb-4" />
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+        <View style={{ flex: 1, backgroundColor: '#e5e7eb' }} />
+        <View style={idleStyles.bottomPanel}>
+          <Skeleton width="60%" height={28} style={{ marginBottom: 12 }} />
+          <Skeleton width="100%" height={52} style={{ borderRadius: 12, marginBottom: 12 }} />
+          <SkeletonCard />
+        </View>
       </View>
     );
   }
 
   return (
-    <View className="pt-4">
-      {/* Location permission denied banner */}
+    <View style={{ flex: 1 }}>
+      {/* ── Fullscreen Map Background ── */}
+      {(() => {
+        const Mapbox = getMapboxGL();
+        if (!Mapbox) return <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#e5e7eb' }]} />;
+        return (
+          <Mapbox.MapView
+            style={StyleSheet.absoluteFillObject}
+            styleURL={MAP_STYLE_LIGHT}
+            attributionEnabled={false}
+            logoEnabled={false}
+            scaleBarEnabled={false}
+            compassEnabled={false}
+            scrollEnabled={true}
+            zoomEnabled={true}
+            pitchEnabled={true}
+            rotateEnabled={true}
+          >
+            <Mapbox.Camera
+              defaultSettings={{
+                centerCoordinate: userCenter ?? [-82.3666, 23.1136],
+                zoomLevel: userCenter ? 15 : 14,
+              }}
+              animationMode="flyTo"
+            />
+            <Mapbox.UserLocation
+              visible={true}
+              onUpdate={(location: { coords: { latitude: number; longitude: number } }) => {
+                // Center map on first location fix only
+                if (location?.coords?.latitude && location?.coords?.longitude && !userLocationSet.current) {
+                  userLocationSet.current = true;
+                }
+              }}
+            />
+          </Mapbox.MapView>
+        );
+      })()}
+
+      {/* ── Floating Search Bar (top) ── */}
+      <View style={[idleStyles.searchBarContainer, { top: insets.top + 20 }]}>
+        <Pressable
+          style={idleStyles.searchBar}
+          onPress={() => setFlowStep('selecting')}
+          accessibilityRole="search"
+          accessibilityLabel={t('home.where_to')}
+          accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
+        >
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
+          <Text variant="body" color="tertiary" style={{ flex: 1 }}>
+            {t('home.where_to')}
+          </Text>
+          <Ionicons name="search" size={20} color={colors.neutral[400]} />
+        </Pressable>
+      </View>
+
+      {/* ── Driver Count Badge (top-right, below search bar) ── */}
+      {driverCount !== null && driverCount > 0 && (
+        <View style={[idleStyles.driverBadge, { top: insets.top + 72 }]}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 6 }} />
+          <Text variant="caption" style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
+            {t('home.drivers_active', { count: driverCount })}
+          </Text>
+        </View>
+      )}
+
+      {/* ── Notification Bell (top-right, next to search) ── */}
+      {notifCenterEnabled && (
+        <Pressable
+          onPress={() => router.push('/notifications')}
+          style={[idleStyles.notifBell, { top: insets.top + 20 }]}
+          accessibilityRole="button"
+          accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
+        >
+          <Ionicons
+            name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
+            size={22}
+            color={colors.neutral[700]}
+          />
+          {unreadCount > 0 && (
+            <View style={idleStyles.notifBadge}>
+              <Text variant="caption" style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      )}
+
+      {/* ── Location permission denied banner (floating) ── */}
       {locationDenied && (
         <Pressable
           onPress={async () => {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status === 'granted') setLocationDenied(false);
           }}
-          className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 mb-4 flex-row items-center"
+          style={[idleStyles.locationBanner, { top: insets.top + 72 }]}
         >
-          <Ionicons name="location-outline" size={20} color="#D97706" />
-          <View className="flex-1 ml-3">
-            <Text variant="bodySmall" className="font-semibold text-yellow-800">
-              {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
-            </Text>
-            <Text variant="caption" className="text-yellow-700">
-              {t('home.location_denied_msg', { defaultValue: 'Activa la ubicación para encontrar conductores cercanos.' })}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color="#D97706" />
+          <Ionicons name="location-outline" size={18} color="#D97706" />
+          <Text variant="caption" style={{ color: '#92400E', flex: 1, marginLeft: 8, fontWeight: '600' }}>
+            {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color="#D97706" />
         </Pressable>
       )}
 
-      <View className="flex-row items-center justify-between mb-1">
-        <Text variant="h3">
-          {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
-        </Text>
-        {notifCenterEnabled && (
-          <Pressable
-            onPress={() => router.push('/notifications')}
-            className="relative p-2"
-            accessibilityRole="button"
-            accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
-          >
-            <Ionicons
-              name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
-              size={24}
-              color={colors.neutral[700]}
-            />
-            {unreadCount > 0 && (
-              <View className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-red-500 items-center justify-center px-1">
-                <Text variant="caption" className="text-white text-[10px] font-bold">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        )}
-      </View>
-
-      <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} className="mt-4 mb-6" />
-
-      {/* Pending split invites */}
-      <SplitInviteCard />
-
-      {/* Destination search */}
-      <Pressable
-        className="bg-neutral-100 rounded-xl px-4 py-4 flex-row items-center mb-4"
-        onPress={() => setFlowStep('selecting')}
-        accessibilityRole="search"
-        accessibilityLabel={t('home.where_to')}
-        accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
-      >
-        <View className="w-3 h-3 rounded-full bg-primary-500 mr-3" />
-        <Text variant="body" color="tertiary">
-          {t('home.where_to')}
-        </Text>
-      </Pressable>
-
-      {/* U2.1: Driver availability pulse */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}>
-        {driverCount === null ? (
-          <Skeleton width={180} height={16} />
-        ) : driverCount > 0 ? (
-          <>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
-            <Text variant="bodySmall" color="secondary">
-              {t('home.drivers_active', { count: driverCount })}
-            </Text>
-          </>
-        ) : (
-          <>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' }} />
-            <Text variant="bodySmall" color="secondary">
-              {t('home.searching_drivers')}
-            </Text>
-          </>
-        )}
-      </View>
-
-      {/* Predicted destinations — U1.1 large one-tap cards */}
-      {predictions.length > 0 && (
-        <View className="mb-4">
-          <Text variant="caption" color="secondary" className="mb-2">
-            {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+      {/* ── Bottom Panel (fixed card above tab bar) ── */}
+      <View style={idleStyles.bottomPanel}>
+        {/* Greeting + Balance row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600' }}>
+            {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
           </Text>
-          {predictions.slice(0, 3).map((pred, idx) => (
-            <Pressable
-              key={`pred-${idx}`}
-              className="flex-row items-center bg-white border border-neutral-200 rounded-xl px-4 py-4 mb-2"
-              onPress={() => handleOneTapPrediction(pred)}
-              accessibilityRole="button"
-              accessibilityLabel={pred.address}
-            >
-              <View className="w-10 h-10 rounded-full bg-primary-50 items-center justify-center">
-                <Ionicons
-                  name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                  size={22}
-                  color={colors.brand.orange}
-                />
-              </View>
-              <View className="flex-1 ml-3">
-                <Text variant="h4" numberOfLines={1}>
-                  {pred.reason === 'time_pattern'
-                    ? t('prediction.time_pattern', { defaultValue: 'Según tu horario' })
-                    : pred.reason === 'frequent'
-                      ? t('prediction.frequent', { defaultValue: 'Destino frecuente' })
-                      : t('prediction.recent', { defaultValue: 'Viaje reciente' })}
-                </Text>
-                <Text variant="bodySmall" color="tertiary" numberOfLines={1} className="mt-0.5">
-                  {pred.address}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.neutral[400]} />
-            </Pressable>
-          ))}
+          <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} />
         </View>
-      )}
 
-      {/* Recent places */}
-      {recentAddresses.length > 0 && (
-        <View className="mb-4">
-          <Text variant="caption" color="secondary" className="mb-2">
-            {t('home.recent_places', { defaultValue: 'Lugares recientes' })}
-          </Text>
-          {recentAddresses.slice(0, 3).map((addr, idx) => (
-            <Pressable
-              key={`recent-idle-${idx}`}
-              className="flex-row items-center bg-neutral-50 rounded-xl px-4 py-3 mb-2"
-              onPress={() => handleRecentTap(addr)}
-              accessibilityRole="button"
-              accessibilityLabel={addr.address}
-            >
-              <Ionicons name="time-outline" size={18} color={colors.neutral[500]} />
-              <Text variant="bodySmall" className="flex-1 ml-3" numberOfLines={1}>
-                {addr.address}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[400]} />
-            </Pressable>
+        {/* Pending split invites */}
+        <SplitInviteCard />
+
+        {/* Predicted destinations — horizontal scroll cards */}
+        {predictions.length > 0 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text variant="caption" color="secondary" style={{ marginBottom: 8 }}>
+              {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {predictions.slice(0, 3).map((pred, idx) => (
+                <Pressable
+                  key={`pred-${idx}`}
+                  style={idleStyles.predictionCard}
+                  onPress={() => handleOneTapPrediction(pred)}
+                  accessibilityRole="button"
+                  accessibilityLabel={pred.address}
+                >
+                  <View style={idleStyles.predictionIcon}>
+                    <Ionicons
+                      name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
+                      size={18}
+                      color={colors.brand.orange}
+                    />
+                  </View>
+                  <Text variant="caption" numberOfLines={2} style={{ color: '#1a1a1a', flex: 1 }}>
+                    {pred.address}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Service types — horizontal scroll */}
+        <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
+          {t('home.services', { defaultValue: 'Servicios' })}
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole="radiogroup">
+          {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
+            <View key={slug} style={{ width: 72, marginRight: 10 }}>
+              <ServiceTypeCard
+                slug={slug}
+                name={t(`service_type.${slug}` as const)}
+                icon={vehicleSelectionImages[slug]}
+              />
+            </View>
           ))}
-        </View>
-      )}
-
-      {/* Service types */}
-      <Text variant="h4" className="mb-3">{t('home.services', { defaultValue: 'Servicios' })}</Text>
-      <View className="flex-row gap-3" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
-          <ServiceTypeCard
-            key={slug}
-            slug={slug}
-            name={t(`service_type.${slug}` as const)}
-            icon={vehicleSelectionImages[slug]}
-          />
-        ))}
+        </ScrollView>
       </View>
     </View>
   );
 }
+
+// ── IdleView Styles (Uber-style fullscreen map) ──
+const idleStyles = StyleSheet.create({
+  searchBarContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 60,
+    zIndex: 10,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  notifBell: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  driverBadge: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  locationBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(254,243,199,0.95)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  bottomPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  predictionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginRight: 10,
+    width: 200,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  predictionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+});
 
 // X2.4: Geocoding coordinate validation
 function isValidCoordinate(lat: number, lng: number): boolean {
@@ -1363,9 +2114,18 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
   mensajeria: { label: 'Envío', desc: 'Delivery', maxPax: 0, slug: 'mensajeria' },
 };
 
+// Vehicle selection icons (used in service cards)
+const VEHICLE_ICONS: Record<string, any> = {
+  moto_standard: require('../../assets/vehicles/selection/moto.png'),
+  triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  auto_confort: require('../../assets/vehicles/selection/confort.png'),
+  mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
+};
+
 // ── Selecting View ─────────────────────────────────────────
 
-function SelectingView() {
+function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | null) => void }) {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const {
@@ -1381,6 +2141,7 @@ function SelectingView() {
     setDeliveryField,
     setPassengerCount,
     setCorporateAccount,
+    setWalletRatio,
     setFlowStep,
     addWaypoint,
     removeWaypoint,
@@ -1388,20 +2149,48 @@ function SelectingView() {
     isLoading,
     isFareEstimating,
     error,
+    promoCode,
+    promoResult,
+    setPromoCode,
+    fareEstimate,
   } = useRideStore();
-  const { requestEstimate } = useRideActions();
+  const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   const { accounts: corporateAccounts } = useCorporateAccounts();
+  const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
+  const insets = useSafeAreaInsets();
+  const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
+
+  // Compute selectedEstimate from allFareEstimates for the current service type
+  const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
+
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
+  const [searchingField, setSearchingField] = useState<'pickup' | 'dropoff' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickupSuggestion, setPickupSuggestion] = useState<{
     latitude: number; longitude: number; address: string;
   } | null>(null);
+
+  /** Format fare based on payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (draft.paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return formatCUP(cupAmount);
+  }, [draft.paymentMethod]);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [selectingDetailsExpanded, setSelectingDetailsExpanded] = useState(false);
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
+  const [promoExpanded, setPromoExpanded] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  // Fetch wallet balance for mixed payment ratio selector
+  useEffect(() => {
+    if (!user?.id) return;
+    walletService.getBalance(user.id).then((b) => setWalletBalance(b.available ?? 0)).catch(() => {});
+  }, [user?.id]);
 
   // Nearest driver ETA
   const nearbyVehicles = useNearbyVehicles(
@@ -1439,14 +2228,14 @@ function SelectingView() {
   // UBER-4.4: Load saved payment method on mount
   useEffect(() => {
     AsyncStorage.getItem('last_payment_method').then((saved) => {
-      if (saved && (saved === 'cash' || saved === 'tricicoin') && !draft.paymentMethod) {
+      if (saved && (saved === 'cash' || saved === 'tricicoin' || saved === 'mixed') && !draft.paymentMethod) {
         setPaymentMethod(saved);
       }
     }).catch(() => {});
   }, []);
 
   // UBER-4.4: Persist payment method when it changes
-  const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin') => {
+  const handlePaymentMethodChange = useCallback((method: 'cash' | 'tricicoin' | 'mixed') => {
     setPaymentMethod(method);
     AsyncStorage.setItem('last_payment_method', method).catch(() => {});
   }, [setPaymentMethod]);
@@ -1465,11 +2254,14 @@ function SelectingView() {
   }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude]);
 
   // Bug 11: Re-estimate fare when payment method changes
+  // Bug 22/28: Clear promoResult so stale discount is not applied to new estimate
   const prevPaymentRef = useRef(draft.paymentMethod);
   useEffect(() => {
     if (draft.paymentMethod !== prevPaymentRef.current) {
       prevPaymentRef.current = draft.paymentMethod;
-      const fe = useRideStore.getState().fareEstimate;
+      const store = useRideStore.getState();
+      if (store.promoResult) store.setPromoResult(null);
+      const fe = store.fareEstimate;
       if (fe) requestEstimate();
     }
   }, [draft.paymentMethod, requestEstimate]);
@@ -1482,754 +2274,401 @@ function SelectingView() {
     }).catch(() => {});
   }, [user?.id]);
 
-  // Auto-populate pickup from pre-fetched location (if empty)
+  // Auto-populate pickup from pre-fetched location (if empty or has only coordinates)
   useEffect(() => {
-    if (!draft.pickup && prefetchedPickup) {
+    if (!prefetchedPickup) return;
+    const currentPickup = useRideStore.getState().draft.pickup;
+    if (!currentPickup || (currentPickup.address.match(/^-?\d+\.\d+/) && prefetchedPickup.address !== currentPickup.address)) {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
-  }, [prefetchedPickup]);
+  }, [prefetchedPickup, setPickup]);
+
+  // Auto-open destination search when entering selecting flow without dropoff
+  useEffect(() => {
+    if (!draft.dropoff) {
+      setSearchingField('dropoff');
+    }
+  }, []); // Only on mount
+
+  // Auto-fetch estimates when both pickup and dropoff are set (web-like flow)
+  useEffect(() => {
+    if (draft.pickup?.location && draft.dropoff?.location && !isFareEstimating) {
+      requestEstimate();
+    }
+  }, [draft.pickup?.location?.latitude, draft.dropoff?.location?.latitude]);
 
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
     draft.delivery.packageDescription.trim() &&
     draft.delivery.recipientName.trim() &&
-    draft.delivery.recipientPhone.trim()
+    draft.delivery.recipientPhone.trim() &&
+    !!draft.delivery.deliveryVehicleType
   );
   const canEstimate = draft.pickup && draft.dropoff && deliveryValid;
 
   const minScheduleDate = new Date(Date.now() + 30 * 60 * 1000); // at least 30 min from now
 
   return (
-    <View className="pt-4">
-      <ScreenHeader title={t('ride.select_route', { defaultValue: 'Seleccionar ruta' })} onBack={() => setFlowStep('idle')} />
-
-      {/* Pickup — address search with presets */}
-      <Text variant="label" className="mb-1">
-        {t('ride.pickup')}
-      </Text>
-      <AddressSearchInput
-        placeholder={t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
-        selectedAddress={draft.pickup?.address ?? null}
-        onSelect={(address, location) => {
-          if (!isValidCoordinate(location.latitude, location.longitude)) {
-            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-            return;
-          }
-          setPickup(address, location);
-        }}
-        savedLocations={savedLocations}
-        recentAddresses={recentAddresses}
-        showUseMyLocation
-        onPickOnMap={() => setMapPickerMode('pickup')}
+    <View style={{ flex: 1 }}>
+      {/* Fullscreen map with route */}
+      <RideMapView
+        fullscreen
+        pickupLocation={draft.pickup?.location ?? null}
+        dropoffLocation={draft.dropoff?.location ?? null}
+        routeCoordinates={routeCoordinates ?? null}
+        nearbyVehicles={nearbyVehicles ?? []}
+        waypointLocations={draft.waypoints.filter((wp) => wp.location).map((wp) => wp.location!)}
+        pois={pois}
+        onCameraChanged={onPoiCameraChanged}
       />
 
-      {/* Predictive pickup suggestion banner */}
-      {pickupSuggestion && !suggestionDismissed && (
-        <View className="bg-primary-50 border border-primary-200 rounded-xl px-4 py-3 mt-2">
-          <View className="flex-row items-start">
-            <Ionicons name="location" size={18} color={colors.brand.orange} style={{ marginTop: 2 }} />
-            <View className="flex-1 ml-2">
-              <Text variant="bodySmall" className="text-neutral-800">
-                {t('ride.pickup_suggestion', { defaultValue: 'Punto de recogida sugerido' })}:{' '}
-                <Text variant="bodySmall" className="font-semibold">{pickupSuggestion.address}</Text>
-              </Text>
-              <Text variant="caption" color="secondary" className="mt-0.5">
-                {t('ride.pickup_suggestion_reason', { defaultValue: 'Los conductores te encontraran mas facilmente aqui' })}
-              </Text>
-              <View className="flex-row gap-3 mt-2">
-                <Pressable
-                  className="bg-primary-500 rounded-lg px-3 py-1.5"
-                  onPress={() => {
-                    setPickup(pickupSuggestion.address, {
-                      latitude: pickupSuggestion.latitude,
-                      longitude: pickupSuggestion.longitude,
-                    });
-                    setPickupSuggestion(null);
-                    triggerSelection();
-                  }}
-                >
-                  <Text variant="caption" color="inverse" className="font-semibold">
-                    {t('ride.use_suggested', { defaultValue: 'Usar punto sugerido' })}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  className="px-3 py-1.5"
-                  onPress={() => setSuggestionDismissed(true)}
-                >
-                  <Text variant="caption" color="secondary">
-                    {t('ride.keep_original', { defaultValue: 'Mantener original' })}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Nearest driver ETA indicator */}
-      {nearestDriverETA != null && draft.pickup && (
-        <View className="flex-row items-center px-3 py-2 mt-1 rounded-lg bg-green-50 border border-green-200">
-          <Ionicons name="car-outline" size={16} color="#16a34a" />
-          <Text variant="caption" style={{ color: '#16a34a', marginLeft: 6 }}>
-            {t('ride.nearest_driver_eta', {
-              defaultValue: 'Conductor más cercano a ~{{minutes}} min',
-              minutes: nearestDriverETA,
-            })}
-          </Text>
-        </View>
-      )}
-
-      {/* Swap button — only visible when both pickup and dropoff are set */}
-      {draft.pickup && draft.dropoff ? (
-        <View className="items-center py-1">
-          <Pressable
-            onPress={() => { swapPickupDropoff(); triggerSelection(); }}
-            className="bg-neutral-100 rounded-full p-2"
-            hitSlop={8}
-            accessibilityLabel={t('ride.swap_locations', { defaultValue: 'Intercambiar origen y destino' })}
-          >
-            <Ionicons name="swap-vertical" size={20} color={colors.brand.orange} />
+      {/* Floating top bar: [X] + compact address summary */}
+      {!searchingField && (
+        <View style={{ position: 'absolute', top: insets.top + 8, left: 12, right: 12, zIndex: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          {/* Close button — 44px touch target */}
+          <Pressable onPress={() => setFlowStep('idle')} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 2 }}>
+            <Ionicons name="close" size={22} color={colors.neutral[700]} />
           </Pressable>
-        </View>
-      ) : (
-        <View className="h-2" />
-      )}
 
-      {/* Dropoff — address search with presets */}
-      <Text variant="label" className="mb-1">
-        {t('ride.dropoff')}
-      </Text>
-      <AddressSearchInput
-        placeholder={t('ride.enter_dropoff', { defaultValue: 'Destino' })}
-        selectedAddress={draft.dropoff?.address ?? null}
-        onSelect={(address, location) => {
-          if (!isValidCoordinate(location.latitude, location.longitude)) {
-            Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-            return;
-          }
-          setDropoff(address, location);
-        }}
-        savedLocations={savedLocations}
-        recentAddresses={recentAddresses}
-        predictions={predictions}
-        onPickOnMap={() => setMapPickerMode('dropoff')}
-      />
-
-      <View className="h-4" />
-
-      {/* Service type — vertical list cards matching web design */}
-      <Text variant="label" className="mb-2">{t('ride.service_label', { defaultValue: 'Servicio' })}</Text>
-      <View className="mb-4 gap-2" accessibilityRole="radiogroup">
-        {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as ServiceTypeSlug[]).map((slug) => {
-          const meta = SERVICE_META[slug];
-          const isSelected = draft.serviceType === slug || (slug === 'triciclo_basico' && draft.serviceType === 'triciclo_cargo');
-          const est = allFareEstimates?.[slug];
-          const vt = serviceTypeToVehicleType(slug);
-          const pickupEta = vt ? etaByVehicleType[vt] : null;
-
-          return (
-            <Pressable
-              key={slug}
-              onPress={() => { setServiceType(slug); triggerSelection(); }}
-              className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
-                isSelected
-                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
-              }`}
-              accessibilityRole="radio"
-              accessibilityLabel={meta?.label ?? slug}
-              accessibilityState={{ selected: isSelected }}
-            >
-              <View className="flex-row items-center flex-1">
-                <Image
-                  source={vehicleSelectionImages[slug]}
-                  style={{ width: 40, height: 40 }}
-                  resizeMode="contain"
-                />
-                <View className="ml-3 flex-1">
-                  <Text variant="body" className="font-semibold">
-                    {meta?.label ?? slug}
-                  </Text>
-                  <View className="flex-row items-center mt-0.5">
-                    <Text variant="caption" color="tertiary">
-                      {slug === 'mensajeria' ? t('ride.delivery_label', { defaultValue: 'Según vehículo' }) : meta?.desc}
-                    </Text>
-                    {pickupEta != null && (
-                      <Text variant="caption" style={{ color: '#16a34a', fontWeight: '600', marginLeft: 6 }}>
-                        · {pickupEta} min
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <View className="items-end">
-                {est ? (
-                  <>
-                    <Text
-                      variant="body"
-                      className="font-bold"
-                      color={isSelected ? 'accent' : 'primary'}
-                    >
-                      ₧{formatCurrency(est.estimated_fare_cup)}
-                    </Text>
-                    {est.estimated_duration_s != null && est.estimated_duration_s > 0 && (
-                      <Text variant="caption" color="tertiary">
-                        ~{Math.ceil(est.estimated_duration_s / 60)} min
-                      </Text>
-                    )}
-                  </>
-                ) : isFareEstimating ? (
-                  <View style={{ width: 60, height: 14, borderRadius: 4, backgroundColor: '#e5e7eb' }} />
-                ) : (
-                  <Text variant="caption" color="tertiary">—</Text>
-                )}
-              </View>
+          {/* Two compact address rows — tap to open fullscreen search */}
+          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, overflow: 'hidden' }}>
+            <Pressable onPress={() => setSearchingField('pickup')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: MAP_COLORS.pickup, marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.pickup?.address ? colors.neutral[900] : colors.neutral[400] }}>
+                {draft.pickup?.address || t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
             </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Triciclo mode toggle: Pasajero / Cargo */}
-      {(draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_cargo') && (
-        <View className="flex-row gap-2 mb-4 bg-neutral-100 rounded-xl p-1">
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_basico' ? 'bg-white shadow-sm' : ''}`}
-            onPress={() => setServiceType('triciclo_basico')}
-          >
-            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_basico' ? 'font-semibold' : 'text-neutral-500'}>
-              {t('ride.mode_passenger', { defaultValue: 'Pasajero' })}
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-1 py-2 rounded-lg items-center ${draft.serviceType === 'triciclo_cargo' ? 'bg-white shadow-sm' : ''}`}
-            onPress={() => setServiceType('triciclo_cargo')}
-          >
-            <Text variant="bodySmall" className={draft.serviceType === 'triciclo_cargo' ? 'font-semibold' : 'text-neutral-500'}>
-              {t('ride.mode_cargo', { defaultValue: 'Mercancia' })}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Cargo info note */}
-      {draft.serviceType === 'triciclo_cargo' && (
-        <Card variant="outlined" padding="md" className="mb-4">
-          <View className="flex-row items-center mb-2">
-            <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
-            <Text variant="label" className="ml-2">
-              {t('ride.cargo_title', { defaultValue: 'Servicio de carga' })}
-            </Text>
-          </View>
-          <Text variant="caption" color="secondary">
-            {t('ride.cargo_description', { defaultValue: 'Renta un triciclo para transportar mercancia. Se cobra por hora desde que llega el conductor. Minimo 1 hora.' })}
-          </Text>
-        </Card>
-      )}
-
-      {/* Delivery fields (only when mensajeria is selected) */}
-      {draft.serviceType === 'mensajeria' && (
-        <Card variant="outlined" padding="md" className="mb-4">
-          <Text variant="label" className="mb-3">
-            {t('ride.delivery_details', { defaultValue: 'Detalles del envio' })}
-          </Text>
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.package_description', { defaultValue: 'Descripcion del paquete' })}
-            value={draft.delivery.packageDescription}
-            onChangeText={(v) => setDeliveryField('packageDescription', v)}
-            className="mb-3"
-          />
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.package_category', { defaultValue: 'Categoría' })}
-            </Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-            <View className="flex-row gap-2">
-              {PACKAGE_CATEGORIES.map((cat) => {
-                const emoji = { documentos: '\u{1F4C4}', comida: '\u{1F354}', paquete_pequeno: '\u{1F4E6}', paquete_grande: '\u{1F4EB}', fragil: '\u26A0\uFE0F' }[cat] ?? '';
-                return (
-                  <Pressable
-                    key={cat}
-                    className={`px-3 py-1.5 rounded-full border ${
-                      draft.delivery.packageCategory === cat
-                        ? 'bg-primary-500 border-primary-500'
-                        : 'bg-neutral-50 border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700'
-                    }`}
-                    onPress={() => setDeliveryField('packageCategory', cat)}
-                  >
-                    <Text
-                      variant="caption"
-                      color={draft.delivery.packageCategory === cat ? 'inverse' : 'secondary'}
-                      className="font-medium"
-                    >
-                      {emoji} {t(`ride.package_cat_${cat}` as const, { defaultValue: cat.replace('_', ' ') })}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.recipient_name', { defaultValue: 'Nombre del destinatario' })}
-            value={draft.delivery.recipientName}
-            onChangeText={(v) => setDeliveryField('recipientName', v)}
-            className="mb-3"
-          />
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <Input
-            placeholder={t('ride.recipient_phone', { defaultValue: 'Telefono del destinatario' })}
-            value={draft.delivery.recipientPhone}
-            onChangeText={(v) => setDeliveryField('recipientPhone', v)}
-            keyboardType="phone-pad"
-            className="mb-3"
-          />
-          {/* Delivery vehicle selector */}
-          <View className="mb-1">
-            <Text variant="caption" color="secondary">
-              {t('ride.delivery_vehicle', { defaultValue: 'Vehículo para el envío' })}
-              <Text variant="caption" className="text-red-500"> *</Text>
-            </Text>
-          </View>
-          <View className="flex-row gap-2 mb-3 flex-wrap">
-            {([
-              { type: 'moto' as const, label: 'Moto', slug: 'moto_standard' as ServiceTypeSlug },
-              { type: 'triciclo' as const, label: 'Triciclo', slug: 'triciclo_basico' as ServiceTypeSlug },
-              { type: 'auto' as const, label: 'Auto', slug: 'auto_standard' as ServiceTypeSlug },
-            ]).map((v) => {
-              const isVSelected = draft.delivery.deliveryVehicleType === v.type;
-              const vEst = allFareEstimates?.[v.slug];
-              return (
-                <Pressable
-                  key={v.type}
-                  className={`flex-row items-center px-3 py-2 rounded-xl border ${
-                    isVSelected
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800'
-                  }`}
-                  onPress={() => setDeliveryField('deliveryVehicleType', v.type)}
-                >
-                  <Image
-                    source={vehicleSelectionImages[v.slug]}
-                    style={{ width: 22, height: 22, marginRight: 6 }}
-                    resizeMode="contain"
-                  />
-                  <Text
-                    variant="caption"
-                    color={isVSelected ? 'accent' : 'secondary'}
-                    className="font-semibold"
-                  >
-                    {v.label}
-                  </Text>
-                  {vEst && (
-                    <Text variant="caption" color="tertiary" className="ml-1" style={{ fontSize: 10 }}>
-                      ₧{formatCurrency(vEst.estimated_fare_cup)}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View className="flex-row gap-3">
-            <View className="flex-1">
-              <View className="mb-1">
-                <Text variant="caption" color="secondary">
-                  {t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
-                  {' '}
-                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-                    ({t('home.optional', { defaultValue: 'opcional' })})
-                  </Text>
-                </Text>
-              </View>
-              <Input
-                placeholder={t('ride.estimated_weight', { defaultValue: 'Peso (kg)' })}
-                value={draft.delivery.estimatedWeightKg}
-                onChangeText={(v) => setDeliveryField('estimatedWeightKg', v)}
-                keyboardType="numeric"
-              />
-            </View>
-            <View className="flex-1">
-              <View className="mb-1">
-                <Text variant="caption" color="secondary">
-                  {t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
-                  {' '}
-                  <Text variant="caption" color="tertiary" style={{ fontSize: 11 }}>
-                    ({t('home.optional', { defaultValue: 'opcional' })})
-                  </Text>
-                </Text>
-              </View>
-              <Input
-                placeholder={t('ride.special_instructions', { defaultValue: 'Instrucciones' })}
-                value={draft.delivery.specialInstructions}
-                onChangeText={(v) => setDeliveryField('specialInstructions', v)}
-              />
-            </View>
-          </View>
-
-          {/* Client accompanies toggle */}
-          <Pressable
-            className={`flex-row items-center mt-3 px-4 py-3 rounded-xl border ${
-              draft.delivery.clientAccompanies
-                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                : 'border-neutral-200 dark:border-neutral-700'
-            }`}
-            onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)}
-          >
-            <View
-              style={{
-                width: 40, height: 22, borderRadius: 11,
-                backgroundColor: draft.delivery.clientAccompanies ? colors.brand.orange : '#ccc',
-                justifyContent: 'center',
-              }}
-            >
-              <View
-                style={{
-                  width: 18, height: 18, borderRadius: 9,
-                  backgroundColor: '#fff',
-                  marginLeft: draft.delivery.clientAccompanies ? 20 : 2,
-                }}
-              />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text variant="bodySmall" className="font-semibold">
-                {t('ride.client_accompanies', { defaultValue: 'Voy con el envío' })}
+            <View style={{ height: 1, backgroundColor: colors.neutral[100], marginHorizontal: 12 }} />
+            <Pressable onPress={() => setSearchingField('dropoff')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand.orange, marginRight: 10 }} />
+              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.dropoff?.address ? colors.neutral[900] : colors.neutral[400] }}>
+                {draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
               </Text>
-              <Text variant="caption" color="tertiary">
-                {t('ride.client_accompanies_desc', { defaultValue: 'Acompaña tu paquete sin costo adicional' })}
-              </Text>
-            </View>
-          </Pressable>
-        </Card>
-      )}
-
-      {/* Payment method */}
-      {!draft.corporateAccountId && (
-        <>
-          <Text variant="label" className="mb-2">{t('ride.payment_method')}</Text>
-          <View className="flex-row gap-3 mb-4" accessibilityRole="radiogroup">
-            {(['cash', 'tricicoin'] as const).map((pm) => (
-              <Pressable
-                key={pm}
-                className={`flex-1 py-3 rounded-xl items-center ${
-                  draft.paymentMethod === pm ? 'bg-primary-500' : 'bg-neutral-100'
-                }`}
-                onPress={() => handlePaymentMethodChange(pm)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: draft.paymentMethod === pm }}
-              >
-                <Text
-                  variant="caption"
-                  color={draft.paymentMethod === pm ? 'inverse' : 'secondary'}
-                  className="text-center"
-                >
-                  {t(`payment.${pm}` as const)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
-
-      {/* UX-1: Collapsible secondary options toggle */}
-      <Pressable
-        className="py-3 items-center"
-        onPress={() => setSelectingDetailsExpanded(!selectingDetailsExpanded)}
-      >
-        <Text variant="bodySmall" color="accent" className="underline">
-          {selectingDetailsExpanded
-            ? t('home.fewer_options', { defaultValue: 'Menos opciones' })
-            : t('home.more_options', { defaultValue: 'Más opciones' })
-          }
-        </Text>
-      </Pressable>
-
-      {/* UX-1: Collapsible secondary options */}
-      {selectingDetailsExpanded && (
-        <>
-          {/* Waypoints */}
-          {draft.waypoints.map((wp, idx) => (
-            <View key={`waypoint-${idx}`}>
-              <View className="h-2" />
-              <View className="flex-row items-center">
-                <View className="flex-1">
-                  <Text variant="label" className="mb-1">
-                    {t('ride.stop_n', { n: idx + 1 })}
-                  </Text>
-                  <AddressSearchInput
-                    placeholder={t('ride.stop_n', { n: idx + 1 })}
-                    selectedAddress={wp.address || null}
-                    onSelect={(address, location) => {
-                      if (!isValidCoordinate(location.latitude, location.longitude)) {
-                        Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-                        return;
-                      }
-                      updateWaypoint(idx, address, location);
-                    }}
-                  />
-                </View>
-                <Pressable
-                  onPress={() => removeWaypoint(idx)}
-                  className="ml-2 mt-5 p-2"
-                  accessibilityRole="button"
-                  accessibilityLabel={t('ride.remove_stop', { defaultValue: `Remove stop ${idx + 1}`, n: idx + 1 })}
-                >
-                  <Ionicons name="close-circle" size={24} color={colors.error.DEFAULT} />
-                </Pressable>
-              </View>
-            </View>
-          ))}
-
-          {/* Add stop button */}
-          {draft.waypoints.length < 3 && (
-            <Pressable
-              onPress={addWaypoint}
-              className="flex-row items-center mt-2 mb-2 py-2"
-              accessibilityRole="button"
-              accessibilityLabel={t('ride.add_stop')}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={colors.brand.orange} />
-              <Text variant="bodySmall" color="accent" className="ml-2">
-                {t('ride.add_stop')}
-              </Text>
-            </Pressable>
-          )}
-
-          {/* Passenger count selector */}
-          {draft.serviceType !== 'triciclo_cargo' && draft.serviceType !== 'mensajeria' && (
-            (() => {
-              const maxP = draft.serviceType === 'moto_standard' ? 1
-                : (draft.serviceType === 'triciclo_basico' || draft.serviceType === 'triciclo_premium') ? 8
-                : 4; // auto_standard, auto_confort
-              if (maxP <= 1) return null;
-              return (
-                <View className="mb-4">
-                  <Text variant="label" className="mb-2">
-                    {t('ride.passengers', { defaultValue: 'Pasajeros' })}
-                  </Text>
-                  <View className="flex-row gap-2">
-                    {Array.from({ length: maxP }, (_, i) => i + 1).map((n) => (
-                      <Pressable
-                        key={n}
-                        className={`w-10 h-10 rounded-lg items-center justify-center ${draft.passengerCount === n ? 'bg-primary-500' : 'bg-neutral-100'}`}
-                        onPress={() => setPassengerCount(n)}
-                      >
-                        <Text variant="bodySmall" className={draft.passengerCount === n ? 'text-white font-bold' : 'text-neutral-600'}>
-                          {n}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <Text variant="caption" color="tertiary" className="mt-2">
-                    {t('home.passenger_capacity_hint', { defaultValue: 'Capacidad: Moto 1, Triciclo 2-3, Auto 1-4' })}
-                  </Text>
-                </View>
-              );
-            })()
-          )}
-
-          {/* Corporate account toggle */}
-          {corporateAccounts.length > 0 && (
-            <View className="mb-4">
-              <Text variant="label" className="mb-2">
-                {t('corporate.riding_as_label', { defaultValue: 'Cobrar a' })}
-              </Text>
-              <View className="flex-row gap-3" accessibilityRole="radiogroup">
-                <Pressable
-                  className={`flex-1 py-3 rounded-xl items-center ${
-                    !draft.corporateAccountId ? 'bg-primary-500' : 'bg-neutral-100'
-                  }`}
-                  onPress={() => setCorporateAccount(null)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: !draft.corporateAccountId }}
-                >
-                  <Text
-                    variant="caption"
-                    color={!draft.corporateAccountId ? 'inverse' : 'secondary'}
-                  >
-                    {t('corporate.personal')}
-                  </Text>
-                </Pressable>
-                {corporateAccounts.map((acc) => (
-                  <Pressable
-                    key={acc.id}
-                    className={`flex-1 py-3 rounded-xl items-center ${
-                      draft.corporateAccountId === acc.id ? 'bg-primary-500' : 'bg-neutral-100'
-                    }`}
-                    onPress={() => setCorporateAccount(acc.id)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: draft.corporateAccountId === acc.id }}
-                  >
-                    <Text
-                      variant="caption"
-                      color={draft.corporateAccountId === acc.id ? 'inverse' : 'secondary'}
-                      numberOfLines={1}
-                    >
-                      {acc.name}
-                    </Text>
-                    {acc.monthly_budget_trc > 0 && (
-                      <Text
-                        variant="caption"
-                        color={draft.corporateAccountId === acc.id ? 'inverse' : 'tertiary'}
-                        style={{ fontSize: 9 }}
-                      >
-                        {formatTRC(acc.monthly_budget_trc - acc.current_month_spent)} {t('corporate.remaining', { defaultValue: 'disp.' })}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-              {draft.corporateAccountId && (
-                <View className="mt-2 bg-primary-50 rounded-lg px-3 py-2">
-                  <Text variant="caption" color="accent">
-                    {t('corporate.riding_as', {
-                      company: corporateAccounts.find((a) => a.id === draft.corporateAccountId)?.name ?? '',
-                    })}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Schedule ride */}
-          <View className="mb-6">
-            <Pressable
-              className={`flex-row items-center rounded-xl px-4 py-3 ${
-                draft.scheduledAt ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
-              }`}
-              onPress={() => {
-                if (draft.scheduledAt) {
-                  setScheduledAt(null);
-                } else {
-                  setShowDatePicker(true);
-                }
-              }}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={20}
-                color={draft.scheduledAt ? colors.brand.orange : colors.neutral[500]}
-              />
-              <Text
-                variant="body"
-                color={draft.scheduledAt ? 'accent' : 'secondary'}
-                className="ml-3 flex-1"
-              >
-                {draft.scheduledAt
-                  ? `${draft.scheduledAt.toLocaleDateString('es-CU', { day: 'numeric', month: 'short' })} — ${draft.scheduledAt.toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}`
-                  : t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}
-              </Text>
-              {draft.scheduledAt && (
-                <Ionicons name="close-circle" size={20} color={colors.neutral[400]} />
-              )}
+              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
             </Pressable>
           </View>
 
-          {/* Date picker */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={draft.scheduledAt ?? minScheduleDate}
-              mode="date"
-              minimumDate={minScheduleDate}
-              onChange={(_e, date) => {
-                setShowDatePicker(false);
-                if (date) {
-                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(date);
-                  merged.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                  setScheduledAt(merged);
-                  // On Android, show time picker right after date
-                  if (Platform.OS === 'android') {
-                    setTimeout(() => setShowTimePicker(true), 300);
-                  } else {
-                    setShowTimePicker(true);
-                  }
-                }
-              }}
-            />
+          {/* Swap button — 40px + hitSlop for 56px touch area */}
+          {draft.pickup && draft.dropoff && (
+            <Pressable onPress={() => { triggerHaptic('light'); swapPickupDropoff(); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, marginTop: 14 }}>
+              <Ionicons name="swap-vertical" size={18} color={colors.neutral[500]} />
+            </Pressable>
           )}
-
-          {/* Time picker */}
-          {showTimePicker && (
-            <DateTimePicker
-              value={draft.scheduledAt ?? minScheduleDate}
-              mode="time"
-              minimumDate={minScheduleDate}
-              onChange={(_e, time) => {
-                setShowTimePicker(false);
-                if (time) {
-                  const merged = draft.scheduledAt ? new Date(draft.scheduledAt) : new Date(time);
-                  merged.setHours(time.getHours(), time.getMinutes());
-                  setScheduledAt(merged);
-                }
-              }}
-            />
-          )}
-        </>
+        </View>
       )}
 
-      {error && (
-        <Text variant="bodySmall" color="error" className="mb-4 text-center">
-          {error}
-        </Text>
-      )}
+      {/* Fullscreen search panel — opens when user taps an address input */}
+      {searchingField && (
+        <ScrollView
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, paddingTop: insets.top + 8 }}
+          contentContainerStyle={{ paddingHorizontal: 16, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+        >
+          {/* Header: back arrow + field label */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Pressable onPress={() => setSearchingField(null)} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="arrow-back" size={24} color={colors.neutral[700]} />
+            </Pressable>
+            <Text variant="h4" style={{ flex: 1, marginLeft: 8 }}>
+              {searchingField === 'pickup'
+                ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
+                : searchingField === 'waypoint'
+                  ? t('ride.add_stop_title', { defaultValue: 'Agregar parada' })
+                  : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+            </Text>
+          </View>
 
-      <Button
-        title={draft.scheduledAt
-          ? t('ride.schedule_confirm', { defaultValue: 'Programar viaje' })
-          : t('ride.get_estimate', { defaultValue: 'Ver tarifa estimada' })}
-        size="lg"
-        fullWidth
-        onPress={requestEstimate}
-        loading={isFareEstimating}
-        disabled={!canEstimate}
-      />
-
-      {/* Confirm Location on Map — full-screen overlay */}
-      {mapPickerMode && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-          <ConfirmLocationScreen
-            mode={mapPickerMode}
-            initialLocation={
-              mapPickerMode === 'pickup'
-                ? draft.pickup?.location ?? null
-                : draft.dropoff?.location ?? null
-            }
-            onConfirm={(address, location) => {
-              if (!isValidCoordinate(location.latitude, location.longitude)) {
-                Toast.show({ type: 'error', text1: t('errors.invalid_coordinates', { ns: 'common', defaultValue: 'Ubicación inválida. Selecciona otra dirección.' }) });
-                setMapPickerMode(null);
-                return;
-              }
-              if (mapPickerMode === 'pickup') {
+          {/* AddressSearchInput — always in search mode, auto-expanded with suggestions */}
+          <AddressSearchInput
+            autoExpand
+            placeholder={searchingField === 'pickup'
+              ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
+              : searchingField === 'waypoint'
+                ? t('ride.add_stop_placeholder', { defaultValue: 'Buscar parada intermedia' })
+                : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+            onSelect={(address, location) => {
+              if (searchingField === 'pickup') {
                 setPickup(address, location);
+              } else if (searchingField === 'waypoint') {
+                // Update the last added waypoint (addWaypoint was called before opening search)
+                const wpIdx = draft.waypoints.length - 1;
+                if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
                 setDropoff(address, location);
               }
-              setMapPickerMode(null);
+              setSearchingField(null);
             }}
-            onClose={() => setMapPickerMode(null)}
+            savedLocations={savedLocations}
+            recentAddresses={recentAddresses}
+            predictions={searchingField === 'dropoff' ? predictions : undefined}
+            showUseMyLocation={searchingField === 'pickup'}
+            onPickOnMap={() => {
+              setSearchingField(null);
+              setMapPickerMode(searchingField);
+            }}
           />
+        </ScrollView>
+      )}
+
+      {/* Route distance/duration badge (floating above bottom panel) */}
+      {!searchingField && routeDistanceM && routeDurationS && (
+        <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+          <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
+            {(routeDistanceM / 1000).toFixed(1)} km · {Math.ceil(routeDurationS / 60)} min por ruta
+          </Text>
+        </View>
+      )}
+
+      {/* Bottom panel — services, payment, request (hidden during search) */}
+      {!searchingField && (draft.pickup && draft.dropoff) && (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.neutral[300], marginBottom: 8 }} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
+            {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => {
+              const meta = SERVICE_META[slug];
+              const est = allFareEstimates?.[slug];
+              const isSelected = draft.serviceType === slug;
+              const eta = etaByVehicleType[slug];
+              return (
+                <Pressable key={slug} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : colors.neutral[200], backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
+                  <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 12 }} resizeMode="contain" />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
+                    <Text variant="caption" color="tertiary">
+                      {meta?.desc}{eta ? <Text style={{ color: MAP_COLORS.pickup }}> · {eta} min</Text> : null}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {est ? (
+                      <>
+                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : colors.neutral[900] }}>{formatCUP(est.estimated_fare_cup)}</Text>
+                        {est.estimated_duration_s ? (
+                          <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
+                        ) : null}
+                      </>
+                    ) : isFareEstimating ? (
+                      <ActivityIndicator size="small" color={colors.neutral[300]} />
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            {/* Delivery form — shown when mensajeria selected */}
+            {draft.serviceType === 'mensajeria' && (
+              <View style={{ backgroundColor: colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                <Text variant="caption" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
+                  {t('delivery.details', { defaultValue: 'Datos del envío' })}
+                </Text>
+                {/* Delivery vehicle selector */}
+                <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.vehicle', { defaultValue: 'Vehículo de envío' })}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((vt) => {
+                    const vLabel = SERVICE_META[vt]?.label ?? vt;
+                    const isSel = draft.delivery.deliveryVehicleType === vt;
+                    return (
+                      <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isSel ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
+                        <Text variant="caption" style={{ fontWeight: isSel ? '700' : '400', color: isSel ? colors.brand.orange : colors.neutral[600], fontSize: 11 }}>{vLabel}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {/* Recipient */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_name', { defaultValue: 'Destinatario' })}</Text>
+                    <TextInput value={draft.delivery.recipientName} onChangeText={(v) => setDeliveryField('recipientName', v)} placeholder="Nombre" placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_phone', { defaultValue: 'Teléfono' })}</Text>
+                    <TextInput value={draft.delivery.recipientPhone} onChangeText={(v) => setDeliveryField('recipientPhone', v)} placeholder="+53 5..." placeholderTextColor={colors.neutral[400]} keyboardType="phone-pad" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                  </View>
+                </View>
+                {/* Package category chips */}
+                <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.package_category', { defaultValue: 'Categoría' })}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {(['documents', 'food', 'electronics', 'clothing', 'other'] as const).map((cat) => {
+                      const catLabels: Record<string, string> = { documents: 'Documentos', food: 'Alimentos', electronics: 'Electrónica', clothing: 'Ropa', other: 'Otro' };
+                      const isCatSel = draft.delivery.packageCategory === cat;
+                      return (
+                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat as PackageCategory)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isCatSel ? '#FFF5F0' : '#fff' }}>
+                          <Text variant="caption" style={{ color: isCatSel ? colors.brand.orange : colors.neutral[600], fontWeight: isCatSel ? '600' : '400' }}>{catLabels[cat]}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+                {/* Description + Weight */}
+                <TextInput value={draft.delivery.packageDescription} onChangeText={(v) => setDeliveryField('packageDescription', v)} placeholder={t('delivery.description_placeholder', { defaultValue: 'Descripción del paquete' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                <TextInput value={draft.delivery.estimatedWeightKg ? String(draft.delivery.estimatedWeightKg) : ''} onChangeText={(v) => setDeliveryField('estimatedWeightKg', Number(v) || 0)} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                {/* Special instructions */}
+                <TextInput value={draft.delivery.specialInstructions} onChangeText={(v) => setDeliveryField('specialInstructions', v)} placeholder={t('delivery.instructions', { defaultValue: 'Instrucciones especiales (opcional)' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                {/* Client accompanies toggle */}
+                <Pressable onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                  <Ionicons name={draft.delivery.clientAccompanies ? 'checkbox' : 'square-outline'} size={20} color={draft.delivery.clientAccompanies ? colors.brand.orange : colors.neutral[400]} />
+                  <Text variant="caption" color="secondary">{t('delivery.accompany', { defaultValue: 'Acompaño el envío' })}</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Passenger count selector */}
+            {draft.serviceType !== 'mensajeria' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, marginBottom: 4 }}>
+                <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{t('ride.passengers', { defaultValue: 'Pasajeros' })}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.max(1, (draft.passengerCount || 1) - 1)); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
+                  </Pressable>
+                  <Text variant="body" style={{ fontWeight: '700', minWidth: 20, textAlign: 'center' }}>{draft.passengerCount || 1}</Text>
+                  <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.min(6, (draft.passengerCount || 1) + 1)); }} hitSlop={8} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>+</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {/* Waypoints — add stops */}
+            <View style={{ marginBottom: 8 }}>
+              {draft.waypoints.filter(wp => wp.address).map((wp, idx) => (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.neutral[50], borderRadius: 8, padding: 8, marginBottom: 4 }}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand.orange, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{idx + 1}</Text>
+                  </View>
+                  <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>{wp.address}</Text>
+                  <Pressable onPress={() => removeWaypoint(idx)} hitSlop={8} style={{ padding: 4 }}>
+                    <Ionicons name="close-circle" size={18} color={colors.neutral[400]} />
+                  </Pressable>
+                </View>
+              ))}
+              {draft.waypoints.length < 3 && (
+                <Pressable onPress={() => { addWaypoint(); setSearchingField('waypoint' as any); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 }}>
+                  <Ionicons name="add-circle-outline" size={18} color={colors.brand.orange} />
+                  <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600' }}>
+                    {t('ride.add_stop', { defaultValue: '+ Agregar parada' })} ({draft.waypoints.length}/3)
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
+            {/* Paso 4: Fare estimate summary box */}
+            {selectedEstimate && (
+              <View style={{ borderWidth: 2, borderColor: colors.brand.orange, borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text variant="caption" color="secondary">{t('ride.estimated_fare', { defaultValue: 'Tarifa estimada' })}</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatCUP(selectedEstimate.estimated_fare_cup)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+                  <Text variant="caption" color="tertiary">{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</Text>
+                  <Text variant="caption" color="tertiary">{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min</Text>
+                  {selectedEstimate.exchange_rate_usd_cup ? (
+                    <Text variant="caption" color="tertiary">~${(selectedEstimate.estimated_fare_cup / selectedEstimate.exchange_rate_usd_cup).toFixed(2)} USD</Text>
+                  ) : null}
+                </View>
+                {selectedEstimate.estimated_distance_m > 0 && (
+                  <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
+                    {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP por km
+                  </Text>
+                )}
+                {(selectedEstimate as any).surge_multiplier > 1 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="trending-up" size={14} color="#ef4444" />
+                    <Text variant="caption" style={{ color: '#ef4444', fontWeight: '600' }}>
+                      Tarifa dinámica ×{((selectedEstimate as any).surge_multiplier as number).toFixed(1)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Payment method selector */}
+            <Text variant="caption" color="secondary" style={{ marginBottom: 8, fontWeight: '600' }}>{t('ride.payment_method', { defaultValue: 'Método de pago' })}</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
+                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[200], backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[500] }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Mixed payment slider */}
+            {draft.paymentMethod === 'mixed' && selectedEstimate && (
+              <View style={{ backgroundColor: colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text variant="caption" color="secondary">Billetera: {Math.round(draft.walletRatio * 100)}%</Text>
+                  <Text variant="caption" color="secondary">Efectivo: {Math.round((1 - draft.walletRatio) * 100)}%</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable onPress={() => { triggerHaptic('light'); setWalletRatio(Math.max(0, draft.walletRatio - 0.1)); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
+                  </Pressable>
+                  <View style={{ flex: 1, height: 6, backgroundColor: colors.neutral[200], borderRadius: 3, overflow: 'hidden' }}>
+                    <View style={{ width: `${draft.walletRatio * 100}%`, height: '100%', backgroundColor: colors.brand.orange, borderRadius: 3 }} />
+                  </View>
+                  <Pressable onPress={() => { triggerHaptic('light'); setWalletRatio(Math.min(1, draft.walletRatio + 0.1)); }} hitSlop={8} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>+</Text>
+                  </Pressable>
+                </View>
+                <Text variant="caption" color="tertiary" style={{ textAlign: 'center', marginTop: 8 }}>
+                  {formatCUP(selectedEstimate.estimated_fare_cup * draft.walletRatio)} billetera + {formatCUP(selectedEstimate.estimated_fare_cup * (1 - draft.walletRatio))} efectivo
+                </Text>
+              </View>
+            )}
+
+            {/* Promo code */}
+            <Pressable onPress={() => setPromoExpanded(!promoExpanded)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
+              <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{t('ride.promo_code', { defaultValue: 'Código promocional' })}</Text>
+              <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.neutral[400]} />
+            </Pressable>
+            {promoExpanded && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
+                  <TextInput
+                    value={promoCode}
+                    onChangeText={setPromoCode}
+                    placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
+                    placeholderTextColor={colors.neutral[400]}
+                    style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
+              </View>
+            )}
+            {promoResult?.valid && (
+              <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="checkmark-circle" size={16} color={MAP_COLORS.pickup} />
+                <Text variant="caption" style={{ color: MAP_COLORS.pickup }}>{'¡'}Descuento de {formatCUP(promoResult.discountAmount)} aplicado!</Text>
+              </View>
+            )}
+
+            {/* Schedule ride */}
+            <Pressable onPress={() => setScheduledAt(draft.scheduledAt ? null : minScheduleDate)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, marginBottom: 4 }}>
+              <Ionicons name={draft.scheduledAt ? 'checkbox' : 'square-outline'} size={22} color={draft.scheduledAt ? colors.brand.orange : colors.neutral[400]} />
+              <Text variant="caption" color="secondary">{t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}</Text>
+            </Pressable>
+            {draft.scheduledAt && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <Pressable onPress={() => setShowDatePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
+                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleDateString('es')}</Text>
+                </Pressable>
+                <Pressable onPress={() => setShowTimePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
+                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</Text>
+                </Pressable>
+              </View>
+            )}
+          </ScrollView>
+          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Solicitar'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
   );
 }
+
+// SelectingView old form code removed — now uses fullscreen map layout above
 
 // ── Reviewing View (BottomSheet) ───────────────────────────
 
@@ -2237,6 +2676,14 @@ function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
   const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
+
+  /** Format fare based on payment method */
+  const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
+    if (draft.paymentMethod === 'tricicoin') {
+      return formatTRC(trcAmount ?? cupAmount);
+    }
+    return formatCUP(cupAmount);
+  }, [draft.paymentMethod]);
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
   const [promoExpanded, setPromoExpanded] = useState(false);
@@ -2302,11 +2749,11 @@ function ReviewingView() {
   const confirmLabel = fareEstimate
     ? t('home.request_with_details', {
         service: selectedServiceLabel,
-        fare: formatCurrency(fareEstimate.estimated_fare_cup),
+        fare: formatCUP(fareEstimate.estimated_fare_cup),
         eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
-  const routeCoordinates = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
   const nearbyVehicles = useNearbyVehicles(
     draft.pickup?.location?.latitude ?? null,
     draft.pickup?.location?.longitude ?? null,
@@ -2384,30 +2831,30 @@ function ReviewingView() {
           </View>
           <View className="items-end">
             <Text variant="h2" color="accent" className="font-bold">
-              ₧{formatCurrency(fareEstimate.estimated_fare_cup)}
+              {formatFare(fareEstimate.estimated_fare_cup, fareEstimate.estimated_fare_trc)}
             </Text>
-            {fareEstimate.exchange_rate_usd_cup > 0 && (
+            {fareEstimate?.exchange_rate_usd_cup > 0 && (
               <Text variant="caption" color="tertiary">
-                ~${(fareEstimate.estimated_fare_cup / fareEstimate.exchange_rate_usd_cup).toFixed(2)} USD
+                ~${(fareEstimate?.estimated_fare_cup / fareEstimate?.exchange_rate_usd_cup).toFixed(2)} USD
               </Text>
             )}
           </View>
         </View>
         {/* Distance · Per-km rate · Exchange rate */}
         <View className="flex-row flex-wrap items-center mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 gap-x-3 gap-y-1">
-          {fareEstimate.estimated_distance_m > 0 && (
+          {fareEstimate?.estimated_distance_m > 0 && (
             <Text variant="caption" color="secondary">
-              {(fareEstimate.estimated_distance_m / 1000).toFixed(1)} km
+              {(fareEstimate?.estimated_distance_m / 1000).toFixed(1)} km
             </Text>
           )}
-          {fareEstimate.per_km_rate_cup > 0 && (
+          {fareEstimate?.per_km_rate_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              ₧{formatCurrency(fareEstimate.per_km_rate_cup)}/km
+              {formatFare(fareEstimate?.per_km_rate_cup)}/km
             </Text>
           )}
-          {fareEstimate.exchange_rate_usd_cup > 0 && (
+          {fareEstimate?.exchange_rate_usd_cup > 0 && (
             <Text variant="caption" color="tertiary">
-              1 USD = {formatCurrency(fareEstimate.exchange_rate_usd_cup)} CUP
+              1 USD = {formatCUP(fareEstimate?.exchange_rate_usd_cup)} CUP
             </Text>
           )}
         </View>
@@ -2441,7 +2888,7 @@ function ReviewingView() {
                   </Text>
                   {est && (
                     <Text variant="caption" color="accent" className="ml-2 font-semibold">
-                      ₧{formatCurrency(est.estimated_fare_cup)}
+                      {formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}
                     </Text>
                   )}
                 </Pressable>
@@ -2502,12 +2949,13 @@ function ReviewingView() {
         </View>
       )}
 
+      {/* Bug 29: Disable confirm button while promo is validating */}
       <Button
         title={confirmLabel}
         size="lg"
         fullWidth
         onPress={debouncedConfirmRide}
-        loading={isLoading || isFareEstimating}
+        loading={isLoading || isFareEstimating || validatingPromo}
         className="mb-3"
       />
       <Button
@@ -2555,15 +3003,18 @@ function ReviewingView() {
           </Card>
 
           {/* UX-3: Nearby vehicles count (moved from main view) */}
-          {nearbyVehicles.length > 0 && (
-            <View className="mt-1 mb-3">
-              <Text variant="caption" color="secondary" className="text-center">
-                {t('ride.nearby_vehicles', { count: nearbyVehicles.length })}
-              </Text>
-            </View>
-          )}
+          <View className="mt-1 mb-3">
+            <Text variant="caption" color="secondary" className="text-center">
+              {nearbyVehicles.length > 0
+                ? t('ride.nearby_vehicles', { count: nearbyVehicles.length })
+                : t('ride.no_nearby_vehicles', { defaultValue: 'Sin conductores cercanos' })}
+            </Text>
+          </View>
 
           {/* Fare breakdown */}
+          {/* BUG-067: Discount applies only to base fare (before insurance premium).
+              The order is: baseFare → distance → duration → surge → discount → subtotal → insurance → total.
+              Insurance premium is calculated on the full fare and added after the discount is applied. */}
           <View className="mb-4">
             <FareBreakdownCard
               title={t('ride.fare_breakdown', { defaultValue: 'Desglose de tarifa' })}
@@ -2578,7 +3029,7 @@ function ReviewingView() {
               totalCup={fareEstimate.estimated_fare_cup}
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}
-              discountTrc={discount}
+              discountTrc={discount} /* discountAmount is in CUP; TRC = CUP 1:1 — discount applies to base fare only, before insurance */
               discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
               minFareApplied={fareEstimate.min_fare_applied}
               minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
@@ -2600,11 +3051,14 @@ function ReviewingView() {
           {/* U1.4: Fare range context */}
           {fareEstimate.estimated_fare_cup > 0 && (
             <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
-              {t('home.usual_fare_range', {
-                low: Math.round(fareEstimate.estimated_fare_cup * 0.85).toLocaleString(),
-                high: Math.round(fareEstimate.estimated_fare_cup * 1.15).toLocaleString(),
-                defaultValue: 'Este viaje suele costar ₧{{low}} - ₧{{high}}',
-              })}
+              {paymentMethod === 'tricicoin'
+                ? `Este viaje suele costar ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 0.85) - discount))} – ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 1.15) - discount))}`
+                : t('home.usual_fare_range', {
+                    low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString(),
+                    high: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 1.15) - discount).toLocaleString(),
+                    defaultValue: 'Este viaje suele costar ${{low}} - ${{high}}',
+                  })
+              }
             </Text>
           )}
 
@@ -2689,7 +3143,8 @@ function ReviewingView() {
           )}
 
           {/* Split fare — only for tricicoin AND when ride exists (has rideId) */}
-          {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && (
+          {/* BUG-066: Guard against stale activeRide — only show split fare when ride is in a valid pre-completion state */}
+          {draft.paymentMethod === 'tricicoin' && fareEstimate && activeRide?.id && ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'].includes(activeRide.status) && (
             <>
               <Pressable
                 className={`flex-row items-center rounded-xl px-4 py-3 mb-6 ${
@@ -2824,6 +3279,60 @@ function ReviewingView() {
   );
 }
 
+// ── Radar pulse animation for searching state ──────────────
+function RadarPulseAnimation() {
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+  const ring3 = useRef(new Animated.Value(0)).current;
+  const rings = [ring1, ring2, ring3];
+
+  useEffect(() => {
+    rings.forEach((ring, i) => {
+      const loop = () => {
+        ring.setValue(0);
+        Animated.timing(ring, {
+          toValue: 1,
+          duration: 2000,
+          delay: i * 600,
+          useNativeDriver: true,
+        }).start(({ finished }) => { if (finished) loop(); });
+      };
+      loop();
+    });
+    return () => rings.forEach((r) => r.stopAnimation());
+  }, []);
+
+  return (
+    <View style={{ width: 100, height: 100, alignItems: 'center', justifyContent: 'center' }}>
+      {rings.map((ring, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            borderWidth: 2,
+            borderColor: 'rgba(255,77,0,0.3)',
+            opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+            transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 2.2] }) }],
+          }}
+        />
+      ))}
+      {/* Center dot with vehicle icon */}
+      <View style={{
+        width: 48, height: 48, borderRadius: 24,
+        backgroundColor: colors.brand.orange,
+        alignItems: 'center', justifyContent: 'center',
+        shadowColor: colors.brand.orange, shadowOpacity: 0.35,
+        shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+      }}>
+        <Ionicons name="car" size={22} color="#fff" />
+      </View>
+    </View>
+  );
+}
+
 // ── Searching View ─────────────────────────────────────────
 
 function SearchingView() {
@@ -2831,17 +3340,25 @@ function SearchingView() {
   const { isTablet } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
   const { cancelRide, requestEstimate } = useRideActions();
-  const routeCoordinates = useRoutePolyline(
+  const { coordinates: routeCoordinates } = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
   );
+
+  // ── Interactive searching: real-time driver presence ──
+  const {
+    searchingDrivers,
+    acceptedDriver,
+    isAcceptAnimating,
+  } = useSearchingDrivers(activeRide?.id ?? null);
 
   // UBER-2.1: 5-phase progressive search messages with fade transitions
   const [searchPhase, setSearchPhase] = useState(0);
   const searchFadeAnim = useRef(new Animated.Value(1)).current;
 
   const fadeAndSetPhase = useCallback((phase: number) => {
-    Animated.timing(searchFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+    Animated.timing(searchFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) return; // Component unmounted or animation interrupted
       setSearchPhase(phase);
       Animated.timing(searchFadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     });
@@ -2905,23 +3422,52 @@ function SearchingView() {
 
   return (
     <View className="pt-4 flex-1 items-center">
-      {/* Map showing pickup + dropoff with route */}
+      {/* Map showing pickup + dropoff with route + searching drivers */}
       {activeRide && (
         <>
           <RideMapView
             pickupLocation={activeRide.pickup_location}
             dropoffLocation={activeRide.dropoff_location}
             routeCoordinates={routeCoordinates}
-            height={isTablet ? 300 : 180}
+            searchingDrivers={searchingDrivers}
+            acceptedDriverId={acceptedDriver?.driverId ?? null}
+            isAcceptAnimating={isAcceptAnimating}
+            acceptedDriverLocation={acceptedDriver?.location ?? null}
+            height={isTablet ? 300 : 220}
           />
-          <View className="h-4" />
+          <View className="h-3" />
         </>
+      )}
+
+      {/* Driver accepted — celebration card overlay */}
+      {acceptedDriver && isAcceptAnimating && (
+        <AcceptedDriverCard
+          driver={acceptedDriver}
+          onAnimationComplete={() => {
+            // The normal ride status update flow will transition to 'active'
+          }}
+        />
+      )}
+
+      {/* Radar pulse animation — 3 rings expanding from center */}
+      {!acceptedDriver && !searchTimedOut && (
+        <View style={{ alignItems: 'center', justifyContent: 'center', height: 100, marginBottom: 8 }}>
+          <RadarPulseAnimation />
+        </View>
+      )}
+
+      {/* Interactive driver presence mini-card */}
+      {!acceptedDriver && (
+        <DriverInfoMiniCard
+          drivers={searchingDrivers}
+          isSearching={!searchTimedOut}
+        />
       )}
 
       <StatusStepper
         steps={searchSteps}
         currentStep="searching"
-        className="w-full mb-8"
+        className="w-full mb-6"
       />
 
       {/* I3.2: Timeout UI vs active search UI */}
@@ -2941,13 +3487,8 @@ function SearchingView() {
             onPress={handleRetrySearch}
           />
         </View>
-      ) : (
+      ) : !acceptedDriver ? (
         <>
-          <ActivityIndicator size="large" color={colors.brand.orange} className="mb-4" />
-
-          <Text variant="h4" className="mb-2 text-center">
-            {t('ride.searching_driver')}
-          </Text>
           <Animated.View style={{ opacity: searchFadeAnim }}>
             <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
               {searchMessage}
@@ -2955,7 +3496,7 @@ function SearchingView() {
           </Animated.View>
 
           {/* UBER-2.1: Thin progress bar showing search timeout */}
-          <View className="w-full px-8 mb-8">
+          <View className="w-full px-8 mb-6">
             <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
               <Animated.View
                 style={{
@@ -2974,7 +3515,7 @@ function SearchingView() {
             </Text>
           )}
         </>
-      )}
+      ) : null}
 
       <Button
         title={t('ride.cancel_ride')}

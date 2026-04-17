@@ -40,22 +40,26 @@ export interface DiscountParams {
 }
 
 export interface FareRange {
-  /** Minimum expected fare in CUP */
+  /** Minimum expected fare in CUP/TRC whole units */
   minFareCup: number;
-  /** Maximum expected fare in CUP */
+  /** Maximum expected fare in CUP/TRC whole units */
   maxFareCup: number;
-  /** Minimum expected fare in TRC centavos */
+  /** Minimum expected fare in TRC (= CUP, 1:1 peg) */
   minFareTrc: number;
-  /** Maximum expected fare in TRC centavos */
+  /** Maximum expected fare in TRC (= CUP, 1:1 peg) */
   maxFareTrc: number;
+  /** Minimum expected fare in USD */
+  minFareUsd: number;
+  /** Maximum expected fare in USD */
+  maxFareUsd: number;
 }
 
 export interface FareRangeParams {
-  /** Calculated fare in CUP (after surge) */
+  /** Calculated fare in CUP/TRC whole units (after surge) */
   fareCup: number;
   /** Current surge multiplier (1.0 = no surge) */
   surgeMultiplier: number;
-  /** Exchange rate: 1 USD = X CUP */
+  /** Exchange rate: 1 USD = X CUP/TRC (from eltoque) */
   exchangeRate: number;
   /** Traffic variance factor (default 0.15 = ±15%) */
   trafficVariance?: number;
@@ -216,7 +220,10 @@ export function matchPricingRule(
  * - Max: fare × (1 + variance) — pessimistic (more traffic)
  * - If surge > 1, max also factors in surge ceiling
  *
- * @returns Range in both CUP and TRC centavos
+ * Since 1 TRC = 1 CUP, TRC values equal CUP values.
+ * USD conversion uses the exchange rate (1 USD = X CUP/TRC).
+ *
+ * @returns Range in CUP, TRC (same), and USD
  */
 export function calculateFareRange(params: FareRangeParams): FareRange {
   const variance = params.trafficVariance ?? 0.15;
@@ -227,16 +234,19 @@ export function calculateFareRange(params: FareRangeParams): FareRange {
   const surgeBoost = surgeMultiplier > 1 ? 1.0 + (surgeMultiplier - 1.0) * 0.5 : 1.0;
   const maxFareCup = Math.round(fareCup * (1 + variance) * surgeBoost);
 
-  // Convert to TRC using cupToTrcCentavos pattern (inline to keep pure)
-  const toTrc = (cup: number): number => {
+  // TRC = CUP (1:1 peg)
+  // USD = CUP / exchangeRate
+  const toUsd = (cup: number): number => {
     if (exchangeRate <= 0) return 0;
-    return Math.round((cup / exchangeRate) * 100);
+    return Math.round((cup / exchangeRate) * 100) / 100; // 2 decimal places
   };
 
   return {
     minFareCup,
     maxFareCup,
-    minFareTrc: toTrc(minFareCup),
-    maxFareTrc: toTrc(maxFareCup),
+    minFareTrc: minFareCup, // 1:1 peg
+    maxFareTrc: maxFareCup, // 1:1 peg
+    minFareUsd: toUsd(minFareCup),
+    maxFareUsd: toUsd(maxFareCup),
   };
 }

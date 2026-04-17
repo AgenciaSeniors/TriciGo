@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
+import { colors } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
@@ -76,19 +77,19 @@ export default function DriverTicketDetailScreen() {
       <View className={`mb-3 ${isOwn ? 'items-end' : 'items-start'}`}>
         <View
           className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-            isOwn ? 'bg-primary-500' : item.is_admin ? 'bg-blue-900' : 'bg-neutral-700'
+            isOwn ? 'bg-primary-500' : item.is_admin ? 'bg-blue-100' : 'bg-neutral-100'
           }`}
         >
           {item.is_admin && (
-            <Text variant="caption" className="text-blue-300 font-semibold mb-0.5">
+            <Text variant="caption" className="text-blue-600 font-semibold mb-0.5">
               Soporte
             </Text>
           )}
-          <Text variant="bodySmall" className="text-white">
+          <Text variant="bodySmall" className="text-neutral-900">
             {item.message}
           </Text>
         </View>
-        <Text variant="caption" color="inverse" className="mt-0.5 mx-1 opacity-40">
+        <Text variant="caption" color="primary" className="mt-0.5 mx-1 opacity-40">
           {new Date(item.created_at).toLocaleTimeString('es-CU', {
             hour: '2-digit',
             minute: '2-digit',
@@ -101,7 +102,7 @@ export default function DriverTicketDetailScreen() {
   const isClosed = ticket?.status === 'closed' || ticket?.status === 'resolved';
 
   return (
-    <Screen bg="dark" statusBarStyle="light-content">
+    <Screen bg="lightPrimary" statusBarStyle="dark-content">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
@@ -109,16 +110,16 @@ export default function DriverTicketDetailScreen() {
       >
         <View className="flex-1">
           {/* Header */}
-          <View className="px-5 pt-4 pb-3 border-b border-neutral-800">
+          <View className="px-5 pt-4 pb-3 border-b border-[#E2E8F0]">
             <View className="flex-row items-center">
               <Pressable onPress={() => router.back()} className="mr-3">
-                <Ionicons name="arrow-back" size={24} color="#FAFAFA" />
+                <Ionicons name="arrow-back" size={24} color={colors.neutral[800]} />
               </Pressable>
               <View className="flex-1">
-                <Text variant="body" color="inverse" className="font-semibold" numberOfLines={1}>
+                <Text variant="body" color="primary" className="font-semibold" numberOfLines={1}>
                   {ticket?.subject ?? 'Ticket'}
                 </Text>
-                <Text variant="caption" color="inverse" className="opacity-50">
+                <Text variant="caption" color="primary" className="opacity-50">
                   {STATUS_LABELS[ticket?.status ?? 'open'] ?? ticket?.status}
                 </Text>
               </View>
@@ -140,7 +141,7 @@ export default function DriverTicketDetailScreen() {
             ListEmptyComponent={
               !loading ? (
                 <View className="flex-1 items-center justify-center">
-                  <Text variant="bodySmall" color="inverse" className="opacity-50">
+                  <Text variant="bodySmall" color="primary" className="opacity-50">
                     No hay mensajes aún. Escribe el primero.
                   </Text>
                 </View>
@@ -150,9 +151,9 @@ export default function DriverTicketDetailScreen() {
 
           {/* Input bar */}
           {!isClosed ? (
-            <View className="flex-row items-end px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+            <View className="flex-row items-end px-4 py-3 border-t border-[#E2E8F0] bg-white">
               <TextInput
-                className="flex-1 border border-neutral-700 rounded-2xl px-4 py-2.5 mr-2 text-white max-h-24"
+                className="flex-1 border border-[#E2E8F0] rounded-2xl px-4 py-2.5 mr-2 text-neutral-900 max-h-24"
                 placeholder="Escribe un mensaje..."
                 placeholderTextColor="#737373"
                 value={messageText}
@@ -163,7 +164,7 @@ export default function DriverTicketDetailScreen() {
                 onPress={handleSend}
                 disabled={!messageText.trim() || sending}
                 className={`w-10 h-10 rounded-full items-center justify-center ${
-                  messageText.trim() ? 'bg-primary-500' : 'bg-neutral-700'
+                  messageText.trim() ? 'bg-primary-500' : 'bg-neutral-200'
                 }`}
               >
                 <Ionicons
@@ -174,8 +175,8 @@ export default function DriverTicketDetailScreen() {
               </Pressable>
             </View>
           ) : (
-            <View className="px-4 py-3 border-t border-neutral-800 bg-neutral-900">
-              <Text variant="bodySmall" color="inverse" className="text-center opacity-50">
+            <View className="px-4 py-3 border-t border-[#E2E8F0] bg-white">
+              <Text variant="bodySmall" color="primary" className="text-center opacity-50">
                 Este ticket está {ticket?.status === 'resolved' ? 'resuelto' : 'cerrado'}
               </Text>
             </View>

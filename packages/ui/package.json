@@ -30,7 +30,12 @@
     "./AnimatedCard": "./src/AnimatedCard.tsx",
     "./hooks/useResponsive": "./src/hooks/useResponsive.ts",
     "./StatCard": "./src/StatCard.tsx",
-    "./Toast": "./src/Toast.tsx"
+    "./Toast": "./src/Toast.tsx",
+    "./MenuRow": "./src/MenuRow.tsx",
+    "./MultiCurrencyPrice": "./src/MultiCurrencyPrice.tsx",
+    "./QuotaCard": "./src/QuotaCard.tsx",
+    "./TripProgressBar": "./src/TripProgressBar.tsx",
+    "./DraggableSheet": "./src/DraggableSheet.tsx"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",
@@ -38,8 +43,9 @@
   },
   "peerDependencies": {
     "@expo/vector-icons": ">=14",
+    "@gorhom/bottom-sheet": ">=5",
     "react": "^18.2.0",
-    "expo-image": ">=2.0.0",
+    "expo-image": ">=55.0.0",
     "react-native": ">=0.74",
     "nativewind": ">=4"
   }

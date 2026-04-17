@@ -3,7 +3,7 @@ import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
 
 export interface TextProps extends RNTextProps {
   variant?: 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'bodySmall' | 'caption' | 'label' | 'stat' | 'metric' | 'badge';
-  color?: 'primary' | 'secondary' | 'tertiary' | 'inverse' | 'accent' | 'error';
+  color?: 'primary' | 'secondary' | 'tertiary' | 'inverse' | 'accent' | 'error' | 'muted';
 }
 
 const variantClasses = {
@@ -24,9 +24,10 @@ const colorClasses = {
   primary: 'text-neutral-950 dark:text-neutral-50',
   secondary: 'text-neutral-600 dark:text-neutral-400',
   tertiary: 'text-neutral-400 dark:text-neutral-500',
-  inverse: 'text-white dark:text-neutral-950',
+  inverse: 'text-white',
   accent: 'text-primary-500',
   error: 'text-error',
+  muted: 'text-neutral-500 dark:text-neutral-400',
 } as const;
 
 export function Text({

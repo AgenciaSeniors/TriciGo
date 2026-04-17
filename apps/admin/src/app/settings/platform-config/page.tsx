@@ -10,10 +10,25 @@ type ConfigEntry = { key: string; value: string };
 
 /** Well-known config keys with input type + help text key */
 const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> = {
+  // ── Stripe payments ──
+  stripe_enabled: { type: 'text', helpKey: 'platform_config.stripe_enabled_help' },
+  stripe_publishable_key: { type: 'text', helpKey: 'platform_config.stripe_publishable_key_help' },
+  stripe_secret_key: { type: 'text', helpKey: 'platform_config.stripe_secret_key_help' },
+  stripe_webhook_secret: { type: 'text', helpKey: 'platform_config.stripe_webhook_secret_help' },
+  stripe_min_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_min_recharge_cup_help' },
+  stripe_max_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_max_recharge_cup_help' },
+  stripe_fee_usd: { type: 'number', helpKey: 'platform_config.stripe_fee_usd_help' },
+  stripe_fee_type: { type: 'text', helpKey: 'platform_config.stripe_fee_type_help' },
+  cash_enabled: { type: 'text', helpKey: 'platform_config.cash_enabled_help' },
+  wallet_enabled: { type: 'text', helpKey: 'platform_config.wallet_enabled_help' },
+  // ── Platform config ──
   max_driver_rate_multiplier: { type: 'number', helpKey: 'platform_config.max_driver_rate_multiplier_help' },
   default_per_km_rate_cup: { type: 'number', helpKey: 'platform_config.default_per_km_rate_cup_help' },
   commission_rate: { type: 'number', helpKey: 'platform_config.commission_rate_help' },
   exchange_rate_fallback_cup: { type: 'number', helpKey: 'platform_config.exchange_rate_fallback_cup_help' },
+  quota_deduction_rate: { type: 'number', helpKey: 'platform_config.quota_deduction_rate_help' },
+  quota_warning_threshold_pct: { type: 'number', helpKey: 'platform_config.quota_warning_threshold_pct_help' },
+  quota_grace_trips: { type: 'number', helpKey: 'platform_config.quota_grace_trips_help' },
   openweather_api_key: { type: 'text', helpKey: 'platform_config.openweather_api_key_help' },
   weather_surge_enabled: { type: 'text', helpKey: 'platform_config.weather_surge_enabled_help' },
 };

@@ -35,7 +35,7 @@ export default function SafetyCenterScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadSafetyData = useCallback(async () => {
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
     setLoading(true);
 
     await Promise.allSettled([
@@ -81,7 +81,7 @@ export default function SafetyCenterScreen() {
       if (!token) {
         token = await rideService.generateShareToken(activeRide.id);
       }
-      const url = `https://tricigo.app/track/share/${token}`;
+      const url = `https://tricigo.com/track/share/${token}`;
       await Share.share({ message: t('safety.share_trip_message', { url }) });
     } catch {
       // dismissed

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,7 +11,6 @@ import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
 
 const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
 
@@ -22,6 +21,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const [error, setError] = useState('');
+  const [legalType, setLegalType] = useState<'terms' | 'privacy' | null>(null);
+  const { t: tWeb } = useTranslation('web');
 
   const handleSendCode = async () => {
     setError('');
@@ -149,7 +150,22 @@ export default function LoginScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
-                onPress={async () => { setSocialLoading(true); try { await authService.signInWithGoogle(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web'
+                      ? window.location.origin
+                      : 'tricigo://auth/callback';
+                    const data = await authService.signInWithGoogle(redirectTo);
+                    // On native, signInWithOAuth returns { url } — must open browser manually
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">{socialLoading ? '...' : 'Google'}</Text>
@@ -158,7 +174,21 @@ export default function LoginScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-900 active:bg-neutral-800"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
-                onPress={async () => { setSocialLoading(true); try { await authService.signInWithApple(Platform.OS === 'web' ? window.location.origin : undefined); } catch { setSocialLoading(false); } }}
+                onPress={async () => {
+                  setSocialLoading(true);
+                  try {
+                    const redirectTo = Platform.OS === 'web'
+                      ? window.location.origin
+                      : 'tricigo://auth/callback';
+                    const data = await authService.signInWithApple(redirectTo);
+                    if (Platform.OS !== 'web' && data?.url) {
+                      await Linking.openURL(data.url);
+                    }
+                  } catch {
+                    setSocialLoading(false);
+                  }
+                  setTimeout(() => setSocialLoading(false), 30000);
+                }}
               >
                 <Ionicons name="logo-apple" size={20} color="#fff" />
                 <Text variant="body" className="font-medium" style={{ color: '#fff' }}>{socialLoading ? '...' : 'Apple'}</Text>
@@ -168,17 +198,148 @@ export default function LoginScreen() {
             {/* Legal text */}
             <Text variant="caption" color="tertiary" className="text-center mt-8 pb-8 leading-5">
               {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => setLegalType('terms')}
+                accessibilityRole="link"
+              >
                 {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
               </Text>
               {' '}{t('auth.and', { defaultValue: 'y' })}{' '}
-              <Text variant="caption" color="accent" className="underline">
+              <Text
+                variant="caption"
+                color="accent"
+                className="underline"
+                onPress={() => setLegalType('privacy')}
+                accessibilityRole="link"
+              >
                 {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
               </Text>
             </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Legal Content Modal */}
+      <Modal visible={!!legalType} animationType="slide" onRequestClose={() => setLegalType(null)}>
+        <View style={{ flex: 1, backgroundColor: '#fff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' }}>
+            <Text variant="body" className="font-semibold">
+              {legalType === 'terms' ? t('auth.terms_link', { defaultValue: 'Términos de Servicio' }) : t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
+            </Text>
+            <Pressable onPress={() => setLegalType(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color="#333" />
+            </Pressable>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+            {legalType === 'terms' ? (
+              <>
+                <Text variant="h2" className="mb-1">{tWeb('terms.title')}</Text>
+                <Text variant="caption" color="tertiary" className="mb-6">{tWeb('terms.last_updated')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.acceptance_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.acceptance_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.service_desc_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.service_desc_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.eligibility_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.eligibility_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.accounts_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.accounts_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.rides_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.rides_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.payments_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.payments_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.cancellations_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.cancellations_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.conduct_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('terms.conduct_intro')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_respectful')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_laws')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_no_fraud')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{'  \u2022 '}{tWeb('terms.conduct_no_damage')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.liability_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.liability_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.ip_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.ip_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.termination_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.termination_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.modifications_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.modifications_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.governing_law_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('terms.governing_law_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('terms.contact_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('terms.contact_text')}</Text>
+                <Text variant="body" color="accent" className="leading-6">{tWeb('terms.contact_email')}</Text>
+              </>
+            ) : legalType === 'privacy' ? (
+              <>
+                <Text variant="h2" className="mb-1">{tWeb('privacy.title')}</Text>
+                <Text variant="caption" color="tertiary" className="mb-6">{tWeb('privacy.last_updated')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.intro_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.intro_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.data_collected_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('privacy.data_collected_intro')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_name_phone')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_location')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_ride_history')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_payment')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.data_device')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.data_use_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('privacy.data_use_intro')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_provide_service')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_improve')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_safety')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_communications')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.use_legal')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.sharing_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.sharing_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.retention_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.retention_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.rights_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('privacy.rights_intro')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_access')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_correction')}</Text>
+                <Text variant="body" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_deletion')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.right_portability')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.security_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.security_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.children_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.children_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.changes_title')}</Text>
+                <Text variant="body" className="mb-4 leading-6">{tWeb('privacy.changes_text')}</Text>
+
+                <Text variant="h3" className="mb-2 mt-4">{tWeb('privacy.contact_title')}</Text>
+                <Text variant="body" className="mb-2 leading-6">{tWeb('privacy.contact_text')}</Text>
+                <Text variant="body" color="accent" className="leading-6">{tWeb('privacy.contact_email')}</Text>
+              </>
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
     </Screen>
   );
 }

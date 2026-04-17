@@ -16,18 +16,22 @@ import type {
   Tip,
   SurgeZone,
   SurgeType,
+  DemandHotspot,
   TripInsuranceConfig,
   RidePreferences,
   CancellationFeePreview,
   Waypoint,
   RideSplit,
+  SharedRideView,
 } from '@tricigo/types';
-import type { PaymentMethod, RideStatus, ServiceTypeSlug } from '@tricigo/types';
+import type { PackageCategory, PaymentMethod, RideStatus, ServiceTypeSlug, VehicleType } from '@tricigo/types';
 import {
   haversineDistance,
   estimateRoadDistance,
   estimateDuration,
-  cupToTrcCentavos,
+  adjustRouteDuration,
+  calculateTripDuration,
+  cupToTrc,
   calculateBaseFare,
   calculateCargoFare,
   applySurge,
@@ -72,6 +76,7 @@ export interface CreateRideParams {
   insurance_selected?: boolean;
   insurance_premium_cup?: number;
   rider_preferences?: RidePreferences;
+  wallet_ratio?: number;
   ride_mode?: 'passenger' | 'cargo';
   delivery_details?: {
     package_description: string;
@@ -100,6 +105,15 @@ export const rideService = {
     dropoff_lat: number;
     dropoff_lng: number;
   }): Promise<FareEstimate> {
+    // Validate ride distance is within reasonable bounds (50km max)
+    const directDistance = haversineDistance(
+      { latitude: params.pickup_lat, longitude: params.pickup_lng },
+      { latitude: params.dropoff_lat, longitude: params.dropoff_lng },
+    );
+    if (directDistance > 50_000) {
+      throw new ValidationError('Ride distance exceeds maximum allowed (50km)');
+    }
+
     const supabase = getSupabaseClient();
 
     const pickup = { latitude: params.pickup_lat, longitude: params.pickup_lng };
@@ -128,7 +142,10 @@ export const rideService = {
           p_lat: params.pickup_lat,
           p_lng: params.pickup_lng,
           p_radius_m: 3000,
-        })).catch(() => ({ data: 1.0 as number, error: null })),
+        })).catch(() => {
+          console.warn('[ride.service] Surge RPC failed, falling back to multiplier 1.0');
+          return { data: 1.0 as number, error: null };
+        }),
         supabase
           .from('pricing_experiments')
           .select('*')
@@ -139,7 +156,8 @@ export const rideService = {
       ]);
 
     if (configResult.error) throw configResult.error;
-    const svcConfig = configResult.data as ServiceTypeConfig;
+    const svcConfig = configResult.data as ServiceTypeConfig | null;
+    if (!svcConfig) throw new Error(`Service type config not found for ${params.service_type}`);
     const pricingRules = rulesResult.data;
 
     // Find matching time-based rule (using pure function)
@@ -174,7 +192,7 @@ export const rideService = {
     let duration: number;
     if (routeResult) {
       roadDistance = routeResult.distance_m;
-      duration = routeResult.duration_s;
+      duration = calculateTripDuration(routeResult.distance_m, params.service_type);
     } else {
       const straightLine = haversineDistance(pickup, dropoff);
       roadDistance = estimateRoadDistance(straightLine);
@@ -259,7 +277,7 @@ export const rideService = {
     } catch { /* experiments are optional, don't break pricing */ }
 
     // ─── Exchange Rate: convert CUP → TRC ───
-    const estimatedFareTrc = cupToTrcCentavos(surgedFare, exchangeRate);
+    const estimatedFareTrc = cupToTrc(surgedFare);
 
     // ─── Fare Range (min-max considering traffic variance) ───
     const fareRange = calculateFareRange({
@@ -280,7 +298,7 @@ export const rideService = {
         insuranceAvailable = true;
         const premium = this.calculateInsurancePremium(surgedFare, insuranceConfig);
         insurancePremiumCup = premium;
-        insurancePremiumTrc = cupToTrcCentavos(premium, exchangeRate);
+        insurancePremiumTrc = cupToTrc(premium);
         insuranceCoverageDesc = insuranceConfig.coverage_description_es;
       }
     } catch {
@@ -349,7 +367,7 @@ export const rideService = {
     // Snapshot exchange rate at ride creation for consistent pricing
     const exchangeRate = await exchangeRateService.getUsdCupRate();
     const estimatedFareTrc = validParams.estimated_fare_cup
-      ? cupToTrcCentavos(validParams.estimated_fare_cup, exchangeRate)
+      ? cupToTrc(validParams.estimated_fare_cup)
       : 0;
 
     // Corporate ride validation
@@ -391,6 +409,7 @@ export const rideService = {
         insurance_premium_cup: validParams.insurance_premium_cup ?? 0,
         rider_preferences: validParams.rider_preferences ?? null,
         ride_mode: validParams.ride_mode ?? 'passenger',
+        wallet_ratio: validParams.wallet_ratio ?? 0,
         status: 'searching' as RideStatus,
       })
       .select()
@@ -442,12 +461,12 @@ export const rideService = {
           recipient_phone: validParams.delivery_details.recipient_phone,
           estimated_weight_kg: validParams.delivery_details.estimated_weight_kg ?? undefined,
           special_instructions: validParams.delivery_details.special_instructions ?? undefined,
-          package_category: validParams.delivery_details.package_category as any,
+          package_category: (validParams.delivery_details.package_category ?? 'paquete_pequeno') as PackageCategory,
           package_length_cm: validParams.delivery_details.package_length_cm ?? undefined,
           package_width_cm: validParams.delivery_details.package_width_cm ?? undefined,
           package_height_cm: validParams.delivery_details.package_height_cm ?? undefined,
           client_accompanies: validParams.delivery_details.client_accompanies,
-          delivery_vehicle_type: validParams.delivery_details.delivery_vehicle_type as any,
+          delivery_vehicle_type: validParams.delivery_details.delivery_vehicle_type as unknown as VehicleType,
         });
       } catch (err) {
         logger.error('delivery_details_creation_failed', { error: (err as Error).message, rideId: rideData.id });
@@ -535,6 +554,70 @@ export const rideService = {
   },
 
   /**
+   * Retry driver matching with an expanded search radius.
+   * Called from the client when the initial search times out.
+   * Returns the number of drivers notified.
+   */
+  async retryMatchDrivers(rideId: string, radiusM: number): Promise<number> {
+    const supabase = getSupabaseClient();
+
+    // Fetch ride and validate status — select only needed columns
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('id, status, ride_mode, service_type, pickup_lat, pickup_lng, pickup_address, dropoff_address')
+      .eq('id', rideId)
+      .single();
+    if (error) throw error;
+    if (!ride) throw new ValidationError('Ride not found');
+
+    if (ride.status !== 'searching') {
+      logger.info('retry_match_skipped', { rideId, status: ride.status });
+      return 0;
+    }
+
+    try {
+      const isDelivery = ride.ride_mode === 'cargo';
+      const drivers = await matchingService.findBestDrivers({
+        pickup_lat: ride.pickup_lat,
+        pickup_lng: ride.pickup_lng,
+        service_type: ride.service_type,
+        limit: 10,
+        radius_m: radiusM,
+        is_delivery: isDelivery,
+      });
+
+      logger.info('retry_drivers_matched', { rideId, radiusM, driversFound: drivers.length, isDelivery });
+
+      if (drivers.length === 0) return 0;
+
+      // Notify each matched driver via push notification
+      const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
+      if (driverUserIds.length > 0) {
+        const title = isDelivery ? 'Nuevo env\u00edo disponible' : 'Nuevo viaje disponible';
+        const body = isDelivery
+          ? `Env\u00edo de ${ride.pickup_address} a ${ride.dropoff_address}`
+          : `De ${ride.pickup_address} a ${ride.dropoff_address}`;
+        await notificationService.sendToMultipleUsers(
+          driverUserIds,
+          isDelivery ? 'new_delivery' : 'new_ride',
+          {
+            title,
+            body,
+            data: { ride_id: ride.id, type: isDelivery ? 'new_delivery' : 'new_ride' },
+          },
+        ).catch((err) => {
+          logger.warn('retry_notify_failed', { error: String(err), rideId });
+        });
+      }
+
+      return driverUserIds.length;
+    } catch (err) {
+      logger.error('retry_match_failed', { error: (err as Error).message, rideId, radiusM });
+      return 0;
+    }
+  },
+
+  /**
    * Get a ride with driver details (manual join).
    */
   async getRideWithDriver(rideId: string): Promise<RideWithDriver | null> {
@@ -570,6 +653,7 @@ export const rideService = {
       vehicle_plate: null,
       vehicle_photo_url: null,
       vehicle_year: null,
+      vehicle_type: null,
     };
 
     // If driver assigned, fetch details
@@ -695,12 +779,15 @@ export const rideService = {
   },
 
   /**
-   * Cancel a ride with optional penalty.
-   * Applies both: (1) state-based cancellation fee and (2) progressive penalty.
+   * Cancel a ride. Delegates everything (auth check, row lock, fee
+   * calculation, penalty progression, offer supersession) to the
+   * `cancel_ride` SECURITY DEFINER RPC. The `userId` parameter is
+   * retained for backwards compatibility but IGNORED on the server —
+   * `canceled_by` is derived from `auth.uid()`. See migration 00121.
    */
   async cancelRide(
     rideId: string,
-    userId?: string,
+    _userId?: string,
     reason?: string,
   ): Promise<{
     penaltyAmount: number;
@@ -709,87 +796,43 @@ export const rideService = {
   } | null> {
     const supabase = getSupabaseClient();
 
-    // Validate that the user is the ride's customer or assigned driver
-    if (userId) {
-      const { data: ride } = await supabase
-        .from('rides')
-        .select('customer_id, driver_id')
-        .eq('id', rideId)
-        .single();
-
-      if (ride) {
-        // Check driver: driver_profiles.id → driver_profiles.user_id
-        let isDriverUser = false;
-        if (ride.driver_id) {
-          const { data: dp } = await supabase
-            .from('driver_profiles')
-            .select('user_id')
-            .eq('id', ride.driver_id)
-            .single();
-          isDriverUser = dp?.user_id === userId;
-        }
-
-        if (ride.customer_id !== userId && !isDriverUser) {
-          throw new ForbiddenError('User is not the customer or driver of this ride');
-        }
-      }
-    }
-
-    // 1. Update ride status FIRST (critical — must succeed before applying fees)
-    const { error } = await supabase
-      .from('rides')
-      .update({
-        status: 'canceled' as RideStatus,
-        canceled_at: new Date().toISOString(),
-        canceled_by: userId ?? null,
-        cancellation_reason: reason ?? null,
-      })
-      .eq('id', rideId);
+    const { data, error } = await supabase.rpc('cancel_ride', {
+      p_ride_id: rideId,
+      p_reason: reason ?? null,
+    });
     if (error) throw error;
 
-    // 2. Apply state-based cancellation fee (non-critical — ride is already canceled)
-    let cancellationFee: CancellationFeePreview | undefined;
-    if (userId) {
-      try {
-        const { data: feeData, error: feeErr } = await supabase.rpc(
-          'apply_cancellation_fee',
-          { p_ride_id: rideId, p_canceled_by: userId },
-        );
-        if (!feeErr && feeData) {
-          const row = Array.isArray(feeData) ? feeData[0] : feeData;
-          cancellationFee = {
-            fee_cup: row?.fee_cup ?? 0,
-            fee_trc: row?.fee_trc ?? 0,
-            fee_reason: row?.fee_reason ?? 'free_cancel',
-            is_free: (row?.fee_cup ?? 0) === 0,
-          };
-        }
-      } catch {
-        console.error('Failed to apply cancellation fee');
+    const result = data as {
+      success?: boolean;
+      error?: string;
+      fee_cup?: number;
+      fee_trc?: number;
+      fee_reason?: string;
+      penalty_amount?: number;
+      is_blocked?: boolean;
+    } | null;
+
+    if (!result || result.error) {
+      const code = result?.error ?? 'unknown';
+      if (code === 'unauthorized') {
+        throw new ForbiddenError('User is not the customer or driver of this ride');
       }
+      throw new Error(`cancel_ride failed: ${code}`);
     }
 
-    // 3. Apply progressive cancellation penalty (non-critical)
-    if (userId) {
-      try {
-        const { data: penaltyData, error: penaltyErr } = await supabase.rpc(
-          'apply_cancellation_penalty',
-          { p_user_id: userId, p_ride_id: rideId },
-        );
-        if (!penaltyErr && penaltyData) {
-          const row = Array.isArray(penaltyData) ? penaltyData[0] : penaltyData;
-          return {
-            penaltyAmount: row?.penalty_amount ?? 0,
-            isBlocked: row?.is_blocked ?? false,
-            cancellationFee,
-          };
-        }
-      } catch {
-        console.error('Failed to apply cancellation penalty');
-      }
-    }
+    const feeCup = result.fee_cup ?? 0;
+    const cancellationFee: CancellationFeePreview = {
+      fee_cup: feeCup,
+      fee_trc: result.fee_trc ?? 0,
+      fee_reason: result.fee_reason ?? 'free_cancel',
+      is_free: feeCup === 0,
+    };
 
-    return cancellationFee ? { penaltyAmount: 0, isBlocked: false, cancellationFee } : null;
+    return {
+      penaltyAmount: result.penalty_amount ?? 0,
+      isBlocked: result.is_blocked ?? false,
+      cancellationFee,
+    };
   },
 
   /**
@@ -946,17 +989,30 @@ export const rideService = {
   },
 
   /**
-   * Get all rides currently searching for a driver.
+   * Get all rides currently offered to the authenticated driver
+   * (pending offers that haven't expired). Replaces the legacy
+   * `getSearchingRides` broadcast. RLS ensures drivers only see their
+   * own offers (see migration 00120).
+   *
+   * Returns the joined `rides` rows with each offer's expires_at so
+   * the UI can show remaining-time for the offer window.
    */
   async getSearchingRides(): Promise<Ride[]> {
     const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
     const { data, error } = await supabase
-      .from('rides')
-      .select('*')
-      .eq('status', 'searching')
-      .order('created_at', { ascending: false });
+      .from('ride_offers')
+      .select('expires_at, rides!inner(*)')
+      .eq('status', 'pending')
+      .gt('expires_at', nowIso)
+      .order('offered_at', { ascending: false });
     if (error) throw error;
-    return data as Ride[];
+    // Flatten: ride_offers → nested rides row
+    type OfferRow = { expires_at: string; rides: Ride };
+    return ((data as unknown as OfferRow[]) ?? []).map((row) => ({
+      ...row.rides,
+      offer_expires_at: row.expires_at,
+    })) as Ride[];
   },
 
   /**
@@ -1046,8 +1102,14 @@ export const rideService = {
   },
 
   /**
-   * Subscribe to new ride requests (for drivers).
-   * Listens for INSERT (new searching rides) and UPDATE (rides leaving searching status).
+   * Subscribe to new ride OFFERS for the authenticated driver.
+   * Replaces the legacy broadcast subscription to `rides:searching`.
+   *
+   * RLS filters on `ride_offers` ensure the driver only receives
+   * offers targeted at them (see migration 00120). On INSERT we fetch
+   * the full ride row (which the driver can now SELECT via the
+   * updated r_select_driver policy). On UPDATE we notify the caller
+   * so expired/superseded offers can be removed from UI.
    */
   subscribeToNewRides(
     onInsert: (ride: Ride) => void,
@@ -1055,17 +1117,24 @@ export const rideService = {
   ) {
     const supabase = getSupabaseClient();
     return supabase
-      .channel('rides:searching')
+      .channel('ride_offers:mine')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'rides',
-          filter: 'status=eq.searching',
+          table: 'ride_offers',
         },
-        (payload) => {
-          onInsert(payload.new as Ride);
+        async (payload) => {
+          const offer = payload.new as { ride_id: string; expires_at: string; status: string };
+          if (offer.status !== 'pending') return;
+          const { data: ride, error } = await supabase
+            .from('rides')
+            .select('*')
+            .eq('id', offer.ride_id)
+            .maybeSingle();
+          if (error || !ride) return;
+          onInsert({ ...(ride as Ride), offer_expires_at: offer.expires_at } as Ride);
         },
       )
       .on(
@@ -1073,10 +1142,14 @@ export const rideService = {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'rides',
+          table: 'ride_offers',
         },
-        (payload) => {
-          onUpdate(payload.new as Ride);
+        async (payload) => {
+          const offer = payload.new as { ride_id: string; status: string };
+          // Any offer leaving 'pending' means the ride is no longer
+          // available to this driver — fetch minimal info to let UI remove it.
+          if (offer.status === 'pending') return;
+          onUpdate({ id: offer.ride_id, status: offer.status === 'accepted' ? 'accepted' : 'canceled' } as unknown as Ride);
         },
       )
       .subscribe();
@@ -1086,6 +1159,10 @@ export const rideService = {
 
   /**
    * Get a ride by its public share token (no auth required).
+   * Returns full RideWithDriver — use getPublicRideByShareToken() for
+   * unauthenticated consumers (web tracking page) to avoid leaking
+   * private fields like driver phone, fare amounts, and addresses.
+   * @deprecated Use getPublicRideByShareToken() for public endpoints.
    */
   async getRideByShareToken(token: string): Promise<RideWithDriver | null> {
     const supabase = getSupabaseClient();
@@ -1097,8 +1174,115 @@ export const rideService = {
     if (error) throw error;
     if (!ride) return null;
 
-    // Reuse getRideWithDriver logic for driver details
     return this.getRideWithDriver((ride as Ride).id);
+  },
+
+  /**
+   * Privacy-safe public lookup by share token.
+   * Returns only fields safe for unauthenticated viewers:
+   * - Status, coordinates (NOT addresses), timing
+   * - Driver first name, avatar, rating, vehicle info
+   * - NO: phone, fare, payment, promo, customer_id
+   *
+   * Also enforces token expiration (24h after completion).
+   */
+  async getPublicRideByShareToken(token: string): Promise<SharedRideView | null> {
+    const supabase = getSupabaseClient();
+
+    // Single query — no redundant re-fetch
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('id, status, service_type, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, estimated_duration_s, accepted_at, pickup_at, arrived_at_destination_at, completed_at, canceled_at, driver_id, share_token_expires_at')
+      .eq('share_token', token)
+      .maybeSingle();
+    if (error) throw error;
+    if (!ride) return null;
+
+    // Enforce token expiration
+    if (ride.share_token_expires_at && new Date(ride.share_token_expires_at) < new Date()) {
+      return null;
+    }
+
+    const result: SharedRideView = {
+      id: ride.id,
+      status: ride.status as SharedRideView['status'],
+      service_type: ride.service_type as SharedRideView['service_type'],
+      pickup_location: { latitude: ride.pickup_lat ?? 0, longitude: ride.pickup_lng ?? 0 },
+      dropoff_location: { latitude: ride.dropoff_lat ?? 0, longitude: ride.dropoff_lng ?? 0 },
+      estimated_duration_s: ride.estimated_duration_s ?? 0,
+      accepted_at: ride.accepted_at ?? null,
+      pickup_at: ride.pickup_at ?? null,
+      arrived_at_destination_at: ride.arrived_at_destination_at ?? null,
+      completed_at: ride.completed_at ?? null,
+      canceled_at: ride.canceled_at ?? null,
+      driver_first_name: null,
+      driver_avatar_url: null,
+      driver_rating: null,
+      vehicle_make: null,
+      vehicle_model: null,
+      vehicle_color: null,
+      vehicle_plate: null,
+      vehicle_photo_url: null,
+      vehicle_type: null,
+    };
+
+    // Fetch driver safe fields (first name only — no phone)
+    if (ride.driver_id) {
+      const { data: driverProfile } = await supabase
+        .from('driver_profiles')
+        .select('user_id, rating_avg')
+        .eq('id', ride.driver_id)
+        .single();
+
+      if (driverProfile) {
+        result.driver_rating = driverProfile.rating_avg;
+
+        const { data: driverUser } = await supabase
+          .from('users')
+          .select('full_name, avatar_url')
+          .eq('id', driverProfile.user_id)
+          .single();
+
+        if (driverUser) {
+          // Only expose first name for privacy
+          result.driver_first_name = driverUser.full_name?.split(' ')[0] ?? null;
+          result.driver_avatar_url = driverUser.avatar_url;
+        }
+
+        const { data: vehicle } = await supabase
+          .from('vehicles')
+          .select('make, model, color, plate_number, photo_url, vehicle_type')
+          .eq('driver_id', ride.driver_id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (vehicle) {
+          result.vehicle_make = vehicle.make;
+          result.vehicle_model = vehicle.model;
+          result.vehicle_color = vehicle.color;
+          result.vehicle_plate = vehicle.plate_number;
+          result.vehicle_photo_url = vehicle.photo_url ?? null;
+          result.vehicle_type = vehicle.vehicle_type ?? null;
+        }
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Revoke sharing — sets share_token to null.
+   * Only the ride's customer can revoke.
+   */
+  async revokeShareToken(rideId: string, userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('rides')
+      .update({ share_token: null, share_token_expires_at: null })
+      .eq('id', rideId)
+      .eq('customer_id', userId);
+    if (error) throw error;
   },
 
   /**
@@ -1120,12 +1304,10 @@ export const rideService = {
    * Fallback for rides accepted before the trigger migration.
    */
   async generateShareToken(rideId: string): Promise<string> {
-    // Generate 24-char hex token (same format as DB trigger)
-    const chars = '0123456789abcdef';
-    let token = '';
-    for (let i = 0; i < 24; i++) {
-      token += chars[Math.floor(Math.random() * 16)];
-    }
+    // Generate 24-char hex token using cryptographically secure RNG
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    const token = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('rides')
@@ -1178,6 +1360,27 @@ export const rideService = {
     });
     if (error) throw error;
     return (data as number) ?? 1.0;
+  },
+
+  /**
+   * Fetch up to 8 demand hotspots around a point. Combines a 28-day
+   * historical pattern (matching the current hour-of-week) with a
+   * live boost from `status='searching'` rides in the last 10 min.
+   * See migration 00125. Returned intensity is normalized 0..1.
+   */
+  async getDemandHotspots(params: {
+    lat: number;
+    lng: number;
+    radiusM?: number;
+  }): Promise<DemandHotspot[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_demand_hotspots', {
+      p_lat: params.lat,
+      p_lng: params.lng,
+      p_radius_m: params.radiusM ?? 5000,
+    });
+    if (error) throw error;
+    return (data as DemandHotspot[] | null) ?? [];
   },
 
   /**

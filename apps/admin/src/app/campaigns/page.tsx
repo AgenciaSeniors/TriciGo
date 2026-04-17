@@ -10,6 +10,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Megaphone } from 'lucide-react';
 
 type Campaign = {
   id: string;
@@ -517,7 +518,7 @@ export default function CampaignsPage() {
                 </tr>
               ) : campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={6}><AdminEmptyState icon="📢" title={t('campaigns.no_campaigns')} /></td>
+                  <td colSpan={6}><AdminEmptyState icon={<Megaphone className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('campaigns.no_campaigns')} /></td>
                 </tr>
               ) : (
                 campaigns.map((campaign) => (

@@ -83,6 +83,7 @@ export default function VerifyOTPScreen() {
           value={code}
           onChangeText={setCode}
           autoFocus
+          variant="dark"
         />
 
         {error ? (
@@ -111,6 +112,7 @@ export default function VerifyOTPScreen() {
               onPress={handleResend}
               variant="ghost"
               size="sm"
+              forceDark
             />
           )}
         </View>

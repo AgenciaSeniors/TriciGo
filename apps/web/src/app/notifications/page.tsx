@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { AppNotification } from '@tricigo/types';
@@ -89,6 +90,7 @@ function useFormatDateGroup(t: (key: string) => string) {
 
 export default function NotificationsPage() {
   const { t } = useTranslation('web');
+  const router = useRouter();
   const formatTime = useFormatTime(t);
   const formatDateGroup = useFormatDateGroup(t);
 
@@ -119,6 +121,11 @@ export default function NotificationsPage() {
       setLoading(false);
     }
   }, [userId, t]);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !userId) router.replace('/login');
+  }, [authLoading, userId, router]);
 
   useEffect(() => {
     if (userId) {
@@ -163,21 +170,15 @@ export default function NotificationsPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || !userId) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>{t('notifications.loading')}</p>
-      </div>
-    );
-  }
-
-  if (!userId) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('notifications.login_prompt')}</p>
-        <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          {t('notifications.login_link')}
-        </Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
+          </div>
+          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+        </div>
       </div>
     );
   }

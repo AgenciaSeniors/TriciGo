@@ -9,6 +9,7 @@ type TimestampedRide = Ride & { _receivedAt: number };
 interface DriverRideState {
   incomingRequests: TimestampedRide[];
   activeTrip: Ride | null;
+  isAdvancing: boolean;
 
   addRequest: (ride: Ride) => void;
   removeRequest: (rideId: string) => void;
@@ -16,12 +17,14 @@ interface DriverRideState {
   clearRequests: () => void;
   setActiveTrip: (trip: Ride | null) => void;
   updateActiveTrip: (trip: Ride) => void;
+  setIsAdvancing: (v: boolean) => void;
   reset: () => void;
 }
 
 export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   incomingRequests: [],
   activeTrip: null,
+  isAdvancing: false,
 
   addRequest: (ride) =>
     set((s) => {
@@ -54,6 +57,8 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
 
   clearRequests: () => set({ incomingRequests: [] }),
 
+  setIsAdvancing: (v) => set({ isAdvancing: v }),
+
   setActiveTrip: (activeTrip) => set({ activeTrip }),
 
   updateActiveTrip: (trip) => {
@@ -61,7 +66,7 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     if (!activeTrip || activeTrip.id !== trip.id) return;
     // V2: Ignore stale realtime updates
     if (activeTrip && trip.updated_at && activeTrip.updated_at) {
-      if (new Date(trip.updated_at) <= new Date(activeTrip.updated_at)) {
+      if (new Date(trip.updated_at) < new Date(activeTrip.updated_at)) {
         logger.warn('[Realtime] Stale update ignored', {
           ride_id: trip.id,
           local_updated: activeTrip.updated_at,
@@ -73,5 +78,5 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     set({ activeTrip: trip });
   },
 
-  reset: () => set({ incomingRequests: [], activeTrip: null }),
+  reset: () => set({ incomingRequests: [], activeTrip: null, isAdvancing: false }),
 }));

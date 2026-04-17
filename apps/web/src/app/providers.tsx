@@ -84,7 +84,23 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  if (!ready) return null;
+  if (!ready) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-primary, #ffffff)',
+      }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary, #999)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+            Trici<span style={{ color: 'var(--primary, #00C853)' }}>Go</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthProvider>

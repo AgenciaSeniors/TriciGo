@@ -7,6 +7,7 @@ import type {
   ReviewSummary,
   ReviewTagDefinition,
   ReviewTag,
+  ReviewWithReviewer,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { validate, submitReviewSchema } from '../schemas';
@@ -145,5 +146,80 @@ export const reviewService = {
       .eq('review_id', reviewId);
     if (error) throw error;
     return data as ReviewTag[];
+  },
+
+  /**
+   * Get reviews with reviewer display info and tags.
+   * Used for driver profile screen.
+   */
+  async getReviewsWithReviewerInfo(
+    userId: string,
+    limit = 10,
+  ): Promise<ReviewWithReviewer[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('reviews')
+      .select(`
+        *,
+        reviewer:users!reviewer_id(first_name, avatar_url),
+        review_tags(
+          tag_key,
+          tag_def:review_tag_definitions!tag_key(
+            key,
+            label_es,
+            label_en,
+            label_pt,
+            sentiment
+          )
+        )
+      `)
+      .eq('reviewee_id', userId)
+      .eq('is_visible', true)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+
+    // Map Supabase joined shape to our ReviewWithReviewer interface
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const reviewer = row.reviewer as Record<string, unknown> | null;
+      const tags = (row.review_tags as Array<Record<string, unknown>>) ?? [];
+      return {
+        id: row.id as string,
+        ride_id: row.ride_id as string,
+        reviewer_id: row.reviewer_id as string,
+        reviewee_id: row.reviewee_id as string,
+        rating: row.rating as 1 | 2 | 3 | 4 | 5,
+        comment: row.comment as string | null,
+        is_visible: row.is_visible as boolean,
+        created_at: row.created_at as string,
+        tags: row.tags as string[] | undefined,
+        reviewer_first_name: (reviewer?.first_name as string) ?? '',
+        reviewer_avatar_url: (reviewer?.avatar_url as string) ?? null,
+        review_tags: tags.map((t) => {
+          const def = t.tag_def as Record<string, unknown> | null;
+          return {
+            key: (def?.key as string) ?? (t.tag_key as string),
+            label_es: (def?.label_es as string) ?? '',
+            label_en: (def?.label_en as string) ?? '',
+            label_pt: (def?.label_pt as string) ?? '',
+            sentiment: (def?.sentiment as string) ?? 'positive',
+          };
+        }),
+      } as ReviewWithReviewer;
+    });
+  },
+
+  /**
+   * Get public driver profile data: review summary + top tags.
+   */
+  async getDriverPublicProfile(driverUserId: string): Promise<{
+    summary: ReviewSummary;
+    recentReviews: ReviewWithReviewer[];
+  }> {
+    const [summary, recentReviews] = await Promise.all([
+      reviewService.getReviewSummary(driverUserId),
+      reviewService.getReviewsWithReviewerInfo(driverUserId, 10),
+    ]);
+    return { summary, recentReviews };
   },
 };

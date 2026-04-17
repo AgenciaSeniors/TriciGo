@@ -10,7 +10,7 @@ import { colors } from '@tricigo/theme';
 
 /**
  * Deep link handler for shared ride URLs.
- * URL: tricigo://ride/share/{token} or https://tricigo.app/ride/share/{token}
+ * URL: tricigo://ride/share/{token} or https://tricigo.com/ride/share/{token}
  *
  * Looks up the ride by share_token and redirects to the ride detail screen.
  */

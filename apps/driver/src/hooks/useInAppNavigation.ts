@@ -92,7 +92,7 @@ export function useInAppNavigation(
   }, []);
 
   const startNavigation = useCallback(async (destination: GeoPoint) => {
-    if (!driverLocation) return;
+    if (!driverLocation || isNavigating || isLoading) return;
     setIsLoading(true);
     destinationRef.current = destination;
     try {
@@ -105,7 +105,7 @@ export function useInAppNavigation(
     } finally {
       setIsLoading(false);
     }
-  }, [driverLocation, fetchRoute]);
+  }, [driverLocation, isNavigating, isLoading, fetchRoute]);
 
   const stopNavigation = useCallback(() => {
     setIsNavigating(false);

@@ -27,7 +27,7 @@
     "navigating_to_zone_in": "Navegando a zona activa en {{seconds}}s",
     "stay_here": "Quedarme aquí",
     "next_ride_estimated": "Próximo viaje ~{{minutes}} min",
-    "per_hour": "₧{{amount}}/h",
+    "per_hour": "${{amount}}/h",
     "ride_accepted": "¡Viaje aceptado!",
     "profitable_ride": "Viaje rentable cerca de ti",
     "available_ride": "Viaje disponible",
@@ -38,8 +38,11 @@
     "waypoints_badge": "{{count}} paradas",
     "scheduled_at": "Programado: {{time}}",
     "corporate_ride": "Corporativo",
-    "payment_tropipay": "TropiPay",
-    "payment_mixed": "Mixto",
+    "payment_card": "Tarjeta",
+    "payment_stripe": "Tarjeta",
+    "payment_mixed": "Pago mixto",
+    "collect_cash": "Cobrar en efectivo",
+    "from_wallet": "Del wallet del pasajero",
     "payment_corporate": "Corporativo",
     "today": "Hoy",
     "trips_label": "Viajes",
@@ -139,7 +142,14 @@
     "hide_route": "Ocultar ruta",
     "done": "Listo",
     "arriving_waypoint": "Llegando a Parada {{n}}...",
-    "auto_arriving": "Marcando llegada automáticamente..."
+    "auto_arriving": "Marcando llegada automáticamente...",
+    "nav_auto_started": "Navegación iniciada",
+    "restart_nav": "Reiniciar navegación",
+    "approaching_pickup": "Llegando al punto de recogida",
+    "approaching_pickup_body": "Estás a ~2 minutos del punto de recogida",
+    "step_at_destination": "En destino",
+    "action_arrived_destination": "Llegue al destino",
+    "action_finish": "Finalizar viaje"
   },
 
   "ride": {
@@ -521,6 +531,37 @@
     "verify_phone": "Verificar teléfono"
   },
 
+  "wallet": {
+    "title": "Billetera",
+    "available_balance": "Saldo disponible",
+    "hold_balance": "En retención",
+    "earning_goals": "Metas de ganancia",
+    "goal_daily": "Meta diaria",
+    "goal_weekly": "Meta semanal",
+    "goal_monthly": "Meta mensual",
+    "goal_of": "de",
+    "commission_history": "Historial de comisiones",
+    "filter_all": "Todos",
+    "type_ride": "Viaje",
+    "type_tip": "Propina",
+    "type_bonus": "Bono",
+    "type_referral": "Referido",
+    "type_surge": "Tarifa dinámica",
+    "no_commissions": "Sin comisiones aun",
+    "no_commissions_desc": "Tus comisiones apareceran aqui",
+    "quota_title": "Cuota de trabajo",
+    "quota_balance": "Balance de cuota",
+    "recharge_quota": "Recargar cuota",
+    "quota_low_warning": "Tu cuota esta baja. Recarga pronto para seguir trabajando.",
+    "quota_grace": "Cuota agotada. Te quedan {count} viajes de gracia.",
+    "quota_blocked": "Cuota agotada. Recarga para seguir aceptando viajes.",
+    "quota_deduction_info": "Se descuenta {pct} del valor de cada viaje."
+  },
+
+  "map": {
+    "recenter": "Recentrar"
+  },
+
   "common": {
     "error": "Error",
     "cash": "Efectivo",
@@ -533,6 +574,11 @@
     "profile_tab": "Perfil",
     "status_label": "Estado",
     "map_unavailable": "Mapa no disponible",
-    "my_location": "Mi ubicación"
+    "my_location": "Mi ubicación",
+    "active": "Activo",
+    "status_approved": "Activo",
+    "status_under_review": "En revisión",
+    "status_suspended": "Suspendido",
+    "status_rejected": "Rechazado"
   }
 }

@@ -21,6 +21,7 @@ import { SkeletonCard } from '@tricigo/ui/Skeleton';
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: 'es', label: 'Español' },
   { value: 'en', label: 'English' },
+  { value: 'pt', label: 'Português' },
 ];
 
 const PAYMENT_METHODS: { value: PaymentMethod; labelKey: string }[] = [
@@ -82,8 +83,13 @@ export default function EditProfileScreen() {
       const publicUrl = await authService.uploadAvatar(user.id, manipulated.uri);
       setAvatarUrl(publicUrl);
       setUser({ ...user, avatar_url: publicUrl });
-    } catch {
-      Alert.alert(t('error'), t('errors.profile_upload_failed'));
+    } catch (err) {
+      const msg = String((err as any)?.message ?? err ?? '');
+      console.error('[ProfileEdit] Avatar upload failed:', msg);
+      Alert.alert(
+        t('error', { defaultValue: 'Error' }),
+        t('errors.profile_upload_failed', { defaultValue: 'No se pudo subir la foto. Intenta con una imagen más pequeña.' }) + (msg ? `\n\n${msg}` : ''),
+      );
     } finally {
       setUploadingAvatar(false);
     }

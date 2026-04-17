@@ -178,7 +178,7 @@ export default function WalletScreen() {
             </View>
 
             {/* Balance card */}
-            <Card variant="surface" padding="lg" className="mb-4">
+            <Card forceDark variant="surface" padding="lg" className="mb-4">
               <Text variant="caption" color="secondary" className="mb-1">
                 {t('wallet.available_balance', { defaultValue: 'Balance disponible' })}
               </Text>
@@ -234,6 +234,7 @@ export default function WalletScreen() {
             <View className="flex-row gap-3 mb-4">
               <View className="flex-1">
                 <StatCard
+                  forceDark
                   icon="trending-up"
                   value={formatCUP(summary?.total_earned ?? 0)}
                   label={t('wallet.total_earned', { defaultValue: 'Total ganado' })}
@@ -242,6 +243,7 @@ export default function WalletScreen() {
               </View>
               <View className="flex-1">
                 <StatCard
+                  forceDark
                   icon="trending-down"
                   value={formatCUP(summary?.total_spent ?? 0)}
                   label={t('wallet.total_spent', { defaultValue: 'Total gastado' })}
@@ -258,6 +260,7 @@ export default function WalletScreen() {
         }
         ListEmptyComponent={
           <EmptyState
+            forceDark
             icon="wallet-outline"
             title={t('wallet.no_transactions_title', { defaultValue: 'Sin transacciones' })}
             description={t('wallet.no_transactions', { defaultValue: 'Aun no tienes transacciones. Completa viajes para empezar a ganar.' })}

@@ -152,6 +152,7 @@ export default function TransferScreen() {
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 autoFocus
+                variant="dark"
               />
               <Button
                 title={searching ? t('wallet.searching', { defaultValue: 'Buscando...' }) : t('wallet.search', { defaultValue: 'Buscar' })}
@@ -169,7 +170,7 @@ export default function TransferScreen() {
           {step === 'amount' && recipient && (
             <View>
               {/* Recipient card */}
-              <Card variant="surface" padding="md" className="mb-6">
+              <Card forceDark variant="surface" padding="md" className="mb-6">
                 <View className="flex-row items-center">
                   <View
                     className="w-12 h-12 rounded-full items-center justify-center mr-3"
@@ -195,6 +196,7 @@ export default function TransferScreen() {
                 onChangeText={setAmount}
                 keyboardType="numeric"
                 autoFocus
+                variant="dark"
               />
 
               <Input
@@ -203,6 +205,7 @@ export default function TransferScreen() {
                 value={note}
                 onChangeText={setNote}
                 className="mt-3"
+                variant="dark"
               />
 
               <Button
@@ -230,7 +233,7 @@ export default function TransferScreen() {
                 {t('wallet.confirm_transfer', { defaultValue: 'Confirmar transferencia' })}
               </Text>
 
-              <Card variant="surface" padding="lg" className="mb-6">
+              <Card forceDark variant="surface" padding="lg" className="mb-6">
                 {/* Amount */}
                 <View className="items-center mb-4">
                   <Text variant="stat" color="accent">

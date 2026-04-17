@@ -92,8 +92,8 @@ export function WebHeader() {
         background: 'var(--bg-hover)',
         border: 'none',
         cursor: 'pointer',
-        width: 36,
-        height: 36,
+        width: 44,
+        height: 44,
         borderRadius: 'var(--radius-sm)',
         display: 'flex',
         alignItems: 'center',
@@ -309,10 +309,12 @@ export function WebHeader() {
         maxWidth: 1200,
         margin: '0 auto',
       }}>
-        <a href="/" style={{ textDecoration: 'none', color: 'inherit' }} aria-label="Ir a inicio de TriciGo">
-          <span style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
-            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
-          </span>
+        <a href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }} aria-label="Ir a inicio de TriciGo">
+          <img
+            src={isDark ? '/logo-wordmark-white.png' : '/logo-wordmark.png'}
+            alt="TriciGo"
+            style={{ height: 28, width: 'auto' }}
+          />
         </a>
 
         <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegacion principal">

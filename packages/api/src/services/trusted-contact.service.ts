@@ -42,7 +42,7 @@ export const trustedContactService = {
         user_id: params.user_id,
         name: params.name,
         phone: params.phone,
-        relationship: params.relationship ?? '',
+        relationship: params.relationship || null,
         auto_share: params.auto_share ?? true,
         is_emergency: params.is_emergency ?? false,
       })

@@ -107,7 +107,11 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
           }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[useDriverPosition] subscription failed:', status);
+        }
+      });
 
     return () => {
       channel.unsubscribe();

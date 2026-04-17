@@ -1,14 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform, Alert, LogBox } from 'react-native';
 import { useColorScheme } from 'nativewind';
+import { useFonts } from 'expo-font';
+import {
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+  Montserrat_800ExtraBold,
+} from '@expo-google-fonts/montserrat';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
-import MapboxGL from '@rnmapbox/maps';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
@@ -16,21 +24,44 @@ import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
 import '../global.css';
 
-// Initialize Sentry as early as possible
-initSentry();
+// Initialize Sentry as early as possible (safe for web)
+try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
 
-// Register sound assets for ride events
-registerSoundAssets({
-  ride_accepted: require('../assets/sounds/ride_accepted.wav'),
-  driver_arrived: require('../assets/sounds/driver_arrived.wav'),
-  trip_completed: require('../assets/sounds/trip_completed.wav'),
-});
+// DEBUG: Global error handler — shows Alert with crash details
+if (Platform.OS !== 'web') {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+    try {
+      Alert.alert(
+        isFatal ? 'FATAL ERROR' : 'ERROR',
+        `${error?.name}: ${error?.message}\n\nStack: ${error?.stack?.substring(0, 300)}`,
+        [{ text: 'OK' }],
+      );
+    } catch { /* Alert itself might fail */ }
+    originalHandler(error, isFatal);
+  });
+}
 
-// Initialize Mapbox (try-catch to prevent crash if token is missing)
-try {
-  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
-} catch {
-  // Mapbox will fail on map screens but app won't crash on startup
+// Register sound assets for ride events (native only — .wav files don't resolve on web)
+if (Platform.OS !== 'web') {
+  try {
+    registerSoundAssets({
+      ride_accepted: require('../assets/sounds/ride_accepted.wav'),
+      driver_arrived: require('../assets/sounds/driver_arrived.wav'),
+      trip_completed: require('../assets/sounds/trip_completed.wav'),
+      destination_arrived: require('../assets/sounds/trip_completed.wav'),
+    });
+  } catch { /* Sound registration failed — non-fatal */ }
+}
+
+// Initialize Mapbox (native only — @rnmapbox/maps has no web support)
+if (Platform.OS !== 'web') {
+  try {
+    const MapboxGL = require('@rnmapbox/maps').default;
+    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+  } catch {
+    // Mapbox will fail on map screens but app won't crash on startup
+  }
 }
 
 function RootNavigator() {
@@ -112,15 +143,47 @@ function RootNavigator() {
       <Stack.Screen name="refer" />
       <Stack.Screen name="promo" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="driver-profile" />
+      <Stack.Screen name="support" />
       <Stack.Screen name="notifications" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
 }
 
+// Keep splash screen visible while loading fonts
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function RootLayoutInner() {
+  const [fontsLoaded] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+    Montserrat_800ExtraBold,
+  });
+
+  const onLayoutReady = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    onLayoutReady();
+  }, [onLayoutReady]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
+    <ErrorBoundary onError={(error) => {
+        Sentry.captureException(error);
+        if (Platform.OS !== 'web') {
+          Alert.alert('App Error', `${error?.name}: ${error?.message}\n\n${error?.stack?.substring(0, 300)}`);
+        }
+      }}>
       <AppProviders>
         <RootNavigator />
         <Toast />

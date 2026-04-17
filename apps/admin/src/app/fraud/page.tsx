@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Shield } from 'lucide-react';
 
 const severityBadge: Record<string, string> = {
   low: 'bg-blue-50 text-blue-700',
@@ -140,7 +141,7 @@ export default function FraudAlertsPage() {
               </tr>
             ) : alerts.length === 0 ? (
               <tr>
-                <td colSpan={6}><AdminEmptyState icon="🛡️" title={t('fraud.no_alerts')} /></td>
+                <td colSpan={6}><AdminEmptyState icon={<Shield className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('fraud.no_alerts')} /></td>
               </tr>
             ) : (
               alerts.map((alert) => (

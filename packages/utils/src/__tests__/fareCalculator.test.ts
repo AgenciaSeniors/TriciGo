@@ -287,10 +287,10 @@ describe('calculateFareRange', () => {
       surgeMultiplier: 1.0,
       exchangeRate: 500,
     });
-    // min TRC: 850 / 500 * 100 = 170
-    // max TRC: 1150 / 500 * 100 = 230
-    expect(result.minFareTrc).toBe(170);
-    expect(result.maxFareTrc).toBe(230);
+    // TRC = CUP (1:1 peg), so minFareTrc = minFareCup = 850
+    // and maxFareTrc = maxFareCup = 1150
+    expect(result.minFareTrc).toBe(850);
+    expect(result.maxFareTrc).toBe(1150);
   });
 
   it('widens max range when surge is active', () => {
@@ -323,8 +323,9 @@ describe('calculateFareRange', () => {
       surgeMultiplier: 1.0,
       exchangeRate: 0,
     });
-    expect(result.minFareTrc).toBe(0);
-    expect(result.maxFareTrc).toBe(0);
+    // TRC = CUP (1:1 peg), exchange rate only affects USD conversion
+    expect(result.minFareTrc).toBe(850);
+    expect(result.maxFareTrc).toBe(1150);
   });
 
   it('handles zero fare', () => {

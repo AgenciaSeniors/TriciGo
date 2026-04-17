@@ -26,7 +26,7 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
         ? 'border-neutral-600'
         : 'border-neutral-200 focus:border-primary-500';
 
-    const bgColor = isDark ? 'bg-neutral-800' : 'bg-white';
+    const bgColor = isDark ? 'bg-[#141418]' : 'bg-white';
     const textColor = isDark ? 'text-white' : 'text-neutral-900';
     const labelColor = isDark ? 'text-neutral-300' : 'text-neutral-700';
     const hintColor = isDark ? 'text-neutral-400' : 'text-neutral-500';
@@ -34,11 +34,11 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
 
     return (
       <View className={`mb-4 ${className ?? ''}`}>
-        {label && (
+        {label ? (
           <Text className={`text-sm font-medium ${labelColor} mb-1.5`}>
             {label}
           </Text>
-        )}
+        ) : null}
         <View
           className={`flex-row items-center border rounded-lg px-3 py-3 ${bgColor} ${borderColor}`}
         >
@@ -54,12 +54,12 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
           />
           {rightIcon && <View className="ml-2">{rightIcon}</View>}
         </View>
-        {error && (
+        {error ? (
           <Text className="text-xs text-error mt-1">{error}</Text>
-        )}
-        {hint && !error && (
+        ) : null}
+        {hint && !error ? (
           <Text className={`text-xs ${hintColor} mt-1`}>{hint}</Text>
-        )}
+        ) : null}
       </View>
     );
   },

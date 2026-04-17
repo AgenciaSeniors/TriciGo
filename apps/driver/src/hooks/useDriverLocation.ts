@@ -27,6 +27,7 @@ export function useDriverLocationTracking(
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const driverIdRef = useRef(driverId);
   const activeRideIdRef = useRef(activeRideId);
+  const lastHeartbeatRef = useRef<number | null>(null);
 
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
@@ -53,6 +54,7 @@ export function useDriverLocationTracking(
                 longitude: b.longitude,
                 heading: b.heading ?? undefined,
                 speed: b.speed ?? undefined,
+                accuracy: b.accuracy,
                 recorded_at: new Date(b.timestamp).toISOString(),
               })),
             );
@@ -120,8 +122,15 @@ export function useDriverLocationTracking(
             if (online) {
               // Update driver profile location
               driverService
-                .updateLocation(driverId!, pos.latitude, pos.longitude, pos.heading ?? undefined)
+                .updateLocation(driverId!, pos.latitude, pos.longitude, pos.heading ?? undefined, activeRideId ?? undefined)
                 .catch(() => { /* best-effort: location broadcast */ });
+
+              // F604: Send heartbeat every 60s (throttled by lastHeartbeat ref)
+              const now = Date.now();
+              if (!lastHeartbeatRef.current || now - lastHeartbeatRef.current > 60_000) {
+                lastHeartbeatRef.current = now;
+                driverService.sendHeartbeat(driverId!).catch(() => { /* best-effort */ });
+              }
 
               // Record ride location if active trip
               if (activeRideId) {
@@ -143,6 +152,7 @@ export function useDriverLocationTracking(
                 longitude: pos.longitude,
                 heading: pos.heading,
                 speed: loc.coords.speed ?? null,
+                accuracy: loc.coords.accuracy ?? null,
                 timestamp: Date.now(),
                 rideId: activeRideId,
                 driverId: driverId!,

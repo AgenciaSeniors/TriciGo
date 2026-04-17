@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -61,6 +61,8 @@ interface AddressSearchInputProps {
   showUseMyLocation?: boolean;
   /** Callback to open the "pick on map" screen */
   onPickOnMap?: () => void;
+  /** When true, component starts expanded with suggestions visible */
+  autoExpand?: boolean;
 }
 
 function AddressSearchInputInner({
@@ -72,6 +74,7 @@ function AddressSearchInputInner({
   predictions = [],
   showUseMyLocation = false,
   onPickOnMap,
+  autoExpand = false,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -79,7 +82,7 @@ function AddressSearchInputInner({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AddressSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(autoExpand);
   const [isLocating, setIsLocating] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
@@ -179,8 +182,14 @@ function AddressSearchInputInner({
           // If no intersection found, fall through to normal search
         }
 
-        // ── Normal search (Mapbox + POIs + Nominatim) ──
-        const searchResults = await searchAddress(text, 5, userLocation);
+        // ── Normal search: Supabase POIs + Streets in parallel, fall back to Mapbox ──
+        const [poiResults, streetResults] = await Promise.all([
+          searchPoisSupabase(text, userLocation, 5),
+          searchStreetsSupabase(text, userLocation, 5),
+        ]);
+        // Merge: streets first (more relevant for Cuban addresses), then POIs, then Mapbox fallback
+        const merged = [...streetResults, ...poiResults];
+        const searchResults = merged.length > 0 ? merged : await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results
@@ -332,7 +341,21 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    // Immediately select with current address
     onSelect(item.address, { latitude: item.latitude, longitude: item.longitude });
+    // Background: enrich with Cuban cross-street format via reverseGeocode
+    if (item.latitude && item.longitude) {
+      reverseGeocode(item.latitude, item.longitude).then((enriched) => {
+        if (enriched && enriched !== item.address) {
+          // If the original was a POI name (not a street), prepend it
+          const isPoiName = !item.address.includes(' e/ ') && !item.address.includes(' entre ') && !item.address.match(/^(Calle|Avenida|Calzada|Carretera)\s/i);
+          const finalAddress = isPoiName && !enriched.includes(item.address)
+            ? `${item.address}, ${enriched}`
+            : enriched;
+          onSelect(finalAddress, { latitude: item.latitude, longitude: item.longitude });
+        }
+      }).catch(() => {});
+    }
   };
 
   // UBER-1.3: Merge and rank all sources into a single list of 3
@@ -480,7 +503,7 @@ function AddressSearchInputInner({
                     {item.address}
                   </Text>
                 </View>
-                {item.distanceKm != null && (
+                {item.distanceKm != null && Number.isFinite(item.distanceKm) && item.distanceKm < 500 && (
                   <Text variant="caption" color="tertiary" className="ml-2">
                     {item.distanceKm < 1
                       ? `${Math.round(item.distanceKm * 1000)} m`
@@ -581,68 +604,69 @@ function AddressSearchInputInner({
             </Pressable>
           )}
 
-          {/* Merged suggestion list: predictions > saved > recent, top 3 */}
-          {(() => {
-            const sugAll: MergedResult[] = [
-              ...predictions.slice(0, 3).map((p) => ({
-                address: p.address, latitude: p.latitude, longitude: p.longitude,
-                priority: 1, source: 'prediction',
-                icon: p.reason === 'time_pattern' ? 'time-outline' : p.reason === 'frequent' ? 'star' : 'navigate-outline',
-                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: p.latitude, longitude: p.longitude }) / 1000 : null,
-              })),
-              ...savedLocations.slice(0, 3).map((s) => ({
-                address: s.address, latitude: s.latitude, longitude: s.longitude,
-                priority: 2, source: 'saved', icon: 'star',
-                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: s.latitude, longitude: s.longitude }) / 1000 : null,
-              })),
-              ...recentAddresses.slice(0, 3).map((r) => ({
-                address: r.address, latitude: r.latitude, longitude: r.longitude,
-                priority: 3, source: 'recent', icon: 'time-outline',
-                distanceKm: userLocation ? haversineDistance(userLocation, { latitude: r.latitude, longitude: r.longitude }) / 1000 : null,
-              })),
-            ];
-            // Dedupe within 100m
-            const deduped: typeof sugAll = [];
-            for (const item of sugAll) {
-              const isDup = deduped.some((d) =>
-                haversineDistance({ latitude: d.latitude, longitude: d.longitude }, { latitude: item.latitude, longitude: item.longitude }) < 100
-              );
-              if (!isDup) deduped.push(item);
-            }
-            deduped.sort((a, b) => a.priority - b.priority);
-            const topItems = deduped.slice(0, 5);
-
-            if (topItems.length === 0) return null;
-            return topItems.map((item, index) => (
-              <Pressable
-                key={`sug-${item.source}-${item.latitude}-${item.longitude}`}
-                className={`flex-row items-center px-3 rounded-lg ${index === 0 ? 'py-3' : 'py-2.5'}`}
-                onPress={() => handleSelectMerged(item)}
-              >
-                <Ionicons
-                  name={item.icon as any}
-                  size={index === 0 ? 18 : 16}
-                  color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
-                />
-                <View className="flex-1 ml-3">
-                  <Text
-                    variant={index === 0 ? 'body' : 'bodySmall'}
-                    className={index === 0 ? 'font-semibold' : 'font-medium'}
-                    numberOfLines={1}
+          {/* Saved locations section (Casa, Trabajo, etc.) — like web */}
+          {savedLocations.length > 0 && (
+            <View className="mb-2">
+              <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
+                {t('ride.saved_locations', { defaultValue: 'Ubicaciones guardadas' })}
+              </Text>
+              {savedLocations.map((loc, i) => {
+                const iconName = (loc as any).label?.toLowerCase().includes('casa') ? 'home' : (loc as any).label?.toLowerCase().includes('trabajo') ? 'briefcase' : 'star';
+                return (
+                  <Pressable
+                    key={`saved-${i}`}
+                    className="flex-row items-center px-3 py-3 rounded-lg"
+                    style={{ borderBottomWidth: i < savedLocations.length - 1 ? 1 : 0, borderBottomColor: isDark ? '#333' : '#f0f0f0' }}
+                    onPress={() => handleSelectMerged({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, priority: 0, source: 'saved', icon: iconName, distanceKm: null })}
                   >
-                    {item.address}
-                  </Text>
-                </View>
-                {item.distanceKm != null && (
-                  <Text variant="caption" color="tertiary">
-                    {item.distanceKm < 1
-                      ? `${Math.round(item.distanceKm * 1000)} m`
-                      : `${item.distanceKm.toFixed(1)} km`}
-                  </Text>
-                )}
-              </Pressable>
-            ));
-          })()}
+                    <Ionicons name={iconName as any} size={18} color={colors.brand.orange} />
+                    <View className="flex-1 ml-3">
+                      <Text variant="body" className="font-semibold" numberOfLines={1}>{(loc as any).label || loc.address}</Text>
+                      <Text variant="caption" color="tertiary" numberOfLines={1}>{loc.address}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Recent addresses section */}
+          {recentAddresses.length > 0 && (
+            <View className="mb-2">
+              <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
+                {t('ride.recent_addresses', { defaultValue: 'Recientes' })}
+              </Text>
+              {recentAddresses.slice(0, 5).map((r, i) => (
+                <Pressable
+                  key={`recent-${i}`}
+                  className="flex-row items-center px-3 py-2.5 rounded-lg"
+                  onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null })}
+                >
+                  <Ionicons name="time-outline" size={16} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
+                  <Text variant="bodySmall" className="flex-1 ml-3 font-medium" numberOfLines={1}>{r.address}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* Predicted destinations */}
+          {predictions.length > 0 && (
+            <View className="mb-2">
+              <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
+                {t('ride.suggestions', { defaultValue: 'Sugeridos' })}
+              </Text>
+              {predictions.slice(0, 3).map((p, i) => (
+                <Pressable
+                  key={`pred-${i}`}
+                  className="flex-row items-center px-3 py-2.5 rounded-lg"
+                  onPress={() => handleSelectMerged({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 0, source: 'prediction', icon: 'navigate-outline', distanceKm: null })}
+                >
+                  <Ionicons name={p.reason === 'frequent' ? 'star' : 'navigate-outline'} size={16} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
+                  <Text variant="bodySmall" className="flex-1 ml-3 font-medium" numberOfLines={1}>{p.address}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           {/* Popular places (presets) */}
           <View className="mt-3">

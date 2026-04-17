@@ -1,11 +1,11 @@
 // ============================================================
 // TriciGo — Typography System
-// Recommended: Montserrat (or Poppins/Inter as fallback)
+// Primary: Inter | Fallback: Montserrat
 // ============================================================
 
 export const fontFamily = {
-  sans: 'Montserrat',
-  sansFallback: 'Inter',
+  sans: 'Inter',
+  sansFallback: 'Montserrat',
   mono: 'JetBrains Mono',
 } as const;
 
@@ -36,19 +36,24 @@ export const lineHeight = {
 } as const;
 
 export const textVariants = {
-  h1: {
-    fontSize: fontSize['4xl'],
+  display: {
+    fontSize: fontSize['5xl'],
     fontWeight: fontWeight.extrabold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 1.1,
   },
-  h2: {
+  h1: {
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     lineHeight: lineHeight.tight,
   },
-  h3: {
+  h2: {
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
+    lineHeight: lineHeight.tight,
+  },
+  h3: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.semibold,
     lineHeight: lineHeight.tight,
   },
   h4: {

@@ -418,8 +418,8 @@
     "col_description": "Descripción",
     "col_type": "Tipo",
     "col_ref": "Ref",
-    "tab_tropipay": "TropiPay",
-    "tropipay_no_intents": "Sin pagos TropiPay",
+    "tab_payments": "Pagos",
+    "no_payment_intents": "Sin pagos",
     "col_status": "Estado",
     "col_usd_amount": "Monto USD",
     "col_reference": "Referencia"
@@ -526,7 +526,8 @@
     "revenue_forecast": "Pronóstico de Ingresos",
     "prediction_next_7_days": "Predicción próximos 7 días",
     "actual": "Real",
-    "predicted": "Proyectado"
+    "predicted": "Proyectado",
+    "export_csv": "Exportar CSV"
   },
 
   "funnel": {
@@ -545,7 +546,7 @@
     "admin_panel": "Panel de administración",
     "email_label": "Correo electrónico",
     "password_label": "Contraseña",
-    "email_placeholder": "admin@tricigo.app",
+    "email_placeholder": "admin@tricigo.com",
     "password_placeholder": "••••••••",
     "login_button": "Ingresar",
     "logging_in": "Ingresando...",
@@ -560,7 +561,7 @@
     "title": "Restablecer contraseña",
     "description": "Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.",
     "email_label": "Correo electrónico",
-    "email_placeholder": "admin@tricigo.app",
+    "email_placeholder": "admin@tricigo.com",
     "send_link": "Enviar enlace",
     "sending": "Enviando...",
     "success_title": "Revisa tu correo",
@@ -875,11 +876,27 @@
     "commission_rate_help": "Porcentaje que cobra la plataforma por viaje (ej: 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Tasa de cambio de respaldo (CUP)",
     "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada",
+    "quota_deduction_rate": "Tasa de deduccion de cuota",
+    "quota_deduction_rate_help": "Porcentaje del valor del viaje que se descuenta de la cuota del conductor (ej: 0.15 = 15%)",
+    "quota_warning_threshold_pct": "Umbral de alerta de cuota baja",
+    "quota_warning_threshold_pct_help": "Porcentaje restante de cuota que activa la alerta (ej: 0.20 = 20%)",
+    "quota_grace_trips": "Viajes de gracia",
+    "quota_grace_trips_help": "Numero de viajes permitidos despues de agotar la cuota antes del bloqueo",
     "openweather_api_key": "API Key de OpenWeatherMap",
     "openweather_api_key_help": "Clave para consultas de clima. Obtener en openweathermap.org",
     "weather_surge_enabled": "Surge por clima activo",
     "weather_surge_enabled_help": "Activar/desactivar el aumento automático de tarifa por lluvia",
-    "weather_last_check": "Último chequeo de clima"
+    "weather_last_check": "Último chequeo de clima",
+    "stripe_enabled_help": "Habilitar/deshabilitar pagos con tarjeta",
+    "stripe_publishable_key_help": "Clave publica de Stripe (pk_...)",
+    "stripe_secret_key_help": "Clave secreta de Stripe (sk_...)",
+    "stripe_webhook_secret_help": "Secreto del webhook de Stripe (whsec_...)",
+    "stripe_min_recharge_cup_help": "Monto minimo de recarga en CUP",
+    "stripe_max_recharge_cup_help": "Monto maximo de recarga en CUP",
+    "stripe_fee_usd_help": "Fee de servicio en USD por recarga",
+    "stripe_fee_type_help": "Tipo de fee: fixed o percentage",
+    "cash_enabled_help": "Habilitar/deshabilitar pagos en efectivo",
+    "wallet_enabled_help": "Habilitar/deshabilitar pagos con wallet"
   },
 
   "exchange_rate": {

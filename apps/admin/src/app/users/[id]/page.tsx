@@ -36,8 +36,8 @@ const roleBadgeClasses: Record<string, string> = {
   super_admin: 'bg-red-50 text-red-700',
 };
 
-function formatCurrency(centavos: number): string {
-  return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
+function formatCurrency(amount: number): string {
+  return `${Math.round(amount).toLocaleString('es-CU')} TRC`;
 }
 
 export default function UserDetailPage() {
@@ -281,7 +281,7 @@ export default function UserDetailPage() {
               <button
                 onClick={handleLevelChange}
                 disabled={levelUpdating || selectedLevel === currentLevel}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {levelUpdating ? t('common.saving') : t('common.save')}
               </button>

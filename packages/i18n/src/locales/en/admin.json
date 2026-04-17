@@ -418,8 +418,8 @@
     "col_description": "Description",
     "col_type": "Type",
     "col_ref": "Ref",
-    "tab_tropipay": "TropiPay",
-    "tropipay_no_intents": "No TropiPay payments",
+    "tab_payments": "Payments",
+    "no_payment_intents": "No payments",
     "col_status": "Status",
     "col_usd_amount": "USD Amount",
     "col_reference": "Reference"
@@ -526,7 +526,8 @@
     "revenue_forecast": "Revenue Forecast",
     "prediction_next_7_days": "Prediction next 7 days",
     "actual": "Actual",
-    "predicted": "Predicted"
+    "predicted": "Predicted",
+    "export_csv": "Export CSV"
   },
 
   "funnel": {
@@ -545,7 +546,7 @@
     "admin_panel": "Admin Panel",
     "email_label": "Email",
     "password_label": "Password",
-    "email_placeholder": "admin@tricigo.app",
+    "email_placeholder": "admin@tricigo.com",
     "password_placeholder": "••••••••",
     "login_button": "Log in",
     "logging_in": "Logging in...",
@@ -560,7 +561,7 @@
     "title": "Reset your password",
     "description": "Enter your email and we'll send you a reset link.",
     "email_label": "Email",
-    "email_placeholder": "admin@tricigo.app",
+    "email_placeholder": "admin@tricigo.com",
     "send_link": "Send reset link",
     "sending": "Sending...",
     "success_title": "Check your email",
@@ -875,11 +876,27 @@
     "commission_rate_help": "Platform fee percentage per ride (e.g., 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Exchange rate fallback (CUP)",
     "exchange_rate_fallback_cup_help": "Fallback USD/CUP rate if no current rate is set",
+    "quota_deduction_rate": "Quota deduction rate",
+    "quota_deduction_rate_help": "Percentage of ride fare deducted from driver's quota (e.g., 0.15 = 15%)",
+    "quota_warning_threshold_pct": "Low quota warning threshold",
+    "quota_warning_threshold_pct_help": "Remaining quota percentage that triggers a warning (e.g., 0.20 = 20%)",
+    "quota_grace_trips": "Grace trips",
+    "quota_grace_trips_help": "Number of trips allowed after quota is depleted before blocking",
     "openweather_api_key": "OpenWeatherMap API Key",
     "openweather_api_key_help": "API key for weather queries. Get one at openweathermap.org",
     "weather_surge_enabled": "Weather surge enabled",
     "weather_surge_enabled_help": "Enable/disable automatic fare increase during rain",
-    "weather_last_check": "Last weather check"
+    "weather_last_check": "Last weather check",
+    "stripe_enabled_help": "Enable/disable card payments",
+    "stripe_publishable_key_help": "Stripe publishable key (pk_...)",
+    "stripe_secret_key_help": "Stripe secret key (sk_...)",
+    "stripe_webhook_secret_help": "Stripe webhook secret (whsec_...)",
+    "stripe_min_recharge_cup_help": "Minimum recharge amount in CUP",
+    "stripe_max_recharge_cup_help": "Maximum recharge amount in CUP",
+    "stripe_fee_usd_help": "Service fee in USD per recharge",
+    "stripe_fee_type_help": "Fee type: fixed or percentage",
+    "cash_enabled_help": "Enable/disable cash payments",
+    "wallet_enabled_help": "Enable/disable wallet payments"
   },
 
   "exchange_rate": {

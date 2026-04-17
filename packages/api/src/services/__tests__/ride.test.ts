@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
-const mockSingle = vi.fn();
-const mockSelect = vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(() => ({ single: mockSingle })) })) }));
-const mockFrom = vi.fn(() => ({ select: mockSelect }));
+const mockFrom = vi.fn(() => createMockQueryChain());
 const mockRpc = vi.fn();
 const mockGetUser = vi.fn();
 const mockSupabase = {
@@ -61,19 +60,15 @@ const MOTO_CONFIG = {
 describe('rideService.getLocalFareEstimate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFrom.mockImplementation(() => createMockQueryChain());
   });
 
   it('calculates fare for triciclo between Capitolio and Hotel Nacional', async () => {
-    // Set up mock to return triciclo config
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: TRICICLO_CONFIG, error: null }),
-          }),
-        }),
-      }),
-    });
+    // Set up mock to return triciclo config for all from() calls
+    const chain = createMockQueryChain();
+    chain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    chain.maybeSingle.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    mockFrom.mockImplementation(() => chain);
 
     const estimate = await rideService.getLocalFareEstimate({
       service_type: 'triciclo_basico',
@@ -92,15 +87,10 @@ describe('rideService.getLocalFareEstimate', () => {
   });
 
   it('respects min_fare_cup for very short distances', async () => {
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: TRICICLO_CONFIG, error: null }),
-          }),
-        }),
-      }),
-    });
+    const chain = createMockQueryChain();
+    chain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    chain.maybeSingle.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    mockFrom.mockImplementation(() => chain);
 
     // Very short distance — same location
     const estimate = await rideService.getLocalFareEstimate({
@@ -117,15 +107,10 @@ describe('rideService.getLocalFareEstimate', () => {
 
   it('different service types produce different fares', async () => {
     // First call: triciclo
-    mockFrom.mockReturnValueOnce({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: TRICICLO_CONFIG, error: null }),
-          }),
-        }),
-      }),
-    });
+    const triciChain = createMockQueryChain();
+    triciChain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    triciChain.maybeSingle.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    mockFrom.mockImplementation(() => triciChain);
 
     const triciEstimate = await rideService.getLocalFareEstimate({
       service_type: 'triciclo_basico',
@@ -136,15 +121,10 @@ describe('rideService.getLocalFareEstimate', () => {
     });
 
     // Second call: moto
-    mockFrom.mockReturnValueOnce({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: MOTO_CONFIG, error: null }),
-          }),
-        }),
-      }),
-    });
+    const motoChain = createMockQueryChain();
+    motoChain.single.mockResolvedValue({ data: MOTO_CONFIG, error: null });
+    motoChain.maybeSingle.mockResolvedValue({ data: MOTO_CONFIG, error: null });
+    mockFrom.mockImplementation(() => motoChain);
 
     const motoEstimate = await rideService.getLocalFareEstimate({
       service_type: 'moto_standard',
@@ -161,18 +141,10 @@ describe('rideService.getLocalFareEstimate', () => {
   });
 
   it('throws when service config fetch fails', async () => {
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'Not found', code: 'PGRST116' },
-            }),
-          }),
-        }),
-      }),
-    });
+    const chain = createMockQueryChain();
+    chain.single.mockResolvedValue({ data: null, error: { message: 'Not found', code: 'PGRST116' } });
+    chain.maybeSingle.mockResolvedValue({ data: null, error: { message: 'Not found', code: 'PGRST116' } });
+    mockFrom.mockImplementation(() => chain);
 
     await expect(
       rideService.getLocalFareEstimate({
@@ -799,14 +771,14 @@ describe('rideService.createRide', () => {
       dropoff_latitude: 23.1375,
       dropoff_longitude: -82.3964,
       dropoff_address: 'Hotel Nacional',
-      promo_code_id: 'promo-1',
+      promo_code_id: UUID.PROMO_1,
       discount_amount_cup: 500,
     });
 
     expect(mockPromoInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ promotion_id: 'promo-1', user_id: 'user-1', ride_id: 'ride-3' }),
+      expect.objectContaining({ promotion_id: UUID.PROMO_1, user_id: 'user-1', ride_id: 'ride-3' }),
     );
-    expect(mockRpc).toHaveBeenCalledWith('increment_promo_uses', { p_promo_id: 'promo-1' });
+    expect(mockRpc).toHaveBeenCalledWith('increment_promo_uses', { p_promo_id: UUID.PROMO_1 });
   });
 });
 
@@ -817,14 +789,14 @@ describe('rideService.createRide', () => {
 describe('rideService.cancelRide', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFrom.mockImplementation(() => createMockQueryChain());
   });
 
   it('cancels a ride and applies penalty', async () => {
-    mockFrom.mockReturnValue({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
-    });
+    // The service does: select ride, then update ride. Default chain handles both.
+    const chain = createMockQueryChain({ data: null, error: null });
+    chain.single.mockResolvedValue({ data: { customer_id: 'user-1', driver_id: null }, error: null });
+    mockFrom.mockImplementation(() => chain);
 
     mockRpc.mockResolvedValue({
       data: { penalty_amount: 200, is_blocked: false },
@@ -832,7 +804,7 @@ describe('rideService.cancelRide', () => {
     });
 
     const result = await rideService.cancelRide('ride-1', 'user-1', 'changed_mind');
-    expect(result).toEqual({ penaltyAmount: 200, isBlocked: false });
+    expect(result).toEqual(expect.objectContaining({ penaltyAmount: 200, isBlocked: false }));
     expect(mockRpc).toHaveBeenCalledWith('apply_cancellation_penalty', {
       p_user_id: 'user-1',
       p_ride_id: 'ride-1',
@@ -840,11 +812,8 @@ describe('rideService.cancelRide', () => {
   });
 
   it('cancels without penalty when no userId', async () => {
-    mockFrom.mockReturnValue({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
-    });
+    const chain = createMockQueryChain({ data: null, error: null });
+    mockFrom.mockImplementation(() => chain);
 
     const result = await rideService.cancelRide('ride-1');
     expect(result).toBeNull();
@@ -852,26 +821,20 @@ describe('rideService.cancelRide', () => {
   });
 
   it('throws when ride update fails', async () => {
-    mockFrom.mockReturnValue({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: { message: 'RLS denied' } }),
-      }),
-    });
+    const chain = createMockQueryChain({ data: null, error: { message: 'RLS denied' } });
+    mockFrom.mockImplementation(() => chain);
 
     await expect(rideService.cancelRide('ride-1')).rejects.toBeDefined();
   });
 
   it('returns null when penalty RPC fails gracefully', async () => {
-    mockFrom.mockReturnValue({
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
-    });
+    const chain = createMockQueryChain({ data: null, error: null });
+    chain.single.mockResolvedValue({ data: { customer_id: 'user-1', driver_id: null }, error: null });
+    mockFrom.mockImplementation(() => chain);
 
     mockRpc.mockRejectedValue(new Error('RPC timeout'));
 
     const result = await rideService.cancelRide('ride-1', 'user-1');
-    // Should not throw — penalty failure is non-critical
     expect(result).toBeNull();
   });
 });

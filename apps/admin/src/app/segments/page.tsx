@@ -7,6 +7,7 @@ import { cityService } from '@tricigo/api';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Users } from 'lucide-react';
 import { formatAdminDate } from '@/lib/formatDate';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
@@ -72,7 +73,7 @@ export default function SegmentsPage() {
       // Power users (>10 rides) — count profiles that have more than 10 rides
       const { data: powerData } = await supabase.rpc('count_power_users', {}).maybeSingle();
       // Fallback: query rides grouped by customer_id
-      let powerCount = powerData?.count ?? 0;
+      let powerCount = (powerData as { count?: number } | null)?.count ?? 0;
       if (!powerData) {
         const { data: rideGroups } = await supabase
           .from('rides')
@@ -196,12 +197,10 @@ export default function SegmentsPage() {
           if (!rideStats[ride.customer_id]) {
             rideStats[ride.customer_id] = { count: 0, lastRide: null };
           }
-          rideStats[ride.customer_id].count++;
-          if (
-            !rideStats[ride.customer_id].lastRide ||
-            ride.created_at > rideStats[ride.customer_id].lastRide!
-          ) {
-            rideStats[ride.customer_id].lastRide = ride.created_at;
+          const stat = rideStats[ride.customer_id]!;
+          stat.count++;
+          if (!stat.lastRide || ride.created_at > stat.lastRide) {
+            stat.lastRide = ride.created_at;
           }
         }
 
@@ -428,7 +427,7 @@ export default function SegmentsPage() {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={6}><AdminEmptyState icon="👥" title={t('segments.no_users')} /></td>
+                    <td colSpan={6}><AdminEmptyState icon={<Users className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('segments.no_users')} /></td>
                   </tr>
                 ) : (
                   users.map((user) => (

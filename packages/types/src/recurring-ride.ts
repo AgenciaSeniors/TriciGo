@@ -8,7 +8,7 @@ export type RecurringRideStatus = 'active' | 'paused' | 'deleted';
 
 export interface RecurringRide {
   id: string;
-  user_id: string;
+  customer_id: string;
 
   // Route
   pickup_latitude: number;

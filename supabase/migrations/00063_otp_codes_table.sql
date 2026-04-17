@@ -26,9 +26,4 @@ SELECT cron.schedule(
 ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 -- No public policies — only service_role can read/write
 
--- Platform config for Infobip WhatsApp
-INSERT INTO platform_config (key, value) VALUES
-  ('infobip_api_key', '"YOUR_INFOBIP_API_KEY"'),
-  ('infobip_base_url', '"https://api.infobip.com"'),
-  ('infobip_whatsapp_sender', '"YOUR_WHATSAPP_NUMBER"')
-ON CONFLICT (key) DO NOTHING;
+-- Note: Infobip config removed — OTP now sent via Twilio (env vars on edge functions)

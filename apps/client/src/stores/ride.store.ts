@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import i18next from 'i18next';
 import type {
@@ -12,6 +13,8 @@ import type {
   RidePreferences,
   PackageCategory,
   VehicleType,
+  SearchingDriverPresence,
+  DriverAcceptedBroadcast,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 import { logger } from '@tricigo/utils';
@@ -85,6 +88,7 @@ interface RideRequestDraft {
   insuranceSelected: boolean;
   ridePreferences: RidePreferences;
   passengerCount: number;
+  walletRatio: number;
 }
 
 const defaultDraft: RideRequestDraft = {
@@ -99,6 +103,7 @@ const defaultDraft: RideRequestDraft = {
   insuranceSelected: false,
   ridePreferences: {},
   passengerCount: 1,
+  walletRatio: 0.5,
 };
 
 interface PromoResult {
@@ -132,6 +137,14 @@ interface RideState {
   // Fare splitting
   splits: RideSplit[];
 
+  // ── Interactive searching state ──
+  searchingDrivers: SearchingDriverPresence[];
+  acceptedDriverBroadcast: DriverAcceptedBroadcast | null;
+  isAcceptAnimating: boolean;
+
+  // ── Rating reminder ──
+  ratingReminderId: string | null;
+
   setFlowStep: (step: RideFlowStep) => void;
   setPickup: (address: string, location: GeoPoint) => void;
   setDropoff: (address: string, location: GeoPoint) => void;
@@ -162,6 +175,12 @@ interface RideState {
   addSplit: (split: RideSplit) => void;
   removeSplit: (splitId: string) => void;
   updateSplit: (split: RideSplit) => void;
+  setSearchingDrivers: (drivers: SearchingDriverPresence[]) => void;
+  setAcceptedDriver: (data: DriverAcceptedBroadcast | null) => void;
+  setAcceptAnimating: (val: boolean) => void;
+  clearSearchState: () => void;
+  setWalletRatio: (ratio: number) => void;
+  setRatingReminderId: (id: string | null) => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -181,6 +200,10 @@ export const useRideStore = create<RideState>((set, get) => ({
   promoResult: null,
   allFareEstimates: null,
   splits: [],
+  searchingDrivers: [],
+  acceptedDriverBroadcast: null,
+  isAcceptAnimating: false,
+  ratingReminderId: null,
 
   setFlowStep: (flowStep) => set({ flowStep }),
 
@@ -211,7 +234,7 @@ export const useRideStore = create<RideState>((set, get) => ({
 
     // X2.2: Validate forward-only status transitions
     if (ride.status !== activeRide.status) {
-      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'completed', 'canceled'];
+      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed', 'canceled'];
 
       const isValidTransition = (current: string, next: string): boolean => {
         if (next === 'canceled') return true; // can always cancel
@@ -242,11 +265,14 @@ export const useRideStore = create<RideState>((set, get) => ({
       ride.status === 'accepted' ||
       ride.status === 'driver_en_route' ||
       ride.status === 'arrived_at_pickup' ||
-      ride.status === 'in_progress'
+      ride.status === 'in_progress' ||
+      ride.status === 'arrived_at_destination'
     ) {
       set({ flowStep: 'active' });
     } else if (ride.status === 'completed') {
       set({ flowStep: 'completed' });
+      // F009: Persist ride ID so review screen survives app restart
+      AsyncStorage.setItem('@tricigo/pending_review_ride_id', ride.id).catch(() => {});
     } else if (ride.status === 'canceled') {
       set({ flowStep: 'idle', activeRide: null, rideWithDriver: null, error: null });
     }
@@ -259,13 +285,20 @@ export const useRideStore = create<RideState>((set, get) => ({
   setPromoResult: (promoResult) => set({ promoResult }),
   setAllFareEstimates: (allFareEstimates) => set({ allFareEstimates }),
   setCorporateAccount: (corporateAccountId) =>
-    set((s) => ({
-      draft: {
-        ...s.draft,
-        corporateAccountId,
-        paymentMethod: corporateAccountId ? 'corporate' : s.draft.paymentMethod === 'corporate' ? 'cash' : s.draft.paymentMethod,
-      },
-    })),
+    set((s) => {
+      // Bug 23: Save previous payment method before switching to corporate so we can restore it on deselect
+      if (corporateAccountId) {
+        return {
+          _prevPaymentMethod: s.draft.paymentMethod !== 'corporate' ? s.draft.paymentMethod : (s as any)._prevPaymentMethod ?? 'cash',
+          draft: { ...s.draft, corporateAccountId, paymentMethod: 'corporate' as PaymentMethod },
+        };
+      }
+      // Deselecting: restore previous payment method instead of defaulting to cash
+      const restored: PaymentMethod = (s as any)._prevPaymentMethod ?? 'cash';
+      return {
+        draft: { ...s.draft, corporateAccountId: null, paymentMethod: s.draft.paymentMethod === 'corporate' ? restored : s.draft.paymentMethod },
+      };
+    }),
   setDeliveryField: (field, value) =>
     set((s) => ({ draft: { ...s.draft, delivery: { ...s.draft.delivery, [field]: value } } })),
 
@@ -310,10 +343,26 @@ export const useRideStore = create<RideState>((set, get) => ({
   removeSplit: (splitId) => set((s) => ({ splits: s.splits.filter((sp) => sp.id !== splitId) })),
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 
+  setSearchingDrivers: (searchingDrivers) => set({ searchingDrivers }),
+  setAcceptedDriver: (acceptedDriverBroadcast) => set({ acceptedDriverBroadcast }),
+  setAcceptAnimating: (isAcceptAnimating) => set({ isAcceptAnimating }),
+  clearSearchState: () => set({ searchingDrivers: [], acceptedDriverBroadcast: null, isAcceptAnimating: false }),
+
+  setWalletRatio: (walletRatio) =>
+    set((s) => ({ draft: { ...s.draft, walletRatio: Math.max(0, Math.min(1, walletRatio)) } })),
+
+  setRatingReminderId: (ratingReminderId) => set({ ratingReminderId }),
+
   resetDraft: () =>
     set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, allFareEstimates: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
 
-  resetAll: () =>
+  resetAll: () => {
+    const { ratingReminderId } = get();
+    if (ratingReminderId) {
+      Notifications.cancelScheduledNotificationAsync(ratingReminderId).catch(() => {});
+    }
+    // F009: Clear pending review on reset
+    AsyncStorage.removeItem('@tricigo/pending_review_ride_id').catch(() => {});
     set({
       flowStep: 'idle',
       draft: { ...defaultDraft },
@@ -329,5 +378,10 @@ export const useRideStore = create<RideState>((set, get) => ({
       promoResult: null,
       splits: [],
       prefetchedPickup: null,
-    }),
+      searchingDrivers: [],
+      acceptedDriverBroadcast: null,
+      isAcceptAnimating: false,
+      ratingReminderId: null,
+    });
+  },
 }));

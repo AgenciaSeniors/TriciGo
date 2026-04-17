@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch, Alert, TextInput } from 'react-native';
+import { View, Pressable, Switch, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
@@ -20,12 +23,48 @@ const NOTIF_CATEGORIES = [
   { key: '@tricigo/notif_rides', icon: 'car-outline' as const, labelKey: 'profile.notif_trip_requests' },
   { key: '@tricigo/notif_chat', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
   { key: '@tricigo/notif_wallet', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
+  { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
+];
+
+const THEME_OPTIONS: { value: ThemeMode; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'light', labelKey: 'profile.theme_light', icon: 'sunny-outline' },
+  { value: 'dark', labelKey: 'profile.theme_dark', icon: 'moon-outline' },
+  { value: 'system', labelKey: 'profile.theme_system', icon: 'phone-portrait-outline' },
+];
+
+const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
+
+// AsyncStorage keys for new settings
+const SOUND_NEW_REQUEST_KEY = '@tricigo/sound_new_request';
+const SOUND_MESSAGE_KEY = '@tricigo/sound_message';
+const NIGHT_MODE_KEY = '@tricigo/night_mode';
+const PREFERRED_ZONE_KEY = '@tricigo/preferred_zone';
+const SILENT_MODE_KEY = '@tricigo/silent_mode';
+const SILENT_MODE_TIMER_KEY = '@tricigo/silent_mode_timer';
+
+const ZONE_OPTIONS = [
+  { key: 'any', labelKey: 'profile.zone_any' },
+  { key: 'centro', labelKey: 'profile.zone_centro' },
+  { key: 'vedado', labelKey: 'profile.zone_vedado' },
+  { key: 'miramar', labelKey: 'profile.zone_miramar' },
+  { key: 'habana_vieja', labelKey: 'profile.zone_habana_vieja' },
+  { key: 'airport', labelKey: 'profile.zone_airport' },
+];
+
+const SILENT_TIMER_OPTIONS = [
+  { minutes: 0, labelKey: 'profile.silent_indefinite' },
+  { minutes: 30, labelKey: 'profile.silent_30min' },
+  { minutes: 60, labelKey: 'profile.silent_1h' },
+  { minutes: 120, labelKey: 'profile.silent_2h' },
 ];
 
 export default function DriverSettingsScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const profile = useDriverStore((s) => s.profile);
+  const themeMode = useThemeStore((s) => s.mode);
+
+  // Existing state
   const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
   const [autoAcceptEligible, setAutoAcceptEligible] = useState(false);
   const [autoAcceptLoading, setAutoAcceptLoading] = useState(false);
@@ -35,7 +74,16 @@ export default function DriverSettingsScreen() {
   const [smsLoading, setSmsLoading] = useState(false);
   const currentLang = i18n.language ?? 'es';
 
+  // New settings state
+  const [soundNewRequest, setSoundNewRequest] = useState(true);
+  const [soundMessage, setSoundMessage] = useState(true);
+  const [nightModeEnabled, setNightModeEnabled] = useState(false);
+  const [preferredZone, setPreferredZone] = useState('any');
+  const [silentModeEnabled, setSilentModeEnabled] = useState(false);
+  const [silentModeTimer, setSilentModeTimer] = useState(0);
+
   useEffect(() => {
+    // Load existing preferences
     AsyncStorage.getItem(NOTIF_PREF_KEY).then((val) => {
       if (val !== null) setNotificationsEnabled(val === 'true');
     }).catch(() => {});
@@ -52,6 +100,14 @@ export default function DriverSettingsScreen() {
     if (userId) {
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
     }
+
+    // Load new settings
+    AsyncStorage.getItem(SOUND_NEW_REQUEST_KEY).then((v) => { if (v !== null) setSoundNewRequest(v === 'true'); }).catch(() => {});
+    AsyncStorage.getItem(SOUND_MESSAGE_KEY).then((v) => { if (v !== null) setSoundMessage(v === 'true'); }).catch(() => {});
+    AsyncStorage.getItem(NIGHT_MODE_KEY).then((v) => { if (v !== null) setNightModeEnabled(v === 'true'); }).catch(() => {});
+    AsyncStorage.getItem(PREFERRED_ZONE_KEY).then((v) => { if (v !== null) setPreferredZone(v); }).catch(() => {});
+    AsyncStorage.getItem(SILENT_MODE_KEY).then((v) => { if (v !== null) setSilentModeEnabled(v === 'true'); }).catch(() => {});
+    AsyncStorage.getItem(SILENT_MODE_TIMER_KEY).then((v) => { if (v !== null) setSilentModeTimer(Number(v)); }).catch(() => {});
   }, [userId]);
 
   useEffect(() => {
@@ -61,7 +117,9 @@ export default function DriverSettingsScreen() {
   }, [profile?.id]);
 
   const toggleLanguage = () => {
-    const next = currentLang === 'es' ? 'en' : currentLang === 'en' ? 'pt' : 'es';
+    const cycle = ['es', 'en', 'pt'] as const;
+    const idx = cycle.indexOf(currentLang as typeof cycle[number]);
+    const next = cycle[(idx + 1) % cycle.length]!;
     i18n.changeLanguage(next);
     AsyncStorage.setItem('tricigo_language', next);
   };
@@ -85,72 +143,238 @@ export default function DriverSettingsScreen() {
     await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
   }, []);
 
-  const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
+  const handleToggle = (key: string, setter: (v: boolean) => void) => async (enabled: boolean) => {
+    setter(enabled);
+    await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
+  };
+
+  const handleZoneChange = () => {
+    const idx = ZONE_OPTIONS.findIndex((z) => z.key === preferredZone);
+    const next = ZONE_OPTIONS[(idx + 1) % ZONE_OPTIONS.length]!.key;
+    setPreferredZone(next);
+    AsyncStorage.setItem(PREFERRED_ZONE_KEY, next);
+  };
+
+  const handleSilentTimerChange = () => {
+    const idx = SILENT_TIMER_OPTIONS.findIndex((o) => o.minutes === silentModeTimer);
+    const next = SILENT_TIMER_OPTIONS[(idx + 1) % SILENT_TIMER_OPTIONS.length]!.minutes;
+    setSilentModeTimer(next);
+    AsyncStorage.setItem(SILENT_MODE_TIMER_KEY, String(next));
+  };
 
   return (
-    <Screen scroll bg="dark" statusBarStyle="light-content" padded>
-      <View className="pt-4">
+    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+      <View className="pt-4 pb-12">
         {/* Header */}
         <View className="flex-row items-center mb-6">
           <Pressable
             onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#252540] items-center justify-center"
+            hitSlop={8}
+            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
+            style={{ backgroundColor: colors.neutral[100] }}
             accessibilityRole="button"
             accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[50]} />
+            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
           </Pressable>
-          <Text variant="h3" color="inverse">{t('profile.settings_title')}</Text>
+          <Text variant="h3" color="primary">{t('profile.settings_title')}</Text>
         </View>
+
+        {/* ── Appearance ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_appearance', { defaultValue: 'Apariencia' })}
+        </Text>
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <View className="flex-row items-center mb-3">
+            <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+              <Ionicons name="color-palette-outline" size={18} color={colors.brand.orange} />
+            </View>
+            <Text variant="body" color="primary">{t('profile.appearance', { defaultValue: 'Modo de pantalla' })}</Text>
+          </View>
+          <View className="flex-row rounded-xl overflow-hidden border border-[#E2E8F0]">
+            {THEME_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => setThemeMode(option.value)}
+                className={`flex-1 py-3 items-center flex-row justify-center ${
+                  themeMode === option.value ? 'bg-primary-500' : 'bg-[#F8FAFC]'
+                }`}
+              >
+                <Ionicons
+                  name={option.icon}
+                  size={16}
+                  color={themeMode === option.value ? '#FFFFFF' : colors.neutral[500]}
+                />
+                <Text
+                  variant="caption"
+                  color={themeMode === option.value ? 'inverse' : 'secondary'}
+                  className="ml-1.5"
+                >
+                  {t(option.labelKey, { defaultValue: option.value })}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
 
         {/* ── Language ── */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_language', { defaultValue: 'Idioma' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
-          <Pressable
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <MenuRow
+            icon="language-outline"
+            label={t('profile.preferred_language')}
+            value={LANG_LABELS[currentLang] ?? currentLang}
+            iconBg="info"
             onPress={toggleLanguage}
-            className="flex-row items-center justify-between min-h-[48px]"
-            accessibilityRole="button"
-            accessibilityLabel={`${t('profile.preferred_language')}: ${LANG_LABELS[currentLang] ?? currentLang}`}
-          >
+            showBorder={false}
+
+          />
+        </Card>
+
+        {/* ── Sounds ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_sounds', { defaultValue: 'Sonidos' })}
+        </Text>
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
-                <Ionicons name="language-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+                <Ionicons name="volume-high-outline" size={18} color={colors.brand.orange} />
               </View>
-              <Text variant="body" color="inverse">{t('profile.preferred_language')}</Text>
-            </View>
-            <View className="flex-row items-center">
-              <Text variant="bodySmall" color="accent" className="mr-1">
-                {LANG_LABELS[currentLang] ?? currentLang}
+              <Text variant="body" color="primary">
+                {t('profile.sound_new_request', { defaultValue: 'Nueva solicitud' })}
               </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.neutral[500]} />
             </View>
-          </Pressable>
+            <Switch
+              value={soundNewRequest}
+              onValueChange={handleToggle(SOUND_NEW_REQUEST_KEY, setSoundNewRequest)}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+            />
+          </View>
+          <View className="flex-row items-center justify-between min-h-[48px] mt-1 pt-2 border-t border-[#E2E8F0]">
+            <View className="flex-row items-center">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+                <Ionicons name="chatbubble-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <Text variant="body" color="primary">
+                {t('profile.sound_message', { defaultValue: 'Mensaje recibido' })}
+              </Text>
+            </View>
+            <Switch
+              value={soundMessage}
+              onValueChange={handleToggle(SOUND_MESSAGE_KEY, setSoundMessage)}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+            />
+          </View>
+        </Card>
+
+        {/* ── Night Mode ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_night_mode', { defaultValue: 'Modo nocturno' })}
+        </Text>
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <View className="flex-row items-center justify-between min-h-[48px]">
+            <View className="flex-row items-center flex-1 mr-3">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+                <Ionicons name="moon-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <View className="flex-1">
+                <Text variant="body" color="primary">
+                  {t('profile.night_mode_toggle', { defaultValue: 'Reducir brillo nocturno' })}
+                </Text>
+                <Text variant="caption" color="secondary" className="mt-0.5">
+                  {t('profile.night_mode_desc', { defaultValue: 'Reduce el brillo automáticamente de 10pm a 6am' })}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={nightModeEnabled}
+              onValueChange={handleToggle(NIGHT_MODE_KEY, setNightModeEnabled)}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+            />
+          </View>
+        </Card>
+
+        {/* ── Preferred Zone ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_zone', { defaultValue: 'Zona preferida' })}
+        </Text>
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <MenuRow
+            icon="location-outline"
+            label={t('profile.preferred_zone', { defaultValue: 'Zona de trabajo' })}
+            subtitle={t('profile.preferred_zone_desc', { defaultValue: 'Prioriza viajes en esta zona' })}
+            value={t(ZONE_OPTIONS.find((z) => z.key === preferredZone)?.labelKey ?? 'profile.zone_any', { defaultValue: preferredZone })}
+            iconBg="warning"
+            onPress={handleZoneChange}
+            showBorder={false}
+
+          />
+        </Card>
+
+        {/* ── Silent Mode ── */}
+        <Text variant="label" color="secondary" className="mb-2 ml-1">
+          {t('profile.section_silent', { defaultValue: 'Modo silencioso' })}
+        </Text>
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
+          <View className="flex-row items-center justify-between min-h-[48px]">
+            <View className="flex-row items-center flex-1 mr-3">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+                <Ionicons name="volume-mute-outline" size={18} color={colors.brand.orange} />
+              </View>
+              <View className="flex-1">
+                <Text variant="body" color="primary">
+                  {t('profile.silent_mode', { defaultValue: 'No recibir viajes' })}
+                </Text>
+                <Text variant="caption" color="secondary" className="mt-0.5">
+                  {t('profile.silent_mode_desc', { defaultValue: 'Pausa solicitudes sin desconectarte' })}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={silentModeEnabled}
+              onValueChange={handleToggle(SILENT_MODE_KEY, setSilentModeEnabled)}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+            />
+          </View>
+          {silentModeEnabled && (
+            <View className="mt-2 pt-2 border-t border-[#E2E8F0]">
+              <MenuRow
+                icon="timer-outline"
+                label={t('profile.silent_timer', { defaultValue: 'Duración' })}
+                value={t(SILENT_TIMER_OPTIONS.find((o) => o.minutes === silentModeTimer)?.labelKey ?? 'profile.silent_indefinite', { defaultValue: 'Indefinido' })}
+                onPress={handleSilentTimerChange}
+                showBorder={false}
+    
+              />
+            </View>
+          )}
         </Card>
 
         {/* ── Notifications ── */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">
           {t('profile.section_notifications', { defaultValue: 'Notificaciones' })}
         </Text>
-        <Card variant="surface" padding="md" className="mb-5">
+        <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
                 <Ionicons name="notifications-outline" size={18} color={colors.brand.orange} />
               </View>
-              <Text variant="body" color="inverse">{t('profile.notifications_toggle')}</Text>
+              <Text variant="body" color="primary">{t('profile.notifications_toggle')}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
               accessibilityLabel={t('profile.notifications_toggle')}
             />
           </View>
 
           {notificationsEnabled && (
-            <View className="mt-3 pt-3 border-t border-white/6">
+            <View className="mt-3 pt-3 border-t border-[#E2E8F0]">
               <Text variant="caption" color="secondary" className="mb-2">
                 {t('profile.notif_section_title')}
               </Text>
@@ -161,14 +385,14 @@ export default function DriverSettingsScreen() {
                 >
                   <View className="flex-row items-center">
                     <Ionicons name={cat.icon} size={16} color={colors.neutral[500]} />
-                    <Text variant="bodySmall" color="inverse" className="ml-2.5">
+                    <Text variant="bodySmall" color="primary" className="ml-2.5">
                       {t(cat.labelKey)}
                     </Text>
                   </View>
                   <Switch
                     value={categoryPrefs[cat.key] !== false}
                     onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                    trackColor={{ false: '#252540', true: colors.brand.orange }}
+                    trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
                     style={{ transform: [{ scale: 0.85 }] }}
                     accessibilityLabel={t(cat.labelKey)}
                   />
@@ -184,14 +408,14 @@ export default function DriverSettingsScreen() {
         </Text>
 
         {/* Auto-accept rides */}
-        <Card variant="surface" padding="md" className="mb-3">
+        <Card theme="light" variant="surface" padding="md" className="mb-3">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
                 <Ionicons name="flash-outline" size={18} color={colors.brand.orange} />
               </View>
               <View className="flex-1">
-                <Text variant="body" color="inverse">
+                <Text variant="body" color="primary">
                   {t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
                 </Text>
                 {autoAcceptEligible ? (
@@ -222,21 +446,21 @@ export default function DriverSettingsScreen() {
                   setAutoAcceptLoading(false);
                 }
               }}
-              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
               accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
             />
           </View>
         </Card>
 
         {/* SMS Alerts */}
-        <Card variant="surface" padding="md" className="mb-8">
+        <Card theme="light" variant="surface" padding="md" className="mb-8">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#252540] items-center justify-center mr-3">
+              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
                 <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.brand.orange} />
               </View>
               <View className="flex-1">
-                <Text variant="body" color="inverse">{t('profile.notif_sms')}</Text>
+                <Text variant="body" color="primary">{t('profile.notif_sms')}</Text>
                 <Text variant="caption" color="secondary" className="mt-0.5">
                   {t('profile.notif_sms_desc')}
                 </Text>
@@ -257,7 +481,7 @@ export default function DriverSettingsScreen() {
                   setSmsLoading(false);
                 }
               }}
-              trackColor={{ false: '#252540', true: colors.brand.orange }}
+              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
               accessibilityLabel={t('profile.notif_sms')}
             />
           </View>
@@ -265,10 +489,10 @@ export default function DriverSettingsScreen() {
 
         {/* ── Delete Account ── */}
         <View className="mt-6">
-          <Text variant="h4" color="inverse" className="mb-3 px-1">
+          <Text variant="h4" color="primary" className="mb-3 px-1">
             {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
           </Text>
-          <Card variant="surface" padding="md">
+          <Card theme="light" variant="surface" padding="md">
             <Text variant="bodySmall" color="secondary" className="mb-3">
               {t('profile.delete_account_desc', {
                 defaultValue: 'Eliminar tu cuenta es permanente. Se perderan todos tus datos, historial de viajes y balance.',
@@ -310,8 +534,7 @@ export default function DriverSettingsScreen() {
                       ],
                       'plain-text',
                     )
-                  : // Android fallback (Alert.prompt is iOS-only)
-                    Alert.alert(
+                  : Alert.alert(
                       t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
                       t('profile.delete_account_confirm_android', {
                         defaultValue: '¿Estas seguro de que deseas eliminar tu cuenta? Esta accion es irreversible.',

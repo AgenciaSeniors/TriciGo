@@ -92,6 +92,7 @@ export interface DriverDocument {
   verification_notes: string | null;
   face_match_score: number | null;
   liveness_passed: boolean | null;
+  mime_type?: string;
 }
 
 export type SelfieCheckStatus = 'pending' | 'processing' | 'passed' | 'failed' | 'expired';

@@ -3,6 +3,8 @@ import {
   haversineDistance,
   estimateRoadDistance,
   estimateDuration,
+  calculateTripDuration,
+  adjustETAForVehicle,
   HAVANA_PRESETS,
   HAVANA_CENTER,
 } from '../geo';
@@ -52,26 +54,89 @@ describe('estimateRoadDistance', () => {
 });
 
 describe('estimateDuration', () => {
-  it('estimates triciclo duration (~312s for 1300m at 15km/h)', () => {
+  it('estimates triciclo duration (~538s for 1300m at 10km/h)', () => {
     const duration = estimateDuration(1300, 'triciclo_basico');
-    // 1300m at 15km/h = 1.3/15 hours = 312s
-    expect(duration).toBe(312);
+    // 1300m at 10km/h = 1300 / 2.778 m/s = 468s × 1.15 = 538
+    expect(duration).toBe(538);
   });
 
-  it('estimates moto duration (~156s for 1300m at 30km/h)', () => {
+  it('estimates moto duration (~245s for 1300m at 22km/h)', () => {
     const duration = estimateDuration(1300, 'moto_standard');
-    // 1300m at 30km/h = 1.3/30 hours = 156s
-    expect(duration).toBe(156);
+    // 1300m at 22km/h = 1300 / 6.111 m/s = 212.7s × 1.15 = 245
+    expect(duration).toBe(245);
   });
 
-  it('estimates auto duration (~187s for 1300m at 25km/h)', () => {
+  it('estimates auto duration (~299s for 1300m at 18km/h)', () => {
     const duration = estimateDuration(1300, 'auto_standard');
-    // 1300m at 25km/h = 1.3/25 hours = 187.2s ≈ 187
-    expect(duration).toBe(187);
+    // 1300m at 18km/h = 1300 / 5.0 m/s = 260s × 1.15 = 299
+    expect(duration).toBe(299);
   });
 
   it('returns 0 for zero distance', () => {
     expect(estimateDuration(0, 'triciclo_basico')).toBe(0);
+  });
+});
+
+describe('calculateTripDuration', () => {
+  it('returns 0 for zero distance', () => {
+    expect(calculateTripDuration(0, 'moto_standard')).toBe(0);
+  });
+
+  it('uses urban speed only for short routes (<8km)', () => {
+    // 3000m, moto urban = 25 km/h = 6.944 m/s
+    // 3000 / 6.944 = 432s × 1.10 = 475.2 → 475
+    const duration = calculateTripDuration(3000, 'moto_standard');
+    expect(duration).toBe(475);
+  });
+
+  it('blends urban + suburban for mid-range routes (8-35km)', () => {
+    // 15000m, auto: urban 20 km/h, suburban 35 km/h
+    // First 8000m at 5.556 m/s = 1440s
+    // Next 7000m at 9.722 m/s = 720s
+    // Total = 2160s × 1.10 = 2376
+    const duration = calculateTripDuration(15000, 'auto_standard');
+    expect(duration).toBe(2376);
+  });
+
+  it('uses all three tiers for long intercity routes', () => {
+    // 100000m, moto: urban 25, suburban 40, intercity 55
+    // First 8000m at 6.944 m/s = 1152s
+    // Next 27000m at 11.111 m/s = 2430s
+    // Last 65000m at 15.278 m/s = 4254.5s
+    // Total = 7836.5s × 1.10 = 8620.2 → 8620
+    const duration = calculateTripDuration(100000, 'moto_standard');
+    expect(duration).toBe(8620);
+  });
+
+  it('falls back to suburban speed for triciclo intercity', () => {
+    // 50000m, triciclo: urban 10, suburban 12, intercity null → uses 12
+    // First 8000m at 2.778 m/s = 2880s
+    // Next 27000m at 3.333 m/s = 8100s
+    // Last 15000m at 3.333 m/s = 4500s (fallback to suburban)
+    // Total = 15480s × 1.10 = 17028
+    const duration = calculateTripDuration(50000, 'triciclo_basico');
+    expect(duration).toBe(17028);
+  });
+});
+
+describe('adjustETAForVehicle', () => {
+  it('returns 0 for zero input', () => {
+    expect(adjustETAForVehicle(0, 'moto_standard')).toBe(0);
+  });
+
+  it('slows down triciclo ETA (25/10 = 2.5x)', () => {
+    // raw 300s × (25 / 10) = 750
+    expect(adjustETAForVehicle(300, 'triciclo_basico')).toBe(750);
+  });
+
+  it('keeps moto ETA unchanged (25/25 = 1.0x)', () => {
+    // raw 300s × (25 / 25) = 300
+    expect(adjustETAForVehicle(300, 'moto_standard')).toBe(300);
+  });
+
+  it('slightly slows auto ETA (25/20 = 1.25x)', () => {
+    // raw 300s × (25 / 20) = 375
+    expect(adjustETAForVehicle(300, 'auto_standard')).toBe(375);
   });
 });
 

@@ -169,20 +169,9 @@ export default function CorporatePage() {
     }
   };
 
-  const handleRecharge = async (accountId: string) => {
-    const amt = parseInt(rechargeAmount, 10);
-    if (!amt || amt <= 0 || !userId) return;
-    setRecharging(true);
-    try {
-      const result = await paymentService.createCorporateRechargeLink(accountId, amt, userId);
-      window.open(result.paymentUrl, '_blank');
-      setRechargeAccountId(null);
-      setRechargeAmount('');
-    } catch {
-      setError(t('corporate_recharge_error', { defaultValue: 'Error al generar el enlace de pago' }));
-    } finally {
-      setRecharging(false);
-    }
+  // TODO: Replace with Stripe PaymentIntent creation
+  const handleRecharge = async (_accountId: string) => {
+    setError(t('common:wallet.recharge_coming_soon', { defaultValue: 'Coming soon' }));
   };
 
   const loadReports = async (accountId: string, monthStr: string) => {

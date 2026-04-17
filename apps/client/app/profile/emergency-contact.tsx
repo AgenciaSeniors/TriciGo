@@ -95,8 +95,11 @@ export default function EmergencyContactScreen() {
           relationship: relationship.trim(),
           auto_share: true,
           is_emergency: true,
-        }).catch(() => {
-          // May fail if duplicate phone — that's ok, trusted_contacts already has this phone
+        }).catch((err: any) => {
+          // Ignore duplicate phone constraint — trusted_contacts already has this phone
+          const msg = String(err?.message ?? err ?? '');
+          if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) return;
+          throw err; // Re-throw real errors so outer catch handles them
         });
       }
 

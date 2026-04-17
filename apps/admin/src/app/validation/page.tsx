@@ -78,7 +78,7 @@ export default function ValidationPage() {
           setAcceptRates(acceptRes.data ?? []);
           // navRes.data is an array with a single row
           const navRows = navRes.data as NavRateRow[] | null;
-          setNavRate(navRows && navRows.length > 0 ? navRows[0] : null);
+          setNavRate(navRows && navRows.length > 0 ? (navRows[0] ?? null) : null);
           setOverrides(overrideRes.data ?? []);
         }
       } catch (err) {

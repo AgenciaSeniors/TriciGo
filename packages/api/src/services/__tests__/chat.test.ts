@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
 const mockFrom = vi.fn();
@@ -68,9 +69,9 @@ describe('chatService', () => {
   describe('sendMessage', () => {
     it('inserts a message and returns it via select().single()', async () => {
       const mockMessage = {
-        id: 'msg-new',
-        ride_id: 'ride-1',
-        sender_id: 'user-1',
+        id: UUID.MSG_1,
+        ride_id: UUID.RIDE_1,
+        sender_id: UUID.USER_1,
         body: 'En camino',
       };
 
@@ -80,12 +81,12 @@ describe('chatService', () => {
 
       mockFrom.mockReturnValueOnce({ insert: mockInsert });
 
-      const result = await chatService.sendMessage('ride-1', 'user-1', 'En camino');
+      const result = await chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'En camino');
 
       expect(mockFrom).toHaveBeenCalledWith('ride_messages');
       expect(mockInsert).toHaveBeenCalledWith({
-        ride_id: 'ride-1',
-        sender_id: 'user-1',
+        ride_id: UUID.RIDE_1,
+        sender_id: UUID.USER_1,
         body: 'En camino',
       });
       expect(mockSelectChain).toHaveBeenCalled();
@@ -104,7 +105,7 @@ describe('chatService', () => {
       mockFrom.mockReturnValueOnce({ insert: mockInsert });
 
       await expect(
-        chatService.sendMessage('ride-1', 'user-1', 'Hola'),
+        chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'Hola'),
       ).rejects.toEqual({ message: 'Insert failed', code: '23505' });
     });
   });

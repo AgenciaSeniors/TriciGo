@@ -14,7 +14,7 @@ const PENDING_REFERRAL_KEY = 'pending_referral_code';
 
 /**
  * Deep link handler for referral URLs.
- * URL: tricigo://refer/{code} or https://tricigo.app/refer/{code}
+ * URL: tricigo://refer/{code} or https://tricigo.com/refer/{code}
  *
  * If authenticated: applies referral code immediately.
  * If not authenticated: saves code to AsyncStorage for later application after login.

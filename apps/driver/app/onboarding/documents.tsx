@@ -3,6 +3,7 @@ import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -75,18 +76,34 @@ export default function DocumentsScreen() {
     })();
   }, [driverProfileId, user, setDriverProfileId]);
 
-  const pickAndUpload = async (docType: DocumentType) => {
-    if (!driverProfileId) {
-      Alert.alert('Error', t('errors.generic'));
-      return;
-    }
+  /** Document types that accept PDF uploads in addition to images */
+  const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration'];
 
+  const uploadFile = async (docType: DocumentType, uri: string, fileName: string, mimeType?: string) => {
+    if (!driverProfileId) return;
+    setDocumentUri(docType, uri, fileName, mimeType);
+    setDocumentUploading(docType, true);
+    try {
+      console.log('[Documents] Uploading:', docType, 'profileId:', driverProfileId, 'mime:', mimeType);
+      const uploadPromise = driverService.uploadDocument(driverProfileId, docType, uri, fileName, mimeType);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Upload timeout after 30s')), 30000),
+      );
+      await Promise.race([uploadPromise, timeoutPromise]);
+      setDocumentUploaded(docType);
+      console.log('[Documents] Upload success:', docType);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[Documents] Upload failed:', docType, msg);
+      setDocumentError(docType, `${t('onboarding.error_upload_failed')} (${msg})`);
+      setDocumentUploading(docType, false);
+    }
+  };
+
+  const pickImage = async (docType: DocumentType) => {
     const isCamera = docType === 'selfie';
     const isWeb = Platform.OS === 'web';
 
-    // On native, check permissions first.
-    // On web, skip — permissions are always granted AND the await breaks
-    // the browser's user activation context, preventing the file dialog from opening.
     if (!isWeb) {
       if (isCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -103,9 +120,7 @@ export default function DocumentsScreen() {
       }
     }
 
-    // On web, camera is not available — always use gallery
     const useCamera = isCamera && !isWeb;
-
     const result = useCamera
       ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
       : await ImagePicker.launchImageLibraryAsync({
@@ -115,28 +130,46 @@ export default function DocumentsScreen() {
         });
 
     if (result.canceled || !result.assets[0]) return;
-
     const asset = result.assets[0];
     const fileName = asset.fileName ?? `${docType}_${Date.now()}.jpg`;
-    setDocumentUri(docType, asset.uri, fileName);
+    await uploadFile(docType, asset.uri, fileName, asset.mimeType ?? 'image/jpeg');
+  };
 
-    // Upload immediately
-    setDocumentUploading(docType, true);
+  const pickDocument = async (docType: DocumentType) => {
     try {
-      console.log('[Documents] Uploading:', docType, 'profileId:', driverProfileId);
-      // Add timeout to prevent infinite loading
-      const uploadPromise = driverService.uploadDocument(driverProfileId, docType, asset.uri, fileName);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Upload timeout after 30s')), 30000),
-      );
-      await Promise.race([uploadPromise, timeoutPromise]);
-      setDocumentUploaded(docType);
-      console.log('[Documents] Upload success:', docType);
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const fileName = asset.name ?? `${docType}_${Date.now()}.pdf`;
+      await uploadFile(docType, asset.uri, fileName, asset.mimeType ?? 'application/pdf');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[Documents] Upload failed:', docType, msg);
-      setDocumentError(docType, `${t('onboarding.error_upload_failed')} (${msg})`);
-      setDocumentUploading(docType, false);
+      console.error('[Documents] Document pick failed:', docType, msg);
+      setDocumentError(docType, msg);
+    }
+  };
+
+  const handleDocumentPress = (docType: DocumentType) => {
+    if (!driverProfileId) {
+      Alert.alert('Error', t('errors.generic'));
+      return;
+    }
+
+    if (PDF_ELIGIBLE_TYPES.includes(docType)) {
+      Alert.alert(
+        t('onboarding.upload_method', { defaultValue: 'Método de subida' }),
+        t('onboarding.choose_upload', { defaultValue: '¿Cómo quieres subir este documento?' }),
+        [
+          { text: t('onboarding.from_gallery', { defaultValue: 'Foto / Galería' }), onPress: () => pickImage(docType) },
+          { text: t('onboarding.upload_pdf', { defaultValue: 'Documento (PDF)' }), onPress: () => pickDocument(docType) },
+          { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        ],
+      );
+    } else {
+      pickImage(docType);
     }
   };
 
@@ -158,13 +191,15 @@ export default function DocumentsScreen() {
         {documents.map((doc) => (
           <Pressable
             key={doc.document_type}
-            onPress={() => pickAndUpload(doc.document_type)}
+            onPress={() => handleDocumentPress(doc.document_type)}
             accessibilityRole="button"
             accessibilityLabel={t(DOC_LABELS[doc.document_type])}
           >
-            <Card variant="surface" padding="md" className="mb-3 flex-row items-center">
+            <Card forceDark variant="surface" padding="md" className="mb-3 flex-row items-center">
               {doc.uploading ? (
                 <ActivityIndicator size="small" color={colors.brand.orange} />
+              ) : doc.uploaded && doc.mimeType === 'application/pdf' ? (
+                <Ionicons name="document-text" size={24} color={colors.status.verified} />
               ) : (
                 <Ionicons
                   name={doc.uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}
@@ -176,6 +211,8 @@ export default function DocumentsScreen() {
                 <Text variant="body" color="inverse">{t(DOC_LABELS[doc.document_type])}</Text>
                 {doc.error ? (
                   <Text variant="caption" color="error">{doc.error}</Text>
+                ) : doc.uploaded && doc.mimeType === 'application/pdf' ? (
+                  <Text variant="caption" color="accent" numberOfLines={1}>{doc.fileName}</Text>
                 ) : (
                   <Text variant="caption" color={doc.uploaded ? 'accent' : 'secondary'}>
                     {doc.uploaded ? t('onboarding.uploaded', { defaultValue: 'Subido' }) : doc.document_type === 'selfie' ? t('onboarding.take_photo') : t('onboarding.pick_from_gallery')}

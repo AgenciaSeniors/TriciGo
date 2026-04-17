@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Modal,
@@ -7,6 +7,7 @@ import {
   Dimensions,
   StyleSheet,
   useColorScheme,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -69,9 +70,34 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const iconScaleAnim = useRef(new Animated.Value(1)).current;
+
+  // Animated dot widths — one per step
+  const dotWidths = useRef(STEPS.map((_, i) => new Animated.Value(i === 0 ? 24 : 8))).current;
+
+  // Animate dots whenever currentStep changes
+  useEffect(() => {
+    STEPS.forEach((_, i) => {
+      Animated.spring(dotWidths[i], {
+        toValue: i === currentStep ? 24 : 8,
+        damping: 20,
+        stiffness: 200,
+        useNativeDriver: false, // width cannot use native driver
+      }).start();
+    });
+
+    // Icon entrance bounce on step change
+    iconScaleAnim.setValue(0.5);
+    Animated.spring(iconScaleAnim, {
+      toValue: 1,
+      damping: 20,
+      stiffness: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [currentStep, dotWidths, iconScaleAnim, STEPS]);
 
   const animateTransition = useCallback(
-    (nextStep: number) => {
+    (nextStep: number, reverse = false) => {
       // Fade out current step
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -79,8 +105,8 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
         useNativeDriver: true,
       }).start(() => {
         setCurrentStep(nextStep);
-        // Slide in new step from right
-        slideAnim.setValue(300);
+        // Slide in new step from left (reverse) or right (forward)
+        slideAnim.setValue(reverse ? -300 : 300);
         Animated.parallel([
           Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
           Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
@@ -96,11 +122,34 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
     } else {
       onComplete();
     }
-  }, [currentStep, animateTransition, onComplete]);
+  }, [currentStep, animateTransition, onComplete, STEPS.length]);
+
+  const handlePrev = useCallback(() => {
+    if (currentStep > 0) {
+      animateTransition(currentStep - 1, true);
+    }
+  }, [currentStep, animateTransition]);
 
   const handleSkip = useCallback(() => {
     onComplete();
   }, [onComplete]);
+
+  // Refs to always have latest handlers for PanResponder
+  const handleNextRef = useRef(handleNext);
+  handleNextRef.current = handleNext;
+  const handlePrevRef = useRef(handlePrev);
+  handlePrevRef.current = handlePrev;
+
+  // Swipe gesture support for horizontal navigation
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 20,
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -50) handleNextRef.current();
+        else if (gestureState.dx > 50) handlePrevRef.current();
+      },
+    }),
+  ).current;
 
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
@@ -121,16 +170,19 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             </Pressable>
           )}
 
-          <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
-            {/* Icon */}
-            <View
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[styles.content, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}
+          >
+            {/* Icon with entrance bounce */}
+            <Animated.View
               style={[
                 styles.iconCircle,
-                { backgroundColor: step.iconBg },
+                { backgroundColor: step.iconBg, transform: [{ scale: iconScaleAnim }] },
               ]}
             >
               <Ionicons name={step.icon} size={48} color={step.iconColor} />
-            </View>
+            </Animated.View>
 
             {/* Title */}
             <Text style={[styles.title, { color: isDark ? darkColors.text.primary : '#111111' }]}>{t(step.titleKey)}</Text>
@@ -139,14 +191,19 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
             <Text style={[styles.description, { color: isDark ? darkColors.text.secondary : '#555555' }]}>{t(step.descKey)}</Text>
           </Animated.View>
 
-          {/* Dots indicator */}
+          {/* Animated dots indicator */}
           <View style={styles.dotsRow} accessibilityRole="tablist">
             {STEPS.map((_, i) => (
-              <View
+              <Animated.View
                 key={i}
                 style={[
                   styles.dot,
-                  i === currentStep ? styles.dotActive : [styles.dotInactive, { backgroundColor: isDark ? darkColors.background.tertiary : '#d4d4d8' }],
+                  {
+                    width: dotWidths[i],
+                    backgroundColor: i === currentStep
+                      ? colors.brand.orange
+                      : isDark ? darkColors.background.tertiary : '#d4d4d8',
+                  },
                 ]}
               />
             ))}
@@ -234,11 +291,5 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  dotActive: {
-    backgroundColor: colors.brand.orange,
-    width: 24,
-  },
-  dotInactive: {
-    backgroundColor: '#d4d4d8',
-  },
+  // dotActive/dotInactive removed — now driven by Animated.Value per dot
 });

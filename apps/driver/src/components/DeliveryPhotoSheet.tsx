@@ -74,6 +74,7 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
       onPhotoUploaded();
     } catch (err) {
       logger.error('[DeliveryPhoto] Upload error', { error: err instanceof Error ? err.message : 'unknown' });
+      setPhotoUri(null);
       Toast.show({
         type: 'error',
         text1: t('trip.delivery_photo_upload_failed', { defaultValue: 'Error al subir foto. Intente de nuevo.' }),
@@ -84,7 +85,7 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
   }, [photoUri, rideId, onPhotoUploaded, t]);
 
   return (
-    <Card variant="filled" padding="lg" className="bg-neutral-800 mb-4">
+    <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4">
       {/* Delivery context */}
       {(recipientName || specialInstructions) && (
         <View className="mb-3">
@@ -129,11 +130,13 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
             source={{ uri: photoUri }}
             style={{ width: 240, height: 240, borderRadius: 12 }}
             resizeMode="cover"
+            accessibilityLabel={phase === 'pickup' ? 'Pickup photo preview' : 'Delivery photo preview'}
           />
           <Button
             title={t('trip.retake_photo', { defaultValue: 'Tomar otra foto' })}
             variant="outline"
             size="sm"
+            forceDark
             onPress={takePhoto}
             className="mt-2"
           />

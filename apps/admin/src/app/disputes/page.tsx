@@ -119,8 +119,8 @@ export default function DisputesPage() {
 
   const handleResolve = async () => {
     if (!selected) return;
-    if (!validateResolveForm()) return;
     setResolving(true);
+    if (!validateResolveForm()) { setResolving(false); return; }
     try {
       const amount = resolution === 'no_action' ? 0 : parseInt(refundAmount || '0', 10);
       if (amount < 0) { showToast('warning', 'El monto no puede ser negativo'); setResolving(false); return; }
@@ -137,7 +137,21 @@ export default function DisputesPage() {
       setDisputes((prev) =>
         prev.map((d) =>
           d.id === selected.id
-            ? { ...d, status: resolution === 'no_action' ? 'denied' : 'resolved' as DisputeStatus, resolution, refund_amount_trc: amount }
+            ? {
+                ...d,
+                status: (() => {
+                  const validStatuses: Record<string, DisputeStatus> = {
+                    no_action: 'denied',
+                    full_refund: 'resolved',
+                    partial_refund: 'resolved',
+                    driver_penalty: 'resolved',
+                    both_penalty: 'resolved',
+                  };
+                  return validStatuses[resolution] ?? ('resolved' as DisputeStatus);
+                })(),
+                resolution,
+                refund_amount_trc: amount,
+              }
             : d,
         ),
       );

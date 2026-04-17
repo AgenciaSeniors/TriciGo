@@ -13,7 +13,7 @@ const PENDING_PROMO_KEY = 'pending_promo_code';
 
 /**
  * Deep link handler for promo code URLs.
- * URL: tricigo://promo/{code} or https://tricigo.app/promo/{code}
+ * URL: tricigo://promo/{code} or https://tricigo.com/promo/{code}
  *
  * If authenticated: saves promo code to ride store and navigates to home.
  * If not authenticated: saves code to AsyncStorage for later application after login.

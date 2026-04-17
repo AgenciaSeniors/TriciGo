@@ -2,6 +2,7 @@ import React, { type ComponentProps } from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
+import { colors } from '@tricigo/theme';
 
 export interface StatusBadgeProps {
   label: string;
@@ -16,31 +17,31 @@ const variantConfig = {
   success: {
     bg: 'bg-green-900/40',
     text: 'text-green-400',
-    iconColor: '#4ADE80',
+    iconColor: colors.success.DEFAULT,
     defaultIcon: 'checkmark-circle' as const,
   },
   error: {
     bg: 'bg-red-900/40',
     text: 'text-red-400',
-    iconColor: '#F87171',
+    iconColor: colors.error.DEFAULT,
     defaultIcon: 'close-circle' as const,
   },
   warning: {
     bg: 'bg-yellow-900/40',
     text: 'text-yellow-400',
-    iconColor: '#FBBF24',
+    iconColor: colors.warning.DEFAULT,
     defaultIcon: 'alert-circle' as const,
   },
   info: {
     bg: 'bg-blue-900/40',
     text: 'text-blue-400',
-    iconColor: '#60A5FA',
+    iconColor: colors.info.DEFAULT,
     defaultIcon: 'information-circle' as const,
   },
   neutral: {
     bg: 'bg-neutral-700/60',
     text: 'text-neutral-400',
-    iconColor: '#9CA3AF',
+    iconColor: colors.neutral[400],
     defaultIcon: 'ellipse' as const,
   },
 } as const;

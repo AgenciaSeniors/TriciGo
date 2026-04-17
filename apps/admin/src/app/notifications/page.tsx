@@ -13,6 +13,7 @@ import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Bell } from 'lucide-react';
 
 type NotificationLog = {
   id: string;
@@ -429,7 +430,7 @@ export default function NotificationsPage() {
         {historyLoading ? (
           <AdminTableSkeleton rows={5} columns={4} />
         ) : history.length === 0 ? (
-          <AdminEmptyState icon="🔔" title={t('notifications.no_notifications')} />
+          <AdminEmptyState icon={<Bell className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('notifications.no_notifications')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
