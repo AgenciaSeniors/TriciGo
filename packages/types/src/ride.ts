@@ -165,6 +165,24 @@ export interface Ride {
   wallet_ratio: number | null;
   wallet_amount_cup: number | null;
   cash_amount_cup: number | null;
+
+  // Ride-offer window (only set when fetched via getSearchingRides
+  // for the authenticated driver). Present as timestamp ISO string.
+  offer_expires_at?: string;
+}
+
+/**
+ * Demand hotspot for the driver map. Produced by the
+ * `get_demand_hotspots` RPC (migration 00125).
+ */
+export interface DemandHotspot {
+  id: string;
+  lat: number;
+  lng: number;
+  /** 0..1 — combined historical + live score. Drives pulse color. */
+  intensity: number;
+  live_rides_count: number;
+  historical_rides_count: number;
 }
 
 export interface Tip {

@@ -16,6 +16,7 @@ import type {
   Tip,
   SurgeZone,
   SurgeType,
+  DemandHotspot,
   TripInsuranceConfig,
   RidePreferences,
   CancellationFeePreview,
@@ -778,12 +779,15 @@ export const rideService = {
   },
 
   /**
-   * Cancel a ride with optional penalty.
-   * Applies both: (1) state-based cancellation fee and (2) progressive penalty.
+   * Cancel a ride. Delegates everything (auth check, row lock, fee
+   * calculation, penalty progression, offer supersession) to the
+   * `cancel_ride` SECURITY DEFINER RPC. The `userId` parameter is
+   * retained for backwards compatibility but IGNORED on the server —
+   * `canceled_by` is derived from `auth.uid()`. See migration 00121.
    */
   async cancelRide(
     rideId: string,
-    userId?: string,
+    _userId?: string,
     reason?: string,
   ): Promise<{
     penaltyAmount: number;
@@ -792,87 +796,43 @@ export const rideService = {
   } | null> {
     const supabase = getSupabaseClient();
 
-    // Validate that the user is the ride's customer or assigned driver
-    if (userId) {
-      const { data: ride } = await supabase
-        .from('rides')
-        .select('customer_id, driver_id')
-        .eq('id', rideId)
-        .single();
-
-      if (ride) {
-        // Check driver: driver_profiles.id → driver_profiles.user_id
-        let isDriverUser = false;
-        if (ride.driver_id) {
-          const { data: dp } = await supabase
-            .from('driver_profiles')
-            .select('user_id')
-            .eq('id', ride.driver_id)
-            .single();
-          isDriverUser = dp?.user_id === userId;
-        }
-
-        if (ride.customer_id !== userId && !isDriverUser) {
-          throw new ForbiddenError('User is not the customer or driver of this ride');
-        }
-      }
-    }
-
-    // 1. Update ride status FIRST (critical — must succeed before applying fees)
-    const { error } = await supabase
-      .from('rides')
-      .update({
-        status: 'canceled' as RideStatus,
-        canceled_at: new Date().toISOString(),
-        canceled_by: userId ?? null,
-        cancellation_reason: reason ?? null,
-      })
-      .eq('id', rideId);
+    const { data, error } = await supabase.rpc('cancel_ride', {
+      p_ride_id: rideId,
+      p_reason: reason ?? null,
+    });
     if (error) throw error;
 
-    // 2. Apply state-based cancellation fee (non-critical — ride is already canceled)
-    let cancellationFee: CancellationFeePreview | undefined;
-    if (userId) {
-      try {
-        const { data: feeData, error: feeErr } = await supabase.rpc(
-          'apply_cancellation_fee',
-          { p_ride_id: rideId, p_canceled_by: userId },
-        );
-        if (!feeErr && feeData) {
-          const row = Array.isArray(feeData) ? feeData[0] : feeData;
-          cancellationFee = {
-            fee_cup: row?.fee_cup ?? 0,
-            fee_trc: row?.fee_trc ?? 0,
-            fee_reason: row?.fee_reason ?? 'free_cancel',
-            is_free: (row?.fee_cup ?? 0) === 0,
-          };
-        }
-      } catch {
-        console.error('Failed to apply cancellation fee');
+    const result = data as {
+      success?: boolean;
+      error?: string;
+      fee_cup?: number;
+      fee_trc?: number;
+      fee_reason?: string;
+      penalty_amount?: number;
+      is_blocked?: boolean;
+    } | null;
+
+    if (!result || result.error) {
+      const code = result?.error ?? 'unknown';
+      if (code === 'unauthorized') {
+        throw new ForbiddenError('User is not the customer or driver of this ride');
       }
+      throw new Error(`cancel_ride failed: ${code}`);
     }
 
-    // 3. Apply progressive cancellation penalty (non-critical)
-    if (userId) {
-      try {
-        const { data: penaltyData, error: penaltyErr } = await supabase.rpc(
-          'apply_cancellation_penalty',
-          { p_user_id: userId, p_ride_id: rideId },
-        );
-        if (!penaltyErr && penaltyData) {
-          const row = Array.isArray(penaltyData) ? penaltyData[0] : penaltyData;
-          return {
-            penaltyAmount: row?.penalty_amount ?? 0,
-            isBlocked: row?.is_blocked ?? false,
-            cancellationFee,
-          };
-        }
-      } catch {
-        console.error('Failed to apply cancellation penalty');
-      }
-    }
+    const feeCup = result.fee_cup ?? 0;
+    const cancellationFee: CancellationFeePreview = {
+      fee_cup: feeCup,
+      fee_trc: result.fee_trc ?? 0,
+      fee_reason: result.fee_reason ?? 'free_cancel',
+      is_free: feeCup === 0,
+    };
 
-    return cancellationFee ? { penaltyAmount: 0, isBlocked: false, cancellationFee } : null;
+    return {
+      penaltyAmount: result.penalty_amount ?? 0,
+      isBlocked: result.is_blocked ?? false,
+      cancellationFee,
+    };
   },
 
   /**
@@ -1029,17 +989,30 @@ export const rideService = {
   },
 
   /**
-   * Get all rides currently searching for a driver.
+   * Get all rides currently offered to the authenticated driver
+   * (pending offers that haven't expired). Replaces the legacy
+   * `getSearchingRides` broadcast. RLS ensures drivers only see their
+   * own offers (see migration 00120).
+   *
+   * Returns the joined `rides` rows with each offer's expires_at so
+   * the UI can show remaining-time for the offer window.
    */
   async getSearchingRides(): Promise<Ride[]> {
     const supabase = getSupabaseClient();
+    const nowIso = new Date().toISOString();
     const { data, error } = await supabase
-      .from('rides')
-      .select('*')
-      .eq('status', 'searching')
-      .order('created_at', { ascending: false });
+      .from('ride_offers')
+      .select('expires_at, rides!inner(*)')
+      .eq('status', 'pending')
+      .gt('expires_at', nowIso)
+      .order('offered_at', { ascending: false });
     if (error) throw error;
-    return data as Ride[];
+    // Flatten: ride_offers → nested rides row
+    type OfferRow = { expires_at: string; rides: Ride };
+    return ((data as unknown as OfferRow[]) ?? []).map((row) => ({
+      ...row.rides,
+      offer_expires_at: row.expires_at,
+    })) as Ride[];
   },
 
   /**
@@ -1129,8 +1102,14 @@ export const rideService = {
   },
 
   /**
-   * Subscribe to new ride requests (for drivers).
-   * Listens for INSERT (new searching rides) and UPDATE (rides leaving searching status).
+   * Subscribe to new ride OFFERS for the authenticated driver.
+   * Replaces the legacy broadcast subscription to `rides:searching`.
+   *
+   * RLS filters on `ride_offers` ensure the driver only receives
+   * offers targeted at them (see migration 00120). On INSERT we fetch
+   * the full ride row (which the driver can now SELECT via the
+   * updated r_select_driver policy). On UPDATE we notify the caller
+   * so expired/superseded offers can be removed from UI.
    */
   subscribeToNewRides(
     onInsert: (ride: Ride) => void,
@@ -1138,17 +1117,24 @@ export const rideService = {
   ) {
     const supabase = getSupabaseClient();
     return supabase
-      .channel('rides:searching')
+      .channel('ride_offers:mine')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'rides',
-          filter: 'status=eq.searching',
+          table: 'ride_offers',
         },
-        (payload) => {
-          onInsert(payload.new as Ride);
+        async (payload) => {
+          const offer = payload.new as { ride_id: string; expires_at: string; status: string };
+          if (offer.status !== 'pending') return;
+          const { data: ride, error } = await supabase
+            .from('rides')
+            .select('*')
+            .eq('id', offer.ride_id)
+            .maybeSingle();
+          if (error || !ride) return;
+          onInsert({ ...(ride as Ride), offer_expires_at: offer.expires_at } as Ride);
         },
       )
       .on(
@@ -1156,10 +1142,14 @@ export const rideService = {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'rides',
+          table: 'ride_offers',
         },
-        (payload) => {
-          onUpdate(payload.new as Ride);
+        async (payload) => {
+          const offer = payload.new as { ride_id: string; status: string };
+          // Any offer leaving 'pending' means the ride is no longer
+          // available to this driver — fetch minimal info to let UI remove it.
+          if (offer.status === 'pending') return;
+          onUpdate({ id: offer.ride_id, status: offer.status === 'accepted' ? 'accepted' : 'canceled' } as unknown as Ride);
         },
       )
       .subscribe();
@@ -1370,6 +1360,27 @@ export const rideService = {
     });
     if (error) throw error;
     return (data as number) ?? 1.0;
+  },
+
+  /**
+   * Fetch up to 8 demand hotspots around a point. Combines a 28-day
+   * historical pattern (matching the current hour-of-week) with a
+   * live boost from `status='searching'` rides in the last 10 min.
+   * See migration 00125. Returned intensity is normalized 0..1.
+   */
+  async getDemandHotspots(params: {
+    lat: number;
+    lng: number;
+    radiusM?: number;
+  }): Promise<DemandHotspot[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_demand_hotspots', {
+      p_lat: params.lat,
+      p_lng: params.lng,
+      p_radius_m: params.radiusM ?? 5000,
+    });
+    if (error) throw error;
+    return (data as DemandHotspot[] | null) ?? [];
   },
 
   /**
