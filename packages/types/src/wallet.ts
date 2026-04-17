@@ -122,6 +122,27 @@ export interface WalletSummary {
   total_earned: number;
   total_spent: number;
   currency: 'TRC';
+  /**
+   * wallet_accounts.id of the summarized account. Lets callers paginate
+   * `ledger_transactions` by account_id without a second lookup. Null
+   * when the account doesn't exist yet.
+   */
+  account_id: string | null;
+}
+
+/**
+ * Which wallet_accounts.account_type the caller wants summarized.
+ * Matches a subset of the public.wallet_account_type enum.
+ */
+export type WalletAccountKind = 'customer_cash' | 'driver_cash';
+
+/** One row of driver earnings grouped by zone (top 5 from RPC). */
+export interface DriverEarningsByZone {
+  zone_id: string;
+  zone_name: string;
+  trip_count: number;
+  total_fare_cup: number;
+  total_earnings_cup: number;
 }
 
 /** Driver quota status for the quota system */

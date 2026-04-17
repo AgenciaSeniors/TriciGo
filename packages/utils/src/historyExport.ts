@@ -134,3 +134,80 @@ export function generateHistoryCSV(
 
   return lines.join('\n');
 }
+
+// ============================================================
+// Wallet CSV export
+// ============================================================
+
+interface ExportableLedgerTransaction {
+  id: string;
+  type: string;
+  description: string | null;
+  created_at: string;
+  ledger_entries?: Array<{
+    amount: number;
+    balance_after?: number | null;
+  }>;
+}
+
+const WALLET_HEADERS_ES = ['Fecha', 'Tipo', 'Descripción', 'Monto (TRC)', 'Balance (TRC)'];
+const WALLET_HEADERS_EN = ['Date', 'Type', 'Description', 'Amount (TRC)', 'Balance (TRC)'];
+
+const TX_TYPE_LABELS: Record<string, Record<string, string>> = {
+  es: {
+    ride_payment: 'Pago de viaje',
+    commission: 'Comisión',
+    tip: 'Propina',
+    transfer_in: 'Transferencia recibida',
+    transfer_out: 'Transferencia enviada',
+    recharge: 'Recarga',
+    promo_credit: 'Crédito promocional',
+    redemption: 'Canje',
+    adjustment: 'Ajuste',
+    cancellation_fee: 'Tarifa de cancelación',
+  },
+  en: {
+    ride_payment: 'Ride payment',
+    commission: 'Commission',
+    tip: 'Tip',
+    transfer_in: 'Transfer received',
+    transfer_out: 'Transfer sent',
+    recharge: 'Recharge',
+    promo_credit: 'Promo credit',
+    redemption: 'Redemption',
+    adjustment: 'Adjustment',
+    cancellation_fee: 'Cancellation fee',
+  },
+};
+
+/**
+ * Generate a CSV string from the driver's (or rider's) ledger
+ * transactions. Amounts come from ledger_entries[0].amount in
+ * centavos and are divided by 100 for human-readable output.
+ */
+export function generateWalletCSV(
+  transactions: ExportableLedgerTransaction[],
+  locale: 'es' | 'en' = 'es',
+): string {
+  const headers = locale === 'es' ? WALLET_HEADERS_ES : WALLET_HEADERS_EN;
+  const labels = TX_TYPE_LABELS[locale] ?? TX_TYPE_LABELS.es!;
+  const lines: string[] = [headers.join(',')];
+
+  for (const tx of transactions) {
+    const entry = tx.ledger_entries?.[0];
+    const amountCentavos = entry?.amount ?? 0;
+    const balanceCentavos = entry?.balance_after ?? null;
+
+    const row = [
+      formatDate(tx.created_at),
+      escapeCsv(labels[tx.type] ?? tx.type),
+      escapeCsv(tx.description ?? ''),
+      (amountCentavos / 100).toFixed(2),
+      balanceCentavos !== null ? (balanceCentavos / 100).toFixed(2) : '',
+    ];
+
+    lines.push(row.join(','));
+  }
+
+  return lines.join('\n');
+}

@@ -11,7 +11,7 @@ export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
 export { useDebouncePress } from './useDebouncePress';
-export { generateHistoryCSV } from './historyExport';
+export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
 export type {
   RideHistoryEntry,

@@ -26,6 +26,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { EarningsBarChart } from '@/components/EarningsBarChart';
 import type { BarChartDataPoint } from '@/components/EarningsBarChart';
 import { HourlyHeatmap } from '@/components/HourlyHeatmap';
+import { EarningsByZoneChart } from '@/components/EarningsByZoneChart';
+import { useDriverEarningsByZone } from '@/hooks/useDriverEarningsByZone';
 
 const lt = driverStandardLightColors;
 const CARD_BG = lt.card;
@@ -508,21 +510,46 @@ function NativeEarningsScreen() {
     let totalEarnings = 0;
     let totalCommission = 0;
     let completedCount = 0;
+    let totalDurationSec = 0;
 
     for (const trip of periodTrips) {
       const fare = trip.final_fare_cup ?? trip.estimated_fare_cup;
       totalEarnings += fare;
       totalCommission += Math.round(fare * commissionRate);
       completedCount++;
+      totalDurationSec += trip.actual_duration_s ?? trip.estimated_duration_s ?? 0;
     }
 
     const avgPerTrip = completedCount > 0 ? Math.round(totalEarnings / completedCount) : 0;
     const netEarnings = totalEarnings - totalCommission;
 
-    return { totalEarnings, totalCommission, netEarnings, completedCount, avgPerTrip };
+    // Time-adjusted metrics — 0 when duration is missing to avoid Infinity.
+    const totalHours = totalDurationSec / 3600;
+    const ridesPerHour = totalHours > 0 ? completedCount / totalHours : 0;
+    const earningsPerHour = totalHours > 0 ? Math.round(netEarnings / totalHours) : 0;
+
+    return {
+      totalEarnings,
+      totalCommission,
+      netEarnings,
+      completedCount,
+      avgPerTrip,
+      totalHours,
+      ridesPerHour,
+      earningsPerHour,
+    };
   }, [periodTrips, commissionRate]);
 
   const dailyData = useMemo(() => groupTripsByDay(periodTrips), [periodTrips]);
+
+  // Earnings by zone (top 5) — RPC get_driver_earnings_by_zone (migration 00128)
+  const periodRange = useMemo(() => getDateRange(period), [period]);
+  const { data: earningsByZone, loading: earningsByZoneLoading } = useDriverEarningsByZone({
+    driverId: driverProfileId ?? null,
+    start: periodRange.start,
+    end: periodRange.end,
+    enabled: !!driverProfileId,
+  });
 
   // Convert dailyData to BarChartDataPoint[]
   const chartData: BarChartDataPoint[] = useMemo(() => {
@@ -733,10 +760,43 @@ function NativeEarningsScreen() {
             </Pressable>
           </View>
 
+          {/* Time-adjusted productivity: rides/hr + $/hr */}
+          <View className="flex-row gap-3 mb-4">
+            <Card
+              variant="filled"
+              padding="md"
+              className="flex-1"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16, ...CARD_SHADOW }}
+            >
+              <Text variant="badge" style={{ color: lt.text.secondary }}>
+                {t('earnings.rides_per_hour', { defaultValue: 'Viajes por hora' })}
+              </Text>
+              <Text variant="metric" style={{ color: lt.text.primary }} className="mt-1">
+                {periodStats.totalHours > 0 ? periodStats.ridesPerHour.toFixed(1) : '—'}
+              </Text>
+            </Card>
+            <Card
+              variant="filled"
+              padding="md"
+              className="flex-1"
+              style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16, ...CARD_SHADOW }}
+            >
+              <Text variant="badge" style={{ color: lt.text.secondary }}>
+                {t('earnings.earnings_per_hour', { defaultValue: 'Ganancia por hora' })}
+              </Text>
+              <Text variant="metric" style={{ color: lt.text.primary }} className="mt-1">
+                {periodStats.totalHours > 0 ? formatCUP(periodStats.earningsPerHour) : '—'}
+              </Text>
+            </Card>
+          </View>
+
           {/* Hourly Heatmap */}
           {periodTrips.length > 0 && (
             <HourlyHeatmap trips={periodTrips} theme="light" />
           )}
+
+          {/* Earnings by zone (top 5) */}
+          <EarningsByZoneChart data={earningsByZone} loading={earningsByZoneLoading} />
 
           {/* Quests / Missions */}
           <View className="mt-8">

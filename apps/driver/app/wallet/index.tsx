@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,10 +10,12 @@ import { StatCard } from '@tricigo/ui/StatCard';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, generateWalletCSV } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const PAGE_SIZE = 20;
 
@@ -31,15 +33,20 @@ export default function WalletScreen() {
   const fetchData = useCallback(async (reset = false) => {
     if (!userId) return;
     try {
-      const p = reset ? 1 : page;
-      const [summaryData, txData] = await Promise.all([
-        walletService.getSummary(userId),
-        walletService.getTransactions(userId, p, PAGE_SIZE),
-      ]);
+      const p = reset ? 0 : page;
+      // Driver wallet screen summarizes the DRIVER earnings account,
+      // not the rider customer_cash balance.
+      const summaryData = await walletService.getSummary(userId, 'driver_cash');
       setSummary(summaryData);
+
+      let txData: LedgerTransaction[] = [];
+      if (summaryData.account_id) {
+        txData = await walletService.getTransactions(summaryData.account_id, p, PAGE_SIZE);
+      }
+
       if (reset) {
         setTransactions(txData);
-        setPage(2);
+        setPage(1);
       } else {
         setTransactions((prev) => [...prev, ...txData]);
         setPage((prev) => prev + 1);
@@ -65,6 +72,46 @@ export default function WalletScreen() {
   const handleLoadMore = () => {
     if (hasMore && !loading) fetchData(false);
   };
+
+  const handleExportCSV = useCallback(async () => {
+    if (!summary?.account_id) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('wallet.export_no_account', { defaultValue: 'No hay cuenta para exportar' }),
+      );
+      return;
+    }
+    try {
+      // Pull a larger slice for export (up to 1000 recent transactions)
+      const rows = await walletService.getTransactions(summary.account_id, 0, 1000);
+      if (!rows.length) {
+        Alert.alert(
+          t('wallet.export_empty_title', { defaultValue: 'Nada para exportar' }),
+          t('wallet.export_empty', { defaultValue: 'Aun no tienes transacciones.' }),
+        );
+        return;
+      }
+      const csv = generateWalletCSV(
+        rows as Array<LedgerTransaction & { ledger_entries?: { amount: number; balance_after?: number | null }[] }>,
+        'es',
+      );
+      const cacheDir = FileSystem.cacheDirectory;
+      if (!cacheDir) {
+        Alert.alert('Error', 'No se puede acceder al almacenamiento');
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const fileUri = `${cacheDir}tricigo-wallet-${today}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar wallet' });
+    } catch (err) {
+      console.error('Error exporting wallet CSV:', err);
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('wallet.export_failed', { defaultValue: 'No se pudo exportar el CSV' }),
+      );
+    }
+  }, [summary?.account_id, t]);
 
   const getTransactionIcon = (type: string): string => {
     switch (type) {
@@ -172,9 +219,22 @@ export default function WalletScreen() {
               >
                 <Ionicons name="arrow-back" size={20} color="#fff" />
               </Pressable>
-              <Text variant="h2" color="inverse">
+              <Text variant="h2" color="inverse" className="flex-1">
                 {t('wallet.title', { defaultValue: 'Wallet' })}
               </Text>
+              <Pressable
+                onPress={handleExportCSV}
+                disabled={!summary?.account_id}
+                className="w-11 h-11 rounded-xl items-center justify-center"
+                style={({ pressed }) => [
+                  { backgroundColor: '#252540', opacity: !summary?.account_id ? 0.4 : 1 },
+                  pressed && { transform: [{ scale: 0.95 }] },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('wallet.export_csv', { defaultValue: 'Exportar CSV' })}
+              >
+                <Ionicons name="download-outline" size={20} color="#fff" />
+              </Pressable>
             </View>
 
             {/* Balance card */}

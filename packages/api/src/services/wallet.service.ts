@@ -8,6 +8,8 @@ import type {
   WalletAccount,
   LedgerTransaction,
   WalletSummary,
+  WalletAccountKind,
+  DriverEarningsByZone,
   WalletRechargeRequest,
   WalletTransfer,
   DriverQuotaStatus,
@@ -35,11 +37,24 @@ export const walletService = {
 
   /**
    * Get wallet summary (balance, held, totals) for display.
+   *
+   * `accountType` selects which wallet to summarize:
+   *   - 'customer_cash' (default) → rider balance
+   *   - 'driver_cash' → driver earnings balance
+   *
+   * Returns the owning `account_id` so callers can paginate
+   * `ledger_transactions` without a second lookup.
    */
-  async getSummary(userId: string): Promise<WalletSummary> {
+  async getSummary(
+    userId: string,
+    accountType: WalletAccountKind = 'customer_cash',
+  ): Promise<WalletSummary> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
-      .rpc('get_wallet_summary', { p_user_id: userId });
+      .rpc('get_wallet_summary', {
+        p_user_id: userId,
+        p_account_type: accountType,
+      });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     return (row ?? {
@@ -48,7 +63,27 @@ export const walletService = {
       total_earned: 0,
       total_spent: 0,
       currency: 'TRC',
+      account_id: null,
     }) as WalletSummary;
+  },
+
+  /**
+   * Top 5 zones by driver earnings for a date range. RLS-checked via
+   * the `get_driver_earnings_by_zone` RPC (see migration 00128).
+   */
+  async getDriverEarningsByZone(params: {
+    driverId: string;
+    start: Date | string;
+    end: Date | string;
+  }): Promise<DriverEarningsByZone[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_earnings_by_zone', {
+      p_driver_id: params.driverId,
+      p_start: typeof params.start === 'string' ? params.start : params.start.toISOString(),
+      p_end: typeof params.end === 'string' ? params.end : params.end.toISOString(),
+    });
+    if (error) throw error;
+    return (data as DriverEarningsByZone[] | null) ?? [];
   },
 
   /**
