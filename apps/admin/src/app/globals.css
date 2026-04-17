@@ -1,21 +1,218 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Montserrat', sans-serif;
+/* ================================================================
+   Theme tokens — semantic surfaces, ink, lines.
+   Light is default; .dark flips them.
+   ================================================================ */
+@layer base {
+  :root {
+    --surface: 252 250 247;
+    --surface-elevated: 255 255 255;
+    --surface-sunken: 246 243 238;
+    --surface-inverse: 17 17 17;
+
+    --ink: 18 20 28;
+    --ink-muted: 82 89 107;
+    --ink-subtle: 142 150 170;
+    --ink-inverse: 248 250 252;
+
+    --line: 224 220 212;
+    --line-strong: 196 190 178;
+
+    --grain-opacity: 0.035;
+    --aurora-opacity: 0.55;
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --surface: 13 15 22;
+    --surface-elevated: 20 23 32;
+    --surface-sunken: 9 11 16;
+    --surface-inverse: 248 250 252;
+
+    --ink: 237 239 246;
+    --ink-muted: 155 164 186;
+    --ink-subtle: 104 113 134;
+    --ink-inverse: 15 23 42;
+
+    --line: 40 44 58;
+    --line-strong: 58 64 82;
+
+    --grain-opacity: 0.06;
+    --aurora-opacity: 0.35;
+
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+
+  body {
+    font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: 'ss01', 'cv11', 'cv05';
+    background: rgb(var(--surface-sunken));
+    color: rgb(var(--ink));
+    position: relative;
+    min-height: 100dvh;
+  }
+
+  /* Grain texture applied as a fixed overlay on the entire app — subtle tactile atmosphere. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.1 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+    background-size: 240px 240px;
+    mix-blend-mode: multiply;
+  }
+
+  .dark body::before {
+    mix-blend-mode: overlay;
+  }
+
+  /* Content must sit above the grain */
+  body > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Editorial display font — for page titles and KPI hero numbers */
+  .font-display,
+  h1.font-display,
+  h2.font-display {
+    font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+    font-variation-settings: 'wdth' 100, 'opsz' 32;
+    letter-spacing: -0.025em;
+  }
+
+  /* Editorial serif — for emphasis on KPI numbers and accents */
+  .font-editorial {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-feature-settings: 'kern', 'liga', 'calt';
+    letter-spacing: -0.01em;
+  }
+
+  /* Tabular figures for numeric data */
+  .tabular,
+  [data-tabular] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Accessibility — respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Focus ring — brand orange, visible on any surface */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #FF4D00;
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  /* Subtle, themed scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong) / 0.7);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ink-subtle) / 0.7);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  ::selection {
+    background: rgb(255 77 0 / 0.25);
+    color: rgb(var(--ink));
+  }
 }
 
-/* Focus visible styles for accessibility */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid #FF4D00;
-  outline-offset: 2px;
-  border-radius: 4px;
+/* ================================================================
+   Component primitives used across the admin shell.
+   ================================================================ */
+@layer components {
+  .admin-card {
+    @apply relative rounded-2xl border border-line bg-surface-elevated shadow-elev-1;
+  }
+
+  .admin-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted;
+  }
+
+  .admin-kbd {
+    @apply inline-flex h-5 min-w-[22px] items-center justify-center rounded-[6px] border border-line bg-surface px-1.5 font-mono text-[10px] font-medium text-ink-muted shadow-[0_1px_0_0_rgb(var(--line-strong)/0.6)];
+  }
+
+  .admin-divider {
+    @apply h-px w-full bg-line;
+  }
+
+  /* Trinational aurora — painterly gradient used behind hero regions */
+  .admin-aurora {
+    position: relative;
+    isolation: isolate;
+  }
+  .admin-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background:
+      radial-gradient(50% 40% at 12% -5%, rgb(255 77 0 / 0.22), transparent 62%),
+      radial-gradient(42% 36% at 92% 8%, rgb(0 156 59 / 0.20), transparent 60%),
+      radial-gradient(55% 45% at 52% 108%, rgb(117 170 219 / 0.22), transparent 58%),
+      radial-gradient(32% 26% at 82% 96%, rgb(213 43 30 / 0.14), transparent 60%);
+    opacity: var(--aurora-opacity);
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* Editorial rule — thin line with asymmetric tick, used to anchor section breaks */
+  .admin-rule {
+    position: relative;
+    height: 1px;
+    background: rgb(var(--line));
+  }
+  .admin-rule::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: -2px;
+    height: 5px;
+    width: 28px;
+    background: rgb(var(--ink));
+    border-radius: 999px;
+  }
 }

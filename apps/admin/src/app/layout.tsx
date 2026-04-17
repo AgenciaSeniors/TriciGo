@@ -11,14 +11,29 @@ export const metadata: Metadata = {
   },
 };
 
+const themeInitScript = `
+(function () {
+  try {
+    var saved = localStorage.getItem('admin-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var theme = saved === 'light' || saved === 'dark' ? saved : (prefersDark ? 'dark' : 'light');
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = theme;
+  } catch (_) {}
+})();
+`.trim();
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
-      <body className="bg-neutral-50 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="bg-surface-sunken text-ink antialiased">
         <AdminShell>{children}</AdminShell>
       </body>
     </html>
