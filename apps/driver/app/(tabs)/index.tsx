@@ -40,7 +40,8 @@ import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripVie
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import * as Location from 'expo-location';
-import { useDemandHeatmap } from '@/hooks/useDemandHeatmap';
+import { useDemandHotspots } from '@/hooks/useDemandHotspots';
+import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useSurgeZones } from '@/hooks/useSurgeZones';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
@@ -304,9 +305,6 @@ function NativeDriverHomeScreen() {
   // GPS tracking when online
   useDriverLocationTracking(profile?.id ?? null, isOnline, activeTrip?.id ?? null);
 
-  // Demand heatmap data
-  const heatmapData = useDemandHeatmap(isOnline);
-
   // Active surge zones (only when online and no active trip)
   const surgeZones = useSurgeZones(isOnline && !activeTrip);
 
@@ -324,6 +322,30 @@ function NativeDriverHomeScreen() {
     [driverLat, driverLng],
   );
 
+  // Center for hotspot/peer lookups (stable reference so polling doesn't
+  // thrash every render). Only updates when crossing ~300m.
+  const mapCenter = useMemo(
+    () => (driverLat && driverLng ? { lat: driverLat, lng: driverLng } : null),
+    // Snap to ~300m grid (0.003°) to avoid re-polling on tiny GPS deltas.
+    [
+      driverLat ? Math.round(driverLat * 333) : null,
+      driverLng ? Math.round(driverLng * 333) : null,
+    ],
+  );
+
+  // Demand hotspots (replaces legacy demand heatmap).
+  const demandHotspots = useDemandHotspots({
+    center: mapCenter,
+    enabled: isOnline,
+  });
+
+  // Peer online drivers (top-down markers on the map).
+  const nearbyDrivers = useNearbyDrivers({
+    center: mapCenter,
+    enabled: isOnline && !activeTrip,
+    myDriverProfileId: profile?.id ?? null,
+  });
+
   // DE-2.3: Track idle time and find nearest hot zone
   useEffect(() => {
     if (!isOnline || activeTrip || incomingRequests.length > 0 || isOnBreak) {
@@ -338,24 +360,24 @@ function NativeDriverHomeScreen() {
       if (idleSince) {
         const mins = Math.floor((Date.now() - idleSince) / 60000);
         setIdleMinutes(mins);
-        if (mins >= 10 && heatmapData.length > 0 && driverLat && driverLng) {
-          const hotZones = heatmapData
-            .filter((p: any) => p.intensity > 0.7)
-            .map((p: any) => ({
-              lat: p.latitude,
-              lng: p.longitude,
+        if (mins >= 10 && demandHotspots.length > 0 && driverLat && driverLng) {
+          const hotZones = demandHotspots
+            .filter((p) => p.intensity > 0.7)
+            .map((p) => ({
+              lat: p.lat,
+              lng: p.lng,
               distance: Math.round(haversineDistance(
                 { latitude: driverLat, longitude: driverLng },
-                { latitude: p.latitude, longitude: p.longitude },
+                { latitude: p.lat, longitude: p.lng },
               ) / 100) / 10,
             }))
-            .sort((a: any, b: any) => a.distance - b.distance);
+            .sort((a, b) => a.distance - b.distance);
           if (hotZones.length > 0 && hotZones[0]) setNearestHotZone(hotZones[0]);
         }
       }
     }, 60000);
     return () => clearInterval(interval);
-  }, [isOnline, activeTrip, incomingRequests.length, isOnBreak, idleSince, heatmapData, driverLat, driverLng]);
+  }, [isOnline, activeTrip, incomingRequests.length, isOnBreak, idleSince, demandHotspots, driverLat, driverLng]);
 
   // OMEGA: Trigger auto-nav countdown when idle >= 10 min
   useEffect(() => {
@@ -387,24 +409,24 @@ function NativeDriverHomeScreen() {
     navCancelledRef.current = true;
   }, [nearestHotZone?.distance, idleMinutes]);
 
-  // OMEGA: Wait time estimate based on heatmap proximity
+  // OMEGA: Wait time estimate based on demand-hotspot proximity
   const estimatedWaitMinutes = useMemo(() => {
-    if (!heatmapData.length || !driverLat || !driverLng) return null;
-    const nearest = heatmapData
-      .map((p: any) => ({
+    if (!demandHotspots.length || !driverLat || !driverLng) return null;
+    const nearest = demandHotspots
+      .map((p) => ({
         ...p,
         dist: haversineDistance(
           { latitude: driverLat, longitude: driverLng },
-          { latitude: p.latitude, longitude: p.longitude },
+          { latitude: p.lat, longitude: p.lng },
         ),
       }))
-      .sort((a: any, b: any) => a.dist - b.dist)[0];
+      .sort((a, b) => a.dist - b.dist)[0];
     if (!nearest || nearest.dist > 2000) return null;
     if (nearest.intensity > 0.8) return 3;
     if (nearest.intensity > 0.5) return 8;
     if (nearest.intensity > 0.2) return 15;
     return null;
-  }, [heatmapData, driverLat, driverLng]);
+  }, [demandHotspots, driverLat, driverLng]);
 
   // OMEGA: Online time tracking for earnings per hour
   useEffect(() => {
@@ -550,8 +572,9 @@ function NativeDriverHomeScreen() {
         <RideMapView
           ref={mapRef}
           driverLocation={driverLocation}
-          heatmapData={heatmapData}
           surgeZones={surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))}
+          nearbyDrivers={nearbyDrivers}
+          demandHotspots={demandHotspots}
           height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
@@ -569,7 +592,7 @@ function NativeDriverHomeScreen() {
       </View>
 
       {/* Top floating badges */}
-      {isOnline && heatmapData.length > 0 && (
+      {isOnline && demandHotspots.length > 0 && (
         <View style={[styles.heatmapBadge, { top: insets.top + 64 }]} pointerEvents="none">
           <Ionicons name="flame" size={12} color={colors.brand.orange} />
           <RNText style={styles.heatmapBadgeText}>{t('home.high_demand', { defaultValue: 'Alta demanda' })}</RNText>
@@ -579,7 +602,7 @@ function NativeDriverHomeScreen() {
         <View
           style={[
             styles.heatmapBadge,
-            { top: insets.top + (heatmapData.length > 0 ? 92 : 64), backgroundColor: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)' },
+            { top: insets.top + (demandHotspots.length > 0 ? 92 : 64), backgroundColor: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)' },
           ]}
           pointerEvents="none"
         >

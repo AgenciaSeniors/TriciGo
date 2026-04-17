@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import type { NearbyVehicle, DemandHotspot } from '@tricigo/types';
+import { HotspotPulseMarker } from './HotspotPulseMarker';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -63,6 +65,10 @@ interface RideMapViewProps {
   bottomOffset?: number;
   /** Additional style for the map container */
   containerStyle?: object;
+  /** Other online drivers to render as peer markers (top-down vehicle icons). */
+  nearbyDrivers?: NearbyVehicle[];
+  /** Demand hotspots with pulse animation (top 8). */
+  demandHotspots?: DemandHotspot[];
 }
 
 const vehicleMarkerImages: Record<string, any> = {
@@ -116,6 +122,8 @@ function WebMapboxView({
   onUserInteraction,
   bottomOffset = 0,
   containerStyle,
+  nearbyDrivers,
+  demandHotspots,
 }: RideMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -562,6 +570,8 @@ function RideMapViewInner(
     followMode,
     driverHeading,
     onUserInteraction,
+    nearbyDrivers,
+    demandHotspots,
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
@@ -649,6 +659,26 @@ function RideMapViewInner(
     };
   }, [heatmapData]);
 
+  // Build peer drivers GeoJSON (top-down vehicle icons for everyone else)
+  const peersGeoJSON = useMemo(() => {
+    if (!nearbyDrivers || nearbyDrivers.length === 0) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: nearbyDrivers.map((v) => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [v.longitude, v.latitude],
+        },
+        properties: {
+          id: v.driver_profile_id,
+          icon: `marker-${v.vehicle_type || 'auto'}`,
+          heading: v.heading ?? 0,
+        },
+      })),
+    };
+  }, [nearbyDrivers]);
+
   // Build surge zones GeoJSON for polygon overlay
   const surgeGeoJSON = useMemo(() => {
     if (!surgeZones || surgeZones.length === 0) return null;
@@ -729,6 +759,8 @@ function RideMapViewInner(
           followMode={followMode}
           driverHeading={driverHeading}
           onUserInteraction={onUserInteraction}
+          nearbyDrivers={nearbyDrivers}
+          demandHotspots={demandHotspots}
         />
       );
     }
@@ -917,6 +949,45 @@ function RideMapViewInner(
             />
           </MapboxGL.ShapeSource>
         )}
+        {/* Peer drivers — top-down vehicle icons rendered via SymbolLayer */}
+        {peersGeoJSON && (
+          <>
+            <MapboxGL.Images
+              images={{
+                'marker-triciclo': vehicleMarkerImages.triciclo,
+                'marker-moto': vehicleMarkerImages.moto,
+                'marker-auto': vehicleMarkerImages.auto,
+                'marker-confort': vehicleMarkerImages.confort,
+              }}
+            />
+            <MapboxGL.ShapeSource id="peers" shape={peersGeoJSON}>
+              <MapboxGL.SymbolLayer
+                id="peers-layer"
+                style={{
+                  iconImage: ['get', 'icon'],
+                  iconSize: 0.45,
+                  iconRotate: ['get', 'heading'],
+                  iconAllowOverlap: true,
+                  iconRotationAlignment: 'map',
+                  iconPitchAlignment: 'map',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          </>
+        )}
+        {/* Demand hotspots — top 8 pulse markers */}
+        {demandHotspots?.map((h) => (
+          <MapboxGL.PointAnnotation
+            key={`hotspot-${h.id}`}
+            id={`hotspot-${h.id}`}
+            coordinate={[h.lng, h.lat]}
+          >
+            <HotspotPulseMarker
+              intensity={h.intensity}
+              label={h.live_rides_count > 0 ? String(h.live_rides_count) : undefined}
+            />
+          </MapboxGL.PointAnnotation>
+        ))}
       </MapboxGL.MapView>
       {!followMode && driverLocation && (
         <Pressable
