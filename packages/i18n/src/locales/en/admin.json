@@ -1333,5 +1333,35 @@
       "invalidated": "Invalidated"
     },
     "unknown": "No status"
+  },
+  "validation": {
+    "page_eyebrow": "Operation · validation",
+    "title": "Automated validation",
+    "page_description": "How well the engine auto-accepts and auto-navigates rides in recent weeks.",
+    "load_error": "Could not load validation data.",
+    "kpi_follow_rate_label": "Navigation follow rate",
+    "kpi_no_data_hint": "No data in this period",
+    "kpi_triggered_suffix": "triggered",
+    "kpi_cancelled_suffix": "cancelled",
+    "section_engine_eyebrow": "Automated engine",
+    "section_engine_title": "Auto-acceptance by profit level",
+    "section_engine_description": "How many offers are accepted without human intervention.",
+    "section_overrides_eyebrow": "Top overriders",
+    "section_overrides_title": "Drivers who intervene the most",
+    "section_overrides_description": "Who rejects more offers or cancels assisted navigation more often.",
+    "col_profit_level": "Profit level",
+    "col_total": "Total",
+    "col_accepted": "Accepted",
+    "col_rejected": "Rejected",
+    "col_rate": "Rate",
+    "col_driver": "Driver",
+    "col_total_overrides": "Total overrides",
+    "col_rejects": "Rejections",
+    "col_nav_cancels": "Nav. cancels",
+    "no_data_label": "No data",
+    "empty_accept_title": "No auto-acceptance data",
+    "empty_accept_body": "No activity recorded in the selected period.",
+    "empty_overrides_title": "No overrides in this period",
+    "empty_overrides_body": "No one intervened — the engine is running solo."
   }
 }

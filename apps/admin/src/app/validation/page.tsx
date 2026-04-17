@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Compass, Gauge, Target } from 'lucide-react';
+import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -42,6 +43,7 @@ function rateTone(rate: number, green: number, amber: number): 'success' | 'warn
 }
 
 export default function ValidationPage() {
+  const { t } = useTranslation('admin');
   const [daysBack, setDaysBack] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +71,11 @@ export default function ValidationPage() {
       setNavRate(navRows && navRows.length > 0 ? navRows[0] ?? null : null);
       setOverrides(overrideRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cargar la validación.');
+      setError(err instanceof Error ? err.message : t('validation.load_error', { defaultValue: 'No pudimos cargar la validación.' }));
     } finally {
       setLoading(false);
     }
-  }, [daysBack]);
+  }, [daysBack, t]);
 
   useEffect(() => {
     void fetchAll();
@@ -85,14 +87,18 @@ export default function ValidationPage() {
     () => [
       {
         id: 'profit_level',
-        header: 'Nivel de ganancia',
-        cell: (r) => <span className="font-medium text-ink">{r.profit_level ?? 'Sin dato'}</span>,
+        header: t('validation.col_profit_level', { defaultValue: 'Nivel de ganancia' }),
+        cell: (r) => (
+          <span className="font-medium text-ink">
+            {r.profit_level ?? t('validation.no_data_label', { defaultValue: 'Sin dato' })}
+          </span>
+        ),
         primary: true,
       },
-      { id: 'total', header: 'Total', cell: (r) => r.total, align: 'right', mono: true, width: '100px' },
+      { id: 'total', header: t('validation.col_total', { defaultValue: 'Total' }), cell: (r) => r.total, align: 'right', mono: true, width: '100px' },
       {
         id: 'accepted',
-        header: 'Aceptados',
+        header: t('validation.col_accepted', { defaultValue: 'Aceptados' }),
         cell: (r) => r.accepted,
         align: 'right',
         mono: true,
@@ -101,7 +107,7 @@ export default function ValidationPage() {
       },
       {
         id: 'rejected',
-        header: 'Rechazados',
+        header: t('validation.col_rejected', { defaultValue: 'Rechazados' }),
         cell: (r) => r.rejected,
         align: 'right',
         mono: true,
@@ -110,7 +116,7 @@ export default function ValidationPage() {
       },
       {
         id: 'accept_rate',
-        header: 'Tasa',
+        header: t('validation.col_rate', { defaultValue: 'Tasa' }),
         cell: (r) => {
           const tone = rateTone(r.accept_rate, 85, 70);
           const cls =
@@ -127,21 +133,21 @@ export default function ValidationPage() {
         secondary: true,
       },
     ],
-    [],
+    [t],
   );
 
   const overrideColumns: DataColumn<OverrideRow>[] = useMemo(
     () => [
       {
         id: 'driver_id',
-        header: 'Conductor',
+        header: t('validation.col_driver', { defaultValue: 'Conductor' }),
         cell: (r) => `${r.driver_id.slice(0, 8)}…`,
         mono: true,
         primary: true,
       },
       {
         id: 'total_overrides',
-        header: 'Total overrides',
+        header: t('validation.col_total_overrides', { defaultValue: 'Total overrides' }),
         cell: (r) => (
           <span className={r.total_overrides > 10 ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>
             {r.total_overrides}
@@ -154,7 +160,7 @@ export default function ValidationPage() {
       },
       {
         id: 'reject_count',
-        header: 'Rechazos',
+        header: t('validation.col_rejects', { defaultValue: 'Rechazos' }),
         cell: (r) => r.reject_count,
         align: 'right',
         mono: true,
@@ -163,7 +169,7 @@ export default function ValidationPage() {
       },
       {
         id: 'nav_cancel_count',
-        header: 'Cancel. nav.',
+        header: t('validation.col_nav_cancels', { defaultValue: 'Cancel. nav.' }),
         cell: (r) => r.nav_cancel_count,
         align: 'right',
         mono: true,
@@ -171,7 +177,7 @@ export default function ValidationPage() {
         width: '120px',
       },
     ],
-    [],
+    [t],
   );
 
   return (
@@ -179,13 +185,13 @@ export default function ValidationPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Operación · validación
+            {t('validation.page_eyebrow', { defaultValue: 'Operación · validación' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Validación automática
+            {t('validation.title', { defaultValue: 'Validación automática' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Qué tan bien el motor auto-acepta y auto-navega los viajes en las últimas semanas.
+            {t('validation.page_description', { defaultValue: 'Qué tan bien el motor auto-acepta y auto-navega los viajes en las últimas semanas.' })}
           </p>
         </div>
         <div className="flex gap-1 rounded-full border border-line bg-surface p-0.5">
@@ -212,21 +218,21 @@ export default function ValidationPage() {
           variant="hero"
           tone={rateTone(followRate, 70, 50)}
           icon={Compass}
-          label="Tasa de seguimiento de navegación"
+          label={t('validation.kpi_follow_rate_label', { defaultValue: 'Tasa de seguimiento de navegación' })}
           value={navRate ? `${followRate}%` : '—'}
           hint={
             navRate
-              ? `${navRate.triggered} activaciones · ${navRate.cancelled} canceladas`
-              : 'Sin datos en este período'
+              ? `${navRate.triggered} ${t('validation.kpi_triggered_suffix', { defaultValue: 'activaciones' })} · ${navRate.cancelled} ${t('validation.kpi_cancelled_suffix', { defaultValue: 'canceladas' })}`
+              : t('validation.kpi_no_data_hint', { defaultValue: 'Sin datos en este período' })
           }
           loading={loading}
         />
 
         <SectionCard
           className="lg:col-span-2"
-          eyebrow="Motor automático"
-          title="Auto-aceptación por nivel de ganancia"
-          description="Cuántas ofertas se aceptan sin intervención humana."
+          eyebrow={t('validation.section_engine_eyebrow', { defaultValue: 'Motor automático' })}
+          title={t('validation.section_engine_title', { defaultValue: 'Auto-aceptación por nivel de ganancia' })}
+          description={t('validation.section_engine_description', { defaultValue: 'Cuántas ofertas se aceptan sin intervención humana.' })}
         >
           <DataTable<AcceptRateRow>
             columns={acceptColumns}
@@ -237,17 +243,17 @@ export default function ValidationPage() {
             onRetry={() => void fetchAll()}
             empty={{
               icon: Gauge,
-              title: 'Sin datos de auto-aceptación',
-              body: 'No hay actividad registrada en el período seleccionado.',
+              title: t('validation.empty_accept_title', { defaultValue: 'Sin datos de auto-aceptación' }),
+              body: t('validation.empty_accept_body', { defaultValue: 'No hay actividad registrada en el período seleccionado.' }),
             }}
           />
         </SectionCard>
       </div>
 
       <SectionCard
-        eyebrow="Top overriders"
-        title="Conductores que más intervienen"
-        description="Quiénes rechazan más ofertas o cancelan más veces la navegación asistida."
+        eyebrow={t('validation.section_overrides_eyebrow', { defaultValue: 'Top overriders' })}
+        title={t('validation.section_overrides_title', { defaultValue: 'Conductores que más intervienen' })}
+        description={t('validation.section_overrides_description', { defaultValue: 'Quiénes rechazan más ofertas o cancelan más veces la navegación asistida.' })}
       >
         <DataTable<OverrideRow>
           columns={overrideColumns}
@@ -258,8 +264,8 @@ export default function ValidationPage() {
           onRetry={() => void fetchAll()}
           empty={{
             icon: Target,
-            title: 'Sin overrides en este período',
-            body: 'Nadie intervino los automatismos — el motor está corriendo solo.',
+            title: t('validation.empty_overrides_title', { defaultValue: 'Sin overrides en este período' }),
+            body: t('validation.empty_overrides_body', { defaultValue: 'Nadie intervino los automatismos — el motor está corriendo solo.' }),
           }}
         />
       </SectionCard>

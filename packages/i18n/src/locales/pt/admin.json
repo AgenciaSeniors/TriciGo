@@ -1317,5 +1317,35 @@
       "invalidated": "Invalidado"
     },
     "unknown": "Sem estado"
+  },
+  "validation": {
+    "page_eyebrow": "Operação · validação",
+    "title": "Validação automática",
+    "page_description": "Quão bem o motor aceita e navega automaticamente as viagens nas últimas semanas.",
+    "load_error": "Não foi possível carregar a validação.",
+    "kpi_follow_rate_label": "Taxa de seguimento de navegação",
+    "kpi_no_data_hint": "Sem dados neste período",
+    "kpi_triggered_suffix": "ativações",
+    "kpi_cancelled_suffix": "canceladas",
+    "section_engine_eyebrow": "Motor automático",
+    "section_engine_title": "Aceitação automática por nível de lucro",
+    "section_engine_description": "Quantas ofertas são aceitas sem intervenção humana.",
+    "section_overrides_eyebrow": "Top overriders",
+    "section_overrides_title": "Motoristas que mais intervêm",
+    "section_overrides_description": "Quem rejeita mais ofertas ou cancela a navegação assistida com mais frequência.",
+    "col_profit_level": "Nível de lucro",
+    "col_total": "Total",
+    "col_accepted": "Aceitos",
+    "col_rejected": "Rejeitados",
+    "col_rate": "Taxa",
+    "col_driver": "Motorista",
+    "col_total_overrides": "Total overrides",
+    "col_rejects": "Rejeições",
+    "col_nav_cancels": "Cancel. nav.",
+    "no_data_label": "Sem dado",
+    "empty_accept_title": "Sem dados de auto-aceitação",
+    "empty_accept_body": "Sem atividade registrada no período selecionado.",
+    "empty_overrides_title": "Sem overrides neste período",
+    "empty_overrides_body": "Ninguém interveio — o motor está rodando sozinho."
   }
 }
