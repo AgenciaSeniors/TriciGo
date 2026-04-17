@@ -1,4 +1,6 @@
-# CLAUDE_MASTER_CHANGES.md — Cambios de `lucia` vs `master`
+# CLAUDE-LUCIA-CHANGES.md — Cambios de `lucia` vs `master`
+
+> **Archivo complementario:** `CLAUDE-MASTER-CHANGES.md` documenta qué cambió en `master` desde el último merge (escrito desde la perspectiva de master). Este documenta qué cambió en `lucia` (escrito desde la perspectiva de lucia). Léanse juntos antes de cualquier merge.
 
 > **Propósito de este archivo:** dejar un registro completo del rediseño del panel de administración hecho en la rama `lucia`, para que futuras sesiones (o quien compare con `master`) entienda rápido qué cambió, por qué, qué queda pendiente, y qué deuda técnica se acumuló.
 >
