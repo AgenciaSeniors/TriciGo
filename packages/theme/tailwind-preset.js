@@ -59,22 +59,40 @@ module.exports = {
           DEFAULT: '#3B82F6',
           dark: '#1E40AF',
         },
-        surface: {
-          card: '#1a1a2e',
-          elevated: '#252540',
-          light: '#FFFFFF',
-          lightCard: '#F8FAFC',
-          lightElevated: '#F1F5F9',
+        // Cuba accent tokens — used sparingly for contextual accents
+        // (flag colors, decorative pulses on the Cuba map). Primary brand
+        // remains orange; these are support accents, not replacements.
+        cuba: {
+          blue: '#002A8F',
+          red: '#CF142B',
+          star: '#FFFFFF',
         },
-        background: {
-          mapDark: '#0a0a0f',
-          lightPrimary: '#F8FAFC',
-          lightSecondary: '#FFFFFF',
+        // Semantic surface tokens (driven by CSS vars — see globals.css)
+        surface: {
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          elevated: 'rgb(var(--surface-elevated) / <alpha-value>)',
+          sunken: 'rgb(var(--surface-sunken) / <alpha-value>)',
+          inverse: 'rgb(var(--surface-inverse) / <alpha-value>)',
+        },
+        ink: {
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--ink-subtle) / <alpha-value>)',
+          inverse: 'rgb(var(--ink-inverse) / <alpha-value>)',
+        },
+        line: {
+          DEFAULT: 'rgb(var(--line) / <alpha-value>)',
+          strong: 'rgb(var(--line-strong) / <alpha-value>)',
         },
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'Inter', 'Montserrat', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['"Instrument Sans"', 'Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Bricolage Grotesque"', '"Instrument Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        editorial: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      fontSize: {
+        '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.02em' }],
       },
       borderRadius: {
         sm: '4px',
@@ -82,6 +100,48 @@ module.exports = {
         lg: '12px',
         xl: '16px',
         '2xl': '24px',
+        '3xl': '32px',
+      },
+      boxShadow: {
+        'elev-1': '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px 0 rgb(0 0 0 / 0.02)',
+        'elev-2': '0 2px 8px -2px rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.04)',
+        'elev-3': '0 10px 30px -10px rgb(0 0 0 / 0.10), 0 4px 12px -4px rgb(0 0 0 / 0.06)',
+        'glow-primary': '0 0 0 1px rgb(255 77 0 / 0.15), 0 8px 24px -8px rgb(255 77 0 / 0.35)',
+        'ring-focus': '0 0 0 2px rgb(var(--surface) / 1), 0 0 0 4px rgb(255 77 0 / 0.5)',
+      },
+      backgroundImage: {
+        'grid-faint':
+          'linear-gradient(to right, rgb(var(--line) / 0.6) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--line) / 0.6) 1px, transparent 1px)',
+        'radial-primary':
+          'radial-gradient(ellipse at top, rgb(255 77 0 / 0.12), transparent 60%)',
+        'aurora':
+          'conic-gradient(from 180deg at 50% 50%, rgb(255 77 0 / 0.18), rgb(0 156 59 / 0.12), rgb(117 170 219 / 0.12), rgb(213 43 30 / 0.10), rgb(255 77 0 / 0.18))',
+      },
+      backgroundSize: {
+        grid: '32px 32px',
+      },
+      transitionTimingFunction: {
+        'spring': 'cubic-bezier(0.22, 1, 0.36, 1)',
+        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'shimmer': {
+          '0%': { backgroundPosition: '-1000px 0' },
+          '100%': { backgroundPosition: '1000px 0' },
+        },
+        'pulse-ring': {
+          '0%': { transform: 'scale(0.9)', opacity: '0.7' },
+          '100%': { transform: 'scale(2.2)', opacity: '0' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'shimmer': 'shimmer 1.8s linear infinite',
+        'pulse-ring': 'pulse-ring 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite',
       },
       screens: {
         tablet: '600px',

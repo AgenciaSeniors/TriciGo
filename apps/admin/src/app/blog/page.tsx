@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Newspaper, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { blogService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
+import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
 
 const emptyForm = {
@@ -26,8 +27,9 @@ const emptyForm = {
 const PAGE_SIZE = 20;
 
 export default function BlogAdminPage() {
-  const { t } = useTranslation('admin');
+  const { t: _t } = useTranslation('admin');
   const { showToast } = useToast();
+
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,19 +37,26 @@ export default function BlogAdminPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
+  const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
+  const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
 
-  const loadPosts = () => {
+  const loadPosts = useCallback(async () => {
     setLoading(true);
-    blogService
-      .getAllPosts(page, PAGE_SIZE)
-      .then(setPosts)
-      .catch((err: unknown) => { setError(err instanceof Error ? err.message : 'Error al cargar posts'); })
-      .finally(() => setLoading(false));
-  };
+    setError(null);
+    try {
+      const data = await blogService.getAllPosts(page, PAGE_SIZE);
+      setPosts(data);
+    } catch (err) {
+      setPosts([]);
+      setError(err instanceof Error ? err.message : 'No pudimos cargar los posts.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
 
   useEffect(() => {
-    loadPosts();
-  }, [page]);
+    void loadPosts();
+  }, [loadPosts]);
 
   const resetForm = () => {
     setForm({ ...emptyForm });
@@ -68,6 +77,7 @@ export default function BlogAdminPage() {
           body_en: form.body_en,
           cover_image_url: form.cover_image_url || null,
         });
+        showToast('success', 'Post actualizado');
       } else {
         await blogService.createPost({
           slug: form.slug,
@@ -82,11 +92,12 @@ export default function BlogAdminPage() {
           published_at: null,
           author_id: null,
         });
+        showToast('success', 'Post creado');
       }
       resetForm();
-      loadPosts();
+      await loadPosts();
     } catch (err) {
-      // Error handled by UI
+      showToast('error', err instanceof Error ? err.message : 'No pudimos guardar el post.');
     }
   };
 
@@ -109,258 +120,280 @@ export default function BlogAdminPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('blog.confirm_delete'))) return;
     try {
       await blogService.deletePost(id);
-      loadPosts();
+      showToast('success', 'Post eliminado');
+      await loadPosts();
     } catch (err) {
-      // Error handled by UI
+      showToast('error', err instanceof Error ? err.message : 'No pudimos eliminar el post.');
     }
   };
-
-  const canGoPrev = page > 0;
-  const canGoNext = posts.length === PAGE_SIZE;
 
   const handleTogglePublish = async (post: BlogPost) => {
     try {
       if (post.is_published) {
         await blogService.unpublishPost(post.id);
+        showToast('success', 'Post despublicado');
       } else {
         await blogService.publishPost(post.id);
+        showToast('success', 'Post publicado');
       }
-      loadPosts();
+      await loadPosts();
     } catch (err) {
-      // Error handled by UI
+      showToast('error', err instanceof Error ? err.message : 'No pudimos cambiar el estado.');
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); loadPosts(); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
+  const sortedPosts = useMemo(() => {
+    if (!sort) return posts;
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    const key = sort.columnId as keyof BlogPost;
+    return [...posts].sort((a, b) => {
+      const av = a[key] as unknown;
+      const bv = b[key] as unknown;
+      return String(av ?? '').localeCompare(String(bv ?? '')) * dir;
+    });
+  }, [posts, sort]);
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('blog.title')}</h1>
+  const columns: DataColumn<BlogPost>[] = useMemo(
+    () => [
+      {
+        id: 'title_es',
+        header: 'Título',
+        cell: (p) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-medium text-ink">{p.title_es || p.title_en || '(sin título)'}</span>
+            <span className="truncate font-mono text-[11px] text-ink-muted">{p.slug}</span>
+          </span>
+        ),
+        primary: true,
+        sortKey: 'title_es',
+      },
+      {
+        id: 'is_published',
+        header: 'Estado',
+        cell: (p) =>
+          p.is_published ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              Publicado
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
+              Borrador
+            </span>
+          ),
+        width: '120px',
+      },
+      {
+        id: 'excerpt_es',
+        header: 'Resumen',
+        cell: (p) => (
+          <span className="block max-w-[280px] truncate text-ink-muted">
+            {p.excerpt_es || <span className="text-ink-subtle">—</span>}
+          </span>
+        ),
+        hideBelow: 'lg',
+        secondary: true,
+      },
+      {
+        id: 'created_at',
+        header: 'Creado',
+        cell: (p) => <span className="text-ink-muted">{formatAdminDate(p.created_at)}</span>,
+        hideBelow: 'lg',
+        sortKey: 'created_at',
+        width: '170px',
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Contenido · bitácora
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Blog
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Historias, novedades y anuncios que se publican en la web pública.
+          </p>
+        </div>
         {!showForm && (
           <button
-            onClick={() => { resetForm(); setShowForm(true); }}
-            className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
           >
-            {t('blog.new_post')}
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo post
           </button>
         )}
       </div>
 
       {showForm && (
-        <div className="bg-white border border-neutral-200 rounded-xl p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.slug')}</label>
-              <input
-                type="text"
-                value={form.slug}
-                onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="my-post-slug"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.cover_image')}</label>
-              <input
-                type="text"
-                value={form.cover_image_url}
-                onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="https://..."
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Title (ES)</label>
-              <input
-                type="text"
-                value={form.title_es}
-                onChange={(e) => setForm({ ...form, title_es: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Title (EN)</label>
-              <input
-                type="text"
-                value={form.title_en}
-                onChange={(e) => setForm({ ...form, title_en: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.excerpt')} (ES)</label>
-              <input
-                type="text"
-                value={form.excerpt_es}
-                onChange={(e) => setForm({ ...form, excerpt_es: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.excerpt')} (EN)</label>
-              <input
-                type="text"
-                value={form.excerpt_en}
-                onChange={(e) => setForm({ ...form, excerpt_en: e.target.value })}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.body')} (ES)</label>
-              <textarea
-                value={form.body_es}
-                onChange={(e) => setForm({ ...form, body_es: e.target.value })}
-                rows={6}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('blog.body')} (EN)</label>
-              <textarea
-                value={form.body_en}
-                onChange={(e) => setForm({ ...form, body_en: e.target.value })}
-                rows={6}
-                className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleSave}
-              className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600"
-            >
-              {t('blog.save')}
-            </button>
+        <div className="admin-card p-5 animate-fade-in">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+              {editingId ? 'Editando post' : 'Nuevo post'}
+            </p>
             <button
               onClick={resetForm}
-              className="border border-neutral-300 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-neutral-50"
+              className="rounded-md p-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
+              aria-label="Cerrar"
             >
-              {t('blog.cancel')}
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Field label="Slug">
+              <input
+                value={form.slug}
+                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                placeholder="nota-sobre-la-habana"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Imagen de portada">
+              <input
+                value={form.cover_image_url}
+                onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
+                placeholder="https://…"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Título (ES)">
+              <input
+                value={form.title_es}
+                onChange={(e) => setForm({ ...form, title_es: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Title (EN)">
+              <input
+                value={form.title_en}
+                onChange={(e) => setForm({ ...form, title_en: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Resumen (ES)">
+              <input
+                value={form.excerpt_es}
+                onChange={(e) => setForm({ ...form, excerpt_es: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Excerpt (EN)">
+              <input
+                value={form.excerpt_en}
+                onChange={(e) => setForm({ ...form, excerpt_en: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Cuerpo (ES)">
+              <textarea
+                rows={8}
+                value={form.body_es}
+                onChange={(e) => setForm({ ...form, body_es: e.target.value })}
+                className={textareaCls}
+              />
+            </Field>
+            <Field label="Body (EN)">
+              <textarea
+                rows={8}
+                value={form.body_en}
+                onChange={(e) => setForm({ ...form, body_en: e.target.value })}
+                className={textareaCls}
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={resetForm}
+              className="rounded-full border border-line bg-surface px-4 py-1.5 text-[12.5px] font-medium text-ink hover:bg-surface-sunken"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => void handleSave()}
+              className="rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
+            >
+              Guardar
             </button>
           </div>
         </div>
       )}
 
-      {loading ? (
-        <AdminTableSkeleton rows={5} columns={4} />
-      ) : (
-        <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm" aria-label={t('blog.title')}>
-            <thead className="bg-neutral-50 border-b border-neutral-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-neutral-600">Title</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-600">{t('blog.slug')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-600">{t('common.date')}</th>
-                <th className="text-left px-4 py-3 font-medium text-neutral-600">{t('common.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {posts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
-                    {t('blog.no_posts', 'No posts yet')}
-                  </td>
-                </tr>
-              ) : (
-                posts.map((post) => (
-                  <tr key={post.id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-3 font-medium">{post.title_en || post.title_es}</td>
-                    <td className="px-4 py-3 text-neutral-500">{post.slug}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          post.is_published
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-neutral-100 text-neutral-600'
-                        }`}
-                      >
-                        {post.is_published ? t('blog.published') : t('blog.draft')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-neutral-500">
-                      {formatAdminDate(post.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(post)}
-                          className="text-primary-500 hover:underline text-xs font-medium"
-                        >
-                          {t('blog.edit')}
-                        </button>
-                        <button
-                          onClick={() => handleTogglePublish(post)}
-                          className="text-amber-600 hover:underline text-xs font-medium"
-                        >
-                          {post.is_published ? t('blog.unpublish') : t('blog.publish')}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(post.id)}
-                          className="text-red-500 hover:underline text-xs font-medium"
-                        >
-                          {t('blog.delete')}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<BlogPost>
+        columns={columns}
+        rows={sortedPosts}
+        keyField="id"
+        loading={loading}
+        error={error}
+        onRetry={() => void loadPosts()}
+        empty={{
+          icon: Newspaper,
+          title: 'Sin posts',
+          body: 'Creá el primero para que la bitácora cuente la historia de TriciGo.',
+          action: {
+            label: 'Nuevo post',
+            onClick: () => {
+              resetForm();
+              setShowForm(true);
+            },
+          },
+        }}
+        sort={sort}
+        onSortChange={setSort}
+        pagination={{ page, pageSize: PAGE_SIZE, hasMore: posts.length === PAGE_SIZE }}
+        onPaginationChange={(next) => setPage(next.page)}
+        rowActions={[
+          { label: 'Editar', onClick: (p) => handleEdit(p) },
+          {
+            label: 'Publicar/Despublicar',
+            onClick: (p) => void handleTogglePublish(p),
+          },
+          {
+            label: 'Eliminar',
+            tone: 'danger',
+            onClick: (p) => setDeleteModalId(p.id),
+          },
+        ]}
+      />
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={!canGoPrev}
-          aria-label={t('common.previous')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoPrev
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.previous')}
-        </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
-          {t('common.page')} {page + 1}
-        </span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canGoNext}
-          aria-label={t('common.next')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoNext
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.next')}
-        </button>
-      </div>
+      <AdminConfirmModal
+        open={!!deleteModalId}
+        title="Eliminar post"
+        message="Esta acción no se puede deshacer."
+        variant="danger"
+        onConfirm={async () => {
+          if (deleteModalId) {
+            await handleDelete(deleteModalId);
+            setDeleteModalId(null);
+          }
+        }}
+        onCancel={() => setDeleteModalId(null)}
+      />
     </div>
   );
 }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  'h-9 rounded-lg border border-line bg-surface px-2.5 text-[13px] text-ink focus:border-primary-500 focus:outline-none';
+const textareaCls =
+  'rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink focus:border-primary-500 focus:outline-none';

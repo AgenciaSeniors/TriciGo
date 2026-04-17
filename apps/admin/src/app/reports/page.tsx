@@ -8,6 +8,9 @@ import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { Download } from 'lucide-react';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { SectionCard } from '@/components/dashboard/SectionCard';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -269,51 +272,57 @@ export default function ReportsPage() {
   }, [selectedCity]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl md:text-3xl font-bold">{t('reports.title')}</h1>
-          <button
-            onClick={exportCSV}
-            disabled={exporting}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
-          >
-            {exporting ? '...' : t('reports.export_csv')}
-          </button>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Sistema · reportes
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Reportes operativos
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Panorama analítico del servicio. Seleccioná el período para ver tendencias.
+          </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* City filter */}
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedCity}
             onChange={(e) => setSelectedCity(e.target.value)}
-            aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
-            className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
+            aria-label="Filtrar por ciudad"
+            className="h-9 rounded-lg border border-line bg-surface px-3 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
           >
-            <option value="">{t('cities.all_cities')}</option>
+            <option value="">Todas las ciudades</option>
             {cities.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
-
-        {/* Period selector */}
-        <div className="flex gap-1 bg-neutral-100 rounded-lg p-1">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              aria-pressed={period === opt.value}
-              aria-label={`${opt.label} ${t('reports.period', { defaultValue: 'period' })}`}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                period === opt.value
-                  ? 'bg-white text-neutral-900 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+          <div className="flex gap-1 rounded-full border border-line bg-surface p-0.5">
+            {PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setPeriod(opt.value)}
+                aria-pressed={period === opt.value}
+                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
+                  period === opt.value
+                    ? 'bg-surface-elevated text-ink shadow-elev-1'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={exportCSV}
+            disabled={exporting}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exporting ? 'Exportando…' : 'Exportar CSV'}
+          </button>
         </div>
       </div>
 
@@ -330,53 +339,51 @@ export default function ReportsPage() {
       )}
 
       {/* System Health — always visible, auto-refreshes every 30s */}
-      <section className="mb-6">
-        <h2 className="text-lg font-bold text-neutral-800 mb-3">{t('reports.system_health')}</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* API Status */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100 flex items-center gap-3">
-            <span className={`w-3 h-3 rounded-full shrink-0 ${health.loading ? 'bg-neutral-300 animate-pulse' : health.apiOk ? 'bg-green-500' : 'bg-red-500'}`} />
+      <SectionCard eyebrow="Operación" title="Salud del sistema" description="Estado de los servicios core en tiempo real.">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-sunken p-3">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.apiOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
-              <p className="text-xs text-neutral-500">{t('reports.api_status')}</p>
-              <p className={`text-sm font-semibold ${health.apiOk ? 'text-green-600' : 'text-red-600'}`}>
-                {health.loading ? '...' : health.apiOk ? t('reports.health_operational') : t('reports.health_down')}
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">API</p>
+              <p className={`text-[12.5px] font-semibold ${health.apiOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {health.loading ? '…' : health.apiOk ? 'Operativa' : 'Caída'}
               </p>
             </div>
           </div>
-          {/* Database Status */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100 flex items-center gap-3">
-            <span className={`w-3 h-3 rounded-full shrink-0 ${health.loading ? 'bg-neutral-300 animate-pulse' : health.dbOk ? 'bg-green-500' : 'bg-red-500'}`} />
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-sunken p-3">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.dbOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
-              <p className="text-xs text-neutral-500">{t('reports.database_status')}</p>
-              <p className={`text-sm font-semibold ${health.dbOk ? 'text-green-600' : 'text-red-600'}`}>
-                {health.loading ? '...' : health.dbOk ? t('reports.health_operational') : t('reports.health_down')}
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Base de datos</p>
+              <p className={`text-[12.5px] font-semibold ${health.dbOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {health.loading ? '…' : health.dbOk ? 'Operativa' : 'Caída'}
               </p>
             </div>
           </div>
-          {/* Active Rides */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-            <p className="text-xs text-neutral-500 mb-1">{t('reports.health_active_rides')}</p>
-            <p className="text-2xl font-bold text-primary-500">{health.loading ? '...' : health.activeRides}</p>
+          <div className="rounded-xl border border-line bg-surface-sunken p-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Viajes activos</p>
+            <p className="font-editorial text-[28px] leading-none italic text-primary-500" data-tabular>
+              {health.loading ? '—' : health.activeRides}
+            </p>
           </div>
-          {/* Online Drivers */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-            <p className="text-xs text-neutral-500 mb-1">{t('reports.health_online_drivers')}</p>
-            <p className="text-2xl font-bold text-green-600">{health.loading ? '...' : health.onlineDrivers}</p>
+          <div className="rounded-xl border border-line bg-surface-sunken p-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Conductores en línea</p>
+            <p className="font-editorial text-[28px] leading-none italic text-emerald-600 dark:text-emerald-400" data-tabular>
+              {health.loading ? '—' : health.onlineDrivers}
+            </p>
           </div>
         </div>
-      </section>
+      </SectionCard>
 
       {!loading && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {kpiCards.map((card) => (
-              <div key={card.label} className="bg-white rounded-xl p-4 shadow-sm border border-neutral-100">
-                <p className="text-xs text-neutral-500 mb-1">{card.label}</p>
-                <p className={`text-2xl font-bold ${card.color}`}>
-                  {card.isFormatted ? card.value : String(card.value)}
-                </p>
-              </div>
+              <KpiCard
+                key={card.label}
+                label={card.label}
+                value={card.isFormatted ? String(card.value) : String(card.value)}
+              />
             ))}
           </div>
 

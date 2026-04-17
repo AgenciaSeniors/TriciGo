@@ -1,301 +1,318 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Users, UserX } from 'lucide-react';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { User } from '@tricigo/types';
+import type { User, UserRole } from '@tricigo/types';
+import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
+import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
-import type { UserRole } from '@tricigo/types';
-import { FilterPanel, type FilterField } from '@/components/FilterPanel';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
-import { useSortableTable } from '@/hooks/useSortableTable';
-import { SortableHeader } from '@/components/ui/SortableHeader';
 import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
-const ROLE_FILTERS: { labelKey: string; value: UserRole | 'all' }[] = [
-  { labelKey: 'users.filter_all', value: 'all' },
-  { labelKey: 'users.filter_customer', value: 'customer' },
-  { labelKey: 'users.filter_driver', value: 'driver' },
-  { labelKey: 'users.filter_admin', value: 'admin' },
+type RoleFilter = UserRole | 'all';
+
+const ROLE_TABS: StatusTab<RoleFilter>[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'customer', label: 'Pasajeros', tone: 'info' },
+  { id: 'driver', label: 'Conductores', tone: 'warning' },
+  { id: 'admin', label: 'Administradores', tone: 'primary' },
 ];
 
-const roleBadgeClasses: Record<UserRole, string> = {
-  customer: 'bg-blue-50 text-blue-700',
-  driver: 'bg-amber-50 text-amber-700',
-  admin: 'bg-purple-50 text-purple-700',
-  super_admin: 'bg-red-50 text-red-700',
+const ROLE_CLASS: Record<string, string> = {
+  customer: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  driver: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  admin: 'bg-primary-500/10 text-primary-600 dark:text-primary-400',
+  super_admin: 'bg-red-500/10 text-red-600 dark:text-red-400',
 };
 
-const EMPTY_FILTERS: Record<string, string> = {
+const ROLE_LABEL: Record<string, string> = {
+  customer: 'Pasajero',
+  driver: 'Conductor',
+  admin: 'Admin',
+  super_admin: 'Super admin',
+};
+
+const EMPTY_FILTERS = {
   search: '',
   dateFrom: '',
   dateTo: '',
   isActive: '',
 };
 
+type AdvancedFilters = typeof EMPTY_FILTERS;
+
 export default function UsersPage() {
-  const router = useRouter();
   const { t } = useTranslation('admin');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
-  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+  const [filters, setFilters] = useState<AdvancedFilters>({ ...EMPTY_FILTERS });
+  const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
-  const filterFields: FilterField[] = [
-    {
-      key: 'search',
-      label: t('filters.search'),
-      type: 'text',
-      placeholder: t('filters.search_user_placeholder'),
-    },
-    { key: 'dateFrom', label: t('filters.date_from'), type: 'date' },
-    { key: 'dateTo', label: t('filters.date_to'), type: 'date' },
-    {
-      key: 'isActive',
-      label: t('filters.status'),
-      type: 'select',
-      placeholder: t('filters.all'),
-      options: [
-        { label: t('common.active'), value: 'true' },
-        { label: t('common.inactive'), value: 'false' },
-      ],
-    },
-  ];
-
-  const handleFilterChange = useCallback((key: string, value: string) => {
-    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
-    setPage(0);
-  }, []);
-
-  const handleClearFilters = useCallback(() => {
-    setAdvancedFilters({ ...EMPTY_FILTERS });
-    setPage(0);
-  }, []);
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const query: Record<string, unknown> = {};
+      if (roleFilter !== 'all') query.role = roleFilter;
+      if (filters.search) query.search = filters.search;
+      if (filters.dateFrom) query.dateFrom = filters.dateFrom;
+      if (filters.dateTo) query.dateTo = filters.dateTo;
+      if (filters.isActive) query.isActive = filters.isActive === 'true';
+      const data = await adminService.getUsers(page, PAGE_SIZE, query);
+      setUsers(data);
+    } catch (err) {
+      setUsers([]);
+      setError(err instanceof Error ? err.message : 'No pudimos cargar los pasajeros.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, roleFilter, filters]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+    void fetchUsers();
+  }, [fetchUsers]);
 
-    async function fetchUsers() {
-      try {
-        const filters: Record<string, any> = {};
-        if (roleFilter !== 'all') filters.role = roleFilter;
-        if (advancedFilters.search) filters.search = advancedFilters.search;
-        if (advancedFilters.dateFrom) filters.dateFrom = advancedFilters.dateFrom;
-        if (advancedFilters.dateTo) filters.dateTo = advancedFilters.dateTo;
-        if (advancedFilters.isActive) filters.isActive = advancedFilters.isActive === 'true';
+  const sortedUsers = useMemo(() => {
+    if (!sort) return users;
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    const key = sort.columnId as keyof User;
+    return [...users].sort((a, b) => {
+      const av = a[key] as unknown;
+      const bv = b[key] as unknown;
+      return String(av ?? '').localeCompare(String(bv ?? '')) * dir;
+    });
+  }, [users, sort]);
 
-        const data = await adminService.getUsers(page, PAGE_SIZE, filters);
-        if (!cancelled) setUsers(data);
-      } catch (err) {
-        // Error handled by UI
-        if (!cancelled) { setUsers([]); setError(err instanceof Error ? err.message : 'Error al cargar usuarios'); }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+  const activeFilterCount = useMemo(
+    () =>
+      (Object.keys(filters) as (keyof AdvancedFilters)[]).reduce(
+        (acc, k) => acc + (filters[k] ? 1 : 0),
+        0,
+      ),
+    [filters],
+  );
 
-    fetchUsers();
-    return () => { cancelled = true; };
-  }, [page, roleFilter, advancedFilters]);
+  const updateFilter = useCallback(<K extends keyof AdvancedFilters>(key: K, value: AdvancedFilters[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(0);
+  }, []);
 
-  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(users, 'created_at');
+  const clearFilters = useCallback(() => {
+    setFilters({ ...EMPTY_FILTERS });
+    setPage(0);
+  }, []);
 
-  const canGoPrev = page > 0;
-  // Heuristic: if we got exactly PAGE_SIZE items, there may be more pages.
-  // This can show a false "next" on the last page when items are exactly PAGE_SIZE,
-  // but it's an acceptable trade-off to avoid an extra count query.
-  const canGoNext = users.length === PAGE_SIZE;
-
-  function handleExportCsv() {
+  const handleExportCsv = useCallback(() => {
     exportToCsv(
-      sortedData as unknown as Record<string, unknown>[],
+      sortedUsers as unknown as Record<string, unknown>[],
       [
-        { key: 'full_name', label: t('users.col_name') },
-        { key: 'phone', label: t('users.col_phone') },
+        { key: 'full_name', label: 'Nombre' },
+        { key: 'phone', label: 'Teléfono' },
         { key: 'email', label: 'Email' },
-        { key: 'role', label: t('users.col_role') },
-        { key: 'is_active', label: t('users.col_status'), format: (v) => v ? 'Active' : 'Inactive' },
-        { key: 'created_at', label: t('users.col_registered') },
+        { key: 'role', label: 'Rol' },
+        { key: 'is_active', label: 'Activo', format: (v) => (v ? 'Sí' : 'No') },
+        { key: 'created_at', label: 'Registrado' },
       ],
       'users',
     );
-  }
+  }, [sortedUsers]);
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">{t('users.title')}</h1>
-        <button
-          onClick={handleExportCsv}
-          disabled={sortedData.length === 0}
-          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {t('common.export_csv', { defaultValue: 'Export CSV' })}
-        </button>
-      </div>
-
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); setPage(0); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
-
-      {/* Role filter buttons */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {ROLE_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            onClick={() => { setRoleFilter(filter.value); setPage(0); }}
-            aria-pressed={roleFilter === filter.value}
-            aria-label={t(filter.labelKey)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              roleFilter === filter.value
-                ? 'bg-primary-500 text-white'
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
+  const columns: DataColumn<User>[] = useMemo(
+    () => [
+      {
+        id: 'full_name',
+        header: 'Nombre',
+        cell: (u) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-medium text-ink">{u.full_name || '—'}</span>
+            {u.email && (
+              <span className="truncate text-[11.5px] text-ink-muted">{u.email}</span>
+            )}
+          </span>
+        ),
+        sortKey: 'full_name',
+        primary: true,
+      },
+      {
+        id: 'phone',
+        header: 'Teléfono',
+        cell: (u) => u.phone || '—',
+        mono: true,
+        hideBelow: 'md',
+        width: '160px',
+      },
+      {
+        id: 'role',
+        header: 'Rol',
+        cell: (u) => (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              ROLE_CLASS[u.role] ?? 'bg-surface-sunken text-ink-muted'
             }`}
           >
-            {t(filter.labelKey)}
-          </button>
-        ))}
-      </div>
+            {ROLE_LABEL[u.role] ?? u.role}
+          </span>
+        ),
+        width: '130px',
+      },
+      {
+        id: 'is_active',
+        header: 'Estado',
+        cell: (u) =>
+          u.is_active ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              Activo
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
+              Inactivo
+            </span>
+          ),
+        width: '110px',
+      },
+      {
+        id: 'created_at',
+        header: 'Registrado',
+        cell: (u) => <span className="text-ink-muted">{formatAdminDate(u.created_at)}</span>,
+        sortKey: 'created_at',
+        hideBelow: 'lg',
+        width: '170px',
+      },
+    ],
+    [],
+  );
 
-      {/* Advanced filters */}
-      <FilterPanel
-        fields={filterFields}
-        values={advancedFilters}
-        onChange={handleFilterChange}
-        onClear={handleClearFilters}
-        clearLabel={t('filters.clear_all')}
-        toggleLabel={t('filters.advanced_filters')}
-      />
-
-      {/* Users table */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full" aria-label={t('users.title')}>
-          <thead>
-            <tr className="border-b border-neutral-100">
-              <SortableHeader label={t('users.col_name')} sortKey="full_name" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap" />
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                {t('users.col_phone')}
-              </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                {t('users.col_role')}
-              </th>
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                {t('users.col_status')}
-              </th>
-              <SortableHeader label={t('users.col_registered')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
-              <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                {t('common.actions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-0 py-0">
-                  <AdminTableSkeleton rows={5} columns={6} />
-                </td>
-              </tr>
-            ) : sortedData.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-500 dark:text-neutral-400">
-                  {t('users.no_users')}
-                </td>
-              </tr>
-            ) : (
-              sortedData.map((user) => (
-                <tr
-                  key={user.id}
-                  className="border-b border-neutral-50 hover:bg-neutral-50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/users/${user.id}`)}
-                >
-                  <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
-                    {user.full_name}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                    {user.phone}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        roleBadgeClasses[user.role] ?? 'bg-neutral-100 text-neutral-600'
-                      }`}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.is_active
-                          ? 'bg-green-50 text-green-700'
-                          : 'bg-neutral-100 text-neutral-500'
-                      }`}
-                    >
-                      {user.is_active ? t('common.active') : t('common.inactive')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                    {formatAdminDate(user.created_at)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <Link
-                      href={`/users/${user.id}`}
-                      className="text-sm font-medium text-primary-500 hover:text-primary-600 transition-colors"
-                    >
-                      {t('common.view')}
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Gente · pasajeros
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Usuarios
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Todas las personas registradas en TriciGo — pasajeros, conductores y equipo.
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={sortedUsers.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Exportar CSV
+        </button>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={!canGoPrev}
-          aria-label={t('common.previous')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoPrev
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.previous')}
-        </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
-          {t('common.page')} {page + 1}
-        </span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canGoNext}
-          aria-label={t('common.next')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoNext
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.next')}
-        </button>
-      </div>
+      <FilterBar<RoleFilter>
+        sticky
+        tabs={ROLE_TABS}
+        activeTab={roleFilter}
+        onTabChange={(id) => {
+          setRoleFilter(id);
+          setPage(0);
+        }}
+        search={{
+          value: filters.search,
+          onChange: (v) => updateFilter('search', v),
+          placeholder: 'Buscar por nombre, teléfono o email…',
+        }}
+        activeFilterCount={activeFilterCount - (filters.search ? 1 : 0)}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Estado
+            </span>
+            <select
+              value={filters.isActive}
+              onChange={(e) => updateFilter('isActive', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="true">Activos</option>
+              <option value="false">Inactivos</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Desde
+            </span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => updateFilter('dateFrom', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Hasta
+            </span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => updateFilter('dateTo', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            />
+          </label>
+        </div>
+        {activeFilterCount > 0 && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-[11.5px] font-medium text-ink-muted hover:text-ink"
+            >
+              Limpiar todo
+            </button>
+          </div>
+        )}
+      </FilterBar>
+
+      <DataTable<User>
+        columns={columns}
+        rows={sortedUsers}
+        keyField="id"
+        loading={loading}
+        error={error}
+        onRetry={() => {
+          setError(null);
+          void fetchUsers();
+        }}
+        empty={
+          activeFilterCount > 0 || roleFilter !== 'all'
+            ? {
+                icon: UserX,
+                title: 'Sin usuarios que coincidan',
+                body: 'Probá limpiar los filtros o cambiar la pestaña.',
+                action: { label: 'Limpiar filtros', onClick: clearFilters },
+              }
+            : {
+                icon: Users,
+                title: 'Sin usuarios aún',
+                body: 'Cuando alguien se registre, va a aparecer acá.',
+              }
+        }
+        rowHref={(u) => `/users/${u.id}`}
+        sort={sort}
+        onSortChange={setSort}
+        pagination={{
+          page,
+          pageSize: PAGE_SIZE,
+          hasMore: users.length === PAGE_SIZE,
+        }}
+        onPaginationChange={(next) => setPage(next.page)}
+      />
     </div>
   );
 }

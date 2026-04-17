@@ -1,19 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, Send, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { adminService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
-import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { useSortableTable } from '@/hooks/useSortableTable';
-import { SortableHeader } from '@/components/ui/SortableHeader';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
-import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
-import { Bell } from 'lucide-react';
+import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { SectionCard } from '@/components/dashboard/SectionCard';
+import { formatAdminDate } from '@/lib/formatDate';
 
 type NotificationLog = {
   id: string;
@@ -26,19 +24,17 @@ type NotificationLog = {
   created_at: string;
 };
 
-const TARGET_LABELS: Record<string, { es: string; en: string }> = {
-  all: { es: 'Todos', en: 'Everyone' },
-  customers: { es: 'Pasajeros', en: 'Riders' },
-  drivers: { es: 'Conductores', en: 'Drivers' },
-  user: { es: 'Usuario específico', en: 'Specific user' },
+const AUDIENCE_LABEL: Record<string, string> = {
+  all: 'Todos',
+  customers: 'Pasajeros',
+  drivers: 'Conductores',
+  user: 'Usuario específico',
 };
 
 export default function NotificationsPage() {
-  const { t } = useTranslation('admin');
+  const { t: _t } = useTranslation('admin');
   const { showToast } = useToast();
-  const [error, setError] = useState<string | null>(null);
 
-  // Compose form state
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [targetType, setTargetType] = useState<'all' | 'customers' | 'drivers' | 'user'>('all');
@@ -46,24 +42,13 @@ export default function NotificationsPage() {
   const [userSearch, setUserSearch] = useState('');
   const [userResults, setUserResults] = useState<User[]>([]);
   const [sending, setSending] = useState(false);
-  const [sendResult, setSendResult] = useState<{ success: number; error: number } | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  function validateNotificationForm() {
-    const errors: Record<string, string> = {};
-    if (!title.trim()) errors.title = t('common.field_required');
-    if (!body.trim()) errors.body = t('common.field_required');
-    if (targetType === 'user' && !targetUserId) errors.target = t('common.select_user');
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
-
-  // History state
   const [history, setHistory] = useState<NotificationLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const { sortedData: sortedHistory, toggleSort, sortKey, sortDirection } = useSortableTable(history, 'created_at');
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
-  // Inbox stats state
   const [inboxStats, setInboxStats] = useState<{
     totalToday: number;
     totalUnread: number;
@@ -72,31 +57,27 @@ export default function NotificationsPage() {
   } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  useEffect(() => {
-    loadHistory();
-    loadInboxStats();
-  }, []);
-
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
     try {
       const data = await notificationService.getNotificationHistory(0, 50);
       setHistory(data);
     } catch (err) {
-      // Error handled by UI
-      setError(err instanceof Error ? err.message : 'Error al cargar historial');
+      setHistory([]);
+      setHistoryError(err instanceof Error ? err.message : 'No pudimos cargar el historial.');
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
-  const loadInboxStats = async () => {
+  const loadInboxStats = useCallback(async () => {
     setStatsLoading(true);
     try {
       const supabase = getSupabaseClient();
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      // Parallel queries: total today, total unread, by type, recent
       const [todayRes, unreadRes, typeRes, recentRes] = await Promise.all([
         supabase
           .from('notifications')
@@ -110,18 +91,12 @@ export default function NotificationsPage() {
           .from('notifications')
           .select('type')
           .gte('created_at', todayStart.toISOString()),
-        supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(10),
+        supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(10),
       ]);
 
       const byType: Record<string, number> = {};
-      if (typeRes.data) {
-        for (const row of typeRes.data) {
-          byType[row.type] = (byType[row.type] || 0) + 1;
-        }
+      for (const row of typeRes.data ?? []) {
+        byType[row.type] = (byType[row.type] || 0) + 1;
       }
 
       setInboxStats({
@@ -130,12 +105,17 @@ export default function NotificationsPage() {
         byType,
         recent: (recentRes.data ?? []) as AppNotification[],
       });
-    } catch (err) {
-      // Error handled by UI
+    } catch {
+      setInboxStats(null);
     } finally {
       setStatsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadHistory();
+    void loadInboxStats();
+  }, [loadHistory, loadInboxStats]);
 
   const handleUserSearch = async (query: string) => {
     setUserSearch(query);
@@ -158,315 +138,348 @@ export default function NotificationsPage() {
     }
   };
 
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    if (!title.trim()) errors.title = 'Requerido';
+    if (!body.trim()) errors.body = 'Requerido';
+    if (targetType === 'user' && !targetUserId) errors.target = 'Elegí un usuario';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSend = async () => {
-    if (!validateNotificationForm()) return;
-
+    if (!validateForm()) return;
     setSending(true);
-    setSendResult(null);
-
     try {
       let result: { successCount: number; errorCount: number };
-
       if (targetType === 'user') {
-        result = await notificationService.sendToUser(
-          targetUserId,
-          title,
-          body,
-          'admin', // Will be replaced with actual admin ID in production
-        );
+        result = await notificationService.sendToUser(targetUserId, title, body, 'admin');
       } else {
-        result = await notificationService.broadcastPush(
-          title,
-          body,
-          targetType,
-          'admin',
-        );
+        result = await notificationService.broadcastPush(title, body, targetType, 'admin');
       }
-
-      setSendResult({ success: result.successCount, error: result.errorCount });
       setTitle('');
       setBody('');
       setTargetUserId('');
       setUserSearch('');
       setFormErrors({});
-      loadHistory();
+      await loadHistory();
+      showToast(
+        'success',
+        `Enviadas ${result.successCount}${result.errorCount > 0 ? ` · ${result.errorCount} fallidas` : ''}`,
+      );
     } catch (err) {
-      // Error handled by UI
-      showToast('error', 'Error al enviar notificación');
-      setSendResult({ success: 0, error: -1 });
+      showToast('error', err instanceof Error ? err.message : 'No pudimos enviar el push.');
     } finally {
       setSending(false);
     }
   };
 
+  const historyColumns: DataColumn<NotificationLog>[] = useMemo(
+    () => [
+      {
+        id: 'title',
+        header: 'Mensaje',
+        cell: (n) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-medium text-ink">{n.title}</span>
+            <span className="truncate text-[11.5px] text-ink-muted">{n.body}</span>
+          </span>
+        ),
+        primary: true,
+      },
+      {
+        id: 'target_type',
+        header: 'Audiencia',
+        cell: (n) => (
+          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+            {AUDIENCE_LABEL[n.target_type] ?? n.target_type}
+          </span>
+        ),
+        width: '150px',
+      },
+      {
+        id: 'sent_count',
+        header: 'Enviados',
+        cell: (n) => <span className="tabular" data-tabular>{n.sent_count.toLocaleString('es-CU')}</span>,
+        align: 'right',
+        mono: true,
+        width: '120px',
+        secondary: true,
+      },
+      {
+        id: 'created_at',
+        header: 'Fecha',
+        cell: (n) => <span className="text-ink-muted">{formatAdminDate(n.created_at)}</span>,
+        sortKey: 'created_at',
+        hideBelow: 'lg',
+        width: '170px',
+      },
+    ],
+    [],
+  );
+
+  const inboxColumns: DataColumn<AppNotification>[] = [
+    {
+      id: 'title',
+      header: 'Notificación',
+      cell: (n) => (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-medium text-ink">{n.title}</span>
+          <span className="truncate text-[11.5px] text-ink-muted">{n.body}</span>
+        </span>
+      ),
+      primary: true,
+    },
+    {
+      id: 'type',
+      header: 'Tipo',
+      cell: (n) => (
+        <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-ink-muted">
+          {n.type}
+        </span>
+      ),
+      width: '130px',
+    },
+    {
+      id: 'user_id',
+      header: 'Usuario',
+      cell: (n) => `${n.user_id.slice(0, 8)}…`,
+      mono: true,
+      hideBelow: 'md',
+      width: '120px',
+    },
+    {
+      id: 'read',
+      header: 'Estado',
+      cell: (n) =>
+        n.read ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+            Leída
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+            Sin leer
+          </span>
+        ),
+      width: '110px',
+    },
+    {
+      id: 'created_at',
+      header: 'Fecha',
+      cell: (n) => <span className="text-ink-muted">{formatAdminDate(n.created_at)}</span>,
+      hideBelow: 'lg',
+      width: '170px',
+    },
+  ];
+
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-3xl font-bold mb-8">{t('notifications.title')}</h1>
+    <div className="flex flex-col gap-5">
+      <div>
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+          Contenido · push
+        </p>
+        <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+          Notificaciones
+        </h1>
+        <p className="mt-0.5 text-[12.5px] text-ink-muted">
+          Mandá avisos a toda Cuba, a un segmento de usuarios o a una persona puntual.
+        </p>
+      </div>
 
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); loadHistory(); loadInboxStats(); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
-
-      {/* Compose Form */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-        <h2 className="text-lg font-bold mb-4">{t('notifications.compose')}</h2>
-
-        <div className="space-y-4">
-          {/* Target audience */}
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.audience')}<span className="text-red-500 ml-1">*</span>
-            </label>
+      {/* Compose */}
+      <SectionCard eyebrow="Redactar" title="Nuevo aviso push">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Audiencia <span className="text-red-500">*</span>
+            </span>
             <select
               value={targetType}
               onChange={(e) => {
                 setTargetType(e.target.value as typeof targetType);
                 setTargetUserId('');
                 setUserSearch('');
-                setFormErrors((prev) => { const { target, ...rest } = prev; return rest; });
+                setFormErrors(({ target: _t, ...rest }) => rest);
               }}
-              className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+              className={inputCls}
             >
-              <option value="all">{t('notifications.audience_all')}</option>
-              <option value="customers">{t('notifications.audience_riders')}</option>
-              <option value="drivers">{t('notifications.audience_drivers')}</option>
-              <option value="user">{t('notifications.audience_specific')}</option>
+              <option value="all">Todos</option>
+              <option value="customers">Pasajeros</option>
+              <option value="drivers">Conductores</option>
+              <option value="user">Usuario específico</option>
             </select>
-          </div>
+          </label>
 
-          {/* User search (when targeting specific user) */}
           {targetType === 'user' && (
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('notifications.select_user')}
-              </label>
+            <label className="relative flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+                Elegir usuario
+              </span>
               <input
-                type="text"
                 value={userSearch}
-                onChange={(e) => handleUserSearch(e.target.value)}
-                placeholder={t('notifications.search_user_placeholder')}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                onChange={(e) => void handleUserSearch(e.target.value)}
+                placeholder="Buscar por nombre, teléfono o email…"
+                className={inputCls}
               />
               {userResults.length > 0 && (
-                <div className="mt-1 border border-neutral-200 rounded-lg max-h-32 overflow-y-auto">
+                <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-40 overflow-y-auto rounded-lg border border-line bg-surface-elevated shadow-elev-2">
                   {userResults.map((u) => (
                     <button
                       key={u.id}
+                      type="button"
                       onClick={() => {
                         setTargetUserId(u.id);
-                        setUserSearch(u.full_name || u.phone);
+                        setUserSearch(u.full_name || u.phone || u.id);
                         setUserResults([]);
                       }}
-                      aria-label={`Select user: ${u.full_name || u.phone}`}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 border-b border-neutral-100 last:border-b-0"
+                      className="flex w-full items-center justify-between gap-2 border-b border-line px-3 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-surface-sunken"
                     >
-                      {u.full_name || '\u2014'} \u00b7 {u.phone}
+                      <span className="truncate">{u.full_name || '—'}</span>
+                      <span className="flex-shrink-0 font-mono text-[10px] text-ink-subtle">{u.phone}</span>
                     </button>
                   ))}
                 </div>
               )}
               {targetUserId && (
-                <p className="text-xs text-green-600 mt-1">
-                  {t('notifications.user_selected')}
-                </p>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Usuario seleccionado</span>
               )}
-              {formErrors.target && <p className="text-red-500 text-xs mt-1">{formErrors.target}</p>}
-            </div>
+              {formErrors.target && <span className="text-[11px] text-red-500">{formErrors.target}</span>}
+            </label>
           )}
 
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.label_title')}<span className="text-red-500 ml-1">*</span>
-            </label>
+          <label className="flex flex-col gap-1 md:col-span-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Título <span className="text-red-500">*</span>
+            </span>
             <input
-              type="text"
               value={title}
-              onChange={(e) => { setTitle(e.target.value); setFormErrors((prev) => { const { title, ...rest } = prev; return rest; }); }}
-              placeholder={t('notifications.title_placeholder')}
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.title ? 'border-red-500' : 'border-neutral-200'}`}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setFormErrors(({ title: _t, ...rest }) => rest);
+              }}
+              placeholder="Lo que aparece en la notificación"
+              className={errorInputCls(!!formErrors.title)}
             />
-            {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
-          </div>
+            {formErrors.title && <span className="text-[11px] text-red-500">{formErrors.title}</span>}
+          </label>
 
-          {/* Body */}
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-              {t('notifications.label_body')}<span className="text-red-500 ml-1">*</span>
-            </label>
+          <label className="flex flex-col gap-1 md:col-span-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Cuerpo <span className="text-red-500">*</span>
+            </span>
             <textarea
-              value={body}
-              onChange={(e) => { setBody(e.target.value); setFormErrors((prev) => { const { body, ...rest } = prev; return rest; }); }}
-              placeholder={t('notifications.body_placeholder')}
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.body ? 'border-red-500' : 'border-neutral-200'}`}
               rows={3}
+              value={body}
+              onChange={(e) => {
+                setBody(e.target.value);
+                setFormErrors(({ body: _b, ...rest }) => rest);
+              }}
+              placeholder="Mensaje que va a leer el usuario"
+              className={errorTextareaCls(!!formErrors.body)}
             />
-            {formErrors.body && <p className="text-red-500 text-xs mt-1">{formErrors.body}</p>}
-          </div>
-
-          {/* Send result */}
-          {sendResult && (
-            <div className={`p-3 rounded-lg text-sm ${
-              sendResult.error === -1
-                ? 'bg-red-50 text-red-700'
-                : 'bg-green-50 text-green-700'
-            }`}>
-              {sendResult.error === -1
-                ? t('notifications.send_error')
-                : t('notifications.send_success', {
-                    success: sendResult.success,
-                    errors: sendResult.error,
-                  })}
-            </div>
-          )}
-
-          {/* Send button */}
+            {formErrors.body && <span className="text-[11px] text-red-500">{formErrors.body}</span>}
+          </label>
+        </div>
+        <div className="mt-4 flex justify-end">
           <button
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={sending || !title.trim() || !body.trim() || (targetType === 'user' && !targetUserId)}
-            className="px-6 py-2.5 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {sending ? t('common.processing') : t('notifications.send')}
+            <Send className="h-3.5 w-3.5" />
+            {sending ? 'Enviando…' : 'Enviar push'}
           </button>
         </div>
+      </SectionCard>
+
+      {/* Inbox stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Enviadas hoy"
+          value={statsLoading ? '—' : String(inboxStats?.totalToday ?? 0)}
+          tone="info"
+          loading={statsLoading}
+        />
+        <KpiCard
+          label="Sin leer"
+          value={statsLoading ? '—' : String(inboxStats?.totalUnread ?? 0)}
+          tone={inboxStats && inboxStats.totalUnread > 0 ? 'warning' : 'default'}
+          loading={statsLoading}
+        />
+        <KpiCard
+          label="Tipos únicos hoy"
+          value={statsLoading ? '—' : String(Object.keys(inboxStats?.byType ?? {}).length)}
+          loading={statsLoading}
+        />
       </div>
 
-      {/* Inbox Stats */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-        <h2 className="text-lg font-bold mb-4">{t('notifications.inbox_stats')}</h2>
-
-        {statsLoading ? (
-          <AdminTableSkeleton rows={3} columns={3} />
-        ) : inboxStats ? (
-          <>
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-xs text-blue-600 font-medium mb-1">{t('notifications.total_today')}</p>
-                <p className="text-2xl font-bold text-blue-700">{inboxStats.totalToday}</p>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-4">
-                <p className="text-xs text-orange-600 font-medium mb-1">{t('notifications.total_unread')}</p>
-                <p className="text-2xl font-bold text-orange-700">{inboxStats.totalUnread}</p>
-              </div>
-            </div>
-
-            {/* By type breakdown */}
-            {Object.keys(inboxStats.byType).length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-neutral-700 mb-2">{t('notifications.by_type')}</h3>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(inboxStats.byType)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, count]) => (
-                      <span
-                        key={type}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700"
-                      >
-                        {type} <span className="text-neutral-500">{count}</span>
-                      </span>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent inbox notifications table */}
-            <h3 className="text-sm font-semibold text-neutral-700 mb-2">{t('notifications.recent_inbox')}</h3>
-            {inboxStats.recent.length === 0 ? (
-              <p className="text-sm text-neutral-400">{t('notifications.inbox_no_data')}</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-neutral-100">
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-neutral-500">{t('notifications.col_date')}</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-neutral-500">{t('notifications.col_type')}</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-neutral-500">{t('notifications.col_title')}</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-neutral-500">{t('notifications.col_user')}</th>
-                      <th className="text-left px-3 py-2 text-xs font-semibold text-neutral-500">{t('notifications.col_read')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inboxStats.recent.map((n) => (
-                      <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-                        <td className="px-3 py-2 text-xs text-neutral-600">{formatAdminDate(n.created_at)}</td>
-                        <td className="px-3 py-2">
-                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-600">
-                            {n.type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <p className="text-xs font-medium">{n.title}</p>
-                          <p className="text-[10px] text-neutral-400 truncate max-w-[200px]">{n.body}</p>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-neutral-500 font-mono">{n.user_id.slice(0, 8)}…</td>
-                        <td className="px-3 py-2">
-                          {n.read ? (
-                            <span className="inline-block w-2 h-2 rounded-full bg-green-400" title="Read" aria-label="Read" role="img" />
-                          ) : (
-                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400" title="Unread" aria-label="Unread" role="img" />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-neutral-400">{t('notifications.inbox_no_data')}</p>
-        )}
-      </div>
-
-      {/* Notification History */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
-        <h2 className="text-lg font-bold mb-4">{t('notifications.history')}</h2>
-
-        {historyLoading ? (
-          <AdminTableSkeleton rows={5} columns={4} />
-        ) : history.length === 0 ? (
-          <AdminEmptyState icon={<Bell className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('notifications.no_notifications')} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-neutral-100">
-                  <SortableHeader label={t('notifications.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 text-xs font-semibold text-neutral-500" />
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_title')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_audience')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('notifications.col_sent')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedHistory.map((n) => (
-                  <tr key={n.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-                    <td className="px-4 py-3 text-sm text-neutral-600">
-                      {formatAdminDate(n.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium">{n.title}</p>
-                      <p className="text-xs text-neutral-500 mt-0.5">{n.body}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                        {TARGET_LABELS[n.target_type]?.es ?? n.target_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-neutral-600">
-                      {n.sent_count}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {inboxStats && Object.keys(inboxStats.byType).length > 0 && (
+        <SectionCard eyebrow="Hoy" title="Distribución por tipo">
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(inboxStats.byType)
+              .sort(([, a], [, b]) => b - a)
+              .map(([type, count]) => (
+                <span
+                  key={type}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px]"
+                >
+                  <span className="font-mono font-medium text-ink">{type}</span>
+                  <span className="font-mono font-semibold text-ink-muted">{count}</span>
+                </span>
+              ))}
           </div>
-        )}
-      </div>
+        </SectionCard>
+      )}
+
+      {inboxStats?.recent && (
+        <SectionCard eyebrow="Inbox" title="Últimas notificaciones entregadas">
+          <DataTable<AppNotification>
+            columns={inboxColumns}
+            rows={inboxStats.recent}
+            keyField="id"
+            loading={statsLoading}
+            empty={{
+              icon: Bell,
+              title: 'Sin notificaciones recientes',
+              body: 'Todavía no llegó ninguna a los usuarios.',
+            }}
+          />
+        </SectionCard>
+      )}
+
+      {/* History */}
+      <SectionCard eyebrow="Historial" title="Pushes enviados">
+        <DataTable<NotificationLog>
+          columns={historyColumns}
+          rows={history}
+          keyField="id"
+          loading={historyLoading}
+          error={historyError}
+          onRetry={() => void loadHistory()}
+          empty={{
+            icon: Bell,
+            title: 'Sin historial',
+            body: 'Todavía no se envió ninguna notificación desde este panel.',
+          }}
+          sort={sort}
+          onSortChange={setSort}
+        />
+      </SectionCard>
     </div>
   );
+}
+
+const inputCls =
+  'h-9 rounded-lg border border-line bg-surface px-2.5 text-[13px] text-ink focus:border-primary-500 focus:outline-none';
+
+function errorInputCls(hasError: boolean) {
+  return `h-9 rounded-lg border bg-surface px-2.5 text-[13px] text-ink focus:outline-none ${
+    hasError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-primary-500'
+  }`;
+}
+
+function errorTextareaCls(hasError: boolean) {
+  return `rounded-lg border bg-surface px-2.5 py-1.5 text-[13px] text-ink focus:outline-none ${
+    hasError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-primary-500'
+  }`;
 }

@@ -1,59 +1,33 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, MapPin, Route, Search } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
-import { FilterPanel, type FilterField } from '@/components/FilterPanel';
 import { createBrowserClient } from '@/lib/supabase-server';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
+import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
+import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
+import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
-import { useSortableTable } from '@/hooks/useSortableTable';
-import { SortableHeader } from '@/components/ui/SortableHeader';
 import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
-const STATUS_FILTERS = [
-  { labelKey: 'rides.filter_all', value: 'all' },
-  { labelKey: 'rides.filter_searching', value: 'searching' },
-  { labelKey: 'rides.filter_accepted', value: 'accepted' },
-  { labelKey: 'rides.filter_in_progress', value: 'in_progress' },
-  { labelKey: 'rides.filter_completed', value: 'completed' },
-  { labelKey: 'rides.filter_canceled', value: 'canceled' },
-  { labelKey: 'rides.filter_disputed', value: 'disputed' },
-] as const;
+type StatusFilter = 'all' | 'searching' | 'accepted' | 'in_progress' | 'completed' | 'canceled' | 'disputed';
 
-const STATUS_BADGE: Record<string, string> = {
-  searching: 'bg-yellow-100 text-yellow-700',
-  accepted: 'bg-blue-100 text-blue-700',
-  driver_en_route: 'bg-blue-100 text-blue-700',
-  arrived_at_pickup: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  canceled: 'bg-red-100 text-red-700',
-  disputed: 'bg-orange-100 text-orange-700',
-};
+const STATUS_TABS: StatusTab<StatusFilter>[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'searching', label: 'Buscando', tone: 'warning' },
+  { id: 'accepted', label: 'Aceptados', tone: 'info' },
+  { id: 'in_progress', label: 'En curso', tone: 'primary' },
+  { id: 'completed', label: 'Completados', tone: 'success' },
+  { id: 'canceled', label: 'Cancelados', tone: 'danger' },
+  { id: 'disputed', label: 'En disputa', tone: 'warning' },
+];
 
-const STATUS_LABEL_KEY: Record<string, string> = {
-  searching: 'rides.status_searching',
-  accepted: 'rides.status_accepted',
-  driver_en_route: 'rides.status_driver_en_route',
-  arrived_at_pickup: 'rides.status_arrived_at_pickup',
-  in_progress: 'rides.status_in_progress',
-  completed: 'rides.status_completed',
-  canceled: 'rides.status_canceled',
-  disputed: 'rides.status_disputed',
-};
-
-function truncate(str: string, len: number) {
-  return str.length > len ? str.slice(0, len) + '…' : str;
-}
-
-const EMPTY_FILTERS: Record<string, string> = {
+const EMPTY_FILTERS = {
   serviceType: '',
   paymentMethod: '',
   dateFrom: '',
@@ -61,277 +35,367 @@ const EMPTY_FILTERS: Record<string, string> = {
   search: '',
 };
 
+type AdvancedFilters = typeof EMPTY_FILTERS;
+
+function truncate(str: string | null | undefined, len: number) {
+  if (!str) return '—';
+  return str.length > len ? str.slice(0, len) + '…' : str;
+}
+
 export default function RidesPage() {
-  const router = useRouter();
   const { t } = useTranslation('admin');
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [advancedFilters, setAdvancedFilters] = useState<Record<string, string>>({ ...EMPTY_FILTERS });
-  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
-  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [filters, setFilters] = useState<AdvancedFilters>({ ...EMPTY_FILTERS });
+  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCity, setSelectedCity] = useState('');
+  const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
   useEffect(() => {
     const supabase = createBrowserClient();
-    supabase.from('cities').select('id, name').eq('is_active', true).order('name')
-      .then(({ data }) => { if (data) setCities(data); });
+    supabase
+      .from('cities')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        if (data) setCities(data);
+      });
   }, []);
 
-  const filterFields: FilterField[] = [
-    {
-      key: 'search',
-      label: t('filters.search'),
-      type: 'text',
-      placeholder: t('filters.search_address_placeholder'),
-    },
-    {
-      key: 'serviceType',
-      label: t('filters.service_type'),
-      type: 'select',
-      placeholder: t('filters.all'),
-      options: [
-        { label: t('rides.filter_triciclo'), value: 'triciclo_basico' },
-        { label: t('rides.filter_moto'), value: 'moto_standard' },
-        { label: t('rides.filter_auto'), value: 'auto_standard' },
-        { label: t('rides.filter_mensajeria'), value: 'mensajeria' },
-      ],
-    },
-    {
-      key: 'paymentMethod',
-      label: t('filters.payment_method'),
-      type: 'select',
-      placeholder: t('filters.all'),
-      options: [
-        { label: t('rides.payment_cash'), value: 'cash' },
-        { label: t('rides.payment_tricicoin'), value: 'tricicoin' },
-      ],
-    },
-    { key: 'dateFrom', label: t('filters.date_from'), type: 'date' },
-    { key: 'dateTo', label: t('filters.date_to'), type: 'date' },
-  ];
-
-  const handleFilterChange = useCallback((key: string, value: string) => {
-    setAdvancedFilters((prev) => ({ ...prev, [key]: value }));
-    setPage(0);
-  }, []);
-
-  const handleClearFilters = useCallback(() => {
-    setAdvancedFilters({ ...EMPTY_FILTERS });
-    setPage(0);
-  }, []);
+  const fetchRides = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const query: Record<string, string> = {};
+      if (statusFilter !== 'all') query.status = statusFilter;
+      if (filters.serviceType) query.serviceType = filters.serviceType;
+      if (filters.paymentMethod) query.paymentMethod = filters.paymentMethod;
+      if (filters.dateFrom) query.dateFrom = filters.dateFrom;
+      if (filters.dateTo) query.dateTo = filters.dateTo;
+      if (filters.search) query.search = filters.search;
+      if (selectedCity) query.cityId = selectedCity;
+      const data = await adminService.getRides(query, page, PAGE_SIZE);
+      setRides(data);
+    } catch (err) {
+      setRides([]);
+      setError(err instanceof Error ? err.message : 'No pudimos cargar los viajes.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, statusFilter, filters, selectedCity]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    (async () => {
+      await fetchRides();
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchRides]);
 
-    async function fetchRides() {
-      try {
-        const filters: Record<string, string> = {};
-        if (statusFilter !== 'all') filters.status = statusFilter;
-        if (advancedFilters.serviceType) filters.serviceType = advancedFilters.serviceType;
-        if (advancedFilters.paymentMethod) filters.paymentMethod = advancedFilters.paymentMethod;
-        if (advancedFilters.dateFrom) filters.dateFrom = advancedFilters.dateFrom;
-        if (advancedFilters.dateTo) filters.dateTo = advancedFilters.dateTo;
-        if (advancedFilters.search) filters.search = advancedFilters.search;
-        if (selectedCity) filters.cityId = selectedCity;
+  // Client-side sort of the current page only (server paginates)
+  const sortedRides = useMemo(() => {
+    if (!sort) return rides;
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    const key = sort.columnId as keyof Ride;
+    return [...rides].sort((a, b) => {
+      const av = a[key] as unknown;
+      const bv = b[key] as unknown;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av ?? '').localeCompare(String(bv ?? '')) * dir;
+    });
+  }, [rides, sort]);
 
-        const data = await adminService.getRides(filters, page, PAGE_SIZE);
-        if (!cancelled) setRides(data);
-      } catch (err) {
-        // Error handled by UI
-        if (!cancelled) { setRides([]); setError(err instanceof Error ? err.message : 'Error al cargar viajes'); }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+  const activeFilterCount = useMemo(
+    () =>
+      (Object.keys(filters) as (keyof AdvancedFilters)[]).reduce(
+        (acc, k) => acc + (filters[k] ? 1 : 0),
+        0,
+      ) + (selectedCity ? 1 : 0),
+    [filters, selectedCity],
+  );
 
-    fetchRides();
-    return () => { cancelled = true; };
-  }, [page, statusFilter, advancedFilters, selectedCity]);
+  const updateFilter = useCallback(<K extends keyof AdvancedFilters>(key: K, value: AdvancedFilters[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(0);
+  }, []);
 
-  const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(rides, 'created_at');
+  const clearFilters = useCallback(() => {
+    setFilters({ ...EMPTY_FILTERS });
+    setSelectedCity('');
+    setPage(0);
+  }, []);
 
-  const canGoPrev = page > 0;
-  const canGoNext = rides.length === PAGE_SIZE;
-
-  function handleExportCsv() {
+  const handleExportCsv = useCallback(() => {
     exportToCsv(
-      sortedData as unknown as Record<string, unknown>[],
+      sortedRides as unknown as Record<string, unknown>[],
       [
-        { key: 'pickup_address', label: t('rides.col_route') + ' (pickup)' },
-        { key: 'dropoff_address', label: t('rides.col_route') + ' (dropoff)' },
-        { key: 'status', label: t('rides.col_status') },
-        { key: 'estimated_fare_cup', label: t('rides.col_fare') + ' (est.)' },
-        { key: 'final_fare_cup', label: t('rides.col_fare') + ' (final)' },
-        { key: 'estimated_distance_m', label: t('rides.col_distance') + ' (m)' },
-        { key: 'payment_method', label: t('rides.col_payment') },
-        { key: 'created_at', label: t('rides.col_date') },
+        { key: 'pickup_address', label: 'Origen' },
+        { key: 'dropoff_address', label: 'Destino' },
+        { key: 'status', label: 'Estado' },
+        { key: 'estimated_fare_cup', label: 'Tarifa estimada (CUP)' },
+        { key: 'final_fare_cup', label: 'Tarifa final (CUP)' },
+        { key: 'estimated_distance_m', label: 'Distancia estimada (m)' },
+        { key: 'actual_distance_m', label: 'Distancia real (m)' },
+        { key: 'payment_method', label: 'Método de pago' },
+        { key: 'created_at', label: 'Creado' },
       ],
       'rides',
     );
-  }
+  }, [sortedRides]);
+
+  const columns: DataColumn<Ride>[] = [
+    {
+      id: 'pickup_address',
+      header: 'Ruta',
+      cell: (r) => (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-medium text-ink">{truncate(r.pickup_address, 34)}</span>
+          <span className="truncate text-[11.5px] text-ink-muted">
+            → {truncate(r.dropoff_address, 34)}
+          </span>
+        </span>
+      ),
+      primary: true,
+      cardLabel: 'Ruta',
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      cell: (r) => <StatusBadge domain="ride" status={r.status} />,
+      width: '170px',
+      sortKey: 'status',
+    },
+    {
+      id: 'fare',
+      header: 'Tarifa',
+      cell: (r) => {
+        if (r.final_fare_cup != null) {
+          return (
+            <span className="inline-flex items-baseline gap-1.5">
+              <span className="font-medium text-ink">{formatCUP(r.final_fare_cup)}</span>
+              {r.final_fare_cup !== r.estimated_fare_cup && (
+                <span className="text-[10px] text-ink-subtle line-through">
+                  {formatCUP(r.estimated_fare_cup)}
+                </span>
+              )}
+            </span>
+          );
+        }
+        return (
+          <span className="text-ink-muted">
+            {formatCUP(r.estimated_fare_cup)}{' '}
+            <span className="text-[10px] text-ink-subtle">(est.)</span>
+          </span>
+        );
+      },
+      align: 'right',
+      mono: true,
+      width: '160px',
+      sortKey: 'estimated_fare_cup',
+    },
+    {
+      id: 'distance',
+      header: 'Distancia',
+      cell: (r) => {
+        if (r.actual_distance_m != null) return `${(r.actual_distance_m / 1000).toFixed(1)} km`;
+        if (r.estimated_distance_m > 0)
+          return (
+            <span className="text-ink-muted">
+              {(r.estimated_distance_m / 1000).toFixed(1)} km{' '}
+              <span className="text-[10px] text-ink-subtle">(est.)</span>
+            </span>
+          );
+        return '—';
+      },
+      align: 'right',
+      mono: true,
+      hideBelow: 'lg',
+      width: '120px',
+    },
+    {
+      id: 'payment_method',
+      header: 'Pago',
+      cell: (r) => (r.payment_method === 'cash' ? 'Efectivo' : 'TriciCoin'),
+      hideBelow: 'lg',
+      width: '110px',
+    },
+    {
+      id: 'created_at',
+      header: 'Creado',
+      cell: (r) => <span className="text-ink-muted">{formatAdminDate(r.created_at)}</span>,
+      sortKey: 'created_at',
+      hideBelow: 'lg',
+      width: '170px',
+    },
+  ];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">{t('rides.title')}</h1>
+    <div className="flex flex-col gap-5">
+      {/* Page header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Operación · viajes
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Viajes
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Todas las solicitudes de viaje, en cualquier estado, en toda Cuba.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
-        <button
-          onClick={handleExportCsv}
-          disabled={sortedData.length === 0}
-          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {t('common.export_csv', { defaultValue: 'Export CSV' })}
-        </button>
-        <select
-          value={selectedCity}
-          onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
-          aria-label={t('cities.filter_by_city', { defaultValue: 'Filter by city' })}
-          className="px-3 py-1.5 rounded-lg text-sm border border-neutral-200 bg-white text-neutral-700"
-        >
-          <option value="">{t('cities.all_cities')}</option>
-          {cities.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        </div>
-      </div>
-
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); setPage(0); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
-
-      {/* Status filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {STATUS_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            onClick={() => { setStatusFilter(filter.value); setPage(0); }}
-            aria-pressed={statusFilter === filter.value}
-            aria-label={t(filter.labelKey)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              statusFilter === filter.value
-                ? 'bg-primary-500 text-white'
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
-            }`}
+          <select
+            value={selectedCity}
+            onChange={(e) => {
+              setSelectedCity(e.target.value);
+              setPage(0);
+            }}
+            aria-label="Filtrar por ciudad"
+            className="h-9 rounded-lg border border-line bg-surface px-3 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
           >
-            {t(filter.labelKey)}
+            <option value="">Todas las ciudades</option>
+            {cities.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={sortedRides.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar CSV
           </button>
-        ))}
-      </div>
-
-      {/* Advanced filters */}
-      <FilterPanel
-        fields={filterFields}
-        values={advancedFilters}
-        onChange={handleFilterChange}
-        onClear={handleClearFilters}
-        clearLabel={t('filters.clear_all')}
-        toggleLabel={t('filters.advanced_filters')}
-      />
-
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm" aria-label={t('rides.title')}>
-          <thead className="bg-neutral-50 border-b border-neutral-100">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap">{t('rides.col_route')}</th>
-              <SortableHeader label={t('rides.col_status')} sortKey="status" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
-              <SortableHeader label={t('rides.col_fare')} sortKey="estimated_fare_cup" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap" />
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_distance')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell">{t('rides.col_payment')}</th>
-              <SortableHeader label={t('rides.col_date')} sortKey="created_at" currentSortKey={sortKey as string | null} sortDirection={sortDirection} onSort={toggleSort as (key: string) => void} className="text-left px-4 py-3 font-medium text-neutral-500 whitespace-nowrap hidden lg:table-cell" />
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-0 py-0">
-                  <AdminTableSkeleton rows={5} columns={6} />
-                </td>
-              </tr>
-            ) : sortedData.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-400">
-                  {t('rides.no_rides')}
-                </td>
-              </tr>
-            ) : (
-              sortedData.map((ride) => (
-                <tr key={ride.id} className="border-b border-neutral-50 hover:bg-neutral-50 cursor-pointer" onClick={() => router.push(`/rides/${ride.id}`)}>
-                  <td className="px-4 py-3">
-                    <div className="text-neutral-900">{truncate(ride.pickup_address, 25)}</div>
-                    <div className="text-neutral-500 text-xs">→ {truncate(ride.dropoff_address, 25)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ride.status] ?? 'bg-neutral-100 text-neutral-700'}`}>
-                      {STATUS_LABEL_KEY[ride.status] ? t(STATUS_LABEL_KEY[ride.status]!) : ride.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-medium">
-                    {ride.final_fare_cup != null ? (
-                      <>
-                        <span>{formatCUP(ride.final_fare_cup)}</span>
-                        {ride.final_fare_cup !== ride.estimated_fare_cup && (
-                          <span className="text-xs text-neutral-400 ml-1 line-through">
-                            {formatCUP(ride.estimated_fare_cup)}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-neutral-400">{formatCUP(ride.estimated_fare_cup)} ({t('rides.estimated')})</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                    {ride.actual_distance_m != null
-                      ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
-                      : ride.estimated_distance_m > 0
-                        ? <span className="text-neutral-400">{(ride.estimated_distance_m / 1000).toFixed(1)} km ({t('rides.estimated')})</span>
-                        : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                    {ride.payment_method === 'cash' ? t('rides.payment_cash') : t('rides.payment_tricicoin')}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500 hidden lg:table-cell">
-                    {formatAdminDate(ride.created_at)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
         </div>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-4">
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={!canGoPrev}
-          aria-label={t('common.previous')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
-        >
-          {t('common.previous')}
-        </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
-          {t('common.page')} <strong>{page + 1}</strong>
-        </span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canGoNext}
-          aria-label={t('common.next')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
-        >
-          {t('common.next')}
-        </button>
-      </div>
+      <FilterBar<StatusFilter>
+        sticky
+        tabs={STATUS_TABS}
+        activeTab={statusFilter}
+        onTabChange={(id) => {
+          setStatusFilter(id);
+          setPage(0);
+        }}
+        search={{
+          value: filters.search,
+          onChange: (v) => updateFilter('search', v),
+          placeholder: 'Buscar por dirección…',
+        }}
+        activeFilterCount={activeFilterCount - (filters.search ? 1 : 0)}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Tipo de servicio
+            </span>
+            <select
+              value={filters.serviceType}
+              onChange={(e) => updateFilter('serviceType', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="triciclo_basico">Triciclo</option>
+              <option value="moto_standard">Moto</option>
+              <option value="auto_standard">Auto</option>
+              <option value="mensajeria">Mensajería</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Método de pago
+            </span>
+            <select
+              value={filters.paymentMethod}
+              onChange={(e) => updateFilter('paymentMethod', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="cash">Efectivo</option>
+              <option value="tricicoin">TriciCoin</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Desde
+            </span>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => updateFilter('dateFrom', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              Hasta
+            </span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => updateFilter('dateTo', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            />
+          </label>
+        </div>
+        {activeFilterCount > 0 && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-[11.5px] font-medium text-ink-muted hover:text-ink"
+            >
+              Limpiar todo
+            </button>
+          </div>
+        )}
+      </FilterBar>
+
+      <DataTable<Ride>
+        columns={columns}
+        rows={sortedRides}
+        keyField="id"
+        loading={loading}
+        error={error}
+        onRetry={() => {
+          setError(null);
+          void fetchRides();
+        }}
+        empty={
+          activeFilterCount > 0 || statusFilter !== 'all'
+            ? {
+                icon: Search,
+                title: 'Sin viajes que coincidan',
+                body: 'Probá limpiar los filtros o elegir otra pestaña.',
+                action: { label: 'Limpiar filtros', onClick: clearFilters },
+              }
+            : {
+                icon: Route,
+                title: 'Cuba duerme tranquila',
+                body: 'Aún no hay viajes registrados. Cuando lleguen, los verás acá en tiempo real.',
+              }
+        }
+        rowHref={(r) => `/rides/${r.id}`}
+        sort={sort}
+        onSortChange={setSort}
+        pagination={{
+          page,
+          pageSize: PAGE_SIZE,
+          hasMore: rides.length === PAGE_SIZE,
+        }}
+        onPaginationChange={(next) => setPage(next.page)}
+      />
     </div>
   );
 }

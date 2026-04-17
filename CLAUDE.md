@@ -1,8 +1,10 @@
 # CLAUDE.md — TriciGo
 
+> **Si estás trabajando en la rama `lucia`:** leé también [`LUCIA_REDESIGN.md`](./LUCIA_REDESIGN.md) — detalla el rediseño del panel admin (identidad cubana, primitivos de datos, 22 páginas migradas) y qué queda pendiente. Si venís de `master`, el archivo te explica qué cambió y por qué antes de mergear.
+
 ## Proyecto
 
-TriciGo es una plataforma de movilidad urbana para la Tríplice Fronteira (Foz do Iguaçu, Brasil / Ciudad del Este, Paraguay / Puerto Iguazú, Argentina). MVP enfocado en rutas de transporte, paradas, horarios y experiencia de usuario trinacional.
+TriciGo es una plataforma de movilidad urbana para **Cuba**. Cobertura nacional en las 16 provincias y 168 municipios (desde Pinar del Río hasta Guantánamo, más Isla de la Juventud). Producto enfocado en viajes, conductores, pasajeros, billeteras y operación del servicio. Moneda: **CUP** (Peso cubano). Idioma principal: español neutro.
 
 ## Stack
 
@@ -95,12 +97,14 @@ src/
   - `chore: update Supabase types`
 - NUNCA digas "listo" sin haber verificado con evidencia (tests pasando, build exitoso, screenshot)
 
-## Contexto trinacional
+## Contexto cubano
 
-TriciGo opera en tres países. Tener en cuenta:
-- **Idiomas:** Español, Portugués. UI en ambos idiomas (i18n)
-- **Monedas:** BRL, PYG, ARS. Mostrar equivalencias cuando sea relevante
-- **Zonas horarias:** Pueden diferir entre países. Usar UTC internamente
+TriciGo opera en Cuba. Tener en cuenta:
+- **Geografía:** 16 provincias y 168 municipios. Las provincias están definidas en `packages/utils/src/cuba-geo.ts` (`CUBA_PROVINCES`, `CUBA_MUNICIPALITIES`).
+- **Idioma:** Español neutro. La UI también soporta inglés/francés/portugués/guaraní para turistas (archivos en `packages/i18n/src/locales/`), pero el tono principal es español cubano neutro — profesional, claro, sin modismos fuertes.
+- **Moneda:** CUP (Peso cubano). Usar `formatCUP` de `@tricigo/utils`.
+- **Zona horaria:** `America/Havana` (CUT, UTC−5 / UTC−4 en horario de verano). Persistir UTC internamente, formatear con `Intl.DateTimeFormat('es', { timeZone: 'America/Havana' })` al mostrar.
+- **Direcciones:** Formato cubano (calle entre cross-streets, número, municipio). Ver utilidades en `packages/utils/src/geo.ts`.
 
 ## Idioma de comunicación
 

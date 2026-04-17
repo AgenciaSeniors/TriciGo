@@ -8,6 +8,15 @@ import { createMiddlewareClient } from '@/lib/supabase-server';
  *  - User does not have admin or super_admin role
  */
 export async function middleware(request: NextRequest) {
+  // Dev-only escape hatch for design previews: /foo?__preview=1
+  // Gated by NODE_ENV so it can never run in production builds.
+  if (
+    process.env.NODE_ENV === 'development' &&
+    request.nextUrl.searchParams.has('__preview')
+  ) {
+    return NextResponse.next();
+  }
+
   const { supabase, response } = createMiddlewareClient(request);
 
   // Check for valid session

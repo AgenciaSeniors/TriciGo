@@ -1,13 +1,22 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Download,
+  Flame,
+  MapPinned,
+  Snowflake,
+  Sparkles,
+  UserCog,
+  Users as UsersIcon,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
-import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
-import { Users } from 'lucide-react';
+import { DataTable, type DataColumn } from '@/components/data/DataTable';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { SectionCard } from '@/components/dashboard/SectionCard';
 import { formatAdminDate } from '@/lib/formatDate';
 
 type SegmentType = 'new_users' | 'power_users' | 'inactive' | 'by_city';
@@ -26,8 +35,18 @@ type City = { id: string; name: string; slug: string };
 
 const PAGE_SIZE = 20;
 
+const SEGMENT_META: Record<
+  SegmentType,
+  { label: string; icon: LucideIcon; tone: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info' }
+> = {
+  new_users: { label: 'Recién llegados', icon: Sparkles, tone: 'success' },
+  power_users: { label: 'Power users', icon: Flame, tone: 'primary' },
+  inactive: { label: 'Inactivos', icon: Snowflake, tone: 'warning' },
+  by_city: { label: 'Por provincia', icon: MapPinned, tone: 'info' },
+};
+
 export default function SegmentsPage() {
-  const { t } = useTranslation('admin');
+  const { t: _t } = useTranslation('admin');
   const [error, setError] = useState<string | null>(null);
 
   const [counts, setCounts] = useState<Record<SegmentType, number>>({
@@ -44,35 +63,27 @@ export default function SegmentsPage() {
   const [page, setPage] = useState(0);
 
   const [cities, setCities] = useState<City[]>([]);
-  const [selectedCityId, setSelectedCityId] = useState<string>('');
+  const [selectedCityId, setSelectedCityId] = useState('');
 
-  // Load cities on mount
   useEffect(() => {
     cityService.getAllCities().then(setCities).catch(() => {});
   }, []);
 
-  // Load segment counts
-  useEffect(() => {
-    loadCounts();
-  }, []);
-
-  const loadCounts = async () => {
+  const loadCounts = useCallback(async () => {
     setCountsLoading(true);
+    setError(null);
     try {
       const supabase = getSupabaseClient();
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      // New users (registered < 7 days)
       const { count: newCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', sevenDaysAgo);
 
-      // Power users (>10 rides) — count profiles that have more than 10 rides
       const { data: powerData } = await supabase.rpc('count_power_users', {}).maybeSingle();
-      // Fallback: query rides grouped by customer_id
       let powerCount = (powerData as { count?: number } | null)?.count ?? 0;
       if (!powerData) {
         const { data: rideGroups } = await supabase
@@ -88,7 +99,6 @@ export default function SegmentsPage() {
         }
       }
 
-      // Inactive users (no ride in 30 days): get users whose last ride < 30 days ago or no rides
       const { data: activeRiders } = await supabase
         .from('rides')
         .select('customer_id')
@@ -108,12 +118,15 @@ export default function SegmentsPage() {
         by_city: 0,
       });
     } catch (err) {
-      // Error handled by UI
-      setError(err instanceof Error ? err.message : 'Error al cargar segmentos');
+      setError(err instanceof Error ? err.message : 'No pudimos cargar los segmentos.');
     } finally {
       setCountsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadCounts();
+  }, [loadCounts]);
 
   const loadSegmentUsers = useCallback(
     async (segment: SegmentType, pageNum: number, cityId?: string) => {
@@ -135,7 +148,6 @@ export default function SegmentsPage() {
             .range(offset, offset + PAGE_SIZE - 1);
           userIds = (data ?? []).map((u) => u.id);
         } else if (segment === 'power_users') {
-          // Get all rides, group by customer_id, filter >10
           const { data: allRides } = await supabase
             .from('rides')
             .select('customer_id')
@@ -176,17 +188,14 @@ export default function SegmentsPage() {
 
         if (userIds.length === 0) {
           setUsers([]);
-          setUsersLoading(false);
           return;
         }
 
-        // Fetch profile details for these users
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, full_name, email, phone, city_id')
           .in('id', userIds);
 
-        // Fetch ride counts and last ride per user
         const { data: rides } = await supabase
           .from('rides')
           .select('customer_id, created_at')
@@ -194,27 +203,20 @@ export default function SegmentsPage() {
 
         const rideStats: Record<string, { count: number; lastRide: string | null }> = {};
         for (const ride of rides ?? []) {
-          if (!rideStats[ride.customer_id]) {
-            rideStats[ride.customer_id] = { count: 0, lastRide: null };
-          }
+          if (!rideStats[ride.customer_id]) rideStats[ride.customer_id] = { count: 0, lastRide: null };
           const stat = rideStats[ride.customer_id]!;
           stat.count++;
-          if (!stat.lastRide || ride.created_at > stat.lastRide) {
-            stat.lastRide = ride.created_at;
-          }
+          if (!stat.lastRide || ride.created_at > stat.lastRide) stat.lastRide = ride.created_at;
         }
 
-        // Get city names
         const cityIds = [...new Set((profiles ?? []).map((p) => p.city_id).filter(Boolean))];
-        let cityMap: Record<string, string> = {};
+        const cityMap: Record<string, string> = {};
         if (cityIds.length > 0) {
           const { data: citiesData } = await supabase
             .from('cities')
             .select('id, name')
             .in('id', cityIds);
-          for (const c of citiesData ?? []) {
-            cityMap[c.id] = c.name;
-          }
+          for (const c of citiesData ?? []) cityMap[c.id] = c.name;
         }
 
         const result: SegmentUser[] = (profiles ?? []).map((p) => ({
@@ -228,8 +230,7 @@ export default function SegmentsPage() {
         }));
 
         setUsers(result);
-      } catch (err) {
-        // Error handled by UI
+      } catch {
         setUsers([]);
       } finally {
         setUsersLoading(false);
@@ -242,21 +243,21 @@ export default function SegmentsPage() {
     setActiveSegment(segment);
     setPage(0);
     if (segment === 'by_city' && !selectedCityId) return;
-    loadSegmentUsers(segment, 0, selectedCityId);
+    void loadSegmentUsers(segment, 0, selectedCityId);
   };
 
   useEffect(() => {
     if (activeSegment && (activeSegment !== 'by_city' || selectedCityId)) {
-      loadSegmentUsers(activeSegment, page, selectedCityId);
+      void loadSegmentUsers(activeSegment, page, selectedCityId);
     }
+
   }, [page]);
 
   const handleCityChange = (cityId: string) => {
     setSelectedCityId(cityId);
     if (activeSegment === 'by_city' && cityId) {
       setPage(0);
-      loadSegmentUsers('by_city', 0, cityId);
-      // Update city count
+      void loadSegmentUsers('by_city', 0, cityId);
       const supabase = getSupabaseClient();
       supabase
         .from('profiles')
@@ -270,14 +271,7 @@ export default function SegmentsPage() {
 
   const handleExportCSV = () => {
     if (users.length === 0) return;
-    const headers = [
-      t('segments.col_name'),
-      t('segments.col_email'),
-      t('segments.col_phone'),
-      t('segments.col_rides'),
-      t('segments.col_last_ride'),
-      t('segments.col_city'),
-    ];
+    const headers = ['Nombre', 'Email', 'Teléfono', 'Viajes', 'Último viaje', 'Ciudad'];
     const rows = users.map((u) => [
       u.full_name ?? '',
       u.email ?? '',
@@ -286,9 +280,7 @@ export default function SegmentsPage() {
       u.last_ride_date ? new Date(u.last_ride_date).toISOString().split('T')[0] : '',
       u.city_name ?? '',
     ]);
-    const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${v}"`).join(','))].join(
-      '\n',
-    );
+    const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${v}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -298,198 +290,184 @@ export default function SegmentsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const segments: { type: SegmentType; labelKey: string; color: string }[] = [
-    { type: 'new_users', labelKey: 'segments.new_users', color: 'bg-green-50 border-green-200' },
+  const columns: DataColumn<SegmentUser>[] = [
     {
-      type: 'power_users',
-      labelKey: 'segments.power_users',
-      color: 'bg-purple-50 border-purple-200',
+      id: 'full_name',
+      header: 'Nombre',
+      cell: (u) => <span className="font-medium text-ink">{u.full_name ?? 'Sin nombre'}</span>,
+      primary: true,
     },
-    { type: 'inactive', labelKey: 'segments.inactive', color: 'bg-orange-50 border-orange-200' },
-    { type: 'by_city', labelKey: 'segments.by_city', color: 'bg-blue-50 border-blue-200' },
+    {
+      id: 'phone',
+      header: 'Teléfono',
+      cell: (u) => u.phone ?? <span className="text-ink-subtle">—</span>,
+      mono: true,
+      hideBelow: 'md',
+      width: '150px',
+    },
+    {
+      id: 'email',
+      header: 'Email',
+      cell: (u) => u.email ?? <span className="text-ink-subtle">—</span>,
+      hideBelow: 'lg',
+      secondary: true,
+    },
+    {
+      id: 'rides_count',
+      header: 'Viajes',
+      cell: (u) => u.rides_count,
+      align: 'right',
+      mono: true,
+      width: '90px',
+    },
+    {
+      id: 'last_ride_date',
+      header: 'Último viaje',
+      cell: (u) => <span className="text-ink-muted">{formatAdminDate(u.last_ride_date)}</span>,
+      hideBelow: 'lg',
+      width: '170px',
+    },
+    {
+      id: 'city_name',
+      header: 'Ciudad',
+      cell: (u) => u.city_name ?? <span className="text-ink-subtle">—</span>,
+      hideBelow: 'lg',
+      width: '150px',
+    },
   ];
 
-  const canGoPrev = page > 0;
-  const canGoNext = users.length === PAGE_SIZE;
-
   return (
-    <div>
-      <h1 className="text-2xl md:text-3xl font-bold mb-6">{t('segments.title')}</h1>
+    <div className="flex flex-col gap-5">
+      <div>
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+          Crecimiento · segmentos
+        </p>
+        <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+          Segmentos
+        </h1>
+        <p className="mt-0.5 text-[12.5px] text-ink-muted">
+          Cortes de usuarios por comportamiento. Explorá cada cohorte para entenderla mejor.
+        </p>
+      </div>
 
       {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); }}
-          onDismiss={() => setError(null)}
-        />
+        <div className="admin-card border-red-500/30 bg-red-500/5 px-5 py-3 text-[13px] text-red-600 dark:text-red-400">
+          {error}
+        </div>
       )}
 
-      {/* Segment cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {segments.map((seg) => (
-          <div
-            key={seg.type}
-            className={`rounded-xl border p-5 ${seg.color} ${
-              activeSegment === seg.type ? 'ring-2 ring-primary-500' : ''
-            }`}
-          >
-            <h3 className="text-sm font-semibold text-neutral-700 mb-1">{t(seg.labelKey)}</h3>
-            <p className="text-3xl font-bold text-neutral-900 mb-3">
-              {countsLoading ? '...' : counts[seg.type]}
-            </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {(Object.keys(SEGMENT_META) as SegmentType[]).map((type) => {
+          const meta = SEGMENT_META[type];
+          const Icon = meta.icon;
+          const active = activeSegment === type;
+          return (
+            <div
+              key={type}
+              className={`admin-card flex flex-col gap-3 p-5 transition-all ${
+                active ? 'ring-2 ring-primary-500/40' : ''
+              }`}
+            >
+              <KpiCardBlock
+                label={meta.label}
+                value={countsLoading ? '—' : String(counts[type])}
+                tone={meta.tone}
+                icon={Icon}
+              />
 
-            {seg.type === 'by_city' && (
-              <div className="mb-3">
+              {type === 'by_city' && (
                 <select
                   value={selectedCityId}
                   onChange={(e) => handleCityChange(e.target.value)}
-                  aria-label={t('segments.select_city')}
-                  className="w-full border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500 bg-white"
+                  aria-label="Seleccionar ciudad"
+                  className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
                 >
-                  <option value="">{t('segments.select_city')}</option>
+                  <option value="">Elegí una ciudad</option>
                   {cities.map((city) => (
                     <option key={city.id} value={city.id}>
                       {city.name}
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleViewUsers(seg.type)}
-                disabled={seg.type === 'by_city' && !selectedCityId}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {t('segments.view_users')}
-              </button>
-              {activeSegment === seg.type && users.length > 0 && (
-                <button
-                  onClick={handleExportCSV}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
-                >
-                  {t('segments.export_csv')}
-                </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => handleViewUsers(type)}
+                disabled={type === 'by_city' && !selectedCityId}
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[11.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Ver usuarios
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Users table */}
       {activeSegment && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
-            <h2 className="text-lg font-bold">
-              {t(`segments.${activeSegment}`)} ({users.length > 0 ? `${t('common.page')} ${page + 1}` : '0'})
-            </h2>
-            {users.length > 0 && (
-              <button
-                onClick={handleExportCSV}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
-              >
-                {t('segments.export_csv')}
-              </button>
-            )}
+        <SectionCard
+          eyebrow="Resultado"
+          title={SEGMENT_META[activeSegment].label}
+          description={`Página ${page + 1}`}
+          action={
+            users.length > 0
+              ? undefined
+              : undefined
+          }
+        >
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={users.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar CSV
+            </button>
           </div>
+          <DataTable<SegmentUser>
+            columns={columns}
+            rows={users}
+            keyField="id"
+            loading={usersLoading}
+            empty={{
+              icon: UsersIcon,
+              title: 'Sin usuarios en este segmento',
+              body: 'Todavía no hay nadie que cumpla las condiciones.',
+            }}
+            pagination={{ page, pageSize: PAGE_SIZE, hasMore: users.length === PAGE_SIZE }}
+            onPaginationChange={(next) => setPage(next.page)}
+          />
+        </SectionCard>
+      )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full" aria-label={t('segments.title')}>
-              <thead>
-                <tr className="border-b border-neutral-100">
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                    {t('segments.col_name')}
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                    {t('segments.col_email')}
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                    {t('segments.col_phone')}
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                    {t('segments.col_rides')}
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                    {t('segments.col_last_ride')}
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                    {t('segments.col_city')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {usersLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-0 py-0">
-                      <AdminTableSkeleton rows={5} columns={6} />
-                    </td>
-                  </tr>
-                ) : users.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}><AdminEmptyState icon={<Users className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('segments.no_users')} /></td>
-                  </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
-                        {user.full_name ?? t('common.no_name')}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                        {user.email ?? '\u2014'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-neutral-600">{user.phone ?? '\u2014'}</td>
-                      <td className="px-6 py-4 text-sm text-neutral-600">{user.rides_count}</td>
-                      <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                        {formatAdminDate(user.last_ride_date)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                        {user.city_name ?? '\u2014'}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+      {!activeSegment && (
+        <SectionCard
+          eyebrow="Empezá por acá"
+          title="Elegí un segmento arriba"
+          description="Cada tarjeta abre la lista detallada de quiénes lo componen."
+        >
+          <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
+            <UserCog className="h-4 w-4" />
+            Los segmentos se calculan sobre la última actividad registrada.
           </div>
-
-          {/* Pagination */}
-          {(canGoPrev || canGoNext) && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-100">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={!canGoPrev}
-                aria-label={t('common.previous')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  canGoPrev
-                    ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
-                    : 'bg-neutral-50 text-neutral-300 cursor-not-allowed'
-                }`}
-              >
-                {t('common.previous')}
-              </button>
-              <span className="text-sm text-neutral-500" aria-live="polite">
-                {t('common.page')} {page + 1}
-              </span>
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={!canGoNext}
-                aria-label={t('common.next')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  canGoNext
-                    ? 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
-                    : 'bg-neutral-50 text-neutral-300 cursor-not-allowed'
-                }`}
-              >
-                {t('common.next')}
-              </button>
-            </div>
-          )}
-        </div>
+        </SectionCard>
       )}
     </div>
   );
+}
+
+function KpiCardBlock({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  tone: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  icon: LucideIcon;
+}) {
+  return <KpiCard label={label} value={value} tone={tone} icon={icon} />;
 }
