@@ -26,18 +26,20 @@
     "error_generic": "Error al iniciar sesión. Intenta de nuevo.",
     "status": "Estado",
     "search_placeholder": "Buscar...",
-    "load_error": "Error al cargar datos",
+    "load_error": "No pudimos cargar los datos",
     "field_required": "Campo requerido",
     "must_be_future": "Debe ser una fecha futura",
     "must_be_positive": "Debe ser mayor o igual a 0",
-    "select_user": "Debe seleccionar un usuario"
+    "select_user": "Debe seleccionar un usuario",
+    "search": "Buscar",
+    "clear_search": "Limpiar busqueda",
+    "filters": "Filtros",
+    "retry": "Reintentar"
   },
-
   "header": {
     "light_mode": "Modo claro",
     "dark_mode": "Modo oscuro"
   },
-
   "filters": {
     "advanced_filters": "Filtros avanzados",
     "clear_all": "Limpiar filtros",
@@ -52,9 +54,9 @@
     "status": "Estado",
     "rating_min": "Rating mínimo",
     "vehicle_type": "Tipo de vehículo",
-    "all": "Todos"
+    "all": "Todos",
+    "status_filters_aria": "Filtros de estado"
   },
-
   "sidebar": {
     "dashboard": "Dashboard",
     "drivers": "Conductores",
@@ -75,19 +77,18 @@
     "live_map": "Mapa en vivo",
     "quests": "Misiones",
     "blog": "Blog",
-    "admin_panel": "Panel de administraci\u00f3n",
+    "admin_panel": "Panel de administración",
     "businesses": "Empresas",
-    "reviews": "Rese\u00f1as",
+    "reviews": "Reseñas",
     "cities": "Ciudades",
     "segments": "Segmentos",
-    "campaigns": "Campa\u00f1as",
+    "campaigns": "Campañas",
     "funnel": "Conversión",
     "validation": "Validación",
     "logout": "Cerrar sesión",
     "close_menu": "Cerrar menú",
     "open_menu": "Abrir menú"
   },
-
   "referrals": {
     "title": "Gestión de Referidos",
     "total": "Total referidos",
@@ -115,7 +116,6 @@
     "no_referrals": "No hay referidos registrados",
     "conversion_rate": "Tasa de conversión"
   },
-
   "dashboard": {
     "title": "Panel de control",
     "active_rides": "Viajes activos",
@@ -138,7 +138,6 @@
     "no_recent_rides": "Sin viajes recientes",
     "no_pending_drivers": "Sin verificaciones pendientes"
   },
-
   "drivers": {
     "title": "Gestión de conductores",
     "pending": "Pendientes",
@@ -252,7 +251,6 @@
     "doc_uploaded_at": "Subido:",
     "actions_section": "Acciones"
   },
-
   "rides": {
     "title": "Gestión de viajes",
     "active": "Activos",
@@ -314,7 +312,6 @@
     "label_completed_at": "Completado",
     "label_canceled_at": "Cancelado"
   },
-
   "users": {
     "title": "Gestión de usuarios",
     "top_review_tags": "Tags de reseñas más frecuentes",
@@ -323,7 +320,7 @@
     "blocked": "Bloqueados",
     "block_user": "Bloquear usuario",
     "unblock_user": "Desbloquear usuario",
-    "block_confirm": "\u00bfEst\u00e1s seguro de bloquear a este usuario? No podr\u00e1 acceder a la plataforma.",
+    "block_confirm": "¿Estás seguro de bloquear a este usuario? No podrá acceder a la plataforma.",
     "block_reason": "Motivo del bloqueo",
     "col_name": "Nombre",
     "col_phone": "Teléfono",
@@ -373,7 +370,6 @@
     "col_type": "Tipo",
     "col_note": "Nota"
   },
-
   "wallet_admin": {
     "title": "Wallet / Finanzas",
     "total_tricicoin": "Total TriciCoin en circulación",
@@ -424,7 +420,6 @@
     "col_usd_amount": "Monto USD",
     "col_reference": "Referencia"
   },
-
   "support": {
     "title": "Tickets de soporte",
     "status_open": "Abierto",
@@ -450,7 +445,6 @@
     "user_label": "Usuario",
     "filter_all": "Todos"
   },
-
   "audit": {
     "title": "Auditoría",
     "filter_from": "Desde",
@@ -478,7 +472,6 @@
     "target_recharge": "Recarga wallet",
     "target_incident": "Incidente"
   },
-
   "reports": {
     "title": "Reportes",
     "section_operations": "Operaciones",
@@ -529,7 +522,6 @@
     "predicted": "Proyectado",
     "export_csv": "Exportar CSV"
   },
-
   "funnel": {
     "title": "Análisis de Conversión",
     "sessions": "Sesiones",
@@ -541,7 +533,6 @@
     "last_30_days": "Últimos 30 días",
     "step": "Paso"
   },
-
   "login": {
     "admin_panel": "Panel de administración",
     "email_label": "Correo electrónico",
@@ -556,7 +547,6 @@
     "sign_in_with_google": "Ingresar con Google",
     "or_divider": "o"
   },
-
   "forgot_password": {
     "title": "Restablecer contraseña",
     "description": "Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.",
@@ -569,7 +559,6 @@
     "back_to_login": "Volver al inicio de sesión",
     "error_generic": "Error al enviar el enlace. Intenta de nuevo."
   },
-
   "reset_password": {
     "title": "Establecer nueva contraseña",
     "description": "Ingresa tu nueva contraseña.",
@@ -586,7 +575,6 @@
     "error_no_session": "Enlace inválido o expirado. Solicita uno nuevo.",
     "go_to_login": "Ir al inicio de sesión"
   },
-
   "promotions": {
     "title": "Promociones",
     "create_promotion": "Crear promoción",
@@ -621,7 +609,6 @@
     "error_creating": "Error al crear promoción",
     "error_deleting": "Error al eliminar"
   },
-
   "service_types": {
     "title": "Tipos de servicio",
     "col_slug": "Slug",
@@ -634,7 +621,6 @@
     "col_active": "Activo",
     "no_service_types": "Sin tipos de servicio"
   },
-
   "pricing": {
     "title": "Reglas de precio",
     "filter_all": "Todos",
@@ -658,8 +644,8 @@
     "no_rules": "Sin reglas de precio",
     "create_rule": "Crear regla",
     "delete_rule": "Eliminar",
-    "confirm_delete": "\u00bfSeguro que quieres eliminar esta regla de precio?",
-    "time_band_morning": "Ma\u00f1ana",
+    "confirm_delete": "¿Seguro que quieres eliminar esta regla de precio?",
+    "time_band_morning": "Mañana",
     "time_band_afternoon": "Tarde",
     "time_band_night": "Noche",
     "time_band_dawn": "Madrugada",
@@ -671,15 +657,14 @@
     "label_base_fare": "Tarifa base (CUP)",
     "label_per_km": "Por km (CUP)",
     "label_per_min": "Por minuto (CUP)",
-    "label_min_fare": "Tarifa m\u00ednima (CUP)",
+    "label_min_fare": "Tarifa mínima (CUP)",
     "label_time_start": "Hora inicio",
     "label_time_end": "Hora fin",
-    "label_days": "D\u00edas de la semana",
+    "label_days": "Días de la semana",
     "creating": "Creando...",
     "error_creating": "Error al crear regla",
     "error_deleting": "Error al eliminar regla"
   },
-
   "zones": {
     "title": "Zonas operativas",
     "map_note": "Edición de polígonos disponible en futura versión con integración de mapas.",
@@ -692,7 +677,6 @@
     "col_active": "Activo",
     "no_zones": "Sin zonas configuradas"
   },
-
   "surge_zones": {
     "title": "Zonas de tarifa dinámica",
     "create_rule": "+ Crear regla",
@@ -714,7 +698,6 @@
     "creating": "Creando...",
     "confirm_delete": "¿Eliminar esta regla de surge?"
   },
-
   "feature_flags": {
     "title": "Feature Flags",
     "add_flag": "Agregar flag",
@@ -725,7 +708,6 @@
     "no_flags": "Sin feature flags configurados",
     "no_description": "Sin descripción"
   },
-
   "settings": {
     "title": "Configuración",
     "pricing_rules": "Reglas de precio",
@@ -761,7 +743,6 @@
     "cities": "Ciudades",
     "cities_desc": "Gestionar ciudades y áreas de operación"
   },
-
   "cities": {
     "title": "Ciudades",
     "col_name": "Nombre",
@@ -776,18 +757,17 @@
     "error_saving": "Error al guardar la ciudad",
     "all_cities": "Todas las ciudades"
   },
-
   "surge_dashboard": {
     "title": "Surge en tiempo real",
     "current_multiplier": "Multiplicador actual",
     "searching_rides": "Viajes buscando conductor",
     "in_progress_rides": "Viajes en curso",
-    "online_drivers": "Conductores en l\u00ednea",
+    "online_drivers": "Conductores en línea",
     "demand_ratio": "Ratio demanda/oferta",
-    "last_updated": "\u00daltima actualizaci\u00f3n",
+    "last_updated": "Última actualización",
     "refreshing": "Actualizando...",
     "zone_surge": "Surge por zona",
-    "live_metrics": "M\u00e9tricas en vivo",
+    "live_metrics": "Métricas en vivo",
     "no_surge": "Sin surge activo",
     "auto_refresh": "Actualizar cada 30s",
     "weather": "Clima actual",
@@ -804,7 +784,6 @@
     "weather_surge_inactive": "Sin surge por clima",
     "weather_temp": "Temperatura"
   },
-
   "fraud": {
     "title": "Alertas de fraude",
     "unresolved_count": "{{count}} alertas sin resolver",
@@ -831,7 +810,6 @@
     "type_suspicious_cancellations": "Cancelaciones sospechosas",
     "type_velocity_anomaly": "Anomalía de velocidad"
   },
-
   "incidents": {
     "title": "Incidentes",
     "filter_all": "Todos",
@@ -858,21 +836,20 @@
     "previous": "Anterior",
     "next": "Siguiente"
   },
-
   "platform_config": {
-    "title": "Configuraci\u00f3n de plataforma",
-    "subtitle": "Par\u00e1metros globales del sistema",
+    "title": "Configuración de plataforma",
+    "subtitle": "Parámetros globales del sistema",
     "key": "Clave",
     "value": "Valor",
     "save": "Guardar",
     "saving": "Guardando...",
     "saved": "Guardado correctamente",
     "error_saving": "Error al guardar",
-    "max_driver_rate_multiplier": "Multiplicador m\u00e1ximo tarifa conductor",
-    "max_driver_rate_multiplier_help": "L\u00edmite superior para tarifas personalizadas (ej: 2.0 = 2x el default)",
+    "max_driver_rate_multiplier": "Multiplicador máximo tarifa conductor",
+    "max_driver_rate_multiplier_help": "Límite superior para tarifas personalizadas (ej: 2.0 = 2x el default)",
     "default_per_km_rate_cup": "Tarifa por km por defecto (CUP)",
-    "default_per_km_rate_cup_help": "Tarifa base por kil\u00f3metro en CUP para todos los conductores",
-    "commission_rate": "Tasa de comisi\u00f3n",
+    "default_per_km_rate_cup_help": "Tarifa base por kilómetro en CUP para todos los conductores",
+    "commission_rate": "Tasa de comisión",
     "commission_rate_help": "Porcentaje que cobra la plataforma por viaje (ej: 0.15 = 15%)",
     "exchange_rate_fallback_cup": "Tasa de cambio de respaldo (CUP)",
     "exchange_rate_fallback_cup_help": "Tasa USD/CUP de respaldo si no hay tasa actual configurada",
@@ -898,7 +875,6 @@
     "cash_enabled_help": "Habilitar/deshabilitar pagos en efectivo",
     "wallet_enabled_help": "Habilitar/deshabilitar pagos con wallet"
   },
-
   "exchange_rate": {
     "title": "Tasa de cambio",
     "subtitle": "Tasa de cambio USD/CUP desde ElToque",
@@ -908,42 +884,41 @@
     "updated_at": "Actualizado",
     "no_rate": "No hay tasa de cambio configurada",
     "manual_override": "Ajuste manual",
-    "manual_override_desc": "Establece una tasa USD/CUP manual. Esto sobreescribe la tasa autom\u00e1tica de ElToque.",
+    "manual_override_desc": "Establece una tasa USD/CUP manual. Esto sobreescribe la tasa automática de ElToque.",
     "set_rate": "Establecer tasa",
     "rate_saved": "Tasa de cambio actualizada correctamente",
-    "error_invalid_rate": "Ingresa una tasa v\u00e1lida mayor a 0",
+    "error_invalid_rate": "Ingresa una tasa válida mayor a 0",
     "error_saving": "Error al actualizar la tasa de cambio",
     "history": "Historial de tasas",
-    "no_history": "Sin historial de tasas a\u00fan",
+    "no_history": "Sin historial de tasas aún",
     "col_date": "Fecha",
     "col_rate": "Tasa (CUP/USD)",
     "col_source": "Fuente",
     "col_status": "Estado",
     "active": "Actual"
   },
-
   "notifications": {
     "title": "Notificaciones",
-    "compose": "Componer notificaci\u00f3n",
+    "compose": "Componer notificación",
     "audience": "Audiencia",
     "audience_all": "Todos los usuarios",
     "audience_riders": "Pasajeros",
     "audience_drivers": "Conductores",
-    "audience_specific": "Usuario espec\u00edfico",
+    "audience_specific": "Usuario específico",
     "select_user": "Seleccionar usuario",
-    "search_user_placeholder": "Buscar por nombre o tel\u00e9fono...",
+    "search_user_placeholder": "Buscar por nombre o teléfono...",
     "user_selected": "Usuario seleccionado",
-    "label_title": "T\u00edtulo",
+    "label_title": "Título",
     "label_body": "Mensaje",
-    "title_placeholder": "T\u00edtulo de la notificaci\u00f3n",
+    "title_placeholder": "Título de la notificación",
     "body_placeholder": "Escribe el mensaje...",
-    "send": "Enviar notificaci\u00f3n",
+    "send": "Enviar notificación",
     "send_success": "Enviada: {{success}} exitosas, {{errors}} errores",
-    "send_error": "Error al enviar la notificaci\u00f3n",
+    "send_error": "Error al enviar la notificación",
     "history": "Historial de notificaciones",
     "no_notifications": "No hay notificaciones enviadas",
     "col_date": "Fecha",
-    "col_title": "T\u00edtulo",
+    "col_title": "Título",
     "col_audience": "Audiencia",
     "col_sent": "Enviados",
     "inbox_stats": "Estadísticas del Inbox",
@@ -956,7 +931,6 @@
     "col_read": "Leída",
     "inbox_no_data": "Sin datos de inbox aún"
   },
-
   "lost_found": {
     "title": "Objetos Perdidos",
     "filter_all": "Todos",
@@ -980,10 +954,9 @@
     "return_fee": "Tarifa de devolución",
     "return_location": "Lugar de devolución"
   },
-
   "blog": {
-    "title": "Gesti\u00f3n de Blog",
-    "new_post": "Nueva publicaci\u00f3n",
+    "title": "Gestión de Blog",
+    "new_post": "Nueva publicación",
     "edit": "Editar",
     "delete": "Eliminar",
     "publish": "Publicar",
@@ -992,13 +965,12 @@
     "draft": "Borrador",
     "slug": "Slug",
     "cover_image": "URL de imagen de portada",
-    "confirm_delete": "\u00bfEst\u00e1s seguro de que deseas eliminar esta publicaci\u00f3n?",
+    "confirm_delete": "¿Estás seguro de que deseas eliminar esta publicación?",
     "excerpt": "Extracto",
     "body": "Contenido",
     "save": "Guardar",
     "cancel": "Cancelar"
   },
-
   "businesses": {
     "title": "Cuentas Corporativas",
     "filter_all": "Todas",
@@ -1025,7 +997,6 @@
     "suspend_reason": "Motivo de la suspensión",
     "not_found": "Empresa no encontrada"
   },
-
   "disputes": {
     "title": "Disputas de viajes",
     "queue": "Cola de disputas",
@@ -1071,7 +1042,6 @@
     "resolved_success": "Disputa resuelta correctamente",
     "error_resolving": "Error al resolver la disputa"
   },
-
   "verification": {
     "verify_doc": "Verificar",
     "reject_doc": "Rechazar",
@@ -1084,7 +1054,6 @@
     "doc_status_rejected": "Rechazado",
     "doc_status_pending": "Pendiente de revisión"
   },
-
   "automation": {
     "title": "Automatización",
     "subtitle": "Configura qué tareas admin se ejecutan automáticamente",
@@ -1105,7 +1074,6 @@
     "saved": "Guardado",
     "saving": "Guardando..."
   },
-
   "dashboard_auto": {
     "recent_auto_actions": "Acciones automatizadas recientes",
     "no_auto_actions": "Sin acciones automatizadas aún",
@@ -1114,12 +1082,11 @@
     "auto_resolve_fraud": "Fraude auto-resuelto",
     "auto_close_incident": "Incidente auto-cerrado"
   },
-
   "reviews": {
-    "title": "Rese\u00f1as",
-    "stat_total": "Total de rese\u00f1as",
-    "stat_average": "Calificaci\u00f3n promedio",
-    "stat_today": "Rese\u00f1as hoy",
+    "title": "Reseñas",
+    "stat_total": "Total de reseñas",
+    "stat_average": "Calificación promedio",
+    "stat_today": "Reseñas hoy",
     "filter_all": "Todas",
     "filter_5": "5 estrellas",
     "filter_4": "4 estrellas",
@@ -1129,11 +1096,11 @@
     "date_from": "Desde",
     "date_to": "Hasta",
     "clear_dates": "Limpiar fechas",
-    "no_reviews": "No hay rese\u00f1as",
+    "no_reviews": "No hay reseñas",
     "col_date": "Fecha",
     "col_reviewer": "Autor",
     "col_reviewee": "Evaluado",
-    "col_rating": "Calificaci\u00f3n",
+    "col_rating": "Calificación",
     "col_comment": "Comentario",
     "col_tags": "Etiquetas",
     "col_status": "Estado",
@@ -1145,9 +1112,8 @@
     "feature": "Destacar",
     "unfeature": "Quitar destacado"
   },
-
   "segments": {
-    "title": "Segmentaci\u00f3n de Usuarios",
+    "title": "Segmentación de Usuarios",
     "new_users": "Nuevos",
     "power_users": "Power Users",
     "inactive": "Inactivos",
@@ -1158,18 +1124,17 @@
     "no_users": "No hay usuarios en este segmento",
     "col_name": "Nombre",
     "col_email": "Email",
-    "col_phone": "Tel\u00e9fono",
+    "col_phone": "Teléfono",
     "col_rides": "Viajes",
-    "col_last_ride": "\u00daltimo viaje",
+    "col_last_ride": "Último viaje",
     "col_city": "Ciudad"
   },
-
   "campaigns": {
-    "title": "Campa\u00f1as",
-    "new_campaign": "Nueva campa\u00f1a",
-    "no_campaigns": "No hay campa\u00f1as",
+    "title": "Campañas",
+    "new_campaign": "Nueva campaña",
+    "no_campaigns": "No hay campañas",
     "label_name": "Nombre",
-    "name_placeholder": "Nombre de la campa\u00f1a",
+    "name_placeholder": "Nombre de la campaña",
     "label_segment": "Segmento",
     "segment_new_users": "Nuevos usuarios",
     "segment_power_users": "Power Users",
@@ -1181,17 +1146,17 @@
     "channel_push": "Push",
     "channel_email": "Email",
     "channel_both": "Push + Email",
-    "label_msg_title": "T\u00edtulo del mensaje",
-    "msg_title_placeholder": "T\u00edtulo de la notificaci\u00f3n",
+    "label_msg_title": "Título del mensaje",
+    "msg_title_placeholder": "Título de la notificación",
     "label_msg_body": "Cuerpo del mensaje",
     "msg_body_placeholder": "Escribe el mensaje...",
-    "label_promo": "C\u00f3digo promocional (opcional)",
-    "no_promo": "Sin c\u00f3digo promocional",
+    "label_promo": "Código promocional (opcional)",
+    "no_promo": "Sin código promocional",
     "send_now": "Enviar ahora",
     "btn_send": "Enviar",
     "btn_schedule": "Programar",
-    "send_success": "Campa\u00f1a enviada exitosamente",
-    "send_error": "Error al enviar la campa\u00f1a",
+    "send_success": "Campaña enviada exitosamente",
+    "send_error": "Error al enviar la campaña",
     "col_name": "Nombre",
     "col_segment": "Segmento",
     "col_channel": "Canal",
@@ -1202,5 +1167,98 @@
     "status_scheduled": "Programada",
     "status_sent": "Enviada",
     "status_cancelled": "Cancelada"
+  },
+  "status_registry": {
+    "ride": {
+      "searching": "Buscando conductor",
+      "accepted": "Aceptado",
+      "driver_en_route": "En camino",
+      "arrived_at_pickup": "En origen",
+      "in_progress": "En curso",
+      "completed": "Completado",
+      "canceled": "Cancelado",
+      "disputed": "En disputa"
+    },
+    "driver": {
+      "pending_verification": "Verificacion pendiente",
+      "verified": "Verificado",
+      "rejected": "Rechazado",
+      "suspended": "Suspendido",
+      "online": "En linea",
+      "offline": "Desconectado"
+    },
+    "incident": {
+      "open": "Abierto",
+      "investigating": "En investigacion",
+      "in_review": "En revision",
+      "resolved": "Resuelto",
+      "dismissed": "Descartado",
+      "closed": "Cerrado"
+    },
+    "dispute": {
+      "open": "Abierta",
+      "under_review": "En revision",
+      "awaiting_response": "Esperando respuesta",
+      "resolved": "Resuelta",
+      "denied": "Denegada",
+      "rejected": "Rechazada",
+      "closed": "Cerrada"
+    },
+    "payment": {
+      "pending": "Pendiente",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "refunded": "Reembolsado"
+    },
+    "verification": {
+      "pending": "Pendiente",
+      "approved": "Aprobada",
+      "rejected": "Rechazada"
+    },
+    "lost_item": {
+      "reported": "Reportado",
+      "driver_notified": "Conductor notificado",
+      "found": "Encontrado",
+      "not_found": "No encontrado",
+      "return_arranged": "Entrega agendada",
+      "returned": "Devuelto",
+      "closed": "Cerrado"
+    },
+    "support": {
+      "open": "Abierto",
+      "in_progress": "En progreso",
+      "waiting_user": "Esperando usuario",
+      "resolved": "Resuelto",
+      "closed": "Cerrado"
+    },
+    "corporate": {
+      "pending": "Pendiente",
+      "approved": "Aprobada",
+      "suspended": "Suspendida",
+      "rejected": "Rechazada"
+    },
+    "campaign": {
+      "draft": "Borrador",
+      "scheduled": "Programada",
+      "sent": "Enviada",
+      "active": "Activa",
+      "paused": "Pausada",
+      "cancelled": "Cancelada",
+      "completed": "Finalizada",
+      "archived": "Archivada"
+    },
+    "quest": {
+      "draft": "Borrador",
+      "active": "Activa",
+      "paused": "Pausada",
+      "completed": "Finalizada",
+      "archived": "Archivada"
+    },
+    "referral": {
+      "pending": "Pendiente",
+      "rewarded": "Premiado",
+      "invalidated": "Invalidado"
+    },
+    "unknown": "Sin estado"
   }
 }

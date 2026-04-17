@@ -26,18 +26,20 @@
     "error_generic": "Error logging in. Please try again.",
     "status": "Status",
     "search_placeholder": "Search...",
-    "load_error": "Error loading data",
+    "load_error": "Could not load data",
     "field_required": "Field required",
     "must_be_future": "Must be a future date",
     "must_be_positive": "Must be greater than or equal to 0",
-    "select_user": "Must select a user"
+    "select_user": "Must select a user",
+    "search": "Search",
+    "clear_search": "Clear search",
+    "filters": "Filters",
+    "retry": "Retry"
   },
-
   "header": {
     "light_mode": "Light mode",
     "dark_mode": "Dark mode"
   },
-
   "filters": {
     "advanced_filters": "Advanced filters",
     "clear_all": "Clear filters",
@@ -52,9 +54,9 @@
     "status": "Status",
     "rating_min": "Min rating",
     "vehicle_type": "Vehicle type",
-    "all": "All"
+    "all": "All",
+    "status_filters_aria": "Status filters"
   },
-
   "sidebar": {
     "dashboard": "Dashboard",
     "drivers": "Drivers",
@@ -87,7 +89,6 @@
     "close_menu": "Close menu",
     "open_menu": "Open menu"
   },
-
   "referrals": {
     "title": "Referral Management",
     "total": "Total referrals",
@@ -115,7 +116,6 @@
     "no_referrals": "No referrals found",
     "conversion_rate": "Conversion rate"
   },
-
   "dashboard": {
     "title": "Dashboard",
     "active_rides": "Active rides",
@@ -138,7 +138,6 @@
     "no_recent_rides": "No recent rides",
     "no_pending_drivers": "No pending verifications"
   },
-
   "drivers": {
     "title": "Driver management",
     "pending": "Pending",
@@ -252,7 +251,6 @@
     "doc_uploaded_at": "Uploaded:",
     "actions_section": "Actions"
   },
-
   "rides": {
     "title": "Ride management",
     "active": "Active",
@@ -314,7 +312,6 @@
     "label_completed_at": "Completed",
     "label_canceled_at": "Canceled"
   },
-
   "users": {
     "title": "User management",
     "top_review_tags": "Top review tags",
@@ -373,7 +370,6 @@
     "col_type": "Type",
     "col_note": "Note"
   },
-
   "wallet_admin": {
     "title": "Wallet / Finance",
     "total_tricicoin": "Total TriciCoin in circulation",
@@ -424,7 +420,6 @@
     "col_usd_amount": "USD Amount",
     "col_reference": "Reference"
   },
-
   "support": {
     "title": "Support tickets",
     "status_open": "Open",
@@ -450,7 +445,6 @@
     "user_label": "User",
     "filter_all": "All"
   },
-
   "audit": {
     "title": "Audit",
     "filter_from": "From",
@@ -478,7 +472,6 @@
     "target_recharge": "Wallet recharge",
     "target_incident": "Incident"
   },
-
   "reports": {
     "title": "Reports",
     "section_operations": "Operations",
@@ -529,7 +522,6 @@
     "predicted": "Predicted",
     "export_csv": "Export CSV"
   },
-
   "funnel": {
     "title": "Conversion Analysis",
     "sessions": "Sessions",
@@ -541,7 +533,6 @@
     "last_30_days": "Last 30 days",
     "step": "Step"
   },
-
   "login": {
     "admin_panel": "Admin Panel",
     "email_label": "Email",
@@ -556,7 +547,6 @@
     "sign_in_with_google": "Sign in with Google",
     "or_divider": "or"
   },
-
   "forgot_password": {
     "title": "Reset your password",
     "description": "Enter your email and we'll send you a reset link.",
@@ -569,7 +559,6 @@
     "back_to_login": "Back to login",
     "error_generic": "Error sending reset link. Please try again."
   },
-
   "reset_password": {
     "title": "Set new password",
     "description": "Enter your new password below.",
@@ -586,7 +575,6 @@
     "error_no_session": "Invalid or expired reset link. Request a new one.",
     "go_to_login": "Go to login"
   },
-
   "promotions": {
     "title": "Promotions",
     "create_promotion": "Create promotion",
@@ -621,7 +609,6 @@
     "error_creating": "Error creating promotion",
     "error_deleting": "Error deleting"
   },
-
   "service_types": {
     "title": "Service types",
     "col_slug": "Slug",
@@ -634,7 +621,6 @@
     "col_active": "Active",
     "no_service_types": "No service types"
   },
-
   "pricing": {
     "title": "Pricing rules",
     "filter_all": "All",
@@ -679,7 +665,6 @@
     "error_creating": "Error creating rule",
     "error_deleting": "Error deleting rule"
   },
-
   "zones": {
     "title": "Operational zones",
     "map_note": "Polygon editing available in a future version with map integration.",
@@ -692,7 +677,6 @@
     "col_active": "Active",
     "no_zones": "No zones configured"
   },
-
   "surge_zones": {
     "title": "Dynamic pricing zones",
     "create_rule": "+ Create rule",
@@ -714,7 +698,6 @@
     "creating": "Creating...",
     "confirm_delete": "Delete this surge rule?"
   },
-
   "feature_flags": {
     "title": "Feature Flags",
     "add_flag": "Add flag",
@@ -725,7 +708,6 @@
     "no_flags": "No feature flags configured",
     "no_description": "No description"
   },
-
   "settings": {
     "title": "Settings",
     "pricing_rules": "Pricing rules",
@@ -761,7 +743,6 @@
     "cities": "Cities",
     "cities_desc": "Manage cities and operational areas"
   },
-
   "cities": {
     "title": "Cities",
     "col_name": "Name",
@@ -776,7 +757,6 @@
     "error_saving": "Error saving city",
     "all_cities": "All cities"
   },
-
   "surge_dashboard": {
     "title": "Live Surge Dashboard",
     "current_multiplier": "Current multiplier",
@@ -804,7 +784,6 @@
     "weather_surge_inactive": "No weather surge",
     "weather_temp": "Temperature"
   },
-
   "fraud": {
     "title": "Fraud Alerts",
     "unresolved_count": "{{count}} unresolved alerts",
@@ -831,7 +810,6 @@
     "type_suspicious_cancellations": "Suspicious cancellations",
     "type_velocity_anomaly": "Velocity anomaly"
   },
-
   "incidents": {
     "title": "Incidents",
     "filter_all": "All",
@@ -858,7 +836,6 @@
     "previous": "Previous",
     "next": "Next"
   },
-
   "platform_config": {
     "title": "Platform Configuration",
     "subtitle": "Global system parameters",
@@ -898,7 +875,6 @@
     "cash_enabled_help": "Enable/disable cash payments",
     "wallet_enabled_help": "Enable/disable wallet payments"
   },
-
   "exchange_rate": {
     "title": "Exchange Rate",
     "subtitle": "USD/CUP exchange rate from ElToque",
@@ -921,7 +897,6 @@
     "col_status": "Status",
     "active": "Current"
   },
-
   "notifications": {
     "title": "Notifications",
     "compose": "Compose notification",
@@ -956,7 +931,6 @@
     "col_read": "Read",
     "inbox_no_data": "No inbox data yet"
   },
-
   "lost_found": {
     "title": "Lost & Found",
     "filter_all": "All",
@@ -980,7 +954,6 @@
     "return_fee": "Return fee",
     "return_location": "Return location"
   },
-
   "blog": {
     "title": "Blog Management",
     "new_post": "New Post",
@@ -998,7 +971,6 @@
     "save": "Save",
     "cancel": "Cancel"
   },
-
   "businesses": {
     "title": "Corporate Accounts",
     "filter_all": "All",
@@ -1025,7 +997,6 @@
     "suspend_reason": "Suspension reason",
     "not_found": "Business not found"
   },
-
   "disputes": {
     "title": "Ride disputes",
     "queue": "Dispute queue",
@@ -1071,7 +1042,6 @@
     "resolved_success": "Dispute resolved successfully",
     "error_resolving": "Error resolving dispute"
   },
-
   "verification": {
     "verify_doc": "Verify",
     "reject_doc": "Reject",
@@ -1084,7 +1054,6 @@
     "doc_status_rejected": "Rejected",
     "doc_status_pending": "Pending review"
   },
-
   "automation": {
     "title": "Automation Rules",
     "subtitle": "Configure which admin tasks run automatically",
@@ -1105,7 +1074,6 @@
     "saved": "Saved",
     "saving": "Saving..."
   },
-
   "dashboard_auto": {
     "recent_auto_actions": "Recent Automated Actions",
     "no_auto_actions": "No automated actions yet",
@@ -1114,7 +1082,6 @@
     "auto_resolve_fraud": "Fraud alert auto-resolved",
     "auto_close_incident": "Incident auto-closed"
   },
-
   "reviews": {
     "title": "Reviews",
     "stat_total": "Total reviews",
@@ -1145,7 +1112,6 @@
     "feature": "Feature",
     "unfeature": "Unfeature"
   },
-
   "segments": {
     "title": "User Segmentation",
     "new_users": "New Users",
@@ -1163,7 +1129,6 @@
     "col_last_ride": "Last ride",
     "col_city": "City"
   },
-
   "campaigns": {
     "title": "Campaigns",
     "new_campaign": "New campaign",
@@ -1202,5 +1167,98 @@
     "status_scheduled": "Scheduled",
     "status_sent": "Sent",
     "status_cancelled": "Cancelled"
+  },
+  "status_registry": {
+    "ride": {
+      "searching": "Searching driver",
+      "accepted": "Accepted",
+      "driver_en_route": "On the way",
+      "arrived_at_pickup": "At pickup",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "canceled": "Canceled",
+      "disputed": "Disputed"
+    },
+    "driver": {
+      "pending_verification": "Verification pending",
+      "verified": "Verified",
+      "rejected": "Rejected",
+      "suspended": "Suspended",
+      "online": "Online",
+      "offline": "Offline"
+    },
+    "incident": {
+      "open": "Open",
+      "investigating": "Investigating",
+      "in_review": "In review",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed",
+      "closed": "Closed"
+    },
+    "dispute": {
+      "open": "Open",
+      "under_review": "Under review",
+      "awaiting_response": "Awaiting response",
+      "resolved": "Resolved",
+      "denied": "Denied",
+      "rejected": "Rejected",
+      "closed": "Closed"
+    },
+    "payment": {
+      "pending": "Pending",
+      "completed": "Completed",
+      "failed": "Failed",
+      "refunded": "Refunded"
+    },
+    "verification": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "lost_item": {
+      "reported": "Reported",
+      "driver_notified": "Driver notified",
+      "found": "Found",
+      "not_found": "Not found",
+      "return_arranged": "Return arranged",
+      "returned": "Returned",
+      "closed": "Closed"
+    },
+    "support": {
+      "open": "Open",
+      "in_progress": "In progress",
+      "waiting_user": "Waiting for user",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "corporate": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "suspended": "Suspended",
+      "rejected": "Rejected"
+    },
+    "campaign": {
+      "draft": "Draft",
+      "scheduled": "Scheduled",
+      "sent": "Sent",
+      "active": "Active",
+      "paused": "Paused",
+      "cancelled": "Cancelled",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "quest": {
+      "draft": "Draft",
+      "active": "Active",
+      "paused": "Paused",
+      "completed": "Completed",
+      "archived": "Archived"
+    },
+    "referral": {
+      "pending": "Pending",
+      "rewarded": "Rewarded",
+      "invalidated": "Invalidated"
+    },
+    "unknown": "No status"
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@tricigo/i18n';
 import { getStatusMeta, type StatusDomain, type StatusTone } from '@/lib/status-registry';
 
 type Props = {
@@ -20,7 +21,9 @@ const TONE_CLASS: Record<StatusTone, string> = {
 };
 
 export function StatusBadge({ domain, status, labelOnly, size = 'sm' }: Props) {
+  const { t } = useTranslation('admin');
   const meta = getStatusMeta(domain, status);
+  const label = t(meta.i18nKey, { defaultValue: meta.label });
   const Icon = meta.icon;
   const sizeCls =
     size === 'md'
@@ -33,7 +36,7 @@ export function StatusBadge({ domain, status, labelOnly, size = 'sm' }: Props) {
       data-status={status ?? 'unknown'}
     >
       {!labelOnly && Icon && <Icon className={size === 'md' ? 'h-3.5 w-3.5' : 'h-3 w-3'} strokeWidth={2} />}
-      <span className="whitespace-nowrap">{meta.label}</span>
+      <span className="whitespace-nowrap">{label}</span>
     </span>
   );
 }

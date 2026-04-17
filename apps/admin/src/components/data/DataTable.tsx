@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUp, ArrowDown, AlertCircle, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
+import { useTranslation } from '@tricigo/i18n';
 import { TableSkeleton } from './TableSkeleton';
 import { DataEmptyState } from './DataEmptyState';
 import { DataTablePagination, type PaginationState } from './DataTablePagination';
@@ -110,6 +111,7 @@ export function DataTable<T>({
   density = 'comfortable',
   className = '',
 }: Props<T>) {
+  const { t } = useTranslation('admin');
   const isInteractive = Boolean(rowHref || onRowClick);
   const padY = density === 'dense' ? 'py-2' : 'py-3.5';
   const primaryCol = columns.find((c) => c.primary) ?? columns[0];
@@ -160,7 +162,9 @@ export function DataTable<T>({
         <div className="flex items-start gap-3 border-b border-line bg-red-500/5 px-5 py-3">
           <AlertCircle className="mt-0.5 h-4 w-4 text-red-500" />
           <div className="flex-1">
-            <p className="text-[13px] font-medium text-red-600 dark:text-red-400">No pudimos cargar los datos</p>
+            <p className="text-[13px] font-medium text-red-600 dark:text-red-400">
+              {t('common.load_error', { defaultValue: 'No pudimos cargar los datos' })}
+            </p>
             <p className="text-[11.5px] text-ink-muted">{error}</p>
           </div>
           {onRetry && (
@@ -169,7 +173,7 @@ export function DataTable<T>({
               className="inline-flex items-center gap-1 rounded-full border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
             >
               <RefreshCw className="h-3 w-3" />
-              Reintentar
+              {t('common.retry', { defaultValue: 'Reintentar' })}
             </button>
           )}
         </div>

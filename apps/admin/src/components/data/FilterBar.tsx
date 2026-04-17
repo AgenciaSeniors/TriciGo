@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Filter, Search, X } from 'lucide-react';
+import { useTranslation } from '@tricigo/i18n';
 import { StatusBadge } from './StatusBadge';
 import type { StatusDomain, StatusTone } from '@/lib/status-registry';
 
@@ -63,8 +64,12 @@ export function FilterBar<TId extends string = string>({
   sticky,
   className = '',
 }: Props<TId>) {
+  const { t } = useTranslation('admin');
   const [expanded, setExpanded] = useState(false);
   const hasChildren = Boolean(children);
+
+  const searchPlaceholder = search?.placeholder ?? t('common.search_placeholder', { defaultValue: 'Buscar…' });
+  const searchAriaLabel = search?.placeholder ?? t('common.search', { defaultValue: 'Buscar' });
 
   return (
     <div
@@ -79,7 +84,7 @@ export function FilterBar<TId extends string = string>({
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:flex-nowrap">
         {tabs && tabs.length > 0 && (
           <nav
-            aria-label="Filtros de estado"
+            aria-label={t('filters.status_filters_aria', { defaultValue: 'Filtros de estado' })}
             className="-mx-1 flex flex-1 items-center gap-1 overflow-x-auto px-1"
           >
             {tabs.map((tab) => {
@@ -124,15 +129,15 @@ export function FilterBar<TId extends string = string>({
               type="search"
               value={search.value}
               onChange={(e) => search.onChange(e.target.value)}
-              placeholder={search.placeholder ?? 'Buscar…'}
-              aria-label={search.placeholder ?? 'Buscar'}
+              placeholder={searchPlaceholder}
+              aria-label={searchAriaLabel}
               className="h-8 w-full rounded-full border border-line bg-surface pl-8 pr-3 text-[12px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
             />
             {search.value && (
               <button
                 type="button"
                 onClick={() => search.onChange('')}
-                aria-label="Limpiar búsqueda"
+                aria-label={t('common.clear_search', { defaultValue: 'Limpiar búsqueda' })}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-ink-subtle hover:text-ink"
               >
                 <X className="h-3 w-3" />
@@ -154,7 +159,7 @@ export function FilterBar<TId extends string = string>({
             }`}
           >
             <Filter className="h-3.5 w-3.5" strokeWidth={2} />
-            <span>Filtros</span>
+            <span>{t('common.filters', { defaultValue: 'Filtros' })}</span>
             {activeFilterCount > 0 && (
               <span className="rounded-full bg-primary-500 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white">
                 {activeFilterCount}
