@@ -180,7 +180,8 @@
     @apply h-px w-full bg-line;
   }
 
-  /* Trinational aurora — painterly gradient used behind hero regions */
+  /* Brand aurora — painterly gradient used behind hero regions.
+     Orange primary + deep cuba blue as accents, no distraction. */
   .admin-aurora {
     position: relative;
     isolation: isolate;
@@ -190,10 +191,9 @@
     position: absolute;
     inset: -1px;
     background:
-      radial-gradient(50% 40% at 12% -5%, rgb(255 77 0 / 0.22), transparent 62%),
-      radial-gradient(42% 36% at 92% 8%, rgb(0 156 59 / 0.20), transparent 60%),
-      radial-gradient(55% 45% at 52% 108%, rgb(117 170 219 / 0.22), transparent 58%),
-      radial-gradient(32% 26% at 82% 96%, rgb(213 43 30 / 0.14), transparent 60%);
+      radial-gradient(56% 42% at 12% -5%, rgb(255 77 0 / 0.22), transparent 62%),
+      radial-gradient(48% 38% at 92% 8%, rgb(0 42 143 / 0.18), transparent 60%),
+      radial-gradient(50% 42% at 52% 108%, rgb(255 77 0 / 0.12), transparent 60%);
     opacity: var(--aurora-opacity);
     z-index: -1;
     pointer-events: none;

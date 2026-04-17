@@ -8,11 +8,11 @@ import { useAdminUser } from '@/lib/useAdminUser';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useSidebar } from './SidebarContext';
 import { useTheme } from './ThemeProvider';
-import { TrinationalSwitch } from './TrinationalSwitch';
+import { ProvinceSwitch } from './ProvinceSwitch';
 
 /**
- * Voice: trinational, movement-first. Prefer verbs that evoke motion
- * and specificity over sterile admin jargon ("Pulso", "Movimiento").
+ * Voice: Cuban, movement-first. Prefer verbs that evoke motion and
+ * specificity over sterile admin jargon ("Pulso", "Movimiento").
  */
 const BREADCRUMB_LABELS: Record<string, string> = {
   '': 'Pulso general',
@@ -150,7 +150,7 @@ export function Header() {
 
       {/* Actions */}
       <div className="ml-auto flex items-center gap-1.5 md:gap-2">
-        <TrinationalSwitch />
+        <ProvinceSwitch />
 
         <button
           onClick={toggleTheme}

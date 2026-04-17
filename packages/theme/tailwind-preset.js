@@ -59,11 +59,13 @@ module.exports = {
           DEFAULT: '#3B82F6',
           dark: '#1E40AF',
         },
-        // Trinational accent (Brasil / Paraguay / Argentina)
-        flag: {
-          br: '#009C3B',
-          py: '#D52B1E',
-          ar: '#75AADB',
+        // Cuba accent tokens — used sparingly for contextual accents
+        // (flag colors, decorative pulses on the Cuba map). Primary brand
+        // remains orange; these are support accents, not replacements.
+        cuba: {
+          blue: '#002A8F',
+          red: '#CF142B',
+          star: '#FFFFFF',
         },
         // Semantic surface tokens (driven by CSS vars — see globals.css)
         surface: {

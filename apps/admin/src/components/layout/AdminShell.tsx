@@ -31,11 +31,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Allow design-preview routes (dev only) to render without a session.
+  // Mirrors the guard in middleware.ts.
+  const bypassAuth =
+    typeof window !== 'undefined' &&
+    process.env.NODE_ENV === 'development' &&
+    new URLSearchParams(window.location.search).has('__preview');
+
   useEffect(() => {
+    if (bypassAuth) return;
     if (!authLoading && !user && !isAuthPage) {
       router.replace('/login');
     }
-  }, [authLoading, user, isAuthPage, router]);
+  }, [authLoading, user, isAuthPage, router, bypassAuth]);
 
   if (!ready) return null;
 
@@ -47,7 +55,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (authLoading || !user) {
+  if (!bypassAuth && (authLoading || !user)) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-sunken">
         <div className="relative h-10 w-10">

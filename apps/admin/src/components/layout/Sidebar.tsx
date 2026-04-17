@@ -176,12 +176,10 @@ export function Sidebar() {
                 <span className="truncate font-display text-[15px] font-semibold tracking-tight text-ink">
                   TriciGo<span className="text-primary-500">.</span>
                 </span>
-                <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.18em] text-ink-subtle">
-                  <span className="inline-block h-1 w-1 rounded-full bg-flag-br" />
-                  <span className="inline-block h-1 w-1 rounded-full bg-flag-py" />
-                  <span className="inline-block h-1 w-1 rounded-full bg-flag-ar" />
-                  <span className="ml-1">
-                    {t('sidebar.admin_panel', { defaultValue: 'Tríplice Fronteira' })}
+                <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-ink-subtle">
+                  <span className="inline-block h-1 w-1 rounded-full bg-primary-500" aria-hidden="true" />
+                  <span>
+                    {t('sidebar.admin_panel', { defaultValue: 'Cuba · Panel' })}
                   </span>
                 </span>
               </span>
@@ -263,7 +261,7 @@ export function Sidebar() {
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-editorial text-[13px] italic text-ink">
-                Movimiento sin fronteras
+                Cuba, en movimiento
               </span>
               <span className="text-[10px] text-ink-subtle">TriciGo · v0.1</span>
             </div>
