@@ -172,6 +172,23 @@ export interface Ride {
 }
 
 /**
+ * Aggregate stats of the offers a ride has generated, scoped to the
+ * ride's customer via `get_ride_offer_stats` RPC (migration 00127).
+ * Used by the rider SearchingView to surface progress.
+ */
+export interface RideOfferStats {
+  pending_count: number;
+  accepted_count: number;
+  expired_count: number;
+  /** ISO timestamp — when the next pending offer expires (null if none). */
+  earliest_expires_at: string | null;
+  /** ISO timestamp — when the last dispatch round started (null if pre-00126). */
+  last_dispatched_at: string | null;
+  /** 0 = not yet dispatched, 1..3 = active round. */
+  dispatch_round: number;
+}
+
+/**
  * Demand hotspot for the driver map. Produced by the
  * `get_demand_hotspots` RPC (migration 00125).
  */

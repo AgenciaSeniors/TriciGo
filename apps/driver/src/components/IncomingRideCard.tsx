@@ -155,18 +155,30 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   const countdownProgress = useRef(new Animated.Value(1)).current;
   const [autoAcceptSecondsLeft, setAutoAcceptSecondsLeft] = useState(autoAcceptDuration);
 
-  // ── 30-second countdown progress bar ──
+  // ── Offer-window countdown progress bar ──
+  // Bound to the server-issued `offer_expires_at` (ride_offers.expires_at)
+  // so the bar reflects the REAL remaining time, not a local 30s timer
+  // that skews with network latency. Migration 00120 introduced this;
+  // migration 00126 added re-dispatch, which re-seeds expires_at.
+  const OFFER_WINDOW_MS = 30_000;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    progressAnim.setValue(0);
+    const expiresAt = ride.offer_expires_at
+      ? new Date(ride.offer_expires_at).getTime()
+      : null;
+    const msLeft = expiresAt ? Math.max(0, expiresAt - Date.now()) : OFFER_WINDOW_MS;
+    // Progress goes 0..1 (0 = just received, 1 = expired)
+    const initialProgress = Math.max(0, Math.min(1, 1 - msLeft / OFFER_WINDOW_MS));
+
+    progressAnim.setValue(initialProgress);
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 30000, // 30 second countdown
-      easing: Easing.inOut(Easing.ease),
+      duration: msLeft,
+      easing: Easing.linear,
       useNativeDriver: false, // width animation can't use native driver
     }).start();
-  }, [ride.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ride.id, ride.offer_expires_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReject = useCallback(() => {
     triggerHaptic('light');
@@ -265,13 +277,19 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
 
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
-      {/* ── Animated countdown progress bar ── */}
+      {/* ── Animated countdown progress bar (green → yellow → red) ── */}
       <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 2, marginBottom: 16, overflow: 'hidden' }}>
         <Animated.View style={{
           height: 4,
-          backgroundColor: colors.brand.orange,
           borderRadius: 2,
           width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['100%', '0%'] }),
+          // 0..0.66 of elapsed (>=10s left of 30s) = green
+          // 0.66..0.83 (5-10s left) = yellow
+          // 0.83..1 (<5s) = red
+          backgroundColor: progressAnim.interpolate({
+            inputRange: [0, 0.66, 0.83, 1],
+            outputRange: ['#22c55e', '#22c55e', '#eab308', '#ef4444'],
+          }),
         }} />
       </View>
 

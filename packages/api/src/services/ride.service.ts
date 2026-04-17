@@ -17,6 +17,7 @@ import type {
   SurgeZone,
   SurgeType,
   DemandHotspot,
+  RideOfferStats,
   TripInsuranceConfig,
   RidePreferences,
   CancellationFeePreview,
@@ -1360,6 +1361,29 @@ export const rideService = {
     });
     if (error) throw error;
     return (data as number) ?? 1.0;
+  },
+
+  /**
+   * Fetch aggregate offer stats for a ride the caller owns (rider side).
+   * Returns driver counts and dispatch-round info, NOT individual driver
+   * identities. See migration 00127.
+   */
+  async getRideOfferStats(rideId: string): Promise<RideOfferStats | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_ride_offer_stats', {
+      p_ride_id: rideId,
+    });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    return {
+      pending_count: row.pending_count ?? 0,
+      accepted_count: row.accepted_count ?? 0,
+      expired_count: row.expired_count ?? 0,
+      earliest_expires_at: row.earliest_expires_at ?? null,
+      last_dispatched_at: row.last_dispatched_at ?? null,
+      dispatch_round: row.dispatch_round ?? 0,
+    };
   },
 
   /**

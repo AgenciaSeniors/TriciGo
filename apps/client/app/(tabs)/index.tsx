@@ -54,6 +54,7 @@ import { NotificationPermissionSheet } from '@/components/NotificationPermission
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
 import { useSearchingDrivers } from '@/hooks/useSearchingDrivers';
+import { useRideOfferStats } from '@/hooks/useRideOfferStats';
 import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
 import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
@@ -3352,6 +3353,43 @@ function SearchingView() {
     isAcceptAnimating,
   } = useSearchingDrivers(activeRide?.id ?? null);
 
+  // ── Ride-offer stats (pending count + countdown + dispatch round) ──
+  // Migration 00127 via useRideOfferStats. Polls every 3s.
+  const offerStats = useRideOfferStats({
+    rideId: activeRide?.id ?? null,
+    enabled: activeRide?.status === 'searching',
+  });
+
+  // Live countdown based on earliest_expires_at. Ticks every 500ms.
+  const [offerSecondsLeft, setOfferSecondsLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!offerStats?.earliest_expires_at) {
+      setOfferSecondsLeft(null);
+      return;
+    }
+    const expiresMs = new Date(offerStats.earliest_expires_at).getTime();
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expiresMs - Date.now()) / 1000));
+      setOfferSecondsLeft(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [offerStats?.earliest_expires_at]);
+
+  // Flash "Ampliando búsqueda…" when dispatch_round advances
+  const prevRoundRef = useRef<number | null>(null);
+  const [showExpandingMsg, setShowExpandingMsg] = useState(false);
+  useEffect(() => {
+    const round = offerStats?.dispatch_round ?? null;
+    if (round !== null && prevRoundRef.current !== null && round > prevRoundRef.current) {
+      setShowExpandingMsg(true);
+      const id = setTimeout(() => setShowExpandingMsg(false), 2500);
+      return () => clearTimeout(id);
+    }
+    prevRoundRef.current = round;
+  }, [offerStats?.dispatch_round]);
+
   // UBER-2.1: 5-phase progressive search messages with fade transitions
   const [searchPhase, setSearchPhase] = useState(0);
   const searchFadeAnim = useRef(new Animated.Value(1)).current;
@@ -3411,7 +3449,34 @@ function SearchingView() {
     t('home.few_drivers'),
   ];
 
-  const searchMessage = SEARCH_MESSAGES[searchPhase] ?? SEARCH_MESSAGES[0];
+  // Prefer live server-side state over the legacy time-based phases.
+  const fallbackMessage = SEARCH_MESSAGES[searchPhase] ?? SEARCH_MESSAGES[0];
+  const searchMessage = (() => {
+    if (showExpandingMsg) {
+      return t('home.expanding_moment', { defaultValue: 'Ampliando búsqueda…' });
+    }
+    const pending = offerStats?.pending_count ?? 0;
+    if (pending > 0) {
+      if (offerSecondsLeft !== null && offerSecondsLeft > 0) {
+        return t('home.drivers_evaluating_countdown', {
+          count: pending,
+          seconds: offerSecondsLeft,
+          defaultValue: `${pending} conductor${pending === 1 ? '' : 'es'} evaluando · ${offerSecondsLeft}s`,
+        });
+      }
+      return t('home.drivers_evaluating', {
+        count: pending,
+        defaultValue: `${pending} conductor${pending === 1 ? '' : 'es'} evaluando tu viaje`,
+      });
+    }
+    // No pending offers but still searching — either pre-dispatch, mid-retry, or last round
+    if ((offerStats?.dispatch_round ?? 0) >= 3) {
+      return t('home.no_drivers_final', {
+        defaultValue: 'Sin conductores disponibles…',
+      });
+    }
+    return fallbackMessage;
+  })();
 
   const searchSteps = useMemo(() => [
     { key: 'searching', label: t('ride.searching_driver') },
@@ -3495,17 +3560,30 @@ function SearchingView() {
             </Text>
           </Animated.View>
 
-          {/* UBER-2.1: Thin progress bar showing search timeout */}
+          {/* Thin progress bar — when a pending offer exists, show the
+               30s offer window draining; otherwise keep the legacy
+               120s stale-ride progress as a fallback. */}
           <View className="w-full px-8 mb-6">
             <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
-              <Animated.View
-                style={{
-                  height: '100%',
-                  backgroundColor: colors.brand.orange,
-                  borderRadius: 2,
-                  width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-                }}
-              />
+              {offerSecondsLeft !== null && offerSecondsLeft > 0 ? (
+                <View
+                  style={{
+                    height: '100%',
+                    backgroundColor: colors.brand.orange,
+                    borderRadius: 2,
+                    width: `${Math.max(0, Math.min(100, (offerSecondsLeft / 30) * 100))}%`,
+                  }}
+                />
+              ) : (
+                <Animated.View
+                  style={{
+                    height: '100%',
+                    backgroundColor: colors.brand.orange,
+                    borderRadius: 2,
+                    width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                  }}
+                />
+              )}
             </View>
           </View>
 

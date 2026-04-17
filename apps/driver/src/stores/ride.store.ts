@@ -46,11 +46,23 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
       incomingRequests: s.incomingRequests.filter((r) => r.id !== rideId),
     })),
 
-  /** Remove requests older than 30 seconds */
+  /**
+   * Remove expired requests.
+   *
+   * Prefers the server-issued `offer_expires_at` (ride_offers.expires_at)
+   * when present — this is the authoritative expiry for the offer window.
+   * Falls back to a 30s TTL on `_receivedAt` for rides created before
+   * the ride_offers migration or when the field is missing.
+   */
   removeStaleRequests: () =>
     set((s) => {
       const now = Date.now();
-      const fresh = s.incomingRequests.filter((r) => now - r._receivedAt < 30_000);
+      const fresh = s.incomingRequests.filter((r) => {
+        if (r.offer_expires_at) {
+          return new Date(r.offer_expires_at).getTime() > now;
+        }
+        return now - r._receivedAt < 30_000;
+      });
       if (fresh.length === s.incomingRequests.length) return s;
       return { incomingRequests: fresh };
     }),
