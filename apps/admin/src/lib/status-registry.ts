@@ -21,7 +21,7 @@ export type StatusMeta = {
   icon?: LucideIcon;
 };
 
-type Domain = 'ride' | 'driver' | 'incident' | 'dispute' | 'payment' | 'verification' | 'lost_item';
+type Domain = 'ride' | 'driver' | 'incident' | 'dispute' | 'payment' | 'verification' | 'lost_item' | 'support';
 
 /**
  * Central registry for status metadata across the admin app.
@@ -84,6 +84,13 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     not_found: { label: 'No encontrado', tone: 'danger', icon: XCircle },
     return_arranged: { label: 'Entrega agendada', tone: 'info', icon: Clock },
     returned: { label: 'Devuelto', tone: 'success', icon: CheckCircle2 },
+    closed: { label: 'Cerrado', tone: 'default', icon: XCircle },
+  },
+  support: {
+    open: { label: 'Abierto', tone: 'info', icon: Clock },
+    in_progress: { label: 'En progreso', tone: 'warning', icon: Clock },
+    waiting_user: { label: 'Esperando usuario', tone: 'warning', icon: Clock },
+    resolved: { label: 'Resuelto', tone: 'success', icon: CheckCircle2 },
     closed: { label: 'Cerrado', tone: 'default', icon: XCircle },
   },
 };
