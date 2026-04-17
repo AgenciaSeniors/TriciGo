@@ -21,7 +21,7 @@ export type StatusMeta = {
   icon?: LucideIcon;
 };
 
-type Domain = 'ride' | 'driver' | 'incident' | 'dispute' | 'payment' | 'verification';
+type Domain = 'ride' | 'driver' | 'incident' | 'dispute' | 'payment' | 'verification' | 'lost_item';
 
 /**
  * Central registry for status metadata across the admin app.
@@ -50,15 +50,21 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     offline: { label: 'Desconectado', tone: 'default', icon: Radio },
   },
   incident: {
-    open: { label: 'Abierto', tone: 'warning', icon: AlertTriangle },
+    open: { label: 'Abierto', tone: 'danger', icon: AlertTriangle },
+    investigating: { label: 'En investigación', tone: 'warning', icon: Clock },
     in_review: { label: 'En revisión', tone: 'info', icon: Clock },
     resolved: { label: 'Resuelto', tone: 'success', icon: CheckCircle2 },
+    dismissed: { label: 'Descartado', tone: 'default', icon: XCircle },
     closed: { label: 'Cerrado', tone: 'default', icon: XCircle },
   },
   dispute: {
-    open: { label: 'Abierta', tone: 'warning', icon: Scale },
+    open: { label: 'Abierta', tone: 'info', icon: Scale },
+    under_review: { label: 'En revisión', tone: 'warning', icon: Clock },
+    awaiting_response: { label: 'Esperando respuesta', tone: 'warning', icon: Clock },
     resolved: { label: 'Resuelta', tone: 'success', icon: CheckCircle2 },
+    denied: { label: 'Denegada', tone: 'danger', icon: XCircle },
     rejected: { label: 'Rechazada', tone: 'danger', icon: XCircle },
+    closed: { label: 'Cerrada', tone: 'default', icon: XCircle },
   },
   payment: {
     pending: { label: 'Pendiente', tone: 'warning', icon: Clock },
@@ -70,6 +76,15 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     pending: { label: 'Pendiente', tone: 'warning', icon: Clock },
     approved: { label: 'Aprobada', tone: 'success', icon: ShieldCheck },
     rejected: { label: 'Rechazada', tone: 'danger', icon: ShieldX },
+  },
+  lost_item: {
+    reported: { label: 'Reportado', tone: 'info', icon: AlertTriangle },
+    driver_notified: { label: 'Conductor notificado', tone: 'warning', icon: Clock },
+    found: { label: 'Encontrado', tone: 'success', icon: CheckCircle2 },
+    not_found: { label: 'No encontrado', tone: 'danger', icon: XCircle },
+    return_arranged: { label: 'Entrega agendada', tone: 'info', icon: Clock },
+    returned: { label: 'Devuelto', tone: 'success', icon: CheckCircle2 },
+    closed: { label: 'Cerrado', tone: 'default', icon: XCircle },
   },
 };
 

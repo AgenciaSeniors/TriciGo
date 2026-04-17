@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Compass, Gauge, Target } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase-server';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
-import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
+import { DataTable, type DataColumn } from '@/components/data/DataTable';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { SectionCard } from '@/components/dashboard/SectionCard';
 
 type AcceptRateRow = {
-  profit_level: string;
+  profit_level: string | null;
   total: number;
   accepted: number;
   rejected: number;
@@ -34,16 +35,10 @@ const DAYS_OPTIONS = [
   { label: '30d', value: 30 },
 ];
 
-function rateColor(rate: number, greenThreshold: number, amberThreshold: number): string {
-  if (rate >= greenThreshold) return 'text-green-600';
-  if (rate >= amberThreshold) return 'text-amber-600';
-  return 'text-red-600';
-}
-
-function rateBg(rate: number, greenThreshold: number, amberThreshold: number): string {
-  if (rate >= greenThreshold) return 'bg-green-50 border-green-200';
-  if (rate >= amberThreshold) return 'bg-amber-50 border-amber-200';
-  return 'bg-red-50 border-red-200';
+function rateTone(rate: number, green: number, amber: number): 'success' | 'warning' | 'danger' {
+  if (rate >= green) return 'success';
+  if (rate >= amber) return 'warning';
+  return 'danger';
 }
 
 export default function ValidationPage() {
@@ -55,62 +50,154 @@ export default function ValidationPage() {
   const [navRate, setNavRate] = useState<NavRateRow | null>(null);
   const [overrides, setOverrides] = useState<OverrideRow[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const supabase = createBrowserClient();
+    try {
+      const [acceptRes, navRes, overrideRes] = await Promise.all([
+        supabase.rpc('get_auto_accept_rate', { p_days_back: daysBack }),
+        supabase.rpc('get_auto_nav_rate', { p_days_back: daysBack }),
+        supabase.rpc('get_override_frequency', { p_days_back: daysBack, p_limit: 20 }),
+      ]);
+      if (acceptRes.error) throw acceptRes.error;
+      if (navRes.error) throw navRes.error;
+      if (overrideRes.error) throw overrideRes.error;
 
-    async function fetchAll() {
-      const supabase = createBrowserClient();
-
-      try {
-        const [acceptRes, navRes, overrideRes] = await Promise.all([
-          supabase.rpc('get_auto_accept_rate', { p_days_back: daysBack }),
-          supabase.rpc('get_auto_nav_rate', { p_days_back: daysBack }),
-          supabase.rpc('get_override_frequency', { p_days_back: daysBack, p_limit: 20 }),
-        ]);
-
-        if (acceptRes.error) throw acceptRes.error;
-        if (navRes.error) throw navRes.error;
-        if (overrideRes.error) throw overrideRes.error;
-
-        if (!cancelled) {
-          setAcceptRates(acceptRes.data ?? []);
-          // navRes.data is an array with a single row
-          const navRows = navRes.data as NavRateRow[] | null;
-          setNavRate(navRows && navRows.length > 0 ? (navRows[0] ?? null) : null);
-          setOverrides(overrideRes.data ?? []);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Error loading validation data');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      setAcceptRates(acceptRes.data ?? []);
+      const navRows = navRes.data as NavRateRow[] | null;
+      setNavRate(navRows && navRows.length > 0 ? navRows[0] ?? null : null);
+      setOverrides(overrideRes.data ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos cargar la validación.');
+    } finally {
+      setLoading(false);
     }
-
-    fetchAll();
-    return () => { cancelled = true; };
   }, [daysBack]);
+
+  useEffect(() => {
+    void fetchAll();
+  }, [fetchAll]);
 
   const followRate = navRate?.follow_rate ?? 0;
 
+  const acceptColumns: DataColumn<AcceptRateRow>[] = useMemo(
+    () => [
+      {
+        id: 'profit_level',
+        header: 'Nivel de ganancia',
+        cell: (r) => <span className="font-medium text-ink">{r.profit_level ?? 'Sin dato'}</span>,
+        primary: true,
+      },
+      { id: 'total', header: 'Total', cell: (r) => r.total, align: 'right', mono: true, width: '100px' },
+      {
+        id: 'accepted',
+        header: 'Aceptados',
+        cell: (r) => r.accepted,
+        align: 'right',
+        mono: true,
+        hideBelow: 'md',
+        width: '110px',
+      },
+      {
+        id: 'rejected',
+        header: 'Rechazados',
+        cell: (r) => r.rejected,
+        align: 'right',
+        mono: true,
+        hideBelow: 'md',
+        width: '110px',
+      },
+      {
+        id: 'accept_rate',
+        header: 'Tasa',
+        cell: (r) => {
+          const tone = rateTone(r.accept_rate, 85, 70);
+          const cls =
+            tone === 'success'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : tone === 'warning'
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-red-600 dark:text-red-400';
+          return <span className={`font-semibold ${cls}`}>{r.accept_rate}%</span>;
+        },
+        align: 'right',
+        mono: true,
+        width: '110px',
+        secondary: true,
+      },
+    ],
+    [],
+  );
+
+  const overrideColumns: DataColumn<OverrideRow>[] = useMemo(
+    () => [
+      {
+        id: 'driver_id',
+        header: 'Conductor',
+        cell: (r) => `${r.driver_id.slice(0, 8)}…`,
+        mono: true,
+        primary: true,
+      },
+      {
+        id: 'total_overrides',
+        header: 'Total overrides',
+        cell: (r) => (
+          <span className={r.total_overrides > 10 ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>
+            {r.total_overrides}
+          </span>
+        ),
+        align: 'right',
+        mono: true,
+        secondary: true,
+        width: '140px',
+      },
+      {
+        id: 'reject_count',
+        header: 'Rechazos',
+        cell: (r) => r.reject_count,
+        align: 'right',
+        mono: true,
+        hideBelow: 'md',
+        width: '110px',
+      },
+      {
+        id: 'nav_cancel_count',
+        header: 'Cancel. nav.',
+        cell: (r) => r.nav_cancel_count,
+        align: 'right',
+        mono: true,
+        hideBelow: 'md',
+        width: '120px',
+      },
+    ],
+    [],
+  );
+
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">Validation Dashboard</h1>
-        <div className="flex gap-1 bg-neutral-100 rounded-lg p-1">
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Operación · validación
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Validación automática
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Qué tan bien el motor auto-acepta y auto-navega los viajes en las últimas semanas.
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-full border border-line bg-surface p-0.5">
           {DAYS_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setDaysBack(opt.value)}
               aria-pressed={daysBack === opt.value}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
                 daysBack === opt.value
-                  ? 'bg-white text-neutral-900 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
+                  ? 'bg-surface-elevated text-ink shadow-elev-1'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               {opt.label}
@@ -119,119 +206,63 @@ export default function ValidationPage() {
         </div>
       </div>
 
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); setDaysBack((d) => d); }}
-          onDismiss={() => setError(null)}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <KpiCard
+          className="lg:col-span-1"
+          variant="hero"
+          tone={rateTone(followRate, 70, 50)}
+          icon={Compass}
+          label="Tasa de seguimiento de navegación"
+          value={navRate ? `${followRate}%` : '—'}
+          hint={
+            navRate
+              ? `${navRate.triggered} activaciones · ${navRate.cancelled} canceladas`
+              : 'Sin datos en este período'
+          }
+          loading={loading}
         />
-      )}
 
-      {loading && <AdminTableSkeleton rows={5} columns={4} />}
+        <SectionCard
+          className="lg:col-span-2"
+          eyebrow="Motor automático"
+          title="Auto-aceptación por nivel de ganancia"
+          description="Cuántas ofertas se aceptan sin intervención humana."
+        >
+          <DataTable<AcceptRateRow>
+            columns={acceptColumns}
+            rows={acceptRates}
+            keyField="profit_level"
+            loading={loading}
+            error={error}
+            onRetry={() => void fetchAll()}
+            empty={{
+              icon: Gauge,
+              title: 'Sin datos de auto-aceptación',
+              body: 'No hay actividad registrada en el período seleccionado.',
+            }}
+          />
+        </SectionCard>
+      </div>
 
-      {!loading && (
-        <>
-          {/* Section 1: Auto-Accept Rates */}
-          <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">Auto-Accept Rates by Profit Level</h2>
-            {acceptRates.length === 0 ? (
-              <AdminEmptyState message="No auto-accept data for this period" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-100">
-                      <th className="text-left py-2 text-neutral-500 font-medium">Profit Level</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Total</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Accepted</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Rejected</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Accept Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {acceptRates.map((row) => (
-                      <tr key={row.profit_level ?? 'unknown'} className="border-b border-neutral-50">
-                        <td className="py-2 text-neutral-900 font-medium">
-                          {row.profit_level ?? 'Unknown'}
-                        </td>
-                        <td className="py-2 text-right text-neutral-600">{row.total}</td>
-                        <td className="py-2 text-right text-neutral-600">{row.accepted}</td>
-                        <td className="py-2 text-right text-neutral-600">{row.rejected}</td>
-                        <td className={`py-2 text-right font-semibold ${rateColor(row.accept_rate, 85, 70)}`}>
-                          {row.accept_rate}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* Section 2: Auto-Nav Follow Rate */}
-          <section className="mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">Auto-Nav Follow Rate</h2>
-            <div
-              className={`rounded-xl p-6 shadow-sm border ${rateBg(followRate, 70, 50)}`}
-            >
-              <p className={`text-4xl font-bold ${rateColor(followRate, 70, 50)}`}>
-                {navRate ? `${followRate}%` : '--'}
-              </p>
-              <p className="text-sm text-neutral-500 mt-1">follow rate</p>
-              {navRate && (
-                <p className="text-sm text-neutral-600 mt-3">
-                  {navRate.triggered} triggered, {navRate.cancelled} cancelled
-                </p>
-              )}
-              {!navRate && (
-                <p className="text-sm text-neutral-400 mt-3">No auto-nav data for this period</p>
-              )}
-            </div>
-          </section>
-
-          {/* Section 3: Top Overriders */}
-          <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">Top Overriders</h2>
-            {overrides.length === 0 ? (
-              <AdminEmptyState message="No override data for this period" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-100">
-                      <th className="text-left py-2 text-neutral-500 font-medium">Driver ID</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Total Overrides</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Rejections</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">Nav Cancels</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overrides.map((row) => (
-                      <tr
-                        key={row.driver_id}
-                        className={`border-b border-neutral-50 ${
-                          row.total_overrides > 10 ? 'bg-amber-50' : ''
-                        }`}
-                      >
-                        <td className="py-2 text-neutral-900 font-mono text-xs">
-                          {row.driver_id.slice(0, 8)}...
-                        </td>
-                        <td className={`py-2 text-right font-semibold ${
-                          row.total_overrides > 10 ? 'text-amber-700' : 'text-neutral-600'
-                        }`}>
-                          {row.total_overrides}
-                        </td>
-                        <td className="py-2 text-right text-neutral-600">{row.reject_count}</td>
-                        <td className="py-2 text-right text-neutral-600">{row.nav_cancel_count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </>
-      )}
+      <SectionCard
+        eyebrow="Top overriders"
+        title="Conductores que más intervienen"
+        description="Quiénes rechazan más ofertas o cancelan más veces la navegación asistida."
+      >
+        <DataTable<OverrideRow>
+          columns={overrideColumns}
+          rows={overrides}
+          keyField="driver_id"
+          loading={loading}
+          error={error}
+          onRetry={() => void fetchAll()}
+          empty={{
+            icon: Target,
+            title: 'Sin overrides en este período',
+            body: 'Nadie intervino los automatismos — el motor está corriendo solo.',
+          }}
+        />
+      </SectionCard>
     </div>
   );
 }

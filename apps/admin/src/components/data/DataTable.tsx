@@ -53,6 +53,7 @@ type Props<T> = {
     title: string;
     body?: ReactNode;
     action?: Parameters<typeof DataEmptyState>[0]['action'];
+    tone?: Parameters<typeof DataEmptyState>[0]['tone'];
   };
 
   /** Navigation or callback when a row is clicked */
@@ -182,7 +183,13 @@ export function DataTable<T>({
 
       {showEmpty && empty && (
         <div className="px-5 py-2">
-          <DataEmptyState icon={empty.icon} title={empty.title} body={empty.body} action={empty.action} />
+          <DataEmptyState
+            icon={empty.icon}
+            title={empty.title}
+            body={empty.body}
+            action={empty.action}
+            tone={empty.tone}
+          />
         </div>
       )}
 
