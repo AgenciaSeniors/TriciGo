@@ -37,16 +37,26 @@ const PAGE_SIZE = 20;
 
 const SEGMENT_META: Record<
   SegmentType,
-  { label: string; icon: LucideIcon; tone: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info' }
+  { icon: LucideIcon; tone: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info' }
 > = {
-  new_users: { label: 'Recién llegados', icon: Sparkles, tone: 'success' },
-  power_users: { label: 'Power users', icon: Flame, tone: 'primary' },
-  inactive: { label: 'Inactivos', icon: Snowflake, tone: 'warning' },
-  by_city: { label: 'Por provincia', icon: MapPinned, tone: 'info' },
+  new_users: { icon: Sparkles, tone: 'success' },
+  power_users: { icon: Flame, tone: 'primary' },
+  inactive: { icon: Snowflake, tone: 'warning' },
+  by_city: { icon: MapPinned, tone: 'info' },
 };
 
 export default function SegmentsPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
+
+  const segmentLabel = (type: SegmentType): string => {
+    const fallbacks: Record<SegmentType, string> = {
+      new_users: 'Recién llegados',
+      power_users: 'Power users',
+      inactive: 'Inactivos',
+      by_city: 'Por provincia',
+    };
+    return t(`segments.type_${type}`, { defaultValue: fallbacks[type] });
+  };
   const [error, setError] = useState<string | null>(null);
 
   const [counts, setCounts] = useState<Record<SegmentType, number>>({
@@ -118,7 +128,7 @@ export default function SegmentsPage() {
         by_city: 0,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los segmentos.');
+      setError(err instanceof Error ? err.message : t('segments.load_error', { defaultValue: 'No pudimos cargar los segmentos.' }));
     } finally {
       setCountsLoading(false);
     }
@@ -271,7 +281,14 @@ export default function SegmentsPage() {
 
   const handleExportCSV = () => {
     if (users.length === 0) return;
-    const headers = ['Nombre', 'Email', 'Teléfono', 'Viajes', 'Último viaje', 'Ciudad'];
+    const headers = [
+      t('segments.csv_name', { defaultValue: 'Nombre' }),
+      t('segments.csv_email', { defaultValue: 'Email' }),
+      t('segments.csv_phone', { defaultValue: 'Teléfono' }),
+      t('segments.csv_rides', { defaultValue: 'Viajes' }),
+      t('segments.csv_last_ride', { defaultValue: 'Último viaje' }),
+      t('segments.csv_city', { defaultValue: 'Ciudad' }),
+    ];
     const rows = users.map((u) => [
       u.full_name ?? '',
       u.email ?? '',
@@ -293,13 +310,13 @@ export default function SegmentsPage() {
   const columns: DataColumn<SegmentUser>[] = [
     {
       id: 'full_name',
-      header: 'Nombre',
-      cell: (u) => <span className="font-medium text-ink">{u.full_name ?? 'Sin nombre'}</span>,
+      header: t('segments.col_name', { defaultValue: 'Nombre' }),
+      cell: (u) => <span className="font-medium text-ink">{u.full_name ?? t('segments.no_name', { defaultValue: 'Sin nombre' })}</span>,
       primary: true,
     },
     {
       id: 'phone',
-      header: 'Teléfono',
+      header: t('segments.col_phone', { defaultValue: 'Teléfono' }),
       cell: (u) => u.phone ?? <span className="text-ink-subtle">—</span>,
       mono: true,
       hideBelow: 'md',
@@ -307,14 +324,14 @@ export default function SegmentsPage() {
     },
     {
       id: 'email',
-      header: 'Email',
+      header: t('segments.col_email', { defaultValue: 'Email' }),
       cell: (u) => u.email ?? <span className="text-ink-subtle">—</span>,
       hideBelow: 'lg',
       secondary: true,
     },
     {
       id: 'rides_count',
-      header: 'Viajes',
+      header: t('segments.col_rides', { defaultValue: 'Viajes' }),
       cell: (u) => u.rides_count,
       align: 'right',
       mono: true,
@@ -322,14 +339,14 @@ export default function SegmentsPage() {
     },
     {
       id: 'last_ride_date',
-      header: 'Último viaje',
+      header: t('segments.col_last_ride', { defaultValue: 'Último viaje' }),
       cell: (u) => <span className="text-ink-muted">{formatAdminDate(u.last_ride_date)}</span>,
       hideBelow: 'lg',
       width: '170px',
     },
     {
       id: 'city_name',
-      header: 'Ciudad',
+      header: t('segments.col_city', { defaultValue: 'Ciudad' }),
       cell: (u) => u.city_name ?? <span className="text-ink-subtle">—</span>,
       hideBelow: 'lg',
       width: '150px',
@@ -340,13 +357,13 @@ export default function SegmentsPage() {
     <div className="flex flex-col gap-5">
       <div>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Crecimiento · segmentos
+          {t('segments.page_eyebrow', { defaultValue: 'Crecimiento · segmentos' })}
         </p>
         <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-          Segmentos
+          {t('segments.title', { defaultValue: 'Segmentos' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          Cortes de usuarios por comportamiento. Explorá cada cohorte para entenderla mejor.
+          {t('segments.page_description', { defaultValue: 'Cortes de usuarios por comportamiento. Explorá cada cohorte para entenderla mejor.' })}
         </p>
       </div>
 
@@ -369,7 +386,7 @@ export default function SegmentsPage() {
               }`}
             >
               <KpiCardBlock
-                label={meta.label}
+                label={segmentLabel(type)}
                 value={countsLoading ? '—' : String(counts[type])}
                 tone={meta.tone}
                 icon={Icon}
@@ -379,10 +396,10 @@ export default function SegmentsPage() {
                 <select
                   value={selectedCityId}
                   onChange={(e) => handleCityChange(e.target.value)}
-                  aria-label="Seleccionar ciudad"
+                  aria-label={t('segments.choose_city_aria', { defaultValue: 'Seleccionar ciudad' })}
                   className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
                 >
-                  <option value="">Elegí una ciudad</option>
+                  <option value="">{t('segments.choose_city_placeholder', { defaultValue: 'Elegí una ciudad' })}</option>
                   {cities.map((city) => (
                     <option key={city.id} value={city.id}>
                       {city.name}
@@ -397,7 +414,7 @@ export default function SegmentsPage() {
                 disabled={type === 'by_city' && !selectedCityId}
                 className="inline-flex items-center justify-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[11.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Ver usuarios
+                {t('segments.view_users', { defaultValue: 'Ver usuarios' })}
               </button>
             </div>
           );
@@ -406,9 +423,9 @@ export default function SegmentsPage() {
 
       {activeSegment && (
         <SectionCard
-          eyebrow="Resultado"
-          title={SEGMENT_META[activeSegment].label}
-          description={`Página ${page + 1}`}
+          eyebrow={t('segments.section_result_eyebrow', { defaultValue: 'Resultado' })}
+          title={segmentLabel(activeSegment)}
+          description={`${t('segments.page_label', { defaultValue: 'Página' })} ${page + 1}`}
           action={
             users.length > 0
               ? undefined
@@ -423,7 +440,7 @@ export default function SegmentsPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download className="h-3.5 w-3.5" />
-              Exportar CSV
+              {t('segments.export_csv', { defaultValue: 'Exportar CSV' })}
             </button>
           </div>
           <DataTable<SegmentUser>
@@ -433,8 +450,8 @@ export default function SegmentsPage() {
             loading={usersLoading}
             empty={{
               icon: UsersIcon,
-              title: 'Sin usuarios en este segmento',
-              body: 'Todavía no hay nadie que cumpla las condiciones.',
+              title: t('segments.empty_title', { defaultValue: 'Sin usuarios en este segmento' }),
+              body: t('segments.empty_body', { defaultValue: 'Todavía no hay nadie que cumpla las condiciones.' }),
             }}
             pagination={{ page, pageSize: PAGE_SIZE, hasMore: users.length === PAGE_SIZE }}
             onPaginationChange={(next) => setPage(next.page)}
@@ -444,13 +461,13 @@ export default function SegmentsPage() {
 
       {!activeSegment && (
         <SectionCard
-          eyebrow="Empezá por acá"
-          title="Elegí un segmento arriba"
-          description="Cada tarjeta abre la lista detallada de quiénes lo componen."
+          eyebrow={t('segments.start_eyebrow', { defaultValue: 'Empezá por acá' })}
+          title={t('segments.start_title', { defaultValue: 'Elegí un segmento arriba' })}
+          description={t('segments.start_description', { defaultValue: 'Cada tarjeta abre la lista detallada de quiénes lo componen.' })}
         >
           <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
             <UserCog className="h-4 w-4" />
-            Los segmentos se calculan sobre la última actividad registrada.
+            {t('segments.start_hint', { defaultValue: 'Los segmentos se calculan sobre la última actividad registrada.' })}
           </div>
         </SectionCard>
       )}

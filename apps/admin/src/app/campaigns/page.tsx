@@ -36,31 +36,27 @@ type Promotion = {
 
 type City = { id: string; name: string; slug: string };
 
-const SEGMENT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'new_users', label: 'Recién llegados' },
-  { value: 'power_users', label: 'Power users' },
-  { value: 'inactive', label: 'Inactivos' },
-  { value: 'all', label: 'Todos los pasajeros' },
-  { value: 'by_city', label: 'Por ciudad' },
-];
-
-const CHANNEL_OPTIONS: { value: string; label: string }[] = [
-  { value: 'push', label: 'Push' },
-  { value: 'email', label: 'Email' },
-  { value: 'both', label: 'Ambos' },
-];
+const SEGMENT_KEYS = ['new_users', 'power_users', 'inactive', 'all', 'by_city'] as const;
+const CHANNEL_KEYS = ['push', 'email', 'both'] as const;
 
 const PAGE_SIZE = 20;
 
-const SEGMENT_LABEL: Record<string, string> = Object.fromEntries(
-  SEGMENT_OPTIONS.map((o) => [o.value, o.label]),
-);
-const CHANNEL_LABEL: Record<string, string> = Object.fromEntries(
-  CHANNEL_OPTIONS.map((o) => [o.value, o.label]),
-);
-
 export default function CampaignsPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
+
+  const segmentLabel = (v: string): string => {
+    const fallbacks: Record<string, string> = {
+      new_users: 'Recién llegados', power_users: 'Power users', inactive: 'Inactivos',
+      all: 'Todos los pasajeros', by_city: 'Por ciudad',
+    };
+    return t(`campaigns.segment_${v}`, { defaultValue: fallbacks[v] ?? v });
+  };
+  const channelLabel = (v: string): string => {
+    const fallbacks: Record<string, string> = { push: 'Push', email: 'Email', both: 'Ambos' };
+    return t(`campaigns.channel_${v}`, { defaultValue: fallbacks[v] ?? v });
+  };
+  const SEGMENT_OPTIONS = SEGMENT_KEYS.map((v) => ({ value: v, label: segmentLabel(v) }));
+  const CHANNEL_OPTIONS = CHANNEL_KEYS.map((v) => ({ value: v, label: channelLabel(v) }));
   const { showToast } = useToast();
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -101,7 +97,7 @@ export default function CampaignsPage() {
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
       setCampaigns([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar las campañas.');
+      setError(err instanceof Error ? err.message : t('campaigns.load_error', { defaultValue: 'No pudimos cargar las campañas.' }));
     } finally {
       setLoading(false);
     }
@@ -195,13 +191,14 @@ export default function CampaignsPage() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formName.trim()) errors.name = 'Requerido';
-    if (!formTitle.trim()) errors.title = 'Requerido';
-    if (!formBody.trim()) errors.body = 'Requerido';
-    if (formSegment === 'by_city' && !formCityId) errors.city = 'Elegí una ciudad';
+    const required = t('campaigns.required', { defaultValue: 'Requerido' });
+    if (!formName.trim()) errors.name = required;
+    if (!formTitle.trim()) errors.title = required;
+    if (!formBody.trim()) errors.body = required;
+    if (formSegment === 'by_city' && !formCityId) errors.city = t('campaigns.choose_city_error', { defaultValue: 'Elegí una ciudad' });
     if (!formSendNow && formSchedule) {
       const d = new Date(formSchedule);
-      if (d <= new Date()) errors.schedule = 'Tiene que ser en el futuro';
+      if (d <= new Date()) errors.schedule = t('campaigns.future_error', { defaultValue: 'Tiene que ser en el futuro' });
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -257,9 +254,11 @@ export default function CampaignsPage() {
       setShowForm(false);
       setPage(0);
       await loadCampaigns();
-      showToast('success', formSendNow ? 'Campaña enviada' : 'Campaña programada');
+      showToast('success', formSendNow
+        ? t('campaigns.toast_sent', { defaultValue: 'Campaña enviada' })
+        : t('campaigns.toast_scheduled', { defaultValue: 'Campaña programada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos enviar la campaña.');
+      showToast('error', err instanceof Error ? err.message : t('campaigns.send_error', { defaultValue: 'No pudimos enviar la campaña.' }));
     } finally {
       setSending(false);
     }
@@ -269,7 +268,7 @@ export default function CampaignsPage() {
     () => [
       {
         id: 'name',
-        header: 'Nombre',
+        header: t('campaigns.col_name', { defaultValue: 'Nombre' }),
         cell: (c) => (
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium text-ink">{c.name}</span>
@@ -281,10 +280,10 @@ export default function CampaignsPage() {
       },
       {
         id: 'segment_type',
-        header: 'Segmento',
+        header: t('campaigns.col_segment', { defaultValue: 'Segmento' }),
         cell: (c) => (
           <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
-            {SEGMENT_LABEL[c.segment_type] ?? c.segment_type}
+            {segmentLabel(c.segment_type)}
           </span>
         ),
         hideBelow: 'md',
@@ -292,20 +291,20 @@ export default function CampaignsPage() {
       },
       {
         id: 'channel',
-        header: 'Canal',
-        cell: (c) => <span className="capitalize">{CHANNEL_LABEL[c.channel] ?? c.channel}</span>,
+        header: t('campaigns.col_channel', { defaultValue: 'Canal' }),
+        cell: (c) => <span className="capitalize">{channelLabel(c.channel)}</span>,
         hideBelow: 'md',
         width: '90px',
       },
       {
         id: 'status',
-        header: 'Estado',
+        header: t('campaigns.col_status', { defaultValue: 'Estado' }),
         cell: (c) => <StatusBadge domain="campaign" status={c.status} />,
         width: '130px',
       },
       {
         id: 'sent_count',
-        header: 'Enviados',
+        header: t('campaigns.col_sent', { defaultValue: 'Enviados' }),
         cell: (c) => <span className="tabular" data-tabular>{c.sent_count.toLocaleString('es-CU')}</span>,
         align: 'right',
         mono: true,
@@ -314,14 +313,15 @@ export default function CampaignsPage() {
       },
       {
         id: 'created_at',
-        header: 'Creada',
+        header: t('campaigns.col_created', { defaultValue: 'Creada' }),
         cell: (c) => <span className="text-ink-muted">{formatAdminDate(c.created_at)}</span>,
         sortKey: 'created_at',
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
 
   return (
@@ -329,13 +329,13 @@ export default function CampaignsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Crecimiento · campañas
+            {t('campaigns.page_eyebrow', { defaultValue: 'Crecimiento · campañas' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Campañas
+            {t('campaigns.title', { defaultValue: 'Campañas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Mensajes push y email a segmentos específicos de usuarios. Programá o enviá al toque.
+            {t('campaigns.page_description', { defaultValue: 'Mensajes push y email a segmentos específicos de usuarios. Programá o enviá al toque.' })}
           </p>
         </div>
         <button
@@ -343,28 +343,30 @@ export default function CampaignsPage() {
           className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
         >
           {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          {showForm ? 'Cancelar' : 'Nueva campaña'}
+          {showForm
+            ? t('campaigns.cancel', { defaultValue: 'Cancelar' })
+            : t('campaigns.new_campaign', { defaultValue: 'Nueva campaña' })}
         </button>
       </div>
 
       {showForm && (
         <div className="admin-card p-5 animate-fade-in">
           <p className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Nueva campaña
+            {t('campaigns.new_campaign_title', { defaultValue: 'Nueva campaña' })}
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <FormField label="Nombre" required error={formErrors.name}>
+            <FormField label={t('campaigns.field_name', { defaultValue: 'Nombre' })} required error={formErrors.name}>
               <input
                 value={formName}
                 onChange={(e) => {
                   setFormName(e.target.value);
                   setFormErrors(({ name: _n, ...rest }) => rest);
                 }}
-                placeholder="Nombre interno de la campaña"
+                placeholder={t('campaigns.placeholder_name', { defaultValue: 'Nombre interno de la campaña' })}
                 className={inputCls(!!formErrors.name)}
               />
             </FormField>
-            <FormField label="Segmento">
+            <FormField label={t('campaigns.field_segment', { defaultValue: 'Segmento' })}>
               <select
                 value={formSegment}
                 onChange={(e) => setFormSegment(e.target.value)}
@@ -377,7 +379,7 @@ export default function CampaignsPage() {
             </FormField>
 
             {formSegment === 'by_city' && (
-              <FormField label="Ciudad" required error={formErrors.city}>
+              <FormField label={t('campaigns.field_city', { defaultValue: 'Ciudad' })} required error={formErrors.city}>
                 <select
                   value={formCityId}
                   onChange={(e) => {
@@ -386,7 +388,7 @@ export default function CampaignsPage() {
                   }}
                   className={inputCls(!!formErrors.city)}
                 >
-                  <option value="">Elegí una ciudad</option>
+                  <option value="">{t('campaigns.placeholder_city', { defaultValue: 'Elegí una ciudad' })}</option>
                   {cities.map((city) => (
                     <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
@@ -394,7 +396,7 @@ export default function CampaignsPage() {
               </FormField>
             )}
 
-            <FormField label="Canal">
+            <FormField label={t('campaigns.field_channel', { defaultValue: 'Canal' })}>
               <select
                 value={formChannel}
                 onChange={(e) => setFormChannel(e.target.value)}
@@ -406,19 +408,29 @@ export default function CampaignsPage() {
               </select>
             </FormField>
 
-            <FormField label="Título del mensaje" required error={formErrors.title} className="md:col-span-2">
+            <FormField
+              label={t('campaigns.field_title', { defaultValue: 'Título del mensaje' })}
+              required
+              error={formErrors.title}
+              className="md:col-span-2"
+            >
               <input
                 value={formTitle}
                 onChange={(e) => {
                   setFormTitle(e.target.value);
-                  setFormErrors(({ title: _t, ...rest }) => rest);
+                  setFormErrors(({ title: _tt, ...rest }) => rest);
                 }}
-                placeholder="Lo que aparece en la notificación"
+                placeholder={t('campaigns.placeholder_title', { defaultValue: 'Lo que aparece en la notificación' })}
                 className={inputCls(!!formErrors.title)}
               />
             </FormField>
 
-            <FormField label="Cuerpo" required error={formErrors.body} className="md:col-span-2">
+            <FormField
+              label={t('campaigns.field_body', { defaultValue: 'Cuerpo' })}
+              required
+              error={formErrors.body}
+              className="md:col-span-2"
+            >
               <textarea
                 rows={3}
                 value={formBody}
@@ -426,18 +438,18 @@ export default function CampaignsPage() {
                   setFormBody(e.target.value);
                   setFormErrors(({ body: _b, ...rest }) => rest);
                 }}
-                placeholder="Mensaje completo"
+                placeholder={t('campaigns.placeholder_body', { defaultValue: 'Mensaje completo' })}
                 className={inputCls(!!formErrors.body, true)}
               />
             </FormField>
 
-            <FormField label="Código promocional (opcional)">
+            <FormField label={t('campaigns.field_promo', { defaultValue: 'Código promocional (opcional)' })}>
               <select
                 value={formPromoId}
                 onChange={(e) => setFormPromoId(e.target.value)}
                 className={inputCls(false)}
               >
-                <option value="">Sin promoción</option>
+                <option value="">{t('campaigns.placeholder_no_promo', { defaultValue: 'Sin promoción' })}</option>
                 {promotions.map((promo) => (
                   <option key={promo.id} value={promo.id}>
                     {promo.code}
@@ -455,10 +467,10 @@ export default function CampaignsPage() {
                   onChange={(e) => setFormSendNow(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-line"
                 />
-                Enviar ahora
+                {t('campaigns.send_now', { defaultValue: 'Enviar ahora' })}
               </label>
               {!formSendNow && (
-                <FormField label="Programar para" error={formErrors.schedule}>
+                <FormField label={t('campaigns.field_schedule', { defaultValue: 'Programar para' })} error={formErrors.schedule}>
                   <input
                     type="datetime-local"
                     value={formSchedule}
@@ -485,7 +497,11 @@ export default function CampaignsPage() {
               }
               className="rounded-full bg-primary-500 px-4 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {sending ? 'Procesando…' : formSendNow ? 'Enviar ahora' : 'Programar'}
+              {sending
+                ? t('campaigns.processing', { defaultValue: 'Procesando…' })
+                : formSendNow
+                  ? t('campaigns.send_now_btn', { defaultValue: 'Enviar ahora' })
+                  : t('campaigns.schedule_btn', { defaultValue: 'Programar' })}
             </button>
           </div>
         </div>
@@ -500,9 +516,9 @@ export default function CampaignsPage() {
         onRetry={() => void loadCampaigns()}
         empty={{
           icon: Megaphone,
-          title: 'Sin campañas',
-          body: 'Creá la primera para llegar a un grupo específico de usuarios.',
-          action: { label: 'Nueva campaña', onClick: () => setShowForm(true) },
+          title: t('campaigns.empty_title', { defaultValue: 'Sin campañas' }),
+          body: t('campaigns.empty_body', { defaultValue: 'Creá la primera para llegar a un grupo específico de usuarios.' }),
+          action: { label: t('campaigns.new_campaign', { defaultValue: 'Nueva campaña' }), onClick: () => setShowForm(true) },
         }}
         sort={sort}
         onSortChange={setSort}
