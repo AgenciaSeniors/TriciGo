@@ -28,16 +28,6 @@ import { DataEmptyState } from '@/components/data/DataEmptyState';
 
 type Filter = LostItemStatus | 'all';
 
-const TABS: StatusTab<Filter>[] = [
-  { id: 'all', label: 'Todos' },
-  { id: 'reported', label: 'Reportados', tone: 'info' },
-  { id: 'found', label: 'Encontrados', tone: 'success' },
-  { id: 'not_found', label: 'No encontrados', tone: 'danger' },
-  { id: 'return_arranged', label: 'Entrega agendada', tone: 'info' },
-  { id: 'returned', label: 'Devueltos', tone: 'success' },
-  { id: 'closed', label: 'Cerrados' },
-];
-
 const CATEGORY_ICON: Record<string, LucideIcon> = {
   phone: Smartphone,
   wallet: Wallet,
@@ -49,18 +39,21 @@ const CATEGORY_ICON: Record<string, LucideIcon> = {
   other: Package,
 };
 
-function categoryLabel(raw: string) {
-  const map: Record<string, string> = {
-    phone: 'Teléfono',
-    wallet: 'Billetera',
-    bag: 'Mochila',
-    clothing: 'Ropa',
-    electronics: 'Electrónica',
-    documents: 'Documentos',
-    keys: 'Llaves',
-    other: 'Otro',
-  };
-  return map[raw] ?? raw;
+const CATEGORY_FALLBACK_ES: Record<string, string> = {
+  phone: 'Teléfono',
+  wallet: 'Billetera',
+  bag: 'Mochila',
+  clothing: 'Ropa',
+  electronics: 'Electrónica',
+  documents: 'Documentos',
+  keys: 'Llaves',
+  other: 'Otro',
+};
+
+type TFunction = (key: string, options?: { defaultValue?: string }) => string;
+
+function categoryLabel(raw: string, t: TFunction): string {
+  return t(`lost_found.category_${raw}`, { defaultValue: CATEGORY_FALLBACK_ES[raw] ?? raw });
 }
 
 export default function LostFoundPage() {
@@ -76,6 +69,16 @@ export default function LostFoundPage() {
   const [adminNotes, setAdminNotes] = useState('');
   const [closing, setClosing] = useState(false);
 
+  const TABS: StatusTab<Filter>[] = useMemo(() => [
+    { id: 'all', label: t('lost_found.filter_all', { defaultValue: 'Todos' }) },
+    { id: 'reported', label: t('lost_found.filter_reported', { defaultValue: 'Reportados' }), tone: 'info' },
+    { id: 'found', label: t('lost_found.filter_found', { defaultValue: 'Encontrados' }), tone: 'success' },
+    { id: 'not_found', label: t('lost_found.filter_not_found', { defaultValue: 'No encontrados' }), tone: 'danger' },
+    { id: 'return_arranged', label: t('lost_found.filter_return_arranged', { defaultValue: 'Entrega agendada' }), tone: 'info' },
+    { id: 'returned', label: t('lost_found.filter_returned', { defaultValue: 'Devueltos' }), tone: 'success' },
+    { id: 'closed', label: t('lost_found.filter_closed', { defaultValue: 'Cerrados' }) },
+  ], [t]);
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -87,11 +90,11 @@ export default function LostFoundPage() {
       setItems(data);
     } catch (err) {
       setItems([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los objetos perdidos.');
+      setError(err instanceof Error ? err.message : t('lost_found.load_error', { defaultValue: 'No pudimos cargar los objetos perdidos.' }));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, t]);
 
   useEffect(() => {
     void fetchItems();
@@ -107,9 +110,9 @@ export default function LostFoundPage() {
     try {
       await lostItemService.addAdminNotes(selected.id, adminNotes);
       setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes } : null));
-      showToast('success', 'Notas guardadas');
+      showToast('success', t('lost_found.toast_notes_saved', { defaultValue: 'Notas guardadas' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos guardar las notas.');
+      showToast('error', err instanceof Error ? err.message : t('lost_found.notes_error', { defaultValue: 'No pudimos guardar las notas.' }));
     }
   };
 
@@ -124,9 +127,9 @@ export default function LostFoundPage() {
       );
       setItems((prev) => prev.map((i) => (i.id === selected.id ? updated : i)));
       setSelected(updated);
-      showToast('success', 'Objeto marcado como cerrado');
+      showToast('success', t('lost_found.toast_closed', { defaultValue: 'Objeto marcado como cerrado' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cerrar el reporte.');
+      showToast('error', err instanceof Error ? err.message : t('lost_found.close_error', { defaultValue: 'No pudimos cerrar el reporte.' }));
     } finally {
       setClosing(false);
     }
@@ -154,9 +157,9 @@ export default function LostFoundPage() {
           <DataEmptyState
             icon={PackageSearch}
             tone="danger"
-            title="No pudimos cargar los objetos"
+            title={t('lost_found.load_error_title', { defaultValue: 'No pudimos cargar los objetos' })}
             body={error}
-            action={{ label: 'Reintentar', onClick: () => void fetchItems() }}
+            action={{ label: t('lost_found.retry', { defaultValue: 'Reintentar' }), onClick: () => void fetchItems() }}
           />
         </div>
       );
@@ -166,8 +169,8 @@ export default function LostFoundPage() {
         <div className="p-6">
           <DataEmptyState
             icon={PackageSearch}
-            title="Sin objetos reportados"
-            body="En este alcance todavía no hay objetos perdidos registrados."
+            title={t('lost_found.empty_title', { defaultValue: 'Sin objetos reportados' })}
+            body={t('lost_found.empty_body', { defaultValue: 'En este alcance todavía no hay objetos perdidos registrados.' })}
           />
         </div>
       );
@@ -197,7 +200,7 @@ export default function LostFoundPage() {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-start justify-between gap-2">
                     <span className="truncate text-[13px] font-medium text-ink">
-                      {categoryLabel(item.category)} · {item.description.slice(0, 48)}
+                      {categoryLabel(item.category, t)} · {item.description.slice(0, 48)}
                       {item.description.length > 48 ? '…' : ''}
                     </span>
                     <StatusBadge domain="lost_item" status={item.status} />
@@ -220,13 +223,13 @@ export default function LostFoundPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Operación · objetos perdidos
+            {t('lost_found.page_eyebrow', { defaultValue: 'Operación · objetos perdidos' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Objetos perdidos
+            {t('lost_found.title', { defaultValue: 'Objetos perdidos' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Reportes de pertenencias olvidadas a bordo. Seguí el rastro hasta que vuelvan al dueño.
+            {t('lost_found.page_description', { defaultValue: 'Reportes de pertenencias olvidadas a bordo. Seguí el rastro hasta que vuelvan al dueño.' })}
           </p>
         </div>
       </div>
@@ -245,10 +248,10 @@ export default function LostFoundPage() {
         <div className="admin-card overflow-hidden lg:col-span-2">
           <div className="border-b border-line px-4 py-2.5">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-              Bandeja
+              {t('lost_found.tray_eyebrow', { defaultValue: 'Bandeja' })}
             </p>
             <h2 className="font-display text-[15px] font-semibold text-ink">
-              Reportes ({items.length})
+              {t('lost_found.tray_title', { defaultValue: 'Reportes' })} ({items.length})
             </h2>
           </div>
           <div className="max-h-[640px] overflow-y-auto">{renderList()}</div>
@@ -268,8 +271,8 @@ export default function LostFoundPage() {
             <div className="flex min-h-[480px] items-center justify-center p-6">
               <DataEmptyState
                 icon={PackageSearch}
-                title="Elegí un reporte"
-                body="Seleccioná un objeto en la bandeja para ver los detalles y tomar acción."
+                title={t('lost_found.pick_title', { defaultValue: 'Elegí un reporte' })}
+                body={t('lost_found.pick_body', { defaultValue: 'Seleccioná un objeto en la bandeja para ver los detalles y tomar acción.' })}
               />
             </div>
           )}
@@ -294,6 +297,7 @@ function ItemDetail({
   onClose: () => void;
   closing: boolean;
 }) {
+  const { t } = useTranslation('admin');
   const Icon = CATEGORY_ICON[item.category] ?? Package;
   const showClose = item.status !== 'returned' && item.status !== 'closed';
   const showReturn = item.status === 'return_arranged' || item.status === 'returned';
@@ -306,10 +310,10 @@ function ItemDetail({
         </span>
         <div className="flex-1">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-            Categoría
+            {t('lost_found.field_category', { defaultValue: 'Categoría' })}
           </p>
           <h2 className="font-display text-[17px] font-semibold text-ink">
-            {categoryLabel(item.category)}
+            {categoryLabel(item.category, t)}
           </h2>
         </div>
         <StatusBadge domain="lost_item" status={item.status} size="md" />
@@ -317,12 +321,14 @@ function ItemDetail({
 
       <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Viaje</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+            {t('lost_found.field_ride', { defaultValue: 'Viaje' })}
+          </p>
           <p className="font-mono text-[12.5px] text-ink">{item.ride_id}</p>
         </div>
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-            Reportado
+            {t('lost_found.field_reported', { defaultValue: 'Reportado' })}
           </p>
           <p className="text-[12.5px] text-ink">{formatAdminDate(item.created_at)}</p>
         </div>
@@ -330,7 +336,7 @@ function ItemDetail({
 
       <section className="px-5 py-4">
         <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Relato del pasajero
+          {t('lost_found.rider_story_title', { defaultValue: 'Relato del pasajero' })}
         </h3>
         <div className="rounded-xl border border-line bg-surface-sunken p-4">
           <p className="text-[13px] text-ink">{item.description}</p>
@@ -344,7 +350,7 @@ function ItemDetail({
                   rel="noopener"
                   className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:text-ink"
                 >
-                  Foto {i + 1}
+                  {t('lost_found.photo_label', { defaultValue: 'Foto' })} {i + 1}
                 </a>
               ))}
             </div>
@@ -354,7 +360,7 @@ function ItemDetail({
 
       <section className="px-5 py-4">
         <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Respuesta del conductor
+          {t('lost_found.driver_response_title', { defaultValue: 'Respuesta del conductor' })}
         </h3>
         <div className="rounded-xl border border-line bg-surface-sunken p-4">
           {item.driver_found !== null ? (
@@ -367,14 +373,18 @@ function ItemDetail({
                 }`}
               >
                 {item.driver_found ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                {item.driver_found ? 'Encontrado' : 'No encontrado'}
+                {item.driver_found
+                  ? t('lost_found.driver_found_label', { defaultValue: 'Encontrado' })
+                  : t('lost_found.driver_not_found_label', { defaultValue: 'No encontrado' })}
               </span>
               {item.driver_response && (
                 <p className="mt-2 text-[13px] text-ink">{item.driver_response}</p>
               )}
             </>
           ) : (
-            <p className="text-[12.5px] italic text-ink-subtle">Aún sin respuesta del conductor.</p>
+            <p className="text-[12.5px] italic text-ink-subtle">
+              {t('lost_found.no_driver_response', { defaultValue: 'Aún sin respuesta del conductor.' })}
+            </p>
           )}
         </div>
       </section>
@@ -383,17 +393,17 @@ function ItemDetail({
         <section className="px-5 py-4">
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
             <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
-              Detalles de entrega
+              {t('lost_found.return_title', { defaultValue: 'Detalles de entrega' })}
             </h3>
             {item.return_fee_cup != null && item.return_fee_cup > 0 && (
               <p className="text-[13px] text-ink">
-                <span className="text-ink-muted">Tarifa: </span>
+                <span className="text-ink-muted">{t('lost_found.return_fee_label', { defaultValue: 'Tarifa:' })} </span>
                 <span className="font-medium">{formatCUP(item.return_fee_cup)}</span>
               </p>
             )}
             {item.return_location && (
               <p className="text-[13px] text-ink">
-                <span className="text-ink-muted">Lugar: </span>
+                <span className="text-ink-muted">{t('lost_found.return_location_label', { defaultValue: 'Lugar:' })} </span>
                 {item.return_location}
               </p>
             )}
@@ -406,12 +416,12 @@ function ItemDetail({
 
       <section className="px-5 py-4">
         <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Notas internas
+          {t('lost_found.admin_notes_title', { defaultValue: 'Notas internas' })}
         </h3>
         <textarea
           value={adminNotes}
           onChange={(e) => onAdminNotesChange(e.target.value)}
-          placeholder="Detalles de gestión, contactos, próximos pasos…"
+          placeholder={t('lost_found.admin_notes_placeholder', { defaultValue: 'Detalles de gestión, contactos, próximos pasos…' })}
           className="min-h-[80px] w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
         />
         <div className="mt-2 flex flex-wrap justify-end gap-2">
@@ -419,7 +429,7 @@ function ItemDetail({
             onClick={onSaveNotes}
             className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-surface-sunken"
           >
-            Guardar notas
+            {t('lost_found.save_notes', { defaultValue: 'Guardar notas' })}
           </button>
           {showClose && (
             <button
@@ -427,7 +437,9 @@ function ItemDetail({
               disabled={closing}
               className="rounded-full bg-ink px-3 py-1.5 text-[12px] font-medium text-surface hover:opacity-90 disabled:opacity-50"
             >
-              {closing ? 'Cerrando…' : 'Cerrar reporte'}
+              {closing
+                ? t('lost_found.closing', { defaultValue: 'Cerrando…' })
+                : t('lost_found.close_report', { defaultValue: 'Cerrar reporte' })}
             </button>
           )}
         </div>
