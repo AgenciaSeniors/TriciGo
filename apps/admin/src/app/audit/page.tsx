@@ -11,27 +11,25 @@ import { formatAdminDate } from '@/lib/formatDate';
 
 const PAGE_SIZE = 20;
 
-const ACTION_LABEL: Record<string, string> = {
-  approve_driver: 'Aprobó conductor',
-  reject_driver: 'Rechazó conductor',
-  suspend_driver: 'Suspendió conductor',
-  approve_redemption: 'Aprobó retiro',
-  reject_redemption: 'Rechazó retiro',
-  approve_recharge: 'Aprobó recarga',
-  reject_recharge: 'Rechazó recarga',
-  incident_investigating: 'Pasó incidente a investigación',
-  incident_resolved: 'Resolvió incidente',
-};
-
-const TARGET_LABEL: Record<string, string> = {
-  driver_profile: 'Conductor',
-  wallet_redemption: 'Retiro',
-  wallet_recharge_request: 'Recarga',
-  incident_report: 'Incidente',
-};
-
 export default function AuditPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
+  const actionLabel = (a: string): string => {
+    const fallbacks: Record<string, string> = {
+      approve_driver: 'Aprobó conductor', reject_driver: 'Rechazó conductor',
+      suspend_driver: 'Suspendió conductor', approve_redemption: 'Aprobó retiro',
+      reject_redemption: 'Rechazó retiro', approve_recharge: 'Aprobó recarga',
+      reject_recharge: 'Rechazó recarga', incident_investigating: 'Pasó incidente a investigación',
+      incident_resolved: 'Resolvió incidente',
+    };
+    return t(`audit.action_${a}`, { defaultValue: fallbacks[a] ?? a.replace(/_/g, ' ') });
+  };
+  const targetLabel = (tgt: string): string => {
+    const fallbacks: Record<string, string> = {
+      driver_profile: 'Conductor', wallet_redemption: 'Retiro',
+      wallet_recharge_request: 'Recarga', incident_report: 'Incidente',
+    };
+    return t(`audit.target_${tgt}`, { defaultValue: fallbacks[tgt] ?? tgt });
+  };
   const [actions, setActions] = useState<AdminAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,11 +49,11 @@ export default function AuditPage() {
       setActions(data);
     } catch (err) {
       setActions([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar la auditoría.');
+      setError(err instanceof Error ? err.message : t('audit.load_error', { defaultValue: 'No pudimos cargar la auditoría.' }));
     } finally {
       setLoading(false);
     }
-  }, [page, dateFrom, dateTo]);
+  }, [page, dateFrom, dateTo, t]);
 
   useEffect(() => {
     void fetchActions();
@@ -67,20 +65,20 @@ export default function AuditPage() {
     () => [
       {
         id: 'action',
-        header: 'Acción',
+        header: t('audit.col_action', { defaultValue: 'Acción' }),
         cell: (a) => (
           <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
-            {ACTION_LABEL[a.action] ?? a.action.replace(/_/g, ' ')}
+            {actionLabel(a.action)}
           </span>
         ),
         primary: true,
       },
       {
         id: 'target',
-        header: 'Sobre',
+        header: t('audit.col_target', { defaultValue: 'Sobre' }),
         cell: (a) => (
           <span className="flex flex-col">
-            <span className="text-ink">{TARGET_LABEL[a.target_type] ?? a.target_type}</span>
+            <span className="text-ink">{targetLabel(a.target_type)}</span>
             {a.target_id && (
               <span className="font-mono text-[10px] text-ink-subtle">{a.target_id.slice(0, 10)}…</span>
             )}
@@ -91,7 +89,7 @@ export default function AuditPage() {
       },
       {
         id: 'admin_id',
-        header: 'Admin',
+        header: t('audit.col_admin', { defaultValue: 'Admin' }),
         cell: (a) => `${a.admin_id.slice(0, 8)}…`,
         mono: true,
         hideBelow: 'md',
@@ -99,7 +97,7 @@ export default function AuditPage() {
       },
       {
         id: 'reason',
-        header: 'Motivo',
+        header: t('audit.col_reason', { defaultValue: 'Motivo' }),
         cell: (a) =>
           a.reason ? (
             <span className="block max-w-xs truncate text-ink-muted" title={a.reason}>
@@ -112,27 +110,28 @@ export default function AuditPage() {
       },
       {
         id: 'created_at',
-        header: 'Fecha',
+        header: t('audit.col_date', { defaultValue: 'Fecha' }),
         cell: (a) => <span className="text-ink-muted">{formatAdminDate(a.created_at)}</span>,
         sortKey: 'created_at',
         hideBelow: 'md',
         width: '170px',
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Sistema · auditoría
+          {t('audit.page_eyebrow', { defaultValue: 'Sistema · auditoría' })}
         </p>
         <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-          Auditoría
+          {t('audit.title', { defaultValue: 'Auditoría' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          Historial completo de acciones hechas por el equipo de administración.
+          {t('audit.page_description', { defaultValue: 'Historial completo de acciones hechas por el equipo de administración.' })}
         </p>
       </div>
 
@@ -142,7 +141,9 @@ export default function AuditPage() {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Desde</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              {t('audit.filter_desde', { defaultValue: 'Desde' })}
+            </span>
             <input
               type="date"
               value={dateFrom}
@@ -154,7 +155,9 @@ export default function AuditPage() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Hasta</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              {t('audit.filter_hasta', { defaultValue: 'Hasta' })}
+            </span>
             <input
               type="date"
               value={dateTo}
@@ -179,7 +182,7 @@ export default function AuditPage() {
               }}
               className="text-[11.5px] font-medium text-ink-muted hover:text-ink"
             >
-              Limpiar fechas
+              {t('audit.clear_dates', { defaultValue: 'Limpiar fechas' })}
             </button>
           </div>
         )}
@@ -194,12 +197,12 @@ export default function AuditPage() {
         onRetry={() => void fetchActions()}
         empty={{
           icon: activeFilterCount > 0 ? ClipboardList : ShieldCheck,
-          title:
-            activeFilterCount > 0 ? 'Sin acciones en ese rango' : 'Nada que auditar aún',
-          body:
-            activeFilterCount > 0
-              ? 'Probá con otras fechas o limpiá el filtro.'
-              : 'Cuando el equipo haga cambios, los vas a ver acá.',
+          title: activeFilterCount > 0
+            ? t('audit.empty_filtered_title', { defaultValue: 'Sin acciones en ese rango' })
+            : t('audit.empty_zero_title', { defaultValue: 'Nada que auditar aún' }),
+          body: activeFilterCount > 0
+            ? t('audit.empty_filtered_body', { defaultValue: 'Probá con otras fechas o limpiá el filtro.' })
+            : t('audit.empty_zero_body', { defaultValue: 'Cuando el equipo haga cambios, los vas a ver acá.' }),
         }}
         sort={sort}
         onSortChange={setSort}

@@ -157,7 +157,7 @@ export default function ReportsPage() {
         }
       } catch (err) {
         // Error handled by UI
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar reportes');
+        if (!cancelled) setError(err instanceof Error ? err.message : t('reports.load_error', { defaultValue: 'Error al cargar reportes' }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -165,6 +165,7 @@ export default function ReportsPage() {
 
     fetchAll();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
   // KPI cards
@@ -248,7 +249,16 @@ export default function ReportsPage() {
 
       if (!data?.length) return;
 
-      const headers = ['Fecha', 'Tipo', 'Estado', 'Tarifa CUP', 'Tarifa TRC', 'Pago', 'Origen', 'Destino'];
+      const headers = [
+        t('rides.csv_col_created', { defaultValue: 'Fecha' }),
+        t('rides.type_all', { defaultValue: 'Tipo' }),
+        t('rides.csv_col_status', { defaultValue: 'Estado' }),
+        t('rides.csv_col_estimated_fare', { defaultValue: 'Tarifa CUP' }),
+        'Tarifa TRC',
+        t('rides.csv_col_payment_method', { defaultValue: 'Pago' }),
+        t('rides.csv_col_origin', { defaultValue: 'Origen' }),
+        t('rides.csv_col_destination', { defaultValue: 'Destino' }),
+      ];
       const rows = data.map(r => [
         new Date(r.created_at).toLocaleDateString(),
         r.service_type, r.status,
@@ -276,23 +286,23 @@ export default function ReportsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Sistema · reportes
+            {t('reports.page_eyebrow', { defaultValue: 'Sistema · reportes' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Reportes operativos
+            {t('reports.title', { defaultValue: 'Reportes operativos' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Panorama analítico del servicio. Seleccioná el período para ver tendencias.
+            {t('reports.page_description', { defaultValue: 'Panorama analítico del servicio. Seleccioná el período para ver tendencias.' })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedCity}
             onChange={(e) => setSelectedCity(e.target.value)}
-            aria-label="Filtrar por ciudad"
+            aria-label={t('reports.filter_city_aria', { defaultValue: 'Filtrar por ciudad' })}
             className="h-9 rounded-lg border border-line bg-surface px-3 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
           >
-            <option value="">Todas las ciudades</option>
+            <option value="">{t('reports.all_cities', { defaultValue: 'Todas las ciudades' })}</option>
             {cities.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -321,7 +331,9 @@ export default function ReportsPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Download className="h-3.5 w-3.5" />
-            {exporting ? 'Exportando…' : 'Exportar CSV'}
+            {exporting
+              ? t('reports.exporting', { defaultValue: 'Exportando…' })
+              : t('reports.export_csv', { defaultValue: 'Exportar CSV' })}
           </button>
         </div>
       </div>
@@ -339,34 +351,38 @@ export default function ReportsPage() {
       )}
 
       {/* System Health — always visible, auto-refreshes every 30s */}
-      <SectionCard eyebrow="Operación" title="Salud del sistema" description="Estado de los servicios core en tiempo real.">
+      <SectionCard
+        eyebrow={t('reports.section_health_eyebrow', { defaultValue: 'Operación' })}
+        title={t('reports.section_health_title', { defaultValue: 'Salud del sistema' })}
+        description={t('reports.section_health_description', { defaultValue: 'Estado de los servicios core en tiempo real.' })}
+      >
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-sunken p-3">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.apiOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">API</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_api', { defaultValue: 'API' })}</p>
               <p className={`text-[12.5px] font-semibold ${health.apiOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {health.loading ? '…' : health.apiOk ? 'Operativa' : 'Caída'}
+                {health.loading ? '…' : health.apiOk ? t('reports.health_ok', { defaultValue: 'Operativa' }) : t('reports.health_down', { defaultValue: 'Caída' })}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-sunken p-3">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.dbOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Base de datos</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_db', { defaultValue: 'Base de datos' })}</p>
               <p className={`text-[12.5px] font-semibold ${health.dbOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {health.loading ? '…' : health.dbOk ? 'Operativa' : 'Caída'}
+                {health.loading ? '…' : health.dbOk ? t('reports.health_ok', { defaultValue: 'Operativa' }) : t('reports.health_down', { defaultValue: 'Caída' })}
               </p>
             </div>
           </div>
           <div className="rounded-xl border border-line bg-surface-sunken p-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Viajes activos</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_active_rides', { defaultValue: 'Viajes activos' })}</p>
             <p className="font-editorial text-[28px] leading-none italic text-primary-500" data-tabular>
               {health.loading ? '—' : health.activeRides}
             </p>
           </div>
           <div className="rounded-xl border border-line bg-surface-sunken p-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">Conductores en línea</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_online_drivers', { defaultValue: 'Conductores en línea' })}</p>
             <p className="font-editorial text-[28px] leading-none italic text-emerald-600 dark:text-emerald-400" data-tabular>
               {health.loading ? '—' : health.onlineDrivers}
             </p>

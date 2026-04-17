@@ -20,46 +20,55 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+type GroupKey = 'catalogo' | 'dinero' | 'geografia' | 'automatizacion' | 'experimentos';
+
 type Section = {
   href: string;
   title: string;
   description: string;
   icon: LucideIcon;
-  group: 'Catálogo' | 'Dinero' | 'Geografía' | 'Automatización' | 'Experimentos';
+  group: GroupKey;
 };
 
 export default function SettingsPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
 
   const sections: Section[] = [
-    { href: '/settings/service-types', title: 'Tipos de servicio', description: 'Triciclo, moto, auto, mensajería y sus reglas', icon: Car, group: 'Catálogo' },
-    { href: '/settings/cities', title: 'Ciudades activas', description: 'En qué municipios opera TriciGo', icon: Building2, group: 'Geografía' },
-    { href: '/settings/zones', title: 'Zonas operativas', description: 'Delimitaciones dentro de cada ciudad', icon: Map, group: 'Geografía' },
-    { href: '/settings/live-map', title: 'Mapa en vivo', description: 'Visualización operativa en tiempo real', icon: MapPin, group: 'Geografía' },
-    { href: '/settings/pricing', title: 'Reglas de tarifa', description: 'Base, por km, por minuto, mínimos y cargos', icon: DollarSign, group: 'Dinero' },
-    { href: '/settings/exchange-rate', title: 'Tasa de cambio', description: 'CUP ↔ TriciCoin y reglas de conversión', icon: ArrowLeftRight, group: 'Dinero' },
-    { href: '/settings/promotions', title: 'Promociones', description: 'Códigos de descuento y cupones', icon: Gift, group: 'Dinero' },
-    { href: '/settings/surge-zones', title: 'Zonas de surge', description: 'Polígonos con multiplicador dinámico', icon: Zap, group: 'Dinero' },
-    { href: '/settings/surge-dashboard', title: 'Dashboard de surge', description: 'Actividad actual del pricing dinámico', icon: Activity, group: 'Dinero' },
-    { href: '/settings/automation', title: 'Automatización', description: 'Reglas del motor auto-accept y auto-nav', icon: Bot, group: 'Automatización' },
-    { href: '/settings/feature-flags', title: 'Feature flags', description: 'Activar o desactivar features en caliente', icon: Flag, group: 'Experimentos' },
-    { href: '/settings/experiments', title: 'Experimentos', description: 'A/B tests activos y resultados', icon: FlaskConical, group: 'Experimentos' },
-    { href: '/settings/platform-config', title: 'Configuración de plataforma', description: 'Valores internos del sistema', icon: Sliders, group: 'Automatización' },
+    { href: '/settings/service-types', title: t('settings_hub.section_service_types_title', { defaultValue: 'Tipos de servicio' }), description: t('settings_hub.section_service_types_desc', { defaultValue: 'Triciclo, moto, auto, mensajería y sus reglas' }), icon: Car, group: 'catalogo' },
+    { href: '/settings/cities', title: t('settings_hub.section_cities_title', { defaultValue: 'Ciudades activas' }), description: t('settings_hub.section_cities_desc', { defaultValue: 'En qué municipios opera TriciGo' }), icon: Building2, group: 'geografia' },
+    { href: '/settings/zones', title: t('settings_hub.section_zones_title', { defaultValue: 'Zonas operativas' }), description: t('settings_hub.section_zones_desc', { defaultValue: 'Delimitaciones dentro de cada ciudad' }), icon: Map, group: 'geografia' },
+    { href: '/settings/live-map', title: t('settings_hub.section_live_map_title', { defaultValue: 'Mapa en vivo' }), description: t('settings_hub.section_live_map_desc', { defaultValue: 'Visualización operativa en tiempo real' }), icon: MapPin, group: 'geografia' },
+    { href: '/settings/pricing', title: t('settings_hub.section_pricing_title', { defaultValue: 'Reglas de tarifa' }), description: t('settings_hub.section_pricing_desc', { defaultValue: 'Base, por km, por minuto, mínimos y cargos' }), icon: DollarSign, group: 'dinero' },
+    { href: '/settings/exchange-rate', title: t('settings_hub.section_exchange_title', { defaultValue: 'Tasa de cambio' }), description: t('settings_hub.section_exchange_desc', { defaultValue: 'CUP ↔ TriciCoin y reglas de conversión' }), icon: ArrowLeftRight, group: 'dinero' },
+    { href: '/settings/promotions', title: t('settings_hub.section_promotions_title', { defaultValue: 'Promociones' }), description: t('settings_hub.section_promotions_desc', { defaultValue: 'Códigos de descuento y cupones' }), icon: Gift, group: 'dinero' },
+    { href: '/settings/surge-zones', title: t('settings_hub.section_surge_zones_title', { defaultValue: 'Zonas de surge' }), description: t('settings_hub.section_surge_zones_desc', { defaultValue: 'Polígonos con multiplicador dinámico' }), icon: Zap, group: 'dinero' },
+    { href: '/settings/surge-dashboard', title: t('settings_hub.section_surge_dashboard_title', { defaultValue: 'Dashboard de surge' }), description: t('settings_hub.section_surge_dashboard_desc', { defaultValue: 'Actividad actual del pricing dinámico' }), icon: Activity, group: 'dinero' },
+    { href: '/settings/automation', title: t('settings_hub.section_automation_title', { defaultValue: 'Automatización' }), description: t('settings_hub.section_automation_desc', { defaultValue: 'Reglas del motor auto-accept y auto-nav' }), icon: Bot, group: 'automatizacion' },
+    { href: '/settings/feature-flags', title: t('settings_hub.section_feature_flags_title', { defaultValue: 'Feature flags' }), description: t('settings_hub.section_feature_flags_desc', { defaultValue: 'Activar o desactivar features en caliente' }), icon: Flag, group: 'experimentos' },
+    { href: '/settings/experiments', title: t('settings_hub.section_experiments_title', { defaultValue: 'Experimentos' }), description: t('settings_hub.section_experiments_desc', { defaultValue: 'A/B tests activos y resultados' }), icon: FlaskConical, group: 'experimentos' },
+    { href: '/settings/platform-config', title: t('settings_hub.section_platform_config_title', { defaultValue: 'Configuración de plataforma' }), description: t('settings_hub.section_platform_config_desc', { defaultValue: 'Valores internos del sistema' }), icon: Sliders, group: 'automatizacion' },
   ];
 
-  const groups = ['Catálogo', 'Geografía', 'Dinero', 'Automatización', 'Experimentos'] as const;
+  const groups: GroupKey[] = ['catalogo', 'geografia', 'dinero', 'automatizacion', 'experimentos'];
+  const groupLabel = (g: GroupKey): string => {
+    const fallbacks: Record<GroupKey, string> = {
+      catalogo: 'Catálogo', dinero: 'Dinero', geografia: 'Geografía',
+      automatizacion: 'Automatización', experimentos: 'Experimentos',
+    };
+    return t(`settings_hub.group_${g}`, { defaultValue: fallbacks[g] });
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Sistema · ajustes
+          {t('settings_hub.page_eyebrow', { defaultValue: 'Sistema · ajustes' })}
         </p>
         <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-          Ajustes
+          {t('settings_hub.title', { defaultValue: 'Ajustes' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          Palancas centrales de TriciGo. Cada sección controla un aspecto específico del servicio.
+          {t('settings_hub.page_description', { defaultValue: 'Palancas centrales de TriciGo. Cada sección controla un aspecto específico del servicio.' })}
         </p>
       </div>
 
@@ -70,7 +79,7 @@ export default function SettingsPage() {
           <section key={g}>
             <div className="mb-3 flex items-baseline gap-2">
               <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-                {g}
+                {groupLabel(g)}
               </span>
               <span className="flex-1 border-t border-dashed border-line" aria-hidden="true" />
             </div>

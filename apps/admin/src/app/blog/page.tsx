@@ -27,7 +27,7 @@ const emptyForm = {
 const PAGE_SIZE = 20;
 
 export default function BlogAdminPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
   const { showToast } = useToast();
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -48,11 +48,11 @@ export default function BlogAdminPage() {
       setPosts(data);
     } catch (err) {
       setPosts([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los posts.');
+      setError(err instanceof Error ? err.message : t('blog.load_error', { defaultValue: 'No pudimos cargar los posts.' }));
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, t]);
 
   useEffect(() => {
     void loadPosts();
@@ -77,7 +77,7 @@ export default function BlogAdminPage() {
           body_en: form.body_en,
           cover_image_url: form.cover_image_url || null,
         });
-        showToast('success', 'Post actualizado');
+        showToast('success', t('blog.toast_updated', { defaultValue: 'Post actualizado' }));
       } else {
         await blogService.createPost({
           slug: form.slug,
@@ -92,12 +92,12 @@ export default function BlogAdminPage() {
           published_at: null,
           author_id: null,
         });
-        showToast('success', 'Post creado');
+        showToast('success', t('blog.toast_created', { defaultValue: 'Post creado' }));
       }
       resetForm();
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos guardar el post.');
+      showToast('error', err instanceof Error ? err.message : t('blog.save_error', { defaultValue: 'No pudimos guardar el post.' }));
     }
   };
 
@@ -122,10 +122,10 @@ export default function BlogAdminPage() {
   const handleDelete = async (id: string) => {
     try {
       await blogService.deletePost(id);
-      showToast('success', 'Post eliminado');
+      showToast('success', t('blog.toast_deleted', { defaultValue: 'Post eliminado' }));
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos eliminar el post.');
+      showToast('error', err instanceof Error ? err.message : t('blog.delete_error', { defaultValue: 'No pudimos eliminar el post.' }));
     }
   };
 
@@ -133,14 +133,14 @@ export default function BlogAdminPage() {
     try {
       if (post.is_published) {
         await blogService.unpublishPost(post.id);
-        showToast('success', 'Post despublicado');
+        showToast('success', t('blog.toast_unpublished', { defaultValue: 'Post despublicado' }));
       } else {
         await blogService.publishPost(post.id);
-        showToast('success', 'Post publicado');
+        showToast('success', t('blog.toast_published', { defaultValue: 'Post publicado' }));
       }
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos cambiar el estado.');
+      showToast('error', err instanceof Error ? err.message : t('blog.publish_error', { defaultValue: 'No pudimos cambiar el estado.' }));
     }
   };
 
@@ -159,10 +159,12 @@ export default function BlogAdminPage() {
     () => [
       {
         id: 'title_es',
-        header: 'Título',
+        header: t('blog.col_title', { defaultValue: 'Título' }),
         cell: (p) => (
           <span className="flex min-w-0 flex-col">
-            <span className="truncate font-medium text-ink">{p.title_es || p.title_en || '(sin título)'}</span>
+            <span className="truncate font-medium text-ink">
+              {p.title_es || p.title_en || t('blog.no_title', { defaultValue: '(sin título)' })}
+            </span>
             <span className="truncate font-mono text-[11px] text-ink-muted">{p.slug}</span>
           </span>
         ),
@@ -171,22 +173,22 @@ export default function BlogAdminPage() {
       },
       {
         id: 'is_published',
-        header: 'Estado',
+        header: t('blog.col_status', { defaultValue: 'Estado' }),
         cell: (p) =>
           p.is_published ? (
             <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              Publicado
+              {t('blog.status_published', { defaultValue: 'Publicado' })}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
-              Borrador
+              {t('blog.status_draft', { defaultValue: 'Borrador' })}
             </span>
           ),
         width: '120px',
       },
       {
         id: 'excerpt_es',
-        header: 'Resumen',
+        header: t('blog.col_excerpt', { defaultValue: 'Resumen' }),
         cell: (p) => (
           <span className="block max-w-[280px] truncate text-ink-muted">
             {p.excerpt_es || <span className="text-ink-subtle">—</span>}
@@ -197,14 +199,14 @@ export default function BlogAdminPage() {
       },
       {
         id: 'created_at',
-        header: 'Creado',
+        header: t('blog.col_created', { defaultValue: 'Creado' }),
         cell: (p) => <span className="text-ink-muted">{formatAdminDate(p.created_at)}</span>,
         hideBelow: 'lg',
         sortKey: 'created_at',
         width: '170px',
       },
     ],
-    [],
+    [t],
   );
 
   return (
@@ -212,13 +214,13 @@ export default function BlogAdminPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Contenido · bitácora
+            {t('blog.page_eyebrow', { defaultValue: 'Contenido · bitácora' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Blog
+            {t('blog.title', { defaultValue: 'Blog' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Historias, novedades y anuncios que se publican en la web pública.
+            {t('blog.page_description', { defaultValue: 'Historias, novedades y anuncios que se publican en la web pública.' })}
           </p>
         </div>
         {!showForm && (
@@ -230,7 +232,7 @@ export default function BlogAdminPage() {
             className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
-            Nuevo post
+            {t('blog.new_post', { defaultValue: 'Nuevo post' })}
           </button>
         )}
       </div>
@@ -239,27 +241,29 @@ export default function BlogAdminPage() {
         <div className="admin-card p-5 animate-fade-in">
           <div className="mb-3 flex items-center justify-between">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-              {editingId ? 'Editando post' : 'Nuevo post'}
+              {editingId
+                ? t('blog.editing_post', { defaultValue: 'Editando post' })
+                : t('blog.new_post', { defaultValue: 'Nuevo post' })}
             </p>
             <button
               onClick={resetForm}
               className="rounded-md p-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
-              aria-label="Cerrar"
+              aria-label={t('blog.close', { defaultValue: 'Cerrar' })}
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Field label="Slug">
+            <Field label={t('blog.field_slug', { defaultValue: 'Slug' })}>
               <input
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                placeholder="nota-sobre-la-habana"
+                placeholder={t('blog.placeholder_slug', { defaultValue: 'nota-sobre-la-habana' })}
                 className={inputCls}
               />
             </Field>
-            <Field label="Imagen de portada">
+            <Field label={t('blog.field_cover', { defaultValue: 'Imagen de portada' })}>
               <input
                 value={form.cover_image_url}
                 onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
@@ -267,35 +271,35 @@ export default function BlogAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label="Título (ES)">
+            <Field label={t('blog.field_title_es', { defaultValue: 'Título (ES)' })}>
               <input
                 value={form.title_es}
                 onChange={(e) => setForm({ ...form, title_es: e.target.value })}
                 className={inputCls}
               />
             </Field>
-            <Field label="Title (EN)">
+            <Field label={t('blog.field_title_en', { defaultValue: 'Title (EN)' })}>
               <input
                 value={form.title_en}
                 onChange={(e) => setForm({ ...form, title_en: e.target.value })}
                 className={inputCls}
               />
             </Field>
-            <Field label="Resumen (ES)">
+            <Field label={t('blog.field_excerpt_es', { defaultValue: 'Resumen (ES)' })}>
               <input
                 value={form.excerpt_es}
                 onChange={(e) => setForm({ ...form, excerpt_es: e.target.value })}
                 className={inputCls}
               />
             </Field>
-            <Field label="Excerpt (EN)">
+            <Field label={t('blog.field_excerpt_en', { defaultValue: 'Excerpt (EN)' })}>
               <input
                 value={form.excerpt_en}
                 onChange={(e) => setForm({ ...form, excerpt_en: e.target.value })}
                 className={inputCls}
               />
             </Field>
-            <Field label="Cuerpo (ES)">
+            <Field label={t('blog.field_body_es', { defaultValue: 'Cuerpo (ES)' })}>
               <textarea
                 rows={8}
                 value={form.body_es}
@@ -303,7 +307,7 @@ export default function BlogAdminPage() {
                 className={textareaCls}
               />
             </Field>
-            <Field label="Body (EN)">
+            <Field label={t('blog.field_body_en', { defaultValue: 'Body (EN)' })}>
               <textarea
                 rows={8}
                 value={form.body_en}
@@ -318,13 +322,13 @@ export default function BlogAdminPage() {
               onClick={resetForm}
               className="rounded-full border border-line bg-surface px-4 py-1.5 text-[12.5px] font-medium text-ink hover:bg-surface-sunken"
             >
-              Cancelar
+              {t('blog.cancel', { defaultValue: 'Cancelar' })}
             </button>
             <button
               onClick={() => void handleSave()}
               className="rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
             >
-              Guardar
+              {t('blog.save', { defaultValue: 'Guardar' })}
             </button>
           </div>
         </div>
@@ -339,10 +343,10 @@ export default function BlogAdminPage() {
         onRetry={() => void loadPosts()}
         empty={{
           icon: Newspaper,
-          title: 'Sin posts',
-          body: 'Creá el primero para que la bitácora cuente la historia de TriciGo.',
+          title: t('blog.empty_title', { defaultValue: 'Sin posts' }),
+          body: t('blog.empty_body', { defaultValue: 'Creá el primero para que la bitácora cuente la historia de TriciGo.' }),
           action: {
-            label: 'Nuevo post',
+            label: t('blog.new_post', { defaultValue: 'Nuevo post' }),
             onClick: () => {
               resetForm();
               setShowForm(true);
@@ -354,13 +358,13 @@ export default function BlogAdminPage() {
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: posts.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
         rowActions={[
-          { label: 'Editar', onClick: (p) => handleEdit(p) },
+          { label: t('blog.action_edit', { defaultValue: 'Editar' }), onClick: (p) => handleEdit(p) },
           {
-            label: 'Publicar/Despublicar',
+            label: t('blog.action_toggle_publish', { defaultValue: 'Publicar/Despublicar' }),
             onClick: (p) => void handleTogglePublish(p),
           },
           {
-            label: 'Eliminar',
+            label: t('blog.action_delete', { defaultValue: 'Eliminar' }),
             tone: 'danger',
             onClick: (p) => setDeleteModalId(p.id),
           },
@@ -369,8 +373,8 @@ export default function BlogAdminPage() {
 
       <AdminConfirmModal
         open={!!deleteModalId}
-        title="Eliminar post"
-        message="Esta acción no se puede deshacer."
+        title={t('blog.delete_title', { defaultValue: 'Eliminar post' })}
+        message={t('blog.delete_confirm', { defaultValue: 'Esta acción no se puede deshacer.' })}
         variant="danger"
         onConfirm={async () => {
           if (deleteModalId) {

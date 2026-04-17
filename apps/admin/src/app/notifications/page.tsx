@@ -24,15 +24,14 @@ type NotificationLog = {
   created_at: string;
 };
 
-const AUDIENCE_LABEL: Record<string, string> = {
-  all: 'Todos',
-  customers: 'Pasajeros',
-  drivers: 'Conductores',
-  user: 'Usuario específico',
-};
-
 export default function NotificationsPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
+  const audienceLabel = (a: string): string => {
+    const fallbacks: Record<string, string> = {
+      all: 'Todos', customers: 'Pasajeros', drivers: 'Conductores', user: 'Usuario específico',
+    };
+    return t(`notifications.audience_${a}`, { defaultValue: fallbacks[a] ?? a });
+  };
   const { showToast } = useToast();
 
   const [title, setTitle] = useState('');
@@ -65,10 +64,11 @@ export default function NotificationsPage() {
       setHistory(data);
     } catch (err) {
       setHistory([]);
-      setHistoryError(err instanceof Error ? err.message : 'No pudimos cargar el historial.');
+      setHistoryError(err instanceof Error ? err.message : t('notifications.history_error', { defaultValue: 'No pudimos cargar el historial.' }));
     } finally {
       setHistoryLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInboxStats = useCallback(async () => {
@@ -140,9 +140,10 @@ export default function NotificationsPage() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!title.trim()) errors.title = 'Requerido';
-    if (!body.trim()) errors.body = 'Requerido';
-    if (targetType === 'user' && !targetUserId) errors.target = 'Elegí un usuario';
+    const required = t('notifications.required', { defaultValue: 'Requerido' });
+    if (!title.trim()) errors.title = required;
+    if (!body.trim()) errors.body = required;
+    if (targetType === 'user' && !targetUserId) errors.target = t('notifications.choose_user_error', { defaultValue: 'Elegí un usuario' });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -163,12 +164,14 @@ export default function NotificationsPage() {
       setUserSearch('');
       setFormErrors({});
       await loadHistory();
+      const sentLabel = t('notifications.sent_result', { defaultValue: 'Enviadas' });
+      const failedSuffix = t('notifications.failed_suffix', { defaultValue: 'fallidas' });
       showToast(
         'success',
-        `Enviadas ${result.successCount}${result.errorCount > 0 ? ` · ${result.errorCount} fallidas` : ''}`,
+        `${sentLabel} ${result.successCount}${result.errorCount > 0 ? ` · ${result.errorCount} ${failedSuffix}` : ''}`,
       );
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos enviar el push.');
+      showToast('error', err instanceof Error ? err.message : t('notifications.sent_error', { defaultValue: 'No pudimos enviar el push.' }));
     } finally {
       setSending(false);
     }
@@ -178,7 +181,7 @@ export default function NotificationsPage() {
     () => [
       {
         id: 'title',
-        header: 'Mensaje',
+        header: t('notifications.col_message', { defaultValue: 'Mensaje' }),
         cell: (n) => (
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium text-ink">{n.title}</span>
@@ -189,17 +192,17 @@ export default function NotificationsPage() {
       },
       {
         id: 'target_type',
-        header: 'Audiencia',
+        header: t('notifications.col_audience', { defaultValue: 'Audiencia' }),
         cell: (n) => (
           <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
-            {AUDIENCE_LABEL[n.target_type] ?? n.target_type}
+            {audienceLabel(n.target_type)}
           </span>
         ),
         width: '150px',
       },
       {
         id: 'sent_count',
-        header: 'Enviados',
+        header: t('notifications.col_sent', { defaultValue: 'Enviados' }),
         cell: (n) => <span className="tabular" data-tabular>{n.sent_count.toLocaleString('es-CU')}</span>,
         align: 'right',
         mono: true,
@@ -208,20 +211,21 @@ export default function NotificationsPage() {
       },
       {
         id: 'created_at',
-        header: 'Fecha',
+        header: t('notifications.col_date', { defaultValue: 'Fecha' }),
         cell: (n) => <span className="text-ink-muted">{formatAdminDate(n.created_at)}</span>,
         sortKey: 'created_at',
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t],
   );
 
   const inboxColumns: DataColumn<AppNotification>[] = [
     {
       id: 'title',
-      header: 'Notificación',
+      header: t('notifications.col_notification', { defaultValue: 'Notificación' }),
       cell: (n) => (
         <span className="flex min-w-0 flex-col">
           <span className="truncate font-medium text-ink">{n.title}</span>
@@ -232,7 +236,7 @@ export default function NotificationsPage() {
     },
     {
       id: 'type',
-      header: 'Tipo',
+      header: t('notifications.col_type', { defaultValue: 'Tipo' }),
       cell: (n) => (
         <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-ink-muted">
           {n.type}
@@ -242,7 +246,7 @@ export default function NotificationsPage() {
     },
     {
       id: 'user_id',
-      header: 'Usuario',
+      header: t('notifications.col_user', { defaultValue: 'Usuario' }),
       cell: (n) => `${n.user_id.slice(0, 8)}…`,
       mono: true,
       hideBelow: 'md',
@@ -250,22 +254,22 @@ export default function NotificationsPage() {
     },
     {
       id: 'read',
-      header: 'Estado',
+      header: t('notifications.col_status', { defaultValue: 'Estado' }),
       cell: (n) =>
         n.read ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-            Leída
+            {t('notifications.status_read', { defaultValue: 'Leída' })}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-            Sin leer
+            {t('notifications.status_unread', { defaultValue: 'Sin leer' })}
           </span>
         ),
       width: '110px',
     },
     {
       id: 'created_at',
-      header: 'Fecha',
+      header: t('notifications.col_date', { defaultValue: 'Fecha' }),
       cell: (n) => <span className="text-ink-muted">{formatAdminDate(n.created_at)}</span>,
       hideBelow: 'lg',
       width: '170px',
@@ -276,22 +280,25 @@ export default function NotificationsPage() {
     <div className="flex flex-col gap-5">
       <div>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Contenido · push
+          {t('notifications.page_eyebrow', { defaultValue: 'Contenido · push' })}
         </p>
         <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-          Notificaciones
+          {t('notifications.title', { defaultValue: 'Notificaciones' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          Mandá avisos a toda Cuba, a un segmento de usuarios o a una persona puntual.
+          {t('notifications.page_description', { defaultValue: 'Mandá avisos a toda Cuba, a un segmento de usuarios o a una persona puntual.' })}
         </p>
       </div>
 
       {/* Compose */}
-      <SectionCard eyebrow="Redactar" title="Nuevo aviso push">
+      <SectionCard
+        eyebrow={t('notifications.section_compose_eyebrow', { defaultValue: 'Redactar' })}
+        title={t('notifications.section_compose_title', { defaultValue: 'Nuevo aviso push' })}
+      >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Audiencia <span className="text-red-500">*</span>
+              {t('notifications.field_audience', { defaultValue: 'Audiencia' })} <span className="text-red-500">*</span>
             </span>
             <select
               value={targetType}
@@ -303,22 +310,22 @@ export default function NotificationsPage() {
               }}
               className={inputCls}
             >
-              <option value="all">Todos</option>
-              <option value="customers">Pasajeros</option>
-              <option value="drivers">Conductores</option>
-              <option value="user">Usuario específico</option>
+              <option value="all">{t('notifications.audience_all', { defaultValue: 'Todos' })}</option>
+              <option value="customers">{t('notifications.audience_customers', { defaultValue: 'Pasajeros' })}</option>
+              <option value="drivers">{t('notifications.audience_drivers', { defaultValue: 'Conductores' })}</option>
+              <option value="user">{t('notifications.audience_user', { defaultValue: 'Usuario específico' })}</option>
             </select>
           </label>
 
           {targetType === 'user' && (
             <label className="relative flex flex-col gap-1">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                Elegir usuario
+                {t('notifications.field_choose_user', { defaultValue: 'Elegir usuario' })}
               </span>
               <input
                 value={userSearch}
                 onChange={(e) => void handleUserSearch(e.target.value)}
-                placeholder="Buscar por nombre, teléfono o email…"
+                placeholder={t('notifications.placeholder_user_search', { defaultValue: 'Buscar por nombre, teléfono o email…' })}
                 className={inputCls}
               />
               {userResults.length > 0 && (
@@ -341,7 +348,9 @@ export default function NotificationsPage() {
                 </div>
               )}
               {targetUserId && (
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Usuario seleccionado</span>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                  {t('notifications.user_selected', { defaultValue: 'Usuario seleccionado' })}
+                </span>
               )}
               {formErrors.target && <span className="text-[11px] text-red-500">{formErrors.target}</span>}
             </label>
@@ -349,7 +358,7 @@ export default function NotificationsPage() {
 
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Título <span className="text-red-500">*</span>
+              {t('notifications.field_title', { defaultValue: 'Título' })} <span className="text-red-500">*</span>
             </span>
             <input
               value={title}
@@ -357,7 +366,7 @@ export default function NotificationsPage() {
                 setTitle(e.target.value);
                 setFormErrors(({ title: _t, ...rest }) => rest);
               }}
-              placeholder="Lo que aparece en la notificación"
+              placeholder={t('notifications.placeholder_title', { defaultValue: 'Lo que aparece en la notificación' })}
               className={errorInputCls(!!formErrors.title)}
             />
             {formErrors.title && <span className="text-[11px] text-red-500">{formErrors.title}</span>}
@@ -365,7 +374,7 @@ export default function NotificationsPage() {
 
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Cuerpo <span className="text-red-500">*</span>
+              {t('notifications.field_body', { defaultValue: 'Cuerpo' })} <span className="text-red-500">*</span>
             </span>
             <textarea
               rows={3}
@@ -374,7 +383,7 @@ export default function NotificationsPage() {
                 setBody(e.target.value);
                 setFormErrors(({ body: _b, ...rest }) => rest);
               }}
-              placeholder="Mensaje que va a leer el usuario"
+              placeholder={t('notifications.placeholder_body', { defaultValue: 'Mensaje que va a leer el usuario' })}
               className={errorTextareaCls(!!formErrors.body)}
             />
             {formErrors.body && <span className="text-[11px] text-red-500">{formErrors.body}</span>}
@@ -387,7 +396,9 @@ export default function NotificationsPage() {
             className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" />
-            {sending ? 'Enviando…' : 'Enviar push'}
+            {sending
+              ? t('notifications.sending', { defaultValue: 'Enviando…' })
+              : t('notifications.send_push', { defaultValue: 'Enviar push' })}
           </button>
         </div>
       </SectionCard>
@@ -395,26 +406,29 @@ export default function NotificationsPage() {
       {/* Inbox stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard
-          label="Enviadas hoy"
+          label={t('notifications.kpi_sent_today', { defaultValue: 'Enviadas hoy' })}
           value={statsLoading ? '—' : String(inboxStats?.totalToday ?? 0)}
           tone="info"
           loading={statsLoading}
         />
         <KpiCard
-          label="Sin leer"
+          label={t('notifications.kpi_unread', { defaultValue: 'Sin leer' })}
           value={statsLoading ? '—' : String(inboxStats?.totalUnread ?? 0)}
           tone={inboxStats && inboxStats.totalUnread > 0 ? 'warning' : 'default'}
           loading={statsLoading}
         />
         <KpiCard
-          label="Tipos únicos hoy"
+          label={t('notifications.kpi_types_today', { defaultValue: 'Tipos únicos hoy' })}
           value={statsLoading ? '—' : String(Object.keys(inboxStats?.byType ?? {}).length)}
           loading={statsLoading}
         />
       </div>
 
       {inboxStats && Object.keys(inboxStats.byType).length > 0 && (
-        <SectionCard eyebrow="Hoy" title="Distribución por tipo">
+        <SectionCard
+          eyebrow={t('notifications.today_distribution_eyebrow', { defaultValue: 'Hoy' })}
+          title={t('notifications.today_distribution_title', { defaultValue: 'Distribución por tipo' })}
+        >
           <div className="flex flex-wrap gap-2">
             {Object.entries(inboxStats.byType)
               .sort(([, a], [, b]) => b - a)
@@ -432,7 +446,10 @@ export default function NotificationsPage() {
       )}
 
       {inboxStats?.recent && (
-        <SectionCard eyebrow="Inbox" title="Últimas notificaciones entregadas">
+        <SectionCard
+          eyebrow={t('notifications.inbox_eyebrow', { defaultValue: 'Inbox' })}
+          title={t('notifications.inbox_title', { defaultValue: 'Últimas notificaciones entregadas' })}
+        >
           <DataTable<AppNotification>
             columns={inboxColumns}
             rows={inboxStats.recent}
@@ -440,15 +457,18 @@ export default function NotificationsPage() {
             loading={statsLoading}
             empty={{
               icon: Bell,
-              title: 'Sin notificaciones recientes',
-              body: 'Todavía no llegó ninguna a los usuarios.',
+              title: t('notifications.empty_inbox_title', { defaultValue: 'Sin notificaciones recientes' }),
+              body: t('notifications.empty_inbox_body', { defaultValue: 'Todavía no llegó ninguna a los usuarios.' }),
             }}
           />
         </SectionCard>
       )}
 
       {/* History */}
-      <SectionCard eyebrow="Historial" title="Pushes enviados">
+      <SectionCard
+        eyebrow={t('notifications.history_eyebrow', { defaultValue: 'Historial' })}
+        title={t('notifications.history_title', { defaultValue: 'Pushes enviados' })}
+      >
         <DataTable<NotificationLog>
           columns={historyColumns}
           rows={history}
@@ -458,8 +478,8 @@ export default function NotificationsPage() {
           onRetry={() => void loadHistory()}
           empty={{
             icon: Bell,
-            title: 'Sin historial',
-            body: 'Todavía no se envió ninguna notificación desde este panel.',
+            title: t('notifications.empty_history_title', { defaultValue: 'Sin historial' }),
+            body: t('notifications.empty_history_body', { defaultValue: 'Todavía no se envió ninguna notificación desde este panel.' }),
           }}
           sort={sort}
           onSortChange={setSort}
