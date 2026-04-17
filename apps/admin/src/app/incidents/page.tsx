@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
@@ -15,32 +15,13 @@ const PAGE_SIZE = 20;
 
 type StatusFilter = 'all' | 'open' | 'investigating' | 'resolved';
 
-const STATUS_TABS: StatusTab<StatusFilter>[] = [
-  { id: 'all', label: 'Todos' },
-  { id: 'open', label: 'Abiertos', tone: 'danger' },
-  { id: 'investigating', label: 'En investigación', tone: 'warning' },
-  { id: 'resolved', label: 'Resueltos', tone: 'success' },
-];
-
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 
-const SEVERITY_META: Record<Severity, { label: string; className: string }> = {
-  critical: {
-    label: 'Crítica',
-    className: 'bg-red-600 text-white',
-  },
-  high: {
-    label: 'Alta',
-    className: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  },
-  medium: {
-    label: 'Media',
-    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  },
-  low: {
-    label: 'Baja',
-    className: 'bg-surface-sunken text-ink-muted',
-  },
+const SEVERITY_CLASS: Record<Severity, string> = {
+  critical: 'bg-red-600 text-white',
+  high: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  low: 'bg-surface-sunken text-ink-muted',
 };
 
 type Incident = {
@@ -71,6 +52,22 @@ export default function IncidentsPage() {
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
+  const STATUS_TABS: StatusTab<StatusFilter>[] = useMemo(() => [
+    { id: 'all', label: t('incidents.filter_label_all', { defaultValue: 'Todos' }) },
+    { id: 'open', label: t('incidents.filter_label_open', { defaultValue: 'Abiertos' }), tone: 'danger' },
+    { id: 'investigating', label: t('incidents.filter_label_investigating', { defaultValue: 'En investigación' }), tone: 'warning' },
+    { id: 'resolved', label: t('incidents.filter_label_resolved', { defaultValue: 'Resueltos' }), tone: 'success' },
+  ], [t]);
+
+  const severityLabel = useCallback((sev: Severity): string => {
+    switch (sev) {
+      case 'critical': return t('incidents.severity_critical', { defaultValue: 'Crítica' });
+      case 'high': return t('incidents.severity_high', { defaultValue: 'Alta' });
+      case 'medium': return t('incidents.severity_medium', { defaultValue: 'Media' });
+      case 'low': return t('incidents.severity_low', { defaultValue: 'Baja' });
+    }
+  }, [t]);
+
   const fetchIncidents = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -83,7 +80,7 @@ export default function IncidentsPage() {
       setIncidents(data as unknown as Incident[]);
     } catch (err) {
       setIncidents([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los incidentes.');
+      setError(err instanceof Error ? err.message : t('incidents.load_error', { defaultValue: 'No pudimos cargar los incidentes.' }));
     } finally {
       setLoading(false);
     }
@@ -100,30 +97,31 @@ export default function IncidentsPage() {
         setIncidents((prev) => prev.map((i) => (i.id === id ? { ...i, status: next } : i)));
         showToast('success', successMsg);
       } catch (err) {
-        showToast('error', err instanceof Error ? err.message : 'No pudimos actualizar el estado.');
+        showToast('error', err instanceof Error ? err.message : t('incidents.update_error', { defaultValue: 'No pudimos actualizar el estado.' }));
       }
     },
-    [adminUserId, showToast],
+    [adminUserId, showToast, t],
   );
 
   const columns: DataColumn<Incident>[] = useMemo(
     () => [
       {
         id: 'type',
-        header: 'Tipo',
+        header: t('incidents.col_type', { defaultValue: 'Tipo' }),
         cell: (i) => <span className="font-medium text-ink">{typeLabel(i.type, t)}</span>,
         primary: true,
       },
       {
         id: 'severity',
-        header: 'Severidad',
+        header: t('incidents.col_severity', { defaultValue: 'Severidad' }),
         cell: (i) => {
-          const meta = SEVERITY_META[(i.severity as Severity) ?? 'low'] ?? SEVERITY_META.low;
+          const sev = ((i.severity as Severity) ?? 'low');
+          const className = SEVERITY_CLASS[sev] ?? SEVERITY_CLASS.low;
           return (
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${meta.className}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${className}`}
             >
-              {meta.label}
+              {severityLabel(sev)}
             </span>
           );
         },
@@ -131,13 +129,13 @@ export default function IncidentsPage() {
       },
       {
         id: 'status',
-        header: 'Estado',
+        header: t('incidents.col_status', { defaultValue: 'Estado' }),
         cell: (i) => <StatusBadge domain="incident" status={i.status} />,
         width: '170px',
       },
       {
         id: 'ride_id',
-        header: 'Viaje',
+        header: t('incidents.col_ride', { defaultValue: 'Viaje' }),
         cell: (i) => (i.ride_id ? `${i.ride_id.slice(0, 8)}…` : <span className="text-ink-subtle">—</span>),
         mono: true,
         hideBelow: 'lg',
@@ -145,7 +143,7 @@ export default function IncidentsPage() {
       },
       {
         id: 'description',
-        header: 'Descripción',
+        header: t('incidents.col_description', { defaultValue: 'Descripción' }),
         cell: (i) => (
           <span className="block max-w-xs truncate text-ink-muted">{i.description}</span>
         ),
@@ -154,13 +152,13 @@ export default function IncidentsPage() {
       },
       {
         id: 'created_at',
-        header: 'Creado',
+        header: t('incidents.col_date', { defaultValue: 'Creado' }),
         cell: (i) => <span className="text-ink-muted">{formatAdminDate(i.created_at)}</span>,
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [t],
+    [t, severityLabel],
   );
 
   return (
@@ -168,13 +166,13 @@ export default function IncidentsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Operación · incidentes
+            {t('incidents.page_eyebrow', { defaultValue: 'Operación · incidentes' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Incidentes
+            {t('incidents.title', { defaultValue: 'Incidentes' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Reportes de seguridad, conflictos y situaciones que requieren intervención.
+            {t('incidents.page_description', { defaultValue: 'Reportes de seguridad, conflictos y situaciones que requieren intervención.' })}
           </p>
         </div>
       </div>
@@ -203,29 +201,29 @@ export default function IncidentsPage() {
           statusFilter === 'resolved'
             ? {
                 icon: ShieldCheck,
-                title: 'Sin incidentes resueltos',
-                body: 'Cuando se cierre alguno, va a aparecer acá.',
+                title: t('incidents.empty_resolved_title', { defaultValue: 'Sin incidentes resueltos' }),
+                body: t('incidents.empty_resolved_body', { defaultValue: 'Cuando se cierre alguno, va a aparecer acá.' }),
               }
             : {
                 icon: ShieldCheck,
-                title: 'Todo en calma',
-                body: 'No hay incidentes abiertos en este momento. Buena señal.',
+                title: t('incidents.empty_calm_title', { defaultValue: 'Todo en calma' }),
+                body: t('incidents.empty_calm_body', { defaultValue: 'No hay incidentes abiertos en este momento. Buena señal.' }),
               }
         }
         rowActions={[
           {
-            label: 'Investigar',
+            label: t('incidents.action_investigate', { defaultValue: 'Investigar' }),
             onClick: (i) => {
               if (i.status === 'open') {
-                void advanceStatus(i.id, 'investigating', 'Incidente pasado a investigación');
+                void advanceStatus(i.id, 'investigating', t('incidents.toast_now_investigating', { defaultValue: 'Incidente pasado a investigación' }));
               }
             },
           },
           {
-            label: 'Resolver',
+            label: t('incidents.action_resolve', { defaultValue: 'Resolver' }),
             onClick: (i) => {
               if (i.status === 'investigating') {
-                void advanceStatus(i.id, 'resolved', 'Incidente resuelto');
+                void advanceStatus(i.id, 'resolved', t('incidents.toast_resolved', { defaultValue: 'Incidente resuelto' }));
               }
             },
           },

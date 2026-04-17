@@ -13,28 +13,11 @@ import { formatAdminDate } from '@/lib/formatDate';
 
 type Filter = 'unresolved' | 'all';
 
-const TABS: StatusTab<Filter>[] = [
-  { id: 'unresolved', label: 'Sin resolver', tone: 'danger' },
-  { id: 'all', label: 'Todas' },
-];
-
-const SEVERITY_META: Record<string, { label: string; className: string }> = {
-  low: {
-    label: 'Baja',
-    className: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  },
-  medium: {
-    label: 'Media',
-    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  },
-  high: {
-    label: 'Alta',
-    className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
-  },
-  critical: {
-    label: 'Crítica',
-    className: 'bg-red-600 text-white',
-  },
+const SEVERITY_CLASS: Record<string, string> = {
+  low: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  high: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+  critical: 'bg-red-600 text-white',
 };
 
 export default function FraudAlertsPage() {
@@ -50,6 +33,21 @@ export default function FraudAlertsPage() {
   const [resolutionNote, setResolutionNote] = useState('');
   const [resolveModalId, setResolveModalId] = useState<string | null>(null);
 
+  const TABS: StatusTab<Filter>[] = useMemo(() => [
+    { id: 'unresolved', label: t('fraud.filter_label_unresolved', { defaultValue: 'Sin resolver' }), tone: 'danger' },
+    { id: 'all', label: t('fraud.filter_label_all', { defaultValue: 'Todas' }) },
+  ], [t]);
+
+  const severityLabel = useCallback((sev: string): string => {
+    switch (sev) {
+      case 'low': return t('fraud.severity_low', { defaultValue: 'Baja' });
+      case 'medium': return t('fraud.severity_medium', { defaultValue: 'Media' });
+      case 'high': return t('fraud.severity_high', { defaultValue: 'Alta' });
+      case 'critical': return t('fraud.severity_critical', { defaultValue: 'Crítica' });
+      default: return sev;
+    }
+  }, [t]);
+
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -61,7 +59,7 @@ export default function FraudAlertsPage() {
       setAlerts(data);
     } catch (err) {
       setAlerts([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar las alertas.');
+      setError(err instanceof Error ? err.message : t('fraud.load_error', { defaultValue: 'No pudimos cargar las alertas.' }));
     } finally {
       setLoading(false);
     }
@@ -84,9 +82,9 @@ export default function FraudAlertsPage() {
       );
       setResolveModalId(null);
       setResolutionNote('');
-      showToast('success', 'Alerta marcada como resuelta');
+      showToast('success', t('fraud.toast_resolved', { defaultValue: 'Alerta marcada como resuelta' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos resolver la alerta.');
+      showToast('error', err instanceof Error ? err.message : t('fraud.resolve_error', { defaultValue: 'No pudimos resolver la alerta.' }));
     } finally {
       setResolving(null);
     }
@@ -96,7 +94,7 @@ export default function FraudAlertsPage() {
     () => [
       {
         id: 'alert_type',
-        header: 'Tipo',
+        header: t('fraud.col_type', { defaultValue: 'Tipo' }),
         cell: (a) => (
           <span className="font-medium text-ink">
             {t(`fraud.type_${a.alert_type}`, { defaultValue: a.alert_type.replace(/_/g, ' ') })}
@@ -106,14 +104,14 @@ export default function FraudAlertsPage() {
       },
       {
         id: 'severity',
-        header: 'Severidad',
+        header: t('fraud.col_severity', { defaultValue: 'Severidad' }),
         cell: (a) => {
-          const meta = SEVERITY_META[a.severity] ?? { label: a.severity, className: 'bg-surface-sunken text-ink-muted' };
+          const className = SEVERITY_CLASS[a.severity] ?? 'bg-surface-sunken text-ink-muted';
           return (
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${meta.className}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${className}`}
             >
-              {meta.label}
+              {severityLabel(a.severity)}
             </span>
           );
         },
@@ -121,22 +119,22 @@ export default function FraudAlertsPage() {
       },
       {
         id: 'resolved',
-        header: 'Estado',
+        header: t('fraud.col_status', { defaultValue: 'Estado' }),
         cell: (a) =>
           a.resolved ? (
             <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              Resuelta
+              {t('fraud.status_resolved', { defaultValue: 'Resuelta' })}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
-              Pendiente
+              {t('fraud.status_pending', { defaultValue: 'Pendiente' })}
             </span>
           ),
         width: '120px',
       },
       {
         id: 'details',
-        header: 'Detalles',
+        header: t('fraud.col_details', { defaultValue: 'Detalles' }),
         cell: (a) => (
           <span className="block max-w-xs truncate font-mono text-[10.5px] text-ink-muted">
             {a.details ? JSON.stringify(a.details) : '—'}
@@ -147,13 +145,13 @@ export default function FraudAlertsPage() {
       },
       {
         id: 'created_at',
-        header: 'Fecha',
+        header: t('fraud.col_date', { defaultValue: 'Fecha' }),
         cell: (a) => <span className="text-ink-muted">{formatAdminDate(a.created_at)}</span>,
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [t],
+    [t, severityLabel],
   );
 
   return (
@@ -161,15 +159,17 @@ export default function FraudAlertsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Operación · antifraude
+            {t('fraud.page_eyebrow', { defaultValue: 'Operación · antifraude' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Alertas de fraude
+            {t('fraud.title', { defaultValue: 'Alertas de fraude' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
             {unresolvedCount > 0
-              ? `${unresolvedCount} ${unresolvedCount === 1 ? 'alerta pendiente' : 'alertas pendientes'} de revisión`
-              : 'Sin alertas pendientes. Buena señal.'}
+              ? `${unresolvedCount} ${unresolvedCount === 1
+                  ? t('fraud.pending_one', { defaultValue: 'alerta pendiente' })
+                  : t('fraud.pending_many', { defaultValue: 'alertas pendientes' })} ${t('fraud.pending_suffix', { defaultValue: 'de revisión' })}`
+              : t('fraud.zero_pending', { defaultValue: 'Sin alertas pendientes. Buena señal.' })}
           </p>
         </div>
       </div>
@@ -190,16 +190,18 @@ export default function FraudAlertsPage() {
         onRetry={() => void fetchAlerts()}
         empty={{
           icon: filter === 'unresolved' ? ShieldCheck : Shield,
-          title: filter === 'unresolved' ? 'Sin alertas activas' : 'Sin alertas registradas',
+          title: filter === 'unresolved'
+            ? t('fraud.empty_unresolved_title', { defaultValue: 'Sin alertas activas' })
+            : t('fraud.empty_all_title', { defaultValue: 'Sin alertas registradas' }),
           body:
             filter === 'unresolved'
-              ? 'Nada pendiente de revisión. El sistema no detectó fraude reciente.'
-              : 'Todavía no hay alertas para mostrar en este alcance.',
+              ? t('fraud.empty_unresolved_body', { defaultValue: 'Nada pendiente de revisión. El sistema no detectó fraude reciente.' })
+              : t('fraud.empty_all_body', { defaultValue: 'Todavía no hay alertas para mostrar en este alcance.' }),
           tone: 'success',
         }}
         rowActions={[
           {
-            label: 'Resolver',
+            label: t('fraud.resolve', { defaultValue: 'Resolver' }),
             onClick: (a) => {
               if (!a.resolved) setResolveModalId(a.id);
             },
@@ -225,10 +227,10 @@ export default function FraudAlertsPage() {
             <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
               <div>
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                  Antifraude
+                  {t('fraud.section_eyebrow', { defaultValue: 'Antifraude' })}
                 </p>
                 <h3 id="fraud-resolve-title" className="font-display text-[17px] font-semibold text-ink">
-                  Resolver alerta
+                  {t('fraud.resolve_title', { defaultValue: 'Resolver alerta' })}
                 </h3>
               </div>
               <button
@@ -236,7 +238,7 @@ export default function FraudAlertsPage() {
                   setResolveModalId(null);
                   setResolutionNote('');
                 }}
-                aria-label="Cerrar"
+                aria-label={t('fraud.close', { defaultValue: 'Cerrar' })}
                 className="rounded-md p-1.5 text-ink-muted hover:bg-surface-sunken hover:text-ink"
               >
                 <X className="h-4 w-4" />
@@ -245,13 +247,16 @@ export default function FraudAlertsPage() {
             <div className="px-5 py-4">
               <label className="flex flex-col gap-1.5">
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                  Nota de resolución <span className="normal-case text-ink-subtle">(opcional)</span>
+                  {t('fraud.resolve_note_label', { defaultValue: 'Nota de resolución' })}{' '}
+                  <span className="normal-case text-ink-subtle">
+                    {t('fraud.resolve_optional', { defaultValue: '(opcional)' })}
+                  </span>
                 </span>
                 <textarea
                   rows={4}
                   value={resolutionNote}
                   onChange={(e) => setResolutionNote(e.target.value)}
-                  placeholder="¿Qué se encontró? ¿Qué se hizo?"
+                  placeholder={t('fraud.resolve_note_placeholder', { defaultValue: '¿Qué se encontró? ¿Qué se hizo?' })}
                   className="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
                 />
               </label>
@@ -264,14 +269,16 @@ export default function FraudAlertsPage() {
                 }}
                 className="rounded-full border border-line bg-surface px-4 py-1.5 text-[12px] font-medium text-ink hover:bg-surface-sunken"
               >
-                Cancelar
+                {t('fraud.cancel', { defaultValue: 'Cancelar' })}
               </button>
               <button
                 onClick={() => handleResolve(resolveModalId)}
                 disabled={resolving === resolveModalId}
                 className="rounded-full bg-ink px-4 py-1.5 text-[12px] font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                {resolving === resolveModalId ? 'Resolviendo…' : 'Marcar como resuelta'}
+                {resolving === resolveModalId
+                  ? t('fraud.resolving', { defaultValue: 'Resolviendo…' })
+                  : t('fraud.mark_resolved', { defaultValue: 'Marcar como resuelta' })}
               </button>
             </div>
           </div>
