@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Megaphone, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { notificationService } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
+import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
+import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
-import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
-import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
-import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
-import { Megaphone } from 'lucide-react';
 
 type Campaign = {
   id: string;
@@ -37,32 +36,31 @@ type Promotion = {
 
 type City = { id: string; name: string; slug: string };
 
-const SEGMENT_OPTIONS = [
-  { value: 'new_users', labelKey: 'campaigns.segment_new_users' },
-  { value: 'power_users', labelKey: 'campaigns.segment_power_users' },
-  { value: 'inactive', labelKey: 'campaigns.segment_inactive' },
-  { value: 'all', labelKey: 'campaigns.segment_all' },
-  { value: 'by_city', labelKey: 'campaigns.segment_by_city' },
+const SEGMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'new_users', label: 'Recién llegados' },
+  { value: 'power_users', label: 'Power users' },
+  { value: 'inactive', label: 'Inactivos' },
+  { value: 'all', label: 'Todos los pasajeros' },
+  { value: 'by_city', label: 'Por ciudad' },
 ];
 
-const CHANNEL_OPTIONS = [
-  { value: 'push', labelKey: 'campaigns.channel_push' },
-  { value: 'email', labelKey: 'campaigns.channel_email' },
-  { value: 'both', labelKey: 'campaigns.channel_both' },
+const CHANNEL_OPTIONS: { value: string; label: string }[] = [
+  { value: 'push', label: 'Push' },
+  { value: 'email', label: 'Email' },
+  { value: 'both', label: 'Ambos' },
 ];
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-neutral-100 text-neutral-600',
-  scheduled: 'bg-blue-100 text-blue-700',
-  sent: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-};
-
 
 const PAGE_SIZE = 20;
 
+const SEGMENT_LABEL: Record<string, string> = Object.fromEntries(
+  SEGMENT_OPTIONS.map((o) => [o.value, o.label]),
+);
+const CHANNEL_LABEL: Record<string, string> = Object.fromEntries(
+  CHANNEL_OPTIONS.map((o) => [o.value, o.label]),
+);
+
 export default function CampaignsPage() {
-  const { t } = useTranslation('admin');
+  const { t: _t } = useTranslation('admin');
   const { showToast } = useToast();
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -71,8 +69,8 @@ export default function CampaignsPage() {
   const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
-  // Form state
   const [formName, setFormName] = useState('');
   const [formSegment, setFormSegment] = useState('new_users');
   const [formCityId, setFormCityId] = useState('');
@@ -84,58 +82,69 @@ export default function CampaignsPage() {
   const [formSendNow, setFormSendNow] = useState(true);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Reference data
   const [cities, setCities] = useState<City[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
 
-  useEffect(() => {
-    loadCampaigns();
-  }, [page]);
-
-  useEffect(() => {
-    loadReferenceData();
-  }, []);
-
-  const loadCampaigns = async () => {
+  const loadCampaigns = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const supabase = getSupabaseClient();
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      const { data } = await supabase
+      const { data, error: dbError } = await supabase
         .from('campaigns')
         .select('*')
         .order('created_at', { ascending: false })
         .range(from, to);
+      if (dbError) throw dbError;
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
-      // Error handled by UI
-      setError(err instanceof Error ? err.message : 'Error al cargar campañas');
+      setCampaigns([]);
+      setError(err instanceof Error ? err.message : 'No pudimos cargar las campañas.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
 
-  const loadReferenceData = async () => {
-    try {
-      const [citiesData, promoData] = await Promise.all([
-        cityService.getAllCities(),
-        (async () => {
-          const supabase = getSupabaseClient();
-          const { data } = await supabase
-            .from('promotions')
-            .select('id, code, description')
-            .eq('is_active', true)
-            .order('code');
-          return (data ?? []) as Promotion[];
-        })(),
-      ]);
-      setCities(citiesData);
-      setPromotions(promoData);
-    } catch (err) {
-      // Error handled by UI
-    }
-  };
+  useEffect(() => {
+    void loadCampaigns();
+  }, [loadCampaigns]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [citiesData, promoData] = await Promise.all([
+          cityService.getAllCities(),
+          (async () => {
+            const supabase = getSupabaseClient();
+            const { data } = await supabase
+              .from('promotions')
+              .select('id, code, description')
+              .eq('is_active', true)
+              .order('code');
+            return (data ?? []) as Promotion[];
+          })(),
+        ]);
+        setCities(citiesData);
+        setPromotions(promoData);
+      } catch {
+        // best-effort
+      }
+    })();
+  }, []);
+
+  const sortedCampaigns = useMemo(() => {
+    if (!sort) return campaigns;
+    const dir = sort.direction === 'asc' ? 1 : -1;
+    const key = sort.columnId as keyof Campaign;
+    return [...campaigns].sort((a, b) => {
+      const av = a[key] as unknown;
+      const bv = b[key] as unknown;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av ?? '').localeCompare(String(bv ?? '')) * dir;
+    });
+  }, [campaigns, sort]);
 
   const getSegmentUserIds = async (): Promise<string[]> => {
     const supabase = getSupabaseClient();
@@ -145,16 +154,11 @@ export default function CampaignsPage() {
       const { data } = await supabase.from('profiles').select('id').eq('role', 'customer');
       return (data ?? []).map((u) => u.id);
     }
-
     if (formSegment === 'new_users') {
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .gte('created_at', sevenDaysAgo);
+      const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase.from('profiles').select('id').gte('created_at', since);
       return (data ?? []).map((u) => u.id);
     }
-
     if (formSegment === 'power_users') {
       const { data: allRides } = await supabase
         .from('rides')
@@ -168,13 +172,12 @@ export default function CampaignsPage() {
         .filter(([, c]) => c > 10)
         .map(([id]) => id);
     }
-
     if (formSegment === 'inactive') {
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: activeRiders } = await supabase
         .from('rides')
         .select('customer_id')
-        .gte('created_at', thirtyDaysAgo)
+        .gte('created_at', since)
         .not('customer_id', 'is', null);
       const activeSet = new Set((activeRiders ?? []).map((r) => r.customer_id));
       const { data: allCustomers } = await supabase
@@ -183,47 +186,47 @@ export default function CampaignsPage() {
         .eq('role', 'customer');
       return (allCustomers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
     }
-
     if (formSegment === 'by_city' && formCityId) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('city_id', formCityId);
+      const { data } = await supabase.from('profiles').select('id').eq('city_id', formCityId);
       return (data ?? []).map((u) => u.id);
     }
-
     return [];
   };
 
-  function validateCampaignForm() {
+  const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formName.trim()) errors.name = t('common.field_required');
-    if (!formTitle.trim()) errors.title = t('common.field_required');
-    if (!formBody.trim()) errors.body = t('common.field_required');
-    if (formSegment === 'by_city' && !formCityId) errors.city = t('common.field_required');
+    if (!formName.trim()) errors.name = 'Requerido';
+    if (!formTitle.trim()) errors.title = 'Requerido';
+    if (!formBody.trim()) errors.body = 'Requerido';
+    if (formSegment === 'by_city' && !formCityId) errors.city = 'Elegí una ciudad';
     if (!formSendNow && formSchedule) {
-      const scheduleDate = new Date(formSchedule);
-      if (scheduleDate <= new Date()) {
-        errors.schedule = t('common.must_be_future');
-      }
+      const d = new Date(formSchedule);
+      if (d <= new Date()) errors.schedule = 'Tiene que ser en el futuro';
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }
+  };
+
+  const resetForm = () => {
+    setFormName('');
+    setFormSegment('new_users');
+    setFormCityId('');
+    setFormChannel('push');
+    setFormTitle('');
+    setFormBody('');
+    setFormPromoId('');
+    setFormSchedule('');
+    setFormSendNow(true);
+    setFormErrors({});
+  };
 
   const handleSend = async () => {
-    if (!validateCampaignForm()) return;
-
+    if (!validateForm()) return;
     setSending(true);
     try {
       const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      // Create campaign record
       const campaignData: Record<string, unknown> = {
         name: formName,
         segment_type: formSegment,
@@ -238,232 +241,241 @@ export default function CampaignsPage() {
       };
 
       if (formSendNow) {
-        // Send immediately
         const userIds = await getSegmentUserIds();
-
         const result = await notificationService.sendToMultipleUsers(userIds, 'campaign', {
           title: formTitle,
           body: formBody,
         });
-
         campaignData.sent_at = new Date().toISOString();
         campaignData.sent_count = result.sent;
       }
 
-      const { error } = await supabase.from('campaigns').insert(campaignData);
-      if (error) throw error;
+      const { error: dbError } = await supabase.from('campaigns').insert(campaignData);
+      if (dbError) throw dbError;
 
-      // Reset form
-      setFormName('');
-      setFormSegment('new_users');
-      setFormCityId('');
-      setFormChannel('push');
-      setFormTitle('');
-      setFormBody('');
-      setFormPromoId('');
-      setFormSchedule('');
-      setFormSendNow(true);
-      setFormErrors({});
+      resetForm();
       setShowForm(false);
-
       setPage(0);
-      loadCampaigns();
-      showToast('success', t('campaigns.send_success'));
+      await loadCampaigns();
+      showToast('success', formSendNow ? 'Campaña enviada' : 'Campaña programada');
     } catch (err) {
-      // Error handled by UI
-      showToast('error', t('campaigns.send_error'));
+      showToast('error', err instanceof Error ? err.message : 'No pudimos enviar la campaña.');
     } finally {
       setSending(false);
     }
   };
 
-  const canGoPrev = page > 0;
-  const canGoNext = campaigns.length === PAGE_SIZE;
-
-  const getSegmentLabel = (segmentType: string): string => {
-    const option = SEGMENT_OPTIONS.find((o) => o.value === segmentType);
-    return option ? t(option.labelKey) : segmentType;
-  };
+  const columns: DataColumn<Campaign>[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        header: 'Nombre',
+        cell: (c) => (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate font-medium text-ink">{c.name}</span>
+            <span className="truncate text-[11.5px] text-ink-muted">{c.message_title}</span>
+          </span>
+        ),
+        primary: true,
+        sortKey: 'name',
+      },
+      {
+        id: 'segment_type',
+        header: 'Segmento',
+        cell: (c) => (
+          <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
+            {SEGMENT_LABEL[c.segment_type] ?? c.segment_type}
+          </span>
+        ),
+        hideBelow: 'md',
+        width: '150px',
+      },
+      {
+        id: 'channel',
+        header: 'Canal',
+        cell: (c) => <span className="capitalize">{CHANNEL_LABEL[c.channel] ?? c.channel}</span>,
+        hideBelow: 'md',
+        width: '90px',
+      },
+      {
+        id: 'status',
+        header: 'Estado',
+        cell: (c) => <StatusBadge domain="campaign" status={c.status} />,
+        width: '130px',
+      },
+      {
+        id: 'sent_count',
+        header: 'Enviados',
+        cell: (c) => <span className="tabular" data-tabular>{c.sent_count.toLocaleString('es-CU')}</span>,
+        align: 'right',
+        mono: true,
+        width: '110px',
+        secondary: true,
+      },
+      {
+        id: 'created_at',
+        header: 'Creada',
+        cell: (c) => <span className="text-ink-muted">{formatAdminDate(c.created_at)}</span>,
+        sortKey: 'created_at',
+        hideBelow: 'lg',
+        width: '170px',
+      },
+    ],
+    [],
+  );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold">{t('campaigns.title')}</h1>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Crecimiento · campañas
+          </p>
+          <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
+            Campañas
+          </h1>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+            Mensajes push y email a segmentos específicos de usuarios. Programá o enviá al toque.
+          </p>
+        </div>
         <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+          onClick={() => setShowForm((v) => !v)}
+          className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-[12.5px] font-medium text-surface transition-opacity hover:opacity-90"
         >
-          {showForm ? t('common.cancel') : t('campaigns.new_campaign')}
+          {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {showForm ? 'Cancelar' : 'Nueva campaña'}
         </button>
       </div>
 
-      {error && (
-        <AdminErrorBanner
-          message={error}
-          onRetry={() => { setError(null); loadCampaigns(); }}
-          onDismiss={() => setError(null)}
-        />
-      )}
-
-      {/* New Campaign Form */}
       {showForm && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
-          <h2 className="text-lg font-bold mb-4">{t('campaigns.new_campaign')}</h2>
-
-          <div className="space-y-4">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_name')}<span className="text-red-500 ml-1">*</span>
-              </label>
+        <div className="admin-card p-5 animate-fade-in">
+          <p className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            Nueva campaña
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="Nombre" required error={formErrors.name}>
               <input
-                type="text"
                 value={formName}
-                onChange={(e) => { setFormName(e.target.value); setFormErrors((prev) => { const { name, ...rest } = prev; return rest; }); }}
-                placeholder={t('campaigns.name_placeholder')}
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.name ? 'border-red-500' : 'border-neutral-200'}`}
+                onChange={(e) => {
+                  setFormName(e.target.value);
+                  setFormErrors(({ name: _n, ...rest }) => rest);
+                }}
+                placeholder="Nombre interno de la campaña"
+                className={inputCls(!!formErrors.name)}
               />
-              {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
-            </div>
-
-            {/* Segment */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_segment')}
-              </label>
+            </FormField>
+            <FormField label="Segmento">
               <select
                 value={formSegment}
                 onChange={(e) => setFormSegment(e.target.value)}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={inputCls(false)}
               >
-                {SEGMENT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {t(opt.labelKey)}
-                  </option>
+                {SEGMENT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            {/* City filter (if by_city) */}
             {formSegment === 'by_city' && (
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                  {t('campaigns.label_city')}<span className="text-red-500 ml-1">*</span>
-                </label>
+              <FormField label="Ciudad" required error={formErrors.city}>
                 <select
                   value={formCityId}
-                  onChange={(e) => { setFormCityId(e.target.value); setFormErrors((prev) => { const { city, ...rest } = prev; return rest; }); }}
-                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.city ? 'border-red-500' : 'border-neutral-200'}`}
+                  onChange={(e) => {
+                    setFormCityId(e.target.value);
+                    setFormErrors(({ city: _c, ...rest }) => rest);
+                  }}
+                  className={inputCls(!!formErrors.city)}
                 >
-                  <option value="">{t('segments.select_city')}</option>
+                  <option value="">Elegí una ciudad</option>
                   {cities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}
-                    </option>
+                    <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
                 </select>
-                {formErrors.city && <p className="text-red-500 text-xs mt-1">{formErrors.city}</p>}
-              </div>
+              </FormField>
             )}
 
-            {/* Channel */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_channel')}
-              </label>
+            <FormField label="Canal">
               <select
                 value={formChannel}
                 onChange={(e) => setFormChannel(e.target.value)}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={inputCls(false)}
               >
-                {CHANNEL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {t(opt.labelKey)}
-                  </option>
+                {CHANNEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            {/* Message title */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_msg_title')}<span className="text-red-500 ml-1">*</span>
-              </label>
+            <FormField label="Título del mensaje" required error={formErrors.title} className="md:col-span-2">
               <input
-                type="text"
                 value={formTitle}
-                onChange={(e) => { setFormTitle(e.target.value); setFormErrors((prev) => { const { title, ...rest } = prev; return rest; }); }}
-                placeholder={t('campaigns.msg_title_placeholder')}
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.title ? 'border-red-500' : 'border-neutral-200'}`}
+                onChange={(e) => {
+                  setFormTitle(e.target.value);
+                  setFormErrors(({ title: _t, ...rest }) => rest);
+                }}
+                placeholder="Lo que aparece en la notificación"
+                className={inputCls(!!formErrors.title)}
               />
-              {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
-            </div>
+            </FormField>
 
-            {/* Message body */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_msg_body')}<span className="text-red-500 ml-1">*</span>
-              </label>
+            <FormField label="Cuerpo" required error={formErrors.body} className="md:col-span-2">
               <textarea
-                value={formBody}
-                onChange={(e) => { setFormBody(e.target.value); setFormErrors((prev) => { const { body, ...rest } = prev; return rest; }); }}
-                placeholder={t('campaigns.msg_body_placeholder')}
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.body ? 'border-red-500' : 'border-neutral-200'}`}
                 rows={3}
+                value={formBody}
+                onChange={(e) => {
+                  setFormBody(e.target.value);
+                  setFormErrors(({ body: _b, ...rest }) => rest);
+                }}
+                placeholder="Mensaje completo"
+                className={inputCls(!!formErrors.body, true)}
               />
-              {formErrors.body && <p className="text-red-500 text-xs mt-1">{formErrors.body}</p>}
-            </div>
+            </FormField>
 
-            {/* Promo code (optional) */}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                {t('campaigns.label_promo')}
-              </label>
+            <FormField label="Código promocional (opcional)">
               <select
                 value={formPromoId}
                 onChange={(e) => setFormPromoId(e.target.value)}
-                className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className={inputCls(false)}
               >
-                <option value="">{t('campaigns.no_promo')}</option>
+                <option value="">Sin promoción</option>
                 {promotions.map((promo) => (
                   <option key={promo.id} value={promo.id}>
-                    {promo.code} {promo.description ? `- ${promo.description}` : ''}
+                    {promo.code}
+                    {promo.description ? ` · ${promo.description}` : ''}
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            {/* Schedule */}
-            <div>
-              <label className="flex items-center gap-2 mb-2">
+            <div className="flex flex-col gap-1 md:col-span-2">
+              <label className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
                 <input
                   type="checkbox"
                   checked={formSendNow}
                   onChange={(e) => setFormSendNow(e.target.checked)}
-                  aria-label={t('campaigns.send_now')}
-                  className="rounded border-neutral-300"
+                  className="h-3.5 w-3.5 rounded border-line"
                 />
-                <span className="text-sm font-medium text-neutral-700">
-                  {t('campaigns.send_now')}
-                </span>
+                Enviar ahora
               </label>
               {!formSendNow && (
-                <>
+                <FormField label="Programar para" error={formErrors.schedule}>
                   <input
                     type="datetime-local"
                     value={formSchedule}
-                    onChange={(e) => { setFormSchedule(e.target.value); setFormErrors((prev) => { const { schedule, ...rest } = prev; return rest; }); }}
-                    aria-label={t('campaigns.schedule_date', { defaultValue: 'Scheduled date and time' })}
-                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 ${formErrors.schedule ? 'border-red-500' : 'border-neutral-200'}`}
+                    onChange={(e) => {
+                      setFormSchedule(e.target.value);
+                      setFormErrors(({ schedule: _s, ...rest }) => rest);
+                    }}
+                    className={inputCls(!!formErrors.schedule)}
                   />
-                  {formErrors.schedule && <p className="text-red-500 text-xs mt-1">{formErrors.schedule}</p>}
-                </>
+                </FormField>
               )}
             </div>
+          </div>
 
-            {/* Send button */}
+          <div className="mt-4 flex justify-end">
             <button
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={
                 sending ||
                 !formName.trim() ||
@@ -471,121 +483,64 @@ export default function CampaignsPage() {
                 !formBody.trim() ||
                 (formSegment === 'by_city' && !formCityId)
               }
-              className="px-6 py-2.5 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
+              className="rounded-full bg-primary-500 px-4 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {sending
-                ? t('common.processing')
-                : formSendNow
-                  ? t('campaigns.btn_send')
-                  : t('campaigns.btn_schedule')}
+              {sending ? 'Procesando…' : formSendNow ? 'Enviar ahora' : 'Programar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Campaigns list */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full" aria-label={t('campaigns.title')}>
-            <thead>
-              <tr className="border-b border-neutral-100">
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                  {t('campaigns.col_name')}
-                </th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                  {t('campaigns.col_segment')}
-                </th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                  {t('campaigns.col_channel')}
-                </th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                  {t('campaigns.col_status')}
-                </th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap">
-                  {t('campaigns.col_sent_count')}
-                </th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-neutral-500 whitespace-nowrap hidden lg:table-cell">
-                  {t('campaigns.col_created')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-0 py-0">
-                    <AdminTableSkeleton rows={5} columns={6} />
-                  </td>
-                </tr>
-              ) : campaigns.length === 0 ? (
-                <tr>
-                  <td colSpan={6}><AdminEmptyState icon={<Megaphone className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />} title={t('campaigns.no_campaigns')} /></td>
-                </tr>
-              ) : (
-                campaigns.map((campaign) => (
-                  <tr
-                    key={campaign.id}
-                    className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm text-neutral-900 font-medium">
-                      {campaign.name}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">
-                      {getSegmentLabel(campaign.segment_type)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600 capitalize">
-                      {campaign.channel}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          STATUS_COLORS[campaign.status] ?? 'bg-neutral-100 text-neutral-600'
-                        }`}
-                      >
-                        {t(`campaigns.status_${campaign.status}`)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{campaign.sent_count}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-600 hidden lg:table-cell">
-                      {formatAdminDate(campaign.created_at)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={!canGoPrev}
-          aria-label={t('common.previous')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoPrev
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.previous')}
-        </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
-          {t('common.page')} {page + 1}
-        </span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canGoNext}
-          aria-label={t('common.next')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            canGoNext
-              ? 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300'
-              : 'bg-neutral-50 text-neutral-300 border border-neutral-100 cursor-not-allowed'
-          }`}
-        >
-          {t('common.next')}
-        </button>
-      </div>
+      <DataTable<Campaign>
+        columns={columns}
+        rows={sortedCampaigns}
+        keyField="id"
+        loading={loading}
+        error={error}
+        onRetry={() => void loadCampaigns()}
+        empty={{
+          icon: Megaphone,
+          title: 'Sin campañas',
+          body: 'Creá la primera para llegar a un grupo específico de usuarios.',
+          action: { label: 'Nueva campaña', onClick: () => setShowForm(true) },
+        }}
+        sort={sort}
+        onSortChange={setSort}
+        pagination={{ page, pageSize: PAGE_SIZE, hasMore: campaigns.length === PAGE_SIZE }}
+        onPaginationChange={(next) => setPage(next.page)}
+      />
     </div>
   );
+}
+
+function FormField({
+  label,
+  required,
+  error,
+  children,
+  className,
+}: {
+  label: string;
+  required?: boolean;
+  error?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`flex flex-col gap-1 ${className ?? ''}`}>
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+        {label}
+        {required && <span className="ml-1 text-red-500">*</span>}
+      </span>
+      {children}
+      {error && <span className="text-[11px] text-red-500">{error}</span>}
+    </label>
+  );
+}
+
+function inputCls(hasError: boolean, multiline = false) {
+  const base = 'rounded-lg border bg-surface text-[13px] text-ink placeholder:text-ink-subtle focus:outline-none';
+  const size = multiline ? 'px-2.5 py-1.5' : 'h-9 px-2.5';
+  const color = hasError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-primary-500';
+  return `${base} ${size} ${color}`;
 }

@@ -21,7 +21,19 @@ export type StatusMeta = {
   icon?: LucideIcon;
 };
 
-type Domain = 'ride' | 'driver' | 'incident' | 'dispute' | 'payment' | 'verification' | 'lost_item' | 'support';
+type Domain =
+  | 'ride'
+  | 'driver'
+  | 'incident'
+  | 'dispute'
+  | 'payment'
+  | 'verification'
+  | 'lost_item'
+  | 'support'
+  | 'corporate'
+  | 'campaign'
+  | 'quest'
+  | 'referral';
 
 /**
  * Central registry for status metadata across the admin app.
@@ -92,6 +104,34 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     waiting_user: { label: 'Esperando usuario', tone: 'warning', icon: Clock },
     resolved: { label: 'Resuelto', tone: 'success', icon: CheckCircle2 },
     closed: { label: 'Cerrado', tone: 'default', icon: XCircle },
+  },
+  corporate: {
+    pending: { label: 'Pendiente', tone: 'warning', icon: Clock },
+    approved: { label: 'Aprobada', tone: 'success', icon: CheckCircle2 },
+    suspended: { label: 'Suspendida', tone: 'danger', icon: Ban },
+    rejected: { label: 'Rechazada', tone: 'default', icon: XCircle },
+  },
+  campaign: {
+    draft: { label: 'Borrador', tone: 'default', icon: Clock },
+    scheduled: { label: 'Programada', tone: 'info', icon: Clock },
+    sent: { label: 'Enviada', tone: 'success', icon: CheckCircle2 },
+    active: { label: 'Activa', tone: 'success', icon: Radio },
+    paused: { label: 'Pausada', tone: 'warning', icon: Clock },
+    cancelled: { label: 'Cancelada', tone: 'danger', icon: XCircle },
+    completed: { label: 'Finalizada', tone: 'default', icon: CheckCircle2 },
+    archived: { label: 'Archivada', tone: 'default', icon: XCircle },
+  },
+  quest: {
+    draft: { label: 'Borrador', tone: 'default', icon: Clock },
+    active: { label: 'Activa', tone: 'success', icon: Radio },
+    paused: { label: 'Pausada', tone: 'warning', icon: Clock },
+    completed: { label: 'Finalizada', tone: 'default', icon: CheckCircle2 },
+    archived: { label: 'Archivada', tone: 'default', icon: XCircle },
+  },
+  referral: {
+    pending: { label: 'Pendiente', tone: 'warning', icon: Clock },
+    rewarded: { label: 'Premiado', tone: 'success', icon: CheckCircle2 },
+    invalidated: { label: 'Invalidado', tone: 'danger', icon: XCircle },
   },
 };
 
