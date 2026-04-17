@@ -14,25 +14,11 @@ const PAGE_SIZE = 20;
 
 type RoleFilter = UserRole | 'all';
 
-const ROLE_TABS: StatusTab<RoleFilter>[] = [
-  { id: 'all', label: 'Todos' },
-  { id: 'customer', label: 'Pasajeros', tone: 'info' },
-  { id: 'driver', label: 'Conductores', tone: 'warning' },
-  { id: 'admin', label: 'Administradores', tone: 'primary' },
-];
-
 const ROLE_CLASS: Record<string, string> = {
   customer: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
   driver: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   admin: 'bg-primary-500/10 text-primary-600 dark:text-primary-400',
   super_admin: 'bg-red-500/10 text-red-600 dark:text-red-400',
-};
-
-const ROLE_LABEL: Record<string, string> = {
-  customer: 'Pasajero',
-  driver: 'Conductor',
-  admin: 'Admin',
-  super_admin: 'Super admin',
 };
 
 const EMPTY_FILTERS = {
@@ -54,6 +40,20 @@ export default function UsersPage() {
   const [filters, setFilters] = useState<AdvancedFilters>({ ...EMPTY_FILTERS });
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
+  const ROLE_TABS: StatusTab<RoleFilter>[] = useMemo(() => [
+    { id: 'all', label: t('users.filter_all', { defaultValue: 'Todos' }) },
+    { id: 'customer', label: t('users.filter_customer', { defaultValue: 'Pasajeros' }), tone: 'info' },
+    { id: 'driver', label: t('users.filter_driver', { defaultValue: 'Conductores' }), tone: 'warning' },
+    { id: 'admin', label: t('users.filter_admin', { defaultValue: 'Administradores' }), tone: 'primary' },
+  ], [t]);
+
+  const roleLabel = useCallback((r: string): string => {
+    const fallbacks: Record<string, string> = {
+      customer: 'Pasajero', driver: 'Conductor', admin: 'Admin', super_admin: 'Super admin',
+    };
+    return t(`users.role_${r}`, { defaultValue: fallbacks[r] ?? r });
+  }, [t]);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -68,11 +68,11 @@ export default function UsersPage() {
       setUsers(data);
     } catch (err) {
       setUsers([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los pasajeros.');
+      setError(err instanceof Error ? err.message : t('users.load_error', { defaultValue: 'No pudimos cargar los pasajeros.' }));
     } finally {
       setLoading(false);
     }
-  }, [page, roleFilter, filters]);
+  }, [page, roleFilter, filters, t]);
 
   useEffect(() => {
     void fetchUsers();
@@ -112,22 +112,22 @@ export default function UsersPage() {
     exportToCsv(
       sortedUsers as unknown as Record<string, unknown>[],
       [
-        { key: 'full_name', label: 'Nombre' },
-        { key: 'phone', label: 'Teléfono' },
-        { key: 'email', label: 'Email' },
-        { key: 'role', label: 'Rol' },
-        { key: 'is_active', label: 'Activo', format: (v) => (v ? 'Sí' : 'No') },
-        { key: 'created_at', label: 'Registrado' },
+        { key: 'full_name', label: t('users.col_name', { defaultValue: 'Nombre' }) },
+        { key: 'phone', label: t('users.col_phone', { defaultValue: 'Teléfono' }) },
+        { key: 'email', label: t('users.col_email', { defaultValue: 'Email' }) },
+        { key: 'role', label: t('users.col_role', { defaultValue: 'Rol' }) },
+        { key: 'is_active', label: t('users.col_active', { defaultValue: 'Activo' }), format: (v) => (v ? t('users.yes', { defaultValue: 'Sí' }) : t('users.no', { defaultValue: 'No' })) },
+        { key: 'created_at', label: t('users.col_registered', { defaultValue: 'Registrado' }) },
       ],
       'users',
     );
-  }, [sortedUsers]);
+  }, [sortedUsers, t]);
 
   const columns: DataColumn<User>[] = useMemo(
     () => [
       {
         id: 'full_name',
-        header: 'Nombre',
+        header: t('users.col_name', { defaultValue: 'Nombre' }),
         cell: (u) => (
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium text-ink">{u.full_name || '—'}</span>
@@ -141,7 +141,7 @@ export default function UsersPage() {
       },
       {
         id: 'phone',
-        header: 'Teléfono',
+        header: t('users.col_phone', { defaultValue: 'Teléfono' }),
         cell: (u) => u.phone || '—',
         mono: true,
         hideBelow: 'md',
@@ -149,43 +149,43 @@ export default function UsersPage() {
       },
       {
         id: 'role',
-        header: 'Rol',
+        header: t('users.col_role', { defaultValue: 'Rol' }),
         cell: (u) => (
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
               ROLE_CLASS[u.role] ?? 'bg-surface-sunken text-ink-muted'
             }`}
           >
-            {ROLE_LABEL[u.role] ?? u.role}
+            {roleLabel(u.role)}
           </span>
         ),
         width: '130px',
       },
       {
         id: 'is_active',
-        header: 'Estado',
+        header: t('users.col_status', { defaultValue: 'Estado' }),
         cell: (u) =>
           u.is_active ? (
             <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              Activo
+              {t('users.status_active', { defaultValue: 'Activo' })}
             </span>
           ) : (
             <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-ink-muted">
-              Inactivo
+              {t('users.status_inactive', { defaultValue: 'Inactivo' })}
             </span>
           ),
         width: '110px',
       },
       {
         id: 'created_at',
-        header: 'Registrado',
+        header: t('users.col_registered', { defaultValue: 'Registrado' }),
         cell: (u) => <span className="text-ink-muted">{formatAdminDate(u.created_at)}</span>,
         sortKey: 'created_at',
         hideBelow: 'lg',
         width: '170px',
       },
     ],
-    [],
+    [t, roleLabel],
   );
 
   return (
@@ -193,13 +193,13 @@ export default function UsersPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Gente · pasajeros
+            {t('users.page_eyebrow', { defaultValue: 'Gente · pasajeros' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Usuarios
+            {t('users.title', { defaultValue: 'Usuarios' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Todas las personas registradas en TriciGo — pasajeros, conductores y equipo.
+            {t('users.page_description', { defaultValue: 'Todas las personas registradas en TriciGo — pasajeros, conductores y equipo.' })}
           </p>
         </div>
         <button
@@ -209,7 +209,7 @@ export default function UsersPage() {
           className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Download className="h-3.5 w-3.5" />
-          Exportar CSV
+          {t('users.export_csv', { defaultValue: 'Exportar CSV' })}
         </button>
       </div>
 
@@ -224,28 +224,28 @@ export default function UsersPage() {
         search={{
           value: filters.search,
           onChange: (v) => updateFilter('search', v),
-          placeholder: 'Buscar por nombre, teléfono o email…',
+          placeholder: t('users.search_placeholder', { defaultValue: 'Buscar por nombre, teléfono o email…' }),
         }}
         activeFilterCount={activeFilterCount - (filters.search ? 1 : 0)}
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Estado
+              {t('users.filter_state_label', { defaultValue: 'Estado' })}
             </span>
             <select
               value={filters.isActive}
               onChange={(e) => updateFilter('isActive', e.target.value)}
               className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
             >
-              <option value="">Todos</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
+              <option value="">{t('users.filter_all', { defaultValue: 'Todos' })}</option>
+              <option value="true">{t('users.filter_active', { defaultValue: 'Activos' })}</option>
+              <option value="false">{t('users.filter_inactive', { defaultValue: 'Inactivos' })}</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Desde
+              {t('users.filter_desde', { defaultValue: 'Desde' })}
             </span>
             <input
               type="date"
@@ -256,7 +256,7 @@ export default function UsersPage() {
           </label>
           <label className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              Hasta
+              {t('users.filter_hasta', { defaultValue: 'Hasta' })}
             </span>
             <input
               type="date"
@@ -273,7 +273,7 @@ export default function UsersPage() {
               onClick={clearFilters}
               className="text-[11.5px] font-medium text-ink-muted hover:text-ink"
             >
-              Limpiar todo
+              {t('users.clear_all', { defaultValue: 'Limpiar todo' })}
             </button>
           </div>
         )}
@@ -293,14 +293,14 @@ export default function UsersPage() {
           activeFilterCount > 0 || roleFilter !== 'all'
             ? {
                 icon: UserX,
-                title: 'Sin usuarios que coincidan',
-                body: 'Probá limpiar los filtros o cambiar la pestaña.',
-                action: { label: 'Limpiar filtros', onClick: clearFilters },
+                title: t('users.empty_filtered_title', { defaultValue: 'Sin usuarios que coincidan' }),
+                body: t('users.empty_filtered_body', { defaultValue: 'Probá limpiar los filtros o cambiar la pestaña.' }),
+                action: { label: t('users.empty_filtered_action', { defaultValue: 'Limpiar filtros' }), onClick: clearFilters },
               }
             : {
                 icon: Users,
-                title: 'Sin usuarios aún',
-                body: 'Cuando alguien se registre, va a aparecer acá.',
+                title: t('users.empty_zero_title', { defaultValue: 'Sin usuarios aún' }),
+                body: t('users.empty_zero_body', { defaultValue: 'Cuando alguien se registre, va a aparecer acá.' }),
               }
         }
         rowHref={(u) => `/users/${u.id}`}
