@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, TrendingUp } from 'lucide-react';
+import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { SectionCard } from '@/components/dashboard/SectionCard';
 import { DataEmptyState } from '@/components/data/DataEmptyState';
@@ -12,15 +13,16 @@ type FunnelStep = {
   count: number;
 };
 
-const STEP_LABELS: Record<string, string> = {
-  sessions: 'Sesiones únicas',
-  searches: 'Búsquedas de viaje',
-  requests: 'Solicitudes creadas',
-  accepted: 'Aceptadas por conductor',
-  completed: 'Viajes completados',
-};
-
 export default function FunnelPage() {
+  const { t } = useTranslation('admin');
+  const STEP_LABELS: Record<string, string> = {
+    sessions: t('funnel.step_sessions', { defaultValue: 'Sesiones únicas' }),
+    searches: t('funnel.step_searches', { defaultValue: 'Búsquedas de viaje' }),
+    requests: t('funnel.step_requests', { defaultValue: 'Solicitudes creadas' }),
+    accepted: t('funnel.step_accepted', { defaultValue: 'Aceptadas por conductor' }),
+    completed: t('funnel.step_completed', { defaultValue: 'Viajes completados' }),
+  };
+
   const [loading, setLoading] = useState(true);
   const [steps, setSteps] = useState<FunnelStep[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -70,10 +72,11 @@ export default function FunnelPage() {
         { key: 'completed', label: STEP_LABELS.completed!, count: completedRes.count ?? 0 },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cargar el embudo.');
+      setError(err instanceof Error ? err.message : t('funnel.load_error', { defaultValue: 'No pudimos cargar el embudo.' }));
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -96,17 +99,17 @@ export default function FunnelPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            Crecimiento · conversión
+            {t('funnel.page_eyebrow', { defaultValue: 'Crecimiento · conversión' })}
           </p>
           <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-            Embudo de conversión
+            {t('funnel.title', { defaultValue: 'Embudo de conversión' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            Cómo se convierten las sesiones en viajes reales. Últimos 30 días.
+            {t('funnel.page_description', { defaultValue: 'Cómo se convierten las sesiones en viajes reales. Últimos 30 días.' })}
           </p>
         </div>
         <span className="inline-flex items-center rounded-full border border-line bg-surface px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">
-          Últimos 30 d
+          {t('funnel.badge_30d', { defaultValue: 'Últimos 30 d' })}
         </span>
       </div>
 
@@ -125,9 +128,9 @@ export default function FunnelPage() {
           <DataEmptyState
             icon={TrendingUp}
             tone="danger"
-            title="No pudimos cargar el embudo"
+            title={t('funnel.load_error_title', { defaultValue: 'No pudimos cargar el embudo' })}
             body={error}
-            action={{ label: 'Reintentar', onClick: () => void fetchData() }}
+            action={{ label: t('funnel.retry', { defaultValue: 'Reintentar' }), onClick: () => void fetchData() }}
           />
         </div>
       )}
@@ -136,9 +139,9 @@ export default function FunnelPage() {
         <>
           {/* Funnel visualization */}
           <SectionCard
-            eyebrow="Visual"
-            title="Forma del embudo"
-            description="Comparativa proporcional de cada paso."
+            eyebrow={t('funnel.section_visual_eyebrow', { defaultValue: 'Visual' })}
+            title={t('funnel.section_visual_title', { defaultValue: 'Forma del embudo' })}
+            description={t('funnel.section_visual_description', { defaultValue: 'Comparativa proporcional de cada paso.' })}
           >
             <div className="flex flex-col items-center gap-2 py-2">
               {steps.map((step, i) => {
@@ -153,7 +156,7 @@ export default function FunnelPage() {
                       <div className="flex items-center gap-1.5 py-1 font-mono text-[10px] text-ink-muted">
                         <ChevronDown className="h-3 w-3" strokeWidth={2} />
                         <span className="font-semibold">{rate}%</span>
-                        <span className="text-ink-subtle">conversión</span>
+                        <span className="text-ink-subtle">{t('funnel.conversion_label', { defaultValue: 'conversión' })}</span>
                       </div>
                     )}
                     <div
@@ -166,7 +169,7 @@ export default function FunnelPage() {
                         <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
                         <div className="relative">
                           <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] opacity-80">
-                            Paso {i + 1}
+                            {t('funnel.step_label', { defaultValue: 'Paso' })} {i + 1}
                           </div>
                           <div className="font-editorial text-[28px] leading-none italic" data-tabular>
                             {step.count.toLocaleString('es-CU')}
@@ -183,9 +186,9 @@ export default function FunnelPage() {
 
           {/* Summary table */}
           <SectionCard
-            eyebrow="Tabla"
-            title="Resumen numérico"
-            description="Tasa paso a paso y tasa total desde la primera etapa."
+            eyebrow={t('funnel.section_table_eyebrow', { defaultValue: 'Tabla' })}
+            title={t('funnel.section_table_title', { defaultValue: 'Resumen numérico' })}
+            description={t('funnel.section_table_description', { defaultValue: 'Tasa paso a paso y tasa total desde la primera etapa.' })}
           >
             <table className="w-full text-[13px]">
               <thead>
@@ -194,13 +197,13 @@ export default function FunnelPage() {
                     #
                   </th>
                   <th className="px-2 pb-2 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                    Paso
+                    {t('funnel.col_step', { defaultValue: 'Paso' })}
                   </th>
                   <th className="px-2 pb-2 text-right font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                    Volumen
+                    {t('funnel.col_volume', { defaultValue: 'Volumen' })}
                   </th>
                   <th className="px-2 pb-2 text-right font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                    Conversión
+                    {t('funnel.col_conversion', { defaultValue: 'Conversión' })}
                   </th>
                 </tr>
               </thead>
@@ -231,7 +234,7 @@ export default function FunnelPage() {
                         </span>
                         {i > 0 && (
                           <span className="ml-2 font-mono text-[10px] text-ink-subtle" data-tabular>
-                            ({totalRate}% total)
+                            ({totalRate}% {t('funnel.total_suffix', { defaultValue: 'total' })})
                           </span>
                         )}
                       </td>
@@ -248,8 +251,8 @@ export default function FunnelPage() {
         <div className="admin-card p-8">
           <DataEmptyState
             icon={TrendingUp}
-            title="Sin datos"
-            body="Todavía no hay actividad en los últimos 30 días."
+            title={t('funnel.empty_title', { defaultValue: 'Sin datos' })}
+            body={t('funnel.empty_body', { defaultValue: 'Todavía no hay actividad en los últimos 30 días.' })}
           />
         </div>
       )}

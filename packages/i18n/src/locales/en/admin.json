@@ -644,7 +644,7 @@
     "export_csv": "Export CSV"
   },
   "funnel": {
-    "title": "Conversion Analysis",
+    "title": "Conversion funnel",
     "sessions": "Sessions",
     "searches": "Searches",
     "requests": "Requests",
@@ -652,7 +652,32 @@
     "completed": "Completed",
     "conversion_rate": "Conversion rate",
     "last_30_days": "Last 30 days",
-    "step": "Step"
+    "step": "Step",
+    "page_eyebrow": "Growth · conversion",
+    "page_description": "How sessions convert into real rides. Last 30 days.",
+    "badge_30d": "Last 30 d",
+    "load_error": "Could not load funnel.",
+    "load_error_title": "Could not load funnel",
+    "retry": "Retry",
+    "step_sessions": "Unique sessions",
+    "step_searches": "Ride searches",
+    "step_requests": "Requests created",
+    "step_accepted": "Accepted by driver",
+    "step_completed": "Rides completed",
+    "section_visual_eyebrow": "Visual",
+    "section_visual_title": "Funnel shape",
+    "section_visual_description": "Proportional comparison of each step.",
+    "step_label": "Step",
+    "conversion_label": "conversion",
+    "section_table_eyebrow": "Table",
+    "section_table_title": "Numeric summary",
+    "section_table_description": "Step-by-step and cumulative rates from the first stage.",
+    "col_step": "Step",
+    "col_volume": "Volume",
+    "col_conversion": "Conversion",
+    "total_suffix": "total",
+    "empty_title": "No data",
+    "empty_body": "No activity in the last 30 days yet."
   },
   "login": {
     "admin_panel": "Admin Panel",
@@ -1173,7 +1198,7 @@
     "cancel": "Cancel"
   },
   "businesses": {
-    "title": "Corporate Accounts",
+    "title": "Allied companies",
     "filter_all": "All",
     "filter_pending": "Pending",
     "filter_approved": "Approved",
@@ -1183,7 +1208,7 @@
     "col_contact": "Contact",
     "col_status": "Status",
     "col_employees": "Employees",
-    "col_spent": "Spent",
+    "col_spent": "Spent · month",
     "approve": "Approve",
     "reject": "Reject",
     "suspend": "Suspend",
@@ -1196,7 +1221,14 @@
     "no_businesses": "No corporate accounts",
     "reject_reason": "Rejection reason",
     "suspend_reason": "Suspension reason",
-    "not_found": "Business not found"
+    "not_found": "Business not found",
+    "page_eyebrow": "Growth · allies",
+    "page_description": "TriciGo corporate accounts: rides with monthly budget and shared fleet.",
+    "load_error": "Could not load companies.",
+    "col_company": "Company",
+    "col_created": "Created",
+    "empty_title": "No allied companies",
+    "empty_body": "When a corporate account joins, it will appear here."
   },
   "disputes": {
     "title": "Ride disputes",

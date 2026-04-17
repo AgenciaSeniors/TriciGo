@@ -644,7 +644,7 @@
     "export_csv": "Exportar CSV"
   },
   "funnel": {
-    "title": "Análisis de Conversión",
+    "title": "Embudo de conversión",
     "sessions": "Sesiones",
     "searches": "Búsquedas",
     "requests": "Solicitudes",
@@ -652,7 +652,32 @@
     "completed": "Completados",
     "conversion_rate": "Tasa de conversión",
     "last_30_days": "Últimos 30 días",
-    "step": "Paso"
+    "step": "Paso",
+    "page_eyebrow": "Crecimiento · conversión",
+    "page_description": "Cómo se convierten las sesiones en viajes reales. Últimos 30 días.",
+    "badge_30d": "Últimos 30 d",
+    "load_error": "No pudimos cargar el embudo.",
+    "load_error_title": "No pudimos cargar el embudo",
+    "retry": "Reintentar",
+    "step_sessions": "Sesiones únicas",
+    "step_searches": "Búsquedas de viaje",
+    "step_requests": "Solicitudes creadas",
+    "step_accepted": "Aceptadas por conductor",
+    "step_completed": "Viajes completados",
+    "section_visual_eyebrow": "Visual",
+    "section_visual_title": "Forma del embudo",
+    "section_visual_description": "Comparativa proporcional de cada paso.",
+    "step_label": "Paso",
+    "conversion_label": "conversión",
+    "section_table_eyebrow": "Tabla",
+    "section_table_title": "Resumen numérico",
+    "section_table_description": "Tasa paso a paso y tasa total desde la primera etapa.",
+    "col_step": "Paso",
+    "col_volume": "Volumen",
+    "col_conversion": "Conversión",
+    "total_suffix": "total",
+    "empty_title": "Sin datos",
+    "empty_body": "Todavía no hay actividad en los últimos 30 días."
   },
   "login": {
     "admin_panel": "Panel de administración",
@@ -1173,7 +1198,7 @@
     "cancel": "Cancelar"
   },
   "businesses": {
-    "title": "Cuentas Corporativas",
+    "title": "Empresas aliadas",
     "filter_all": "Todas",
     "filter_pending": "Pendientes",
     "filter_approved": "Aprobadas",
@@ -1183,7 +1208,7 @@
     "col_contact": "Contacto",
     "col_status": "Estado",
     "col_employees": "Empleados",
-    "col_spent": "Gastado",
+    "col_spent": "Gastado · mes",
     "approve": "Aprobar",
     "reject": "Rechazar",
     "suspend": "Suspender",
@@ -1196,7 +1221,14 @@
     "no_businesses": "No hay cuentas corporativas",
     "reject_reason": "Motivo del rechazo",
     "suspend_reason": "Motivo de la suspensión",
-    "not_found": "Empresa no encontrada"
+    "not_found": "Empresa no encontrada",
+    "page_eyebrow": "Crecimiento · aliados",
+    "page_description": "Cuentas corporativas de TriciGo: viajes con presupuesto mensual y flota compartida.",
+    "load_error": "No pudimos cargar las empresas.",
+    "col_company": "Empresa",
+    "col_created": "Creada",
+    "empty_title": "Sin empresas aliadas",
+    "empty_body": "Cuando se sume una cuenta corporativa, va a aparecer acá."
   },
   "disputes": {
     "title": "Disputas de viajes",

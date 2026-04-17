@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { corporateService } from '@tricigo/api';
 import { formatTriciCoin } from '@tricigo/utils';
@@ -15,21 +15,21 @@ const PAGE_SIZE = 20;
 
 type Filter = 'all' | CorporateAccountStatus;
 
-const TABS: StatusTab<Filter>[] = [
-  { id: 'all', label: 'Todas' },
-  { id: 'pending', label: 'Pendientes', tone: 'warning' },
-  { id: 'approved', label: 'Aprobadas', tone: 'success' },
-  { id: 'suspended', label: 'Suspendidas', tone: 'danger' },
-  { id: 'rejected', label: 'Rechazadas' },
-];
-
 export default function BusinessesPage() {
-  const { t: _t } = useTranslation('admin');
+  const { t } = useTranslation('admin');
   const [tab, setTab] = useState<Filter>('all');
   const [accounts, setAccounts] = useState<CorporateAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+
+  const TABS: StatusTab<Filter>[] = useMemo(() => [
+    { id: 'all', label: t('businesses.filter_all', { defaultValue: 'Todas' }) },
+    { id: 'pending', label: t('businesses.filter_pending', { defaultValue: 'Pendientes' }), tone: 'warning' },
+    { id: 'approved', label: t('businesses.filter_approved', { defaultValue: 'Aprobadas' }), tone: 'success' },
+    { id: 'suspended', label: t('businesses.filter_suspended', { defaultValue: 'Suspendidas' }), tone: 'danger' },
+    { id: 'rejected', label: t('businesses.filter_rejected', { defaultValue: 'Rechazadas' }) },
+  ], [t]);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -43,11 +43,11 @@ export default function BusinessesPage() {
       setAccounts(data);
     } catch (err) {
       setAccounts([]);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar las empresas.');
+      setError(err instanceof Error ? err.message : t('businesses.load_error', { defaultValue: 'No pudimos cargar las empresas.' }));
     } finally {
       setLoading(false);
     }
-  }, [tab, page]);
+  }, [tab, page, t]);
 
   useEffect(() => {
     void fetchAccounts();
@@ -56,13 +56,13 @@ export default function BusinessesPage() {
   const columns: DataColumn<CorporateAccount>[] = [
     {
       id: 'name',
-      header: 'Empresa',
+      header: t('businesses.col_company', { defaultValue: 'Empresa' }),
       cell: (a) => <span className="font-medium text-ink">{a.name}</span>,
       primary: true,
     },
     {
       id: 'contact_phone',
-      header: 'Contacto',
+      header: t('businesses.col_contact', { defaultValue: 'Contacto' }),
       cell: (a) => a.contact_phone ?? <span className="text-ink-subtle">—</span>,
       mono: true,
       hideBelow: 'md',
@@ -70,13 +70,13 @@ export default function BusinessesPage() {
     },
     {
       id: 'status',
-      header: 'Estado',
+      header: t('businesses.col_status', { defaultValue: 'Estado' }),
       cell: (a) => <StatusBadge domain="corporate" status={a.status} />,
       width: '160px',
     },
     {
       id: 'spent',
-      header: 'Gastado · mes',
+      header: t('businesses.col_spent', { defaultValue: 'Gastado · mes' }),
       cell: (a) => (
         <span className="font-medium text-ink">
           {formatTriciCoin(a.current_month_spent)}
@@ -93,7 +93,7 @@ export default function BusinessesPage() {
     },
     {
       id: 'created_at',
-      header: 'Creada',
+      header: t('businesses.col_created', { defaultValue: 'Creada' }),
       cell: (a) => <span className="text-ink-muted">{formatAdminDate(a.created_at)}</span>,
       hideBelow: 'lg',
       width: '170px',
@@ -104,13 +104,13 @@ export default function BusinessesPage() {
     <div className="flex flex-col gap-5">
       <div>
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-          Crecimiento · aliados
+          {t('businesses.page_eyebrow', { defaultValue: 'Crecimiento · aliados' })}
         </p>
         <h1 className="font-display text-[26px] font-semibold tracking-[-0.02em] text-ink md:text-[30px]">
-          Empresas aliadas
+          {t('businesses.title', { defaultValue: 'Empresas aliadas' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          Cuentas corporativas de TriciGo: viajes con presupuesto mensual y flota compartida.
+          {t('businesses.page_description', { defaultValue: 'Cuentas corporativas de TriciGo: viajes con presupuesto mensual y flota compartida.' })}
         </p>
       </div>
 
@@ -133,8 +133,8 @@ export default function BusinessesPage() {
         onRetry={() => void fetchAccounts()}
         empty={{
           icon: Building2,
-          title: 'Sin empresas aliadas',
-          body: 'Cuando se sume una cuenta corporativa, va a aparecer acá.',
+          title: t('businesses.empty_title', { defaultValue: 'Sin empresas aliadas' }),
+          body: t('businesses.empty_body', { defaultValue: 'Cuando se sume una cuenta corporativa, va a aparecer acá.' }),
         }}
         rowHref={(a) => `/businesses/${a.id}`}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: accounts.length === PAGE_SIZE }}
