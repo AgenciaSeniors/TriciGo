@@ -55,14 +55,27 @@ if (Platform.OS !== 'web') {
 }
 
 // Initialize Mapbox (native only — @rnmapbox/maps has no web support)
-if (Platform.OS !== 'web') {
+// Runs at module load AND again in useEffect inside RootNavigator —
+// release builds sometimes lose the race between the module side-effect
+// and native MapView mounting, so the useEffect guarantees the token is
+// set before any map tries to render.
+function initMapbox() {
+  if (Platform.OS === 'web') return;
   try {
     const MapboxGL = require('@rnmapbox/maps').default;
-    MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    MapboxGL.setAccessToken(token);
+    if (typeof MapboxGL.setWellKnownTileServer === 'function') {
+      MapboxGL.setWellKnownTileServer('Mapbox');
+    }
+    if (typeof MapboxGL.setTelemetryEnabled === 'function') {
+      MapboxGL.setTelemetryEnabled(false);
+    }
   } catch {
     // Mapbox will fail on map screens but app won't crash on startup
   }
 }
+initMapbox();
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -77,6 +90,12 @@ function RootNavigator() {
   useEffect(() => {
     setColorScheme(resolvedScheme);
   }, [resolvedScheme, setColorScheme]);
+
+  // Re-initialize Mapbox after React mounts — belt + suspenders with
+  // the module-level initMapbox() above.
+  useEffect(() => {
+    initMapbox();
+  }, []);
 
   // Download Havana offline map tiles (runs once per week)
   useMapboxOffline();
