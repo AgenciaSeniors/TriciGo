@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
+import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
 import { formatCUP } from '@tricigo/utils';
 import type {
   DriverProfile,
@@ -111,6 +112,12 @@ export default function DriverDetailPage() {
   const [docNotes, setDocNotes] = useState<Record<string, string>>({});
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletAdjusting, setWalletAdjusting] = useState(false);
+  const [graceTripsModalOpen, setGraceTripsModalOpen] = useState(false);
+  const [graceTripsCount, setGraceTripsCount] = useState('5');
+  const [graceTripsReason, setGraceTripsReason] = useState('');
+  const [graceTripsSubmitting, setGraceTripsSubmitting] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +213,51 @@ export default function DriverDetailPage() {
       );
     } finally {
       setVerifyingDoc(null);
+    }
+  };
+
+  const handleAdjustDriverQuota = async (args: { accountType: WalletAccountType; amountCup: number; reason: string }) => {
+    if (!profile?.user_id) return;
+    setWalletAdjusting(true);
+    try {
+      const result = await adminService.adjustWallet(profile.user_id, args.accountType, args.amountCup, args.reason);
+      showToast('success', t('admin_ops.adjust_success', {
+        defaultValue: `Saldo ajustado. Nuevo balance: ${result.new_balance.toLocaleString()} CUP`,
+      }));
+      setWalletModalOpen(false);
+      await refreshDriver();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('admin_ops.adjust_error', { defaultValue: 'No pudimos ajustar el saldo' }));
+    } finally {
+      setWalletAdjusting(false);
+    }
+  };
+
+  const handleGrantGraceTrips = async () => {
+    if (!profile?.user_id) return;
+    const trips = parseInt(graceTripsCount, 10);
+    if (isNaN(trips) || trips === 0) {
+      showToast('error', t('admin_ops.grace_invalid', { defaultValue: 'Cantidad de viajes inválida' }));
+      return;
+    }
+    if (graceTripsReason.trim().length < 3) {
+      showToast('error', t('admin_ops.grace_reason_required', { defaultValue: 'Razón obligatoria (mín. 3 caracteres)' }));
+      return;
+    }
+    setGraceTripsSubmitting(true);
+    try {
+      const result = await adminService.grantGraceTrips(profile.user_id, trips, graceTripsReason.trim());
+      showToast('success', t('admin_ops.grace_success', {
+        defaultValue: `+${result.trips_added} viajes de gracia. Total actual: ${result.new_total}`,
+      }));
+      setGraceTripsModalOpen(false);
+      setGraceTripsCount('5');
+      setGraceTripsReason('');
+      await refreshDriver();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('admin_ops.grace_error', { defaultValue: 'No pudimos otorgar los viajes' }));
+    } finally {
+      setGraceTripsSubmitting(false);
     }
   };
 
@@ -367,6 +419,25 @@ export default function DriverDetailPage() {
                     {t('drivers.action_suspend', { defaultValue: 'Suspender conductor' })}
                   </button>
                 )}
+
+                {/* Wallet ops — always available */}
+                <div className="border-t border-neutral-100 my-1" />
+                <button
+                  onClick={() => { setWalletModalOpen(true); setActionsMenuOpen(false); }}
+                  disabled={actionLoading}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 disabled:opacity-40 transition-colors text-left"
+                >
+                  <span className="text-base leading-none">±</span>
+                  {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
+                </button>
+                <button
+                  onClick={() => { setGraceTripsModalOpen(true); setActionsMenuOpen(false); }}
+                  disabled={actionLoading}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-40 transition-colors text-left"
+                >
+                  <span className="text-base leading-none">★</span>
+                  {t('admin_ops.grace_trips_btn', { defaultValue: 'Dar viajes de gracia' })}
+                </button>
               </div>
             )}
           </div>
@@ -892,6 +963,80 @@ export default function DriverDetailPage() {
                   : showReasonModal === 'reject'
                     ? t('drivers.action_reject', { defaultValue: 'Rechazar' })
                     : t('drivers.action_suspend', { defaultValue: 'Suspender' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Wallet Modal (quota or passenger wallet) */}
+      <AdjustWalletModal
+        open={walletModalOpen}
+        userName={profile.users.full_name || profile.user_id}
+        isDriver={true}
+        defaultAccountType="driver_cash"
+        loading={walletAdjusting}
+        onCancel={() => setWalletModalOpen(false)}
+        onConfirm={handleAdjustDriverQuota}
+      />
+
+      {/* Grace Trips Modal */}
+      {graceTripsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !graceTripsSubmitting && setGraceTripsModalOpen(false)}>
+          <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+              {t('admin_ops.grace_eyebrow', { defaultValue: 'Bonificación' })}
+            </p>
+            <h3 className="font-display text-[18px] font-semibold text-ink">
+              {t('admin_ops.grace_title', { defaultValue: 'Viajes de gracia (sin comisión)' })}
+            </h3>
+            <p className="mt-0.5 text-[12.5px] text-ink-muted">
+              {profile.users.full_name}
+            </p>
+
+            <label className="mt-4 flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+                {t('admin_ops.grace_count', { defaultValue: 'Cantidad de viajes (+/-)' })}
+              </span>
+              <input
+                type="number"
+                value={graceTripsCount}
+                onChange={(e) => setGraceTripsCount(e.target.value)}
+                disabled={graceTripsSubmitting}
+                className="h-10 rounded-lg border border-line bg-surface px-3 text-[14px] text-ink focus:border-primary-500 focus:outline-none"
+              />
+            </label>
+            <label className="mt-3 flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+                {t('admin_ops.grace_reason', { defaultValue: 'Razón' })}
+              </span>
+              <textarea
+                value={graceTripsReason}
+                onChange={(e) => setGraceTripsReason(e.target.value)}
+                rows={3}
+                disabled={graceTripsSubmitting}
+                className="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary-500 focus:outline-none resize-none"
+              />
+            </label>
+
+            <div className="mt-5 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setGraceTripsModalOpen(false)}
+                disabled={graceTripsSubmitting}
+                className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink hover:bg-surface-sunken"
+              >
+                {t('admin_ops.cancel', { defaultValue: 'Cancelar' })}
+              </button>
+              <button
+                type="button"
+                onClick={handleGrantGraceTrips}
+                disabled={graceTripsSubmitting}
+                className="rounded-lg bg-sky-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+              >
+                {graceTripsSubmitting
+                  ? t('admin_ops.applying', { defaultValue: 'Aplicando…' })
+                  : t('admin_ops.grace_confirm', { defaultValue: 'Otorgar' })}
               </button>
             </div>
           </div>

@@ -9,6 +9,7 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
+import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
 
 type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
@@ -54,6 +55,27 @@ export default function UserDetailPage() {
   const [blockUpdating, setBlockUpdating] = useState(false);
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
   const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string}>({open: false, action: () => {}, title: '', message: ''});
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletAdjusting, setWalletAdjusting] = useState(false);
+
+  const handleAdjustWallet = async (args: { accountType: WalletAccountType; amountCup: number; reason: string }) => {
+    if (!id) return;
+    setWalletAdjusting(true);
+    try {
+      const result = await adminService.adjustWallet(id, args.accountType, args.amountCup, args.reason);
+      showToast('success', t('admin_ops.adjust_success', {
+        defaultValue: `Saldo ajustado. Nuevo balance: ${result.new_balance.toLocaleString()} CUP`,
+      }));
+      setWalletModalOpen(false);
+      // Refresh user detail to see new balance
+      const data = await adminService.getUserDetail(id);
+      setDetail(data);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('admin_ops.adjust_error', { defaultValue: 'No pudimos ajustar el saldo' }));
+    } finally {
+      setWalletAdjusting(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -174,7 +196,13 @@ export default function UserDetailPage() {
             </span>
           </div>
         </div>
-        <div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setWalletModalOpen(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+          >
+            {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
+          </button>
           {user.is_active ? (
             <button
               onClick={() => setBlockModalOpen(true)}
@@ -404,6 +432,16 @@ export default function UserDetailPage() {
         message={confirmModal.message}
         onConfirm={confirmModal.action}
         onCancel={() => setConfirmModal(prev => ({...prev, open: false}))}
+      />
+
+      {/* Adjust Wallet Modal */}
+      <AdjustWalletModal
+        open={walletModalOpen}
+        userName={user.full_name || user.email || user.phone || 'Usuario'}
+        isDriver={user.role === 'driver'}
+        loading={walletAdjusting}
+        onCancel={() => setWalletModalOpen(false)}
+        onConfirm={handleAdjustWallet}
       />
 
       {/* Block User Modal */}

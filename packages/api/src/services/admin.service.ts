@@ -1360,6 +1360,10 @@ export const adminService = {
           .from('wallet_accounts')
           .update({ balance: currentBalance + request.amount })
           .eq('id', accountId);
+
+        // Fire-and-forget business email notification
+        void this.notifyBusinessMovement(txn.id, 'recharge_approved')
+          .catch(() => { /* silent */ });
       }
 
       // Mark as approved
@@ -1662,5 +1666,108 @@ export const adminService = {
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     return (row ?? { online: 0, busy: 0, idle: 0, offline: 0 }) as { online: number; busy: number; idle: number; offline: number };
+  },
+
+  // ==================== WALLET OPS (admin adjustments) ====================
+
+  /**
+   * Credit or debit a user's wallet manually.
+   * Calls admin_adjust_wallet RPC (migration 00133).
+   *
+   * @param targetUserId — user whose wallet is adjusted
+   * @param accountType — 'customer_cash' (passenger) or 'driver_cash' (driver quota)
+   * @param amountCup — positive = credit, negative = debit
+   * @param reason — required, ≥3 chars
+   */
+  async adjustWallet(
+    targetUserId: string,
+    accountType: 'customer_cash' | 'driver_cash',
+    amountCup: number,
+    reason: string,
+  ): Promise<{ transaction_id: string; account_id: string; amount_cup: number; new_balance: number }> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_adjust_wallet', {
+      p_target_user_id: targetUserId,
+      p_account_type: accountType,
+      p_amount_cup: amountCup,
+      p_reason: reason,
+      p_admin_user_id: admin.id,
+    });
+    if (error) throw error;
+
+    // Fire-and-forget business email notification
+    void this.notifyBusinessMovement(
+      (data as { transaction_id: string }).transaction_id,
+      'admin_adjustment',
+    ).catch(() => { /* silent — non-critical */ });
+
+    return data as { transaction_id: string; account_id: string; amount_cup: number; new_balance: number };
+  },
+
+  /**
+   * Refund the commission charged on a specific ride.
+   * Credits the driver's driver_cash balance with the commission amount.
+   */
+  async refundRideCommission(rideId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { error } = await supabase.rpc('admin_refund_ride_commission', {
+      p_ride_id: rideId,
+      p_admin_user_id: admin.id,
+      p_reason: reason,
+    });
+    if (error) throw error;
+  },
+
+  /**
+   * Grant N grace trips (rides where commission is waived) to a driver.
+   */
+  async grantGraceTrips(driverUserId: string, trips: number, reason: string): Promise<{ trips_added: number; new_total: number }> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_grant_grace_trips', {
+      p_driver_user_id: driverUserId,
+      p_trips: trips,
+      p_admin_user_id: admin.id,
+      p_reason: reason,
+    });
+    if (error) throw error;
+    return data as { trips_added: number; new_total: number };
+  },
+
+  /**
+   * Fire-and-forget business email notification for significant wallet movements.
+   * Hits the notify-business-movement edge function. Fails silently.
+   */
+  async notifyBusinessMovement(
+    transactionId: string,
+    eventType: 'admin_adjustment' | 'recharge_approved',
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
+      ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+      ?? process.env.EXPO_PUBLIC_SUPABASE_URL
+      ?? '';
+
+    await fetch(`${supabaseUrl}/functions/v1/notify-business-movement`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+          ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+          ?? '',
+      },
+      body: JSON.stringify({ transaction_id: transactionId, event_type: eventType }),
+    });
   },
 };
