@@ -75,6 +75,20 @@ jobs:
           cd apps/${{ steps.target.outputs.app }}
           pnpm exec expo prebuild --platform android --no-install --clean
 
+      - name: Bump Gradle JVM heap (prevent OOM on release builds)
+        run: |
+          cd apps/${{ steps.target.outputs.app }}/android
+          # Override / add the jvmargs line in gradle.properties so the Gradle
+          # daemon (spawned by ./gradlew) also uses 6GB heap, matching
+          # GRADLE_OPTS on the CLI side.
+          if grep -q "^org.gradle.jvmargs=" gradle.properties; then
+            sed -i 's|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8|' gradle.properties
+          else
+            echo "" >> gradle.properties
+            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> gradle.properties
+          fi
+          grep "^org.gradle.jvmargs" gradle.properties
+
       - name: Configure release to sign with debug keystore
         run: |
           cd apps/${{ steps.target.outputs.app }}/android/app
@@ -138,6 +152,10 @@ jobs:
           SENTRY_ORG: agencia-senores
           SENTRY_PROJECT: tricigo-mobile
           NODE_OPTIONS: --max_old_space_size=4096
+          # Gradle + JVM heap — client bundle (~12MB) OOMed CompileArtProfileTask
+          # on the default 1.5GB heap. Runner has 16GB; give Gradle 6GB.
+          GRADLE_OPTS: "-Xmx6g -Dfile.encoding=UTF-8"
+          JAVA_TOOL_OPTIONS: "-Xmx6g"
         run: |
           cd apps/${{ steps.target.outputs.app }}/android
           chmod +x ./gradlew
