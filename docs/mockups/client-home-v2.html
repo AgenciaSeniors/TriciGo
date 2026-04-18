@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TriciGo · Client Home v2 — Capitolio + iconos custom</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Inter:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-paper: #FFFBF5;
+    --bg-elev-1: #FFFFFF;
+    --bg-elev-2: #F4EEE2;
+    --ink-primary: #1A1414;
+    --ink-secondary: #6B7F8F;
+    --ink-subtle: #A9B4BC;
+    --line: rgba(26, 20, 20, 0.08);
+    --accent-orange: #FF4D00;
+    --accent-orange-glow: rgba(255, 77, 0, 0.18);
+    --accent-warm: #FFB547;
+    --accent-dusk: #6B7F8F;
+    --shadow-card: 0 2px 20px rgba(30, 20, 10, 0.04), 0 1px 2px rgba(30, 20, 10, 0.06);
+    --shadow-hero: 0 8px 40px rgba(255, 77, 0, 0.15), 0 2px 6px rgba(30, 20, 10, 0.08);
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    --bg-paper: #0A0E1A;
+    --bg-elev-1: #11172A;
+    --bg-elev-2: #18203A;
+    --ink-primary: #F4F0EA;
+    --ink-secondary: #B7C4CF;
+    --ink-subtle: #6B7F8F;
+    --line: rgba(244, 240, 234, 0.08);
+    --accent-orange: #FF4D00;
+    --accent-orange-glow: rgba(255, 77, 0, 0.25);
+    --accent-warm: #FFB547;
+    --accent-dusk: #4A6278;
+    --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-hero: 0 8px 40px rgba(255, 77, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg-elev-2);
+    color: var(--ink-primary);
+    min-height: 100vh;
+    padding: 24px;
+    transition: background 200ms ease, color 200ms ease;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--bg-paper);
+    border-radius: 42px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    position: relative;
+    transition: background 200ms ease;
+  }
+
+  .status-bar {
+    height: 44px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-primary);
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+  }
+  .wordmark-tri { color: var(--ink-primary); font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: -0.5px; }
+  .wordmark-go { color: var(--accent-orange); font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px; letter-spacing: -0.5px; }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .theme-toggle, .notif-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+  .theme-toggle:hover, .notif-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-card); }
+  .notif-btn { position: relative; }
+  .notif-dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-orange); }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-warm));
+    color: #FFFBF5;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-weight: 700; font-size: 15px;
+  }
+
+  .scroll {
+    padding: 8px 20px 100px 20px;
+    height: calc(100% - 44px - 56px);
+    overflow-y: auto;
+  }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* Balance card */
+  .balance-card {
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 18px 20px;
+    margin-top: 8px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+  .balance-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 140px; height: 100%;
+    background: radial-gradient(circle at right, var(--accent-orange-glow), transparent 70%);
+    pointer-events: none;
+  }
+  .balance-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .balance-label::before { content: '◆'; color: var(--accent-orange); font-size: 8px; }
+  .balance-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-top: 8px;
+    gap: 12px;
+  }
+  .balance-amount {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -1.2px;
+    color: var(--ink-primary);
+  }
+  .balance-amount small {
+    font-size: 14px;
+    font-weight: 500;
+    margin-left: 4px;
+    color: var(--ink-secondary);
+    letter-spacing: 0;
+  }
+  .balance-usd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-warm);
+  }
+  .balance-usd::before { content: '↗ '; }
+
+  /* Destination ask */
+  .dest-section { margin-top: 28px; }
+  .dest-title {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 30px;
+    font-weight: 400;
+    color: var(--ink-primary);
+    line-height: 1.2;
+  }
+  .dest-underline {
+    display: block;
+    width: 64px;
+    height: 3px;
+    margin-top: 8px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-warm));
+  }
+  .dest-input {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow-card);
+    cursor: text;
+    transition: all 200ms ease;
+  }
+  .dest-input:hover { border-color: var(--accent-orange); box-shadow: var(--shadow-hero); }
+  .dest-icon {
+    width: 20px; height: 20px;
+    flex-shrink: 0;
+    color: var(--accent-orange);
+  }
+  .dest-placeholder {
+    flex: 1;
+    color: var(--ink-secondary);
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  /* Section label */
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+    margin: 28px 0 12px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  /* Recent places */
+  .recent-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: all 120ms ease;
+  }
+  .recent-item:last-child { border-bottom: none; }
+  .recent-item:hover { padding-left: 8px; }
+  .recent-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-orange);
+    flex-shrink: 0;
+  }
+  .recent-info { flex: 1; min-width: 0; }
+  .recent-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .recent-when {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-subtle);
+    margin-top: 2px;
+  }
+  .recent-arrow {
+    color: var(--ink-subtle);
+    font-size: 18px;
+  }
+
+  /* Services — clean, no prices */
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .service-card {
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 14px 6px 10px 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 180ms ease;
+    box-shadow: var(--shadow-card);
+  }
+  .service-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent-orange);
+    box-shadow: 0 8px 28px rgba(255, 77, 0, 0.18);
+  }
+  .service-icon-wrap {
+    width: 56px; height: 56px;
+    margin: 0 auto 6px auto;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .service-icon-wrap img {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain;
+  }
+  .service-name {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-primary);
+    letter-spacing: -0.2px;
+  }
+
+  /* Capitolio divider */
+  .capitolio-divider {
+    margin: 36px -20px 24px -20px;
+    width: calc(100% + 40px);
+    height: 72px;
+    opacity: 0.45;
+    position: relative;
+  }
+  [data-theme="dark"] .capitolio-divider { opacity: 0.55; }
+  .capitolio-svg { width: 100%; height: 100%; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--bg-elev-1);
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 20px;
+    backdrop-filter: blur(10px);
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--ink-subtle);
+    transition: color 120ms ease;
+  }
+  .nav-item.active { color: var(--accent-orange); }
+  .nav-item svg { width: 22px; height: 22px; }
+  .nav-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* Notes panel */
+  .notes {
+    max-width: 440px;
+    padding: 24px;
+    background: var(--bg-elev-1);
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    align-self: flex-start;
+  }
+  .notes h1 {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: var(--ink-primary);
+  }
+  .notes h2 {
+    font-family: 'Bricolage Grotesque', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 18px 0 6px 0;
+    color: var(--accent-orange);
+    letter-spacing: -0.3px;
+  }
+  .notes p, .notes li {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+  }
+  .notes ul { padding-left: 20px; }
+  .notes li { margin-bottom: 4px; }
+  .notes code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-elev-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--ink-primary);
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--accent-orange);
+    color: #FFFBF5;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<!-- PHONE -->
+<div class="phone" id="phone">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>•••  100%</span>
+  </div>
+
+  <div class="topbar">
+    <div>
+      <span class="wordmark-tri">Trici</span><span class="wordmark-go">Go</span>
+    </div>
+    <div class="topbar-actions">
+      <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </div>
+      <div class="notif-btn" title="Notificaciones">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-dot"></span>
+      </div>
+      <div class="avatar">A</div>
+    </div>
+  </div>
+
+  <div class="scroll">
+
+    <!-- balance -->
+    <div class="balance-card">
+      <div class="balance-label">Saldo disponible</div>
+      <div class="balance-row">
+        <div class="balance-amount">24,890<small>TC</small></div>
+        <div class="balance-usd">$47.86 USD</div>
+      </div>
+    </div>
+
+    <!-- Destination ask -->
+    <div class="dest-section">
+      <div class="dest-title">¿A dónde vamos hoy?</div>
+      <span class="dest-underline"></span>
+      <div class="dest-input">
+        <svg class="dest-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span class="dest-placeholder">Buscar dirección o lugar…</span>
+      </div>
+    </div>
+
+    <!-- Recientes -->
+    <div class="section-label">Recientes</div>
+    <div class="recent-item">
+      <span class="recent-dot"></span>
+      <div class="recent-info">
+        <div class="recent-name">Aeropuerto José Martí</div>
+        <div class="recent-when">Hace 2h · Habana</div>
+      </div>
+      <span class="recent-arrow">›</span>
+    </div>
+    <div class="recent-item">
+      <span class="recent-dot"></span>
+      <div class="recent-info">
+        <div class="recent-name">Habana Vieja · Plaza de Armas</div>
+        <div class="recent-when">Ayer</div>
+      </div>
+      <span class="recent-arrow">›</span>
+    </div>
+
+    <!-- Capitolio divider -->
+    <div class="capitolio-divider">
+      <svg class="capitolio-svg" viewBox="0 0 390 72" preserveAspectRatio="xMidYMid meet">
+        <!-- Palmera izquierda (sutil, contexto) -->
+        <g transform="translate(18, 28) scale(0.8)" opacity="0.55">
+          <line x1="8" y1="40" x2="8" y2="18" stroke="var(--accent-dusk)" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M 8 18 Q 0 12, -4 6 M 8 18 Q 2 8, 2 0 M 8 18 Q 14 8, 20 4 M 8 18 Q 18 14, 24 12" stroke="var(--accent-dusk)" stroke-width="1" fill="none" stroke-linecap="round"/>
+        </g>
+        <!-- Palmera derecha -->
+        <g transform="translate(362, 30) scale(0.8)" opacity="0.55">
+          <line x1="8" y1="38" x2="8" y2="16" stroke="var(--accent-dusk)" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M 8 16 Q 0 10, -4 4 M 8 16 Q 2 6, 2 -2 M 8 16 Q 14 6, 20 2 M 8 16 Q 18 12, 24 10" stroke="var(--accent-dusk)" stroke-width="1" fill="none" stroke-linecap="round"/>
+        </g>
+
+        <!-- Capitolio principal (centrado) -->
+        <g transform="translate(195, 0)">
+          <!-- Base escalera (trapezoide) -->
+          <polygon points="-95,68 95,68 82,64 -82,64" fill="var(--accent-dusk)"/>
+          <polygon points="-82,64 82,64 74,60 -74,60" fill="var(--accent-dusk)"/>
+
+          <!-- Alas laterales (edificios rectangulares con techo ondulado sutil) -->
+          <rect x="-74" y="42" width="48" height="18" fill="var(--accent-dusk)"/>
+          <rect x="26" y="42" width="48" height="18" fill="var(--accent-dusk)"/>
+          <!-- Ventanas sutiles alas -->
+          <g fill="var(--accent-warm)" opacity="0.3">
+            <rect x="-68" y="48" width="3" height="6"/>
+            <rect x="-60" y="48" width="3" height="6"/>
+            <rect x="-52" y="48" width="3" height="6"/>
+            <rect x="-44" y="48" width="3" height="6"/>
+            <rect x="-36" y="48" width="3" height="6"/>
+            <rect x="32" y="48" width="3" height="6"/>
+            <rect x="40" y="48" width="3" height="6"/>
+            <rect x="48" y="48" width="3" height="6"/>
+            <rect x="56" y="48" width="3" height="6"/>
+            <rect x="64" y="48" width="3" height="6"/>
+          </g>
+
+          <!-- Cuerpo central del Capitolio -->
+          <rect x="-26" y="38" width="52" height="22" fill="var(--accent-dusk)"/>
+          <!-- Columnas frontales -->
+          <g fill="var(--accent-dusk)">
+            <rect x="-22" y="38" width="3" height="22"/>
+            <rect x="-14" y="38" width="3" height="22"/>
+            <rect x="-6" y="38" width="3" height="22"/>
+            <rect x="2" y="38" width="3" height="22"/>
+            <rect x="10" y="38" width="3" height="22"/>
+            <rect x="18" y="38" width="3" height="22"/>
+          </g>
+          <!-- Frontón triangular -->
+          <polygon points="-28,38 28,38 0,28" fill="var(--accent-dusk)"/>
+
+          <!-- Cúpula principal (la icónica) -->
+          <ellipse cx="0" cy="22" rx="22" ry="10" fill="var(--accent-dusk)"/>
+          <path d="M -22 22 Q -22 2, 0 2 Q 22 2, 22 22" fill="var(--accent-dusk)"/>
+
+          <!-- Líneas verticales de la cúpula (nervios) -->
+          <g stroke="var(--accent-orange)" stroke-width="0.4" opacity="0.5" fill="none">
+            <path d="M -18 22 Q -16 8, -8 4"/>
+            <path d="M -10 22 Q -9 4, 0 2"/>
+            <path d="M 0 22 L 0 2"/>
+            <path d="M 10 22 Q 9 4, 0 2"/>
+            <path d="M 18 22 Q 16 8, 8 4"/>
+          </g>
+
+          <!-- Linterna/cupulín encima -->
+          <rect x="-4" y="-4" width="8" height="6" fill="var(--accent-dusk)"/>
+          <rect x="-5" y="-6" width="10" height="2" fill="var(--accent-dusk)"/>
+          <!-- Aguja -->
+          <line x1="0" y1="-6" x2="0" y2="-14" stroke="var(--accent-dusk)" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="0" cy="-14" r="1.5" fill="var(--accent-orange)"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Servicios: iconos 3D custom del user, sin precios -->
+    <div class="section-label">Servicios</div>
+    <div class="services-grid">
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <img src="icons/triciclo@2x.png" alt="Triciclo" />
+        </div>
+        <div class="service-name">Triciclo</div>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <img src="icons/moto@2x.png" alt="Moto" />
+        </div>
+        <div class="service-name">Moto</div>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <img src="icons/auto@2x.png" alt="Auto" />
+        </div>
+        <div class="service-name">Auto</div>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <img src="icons/mensajeria@2x.png" alt="Envío" />
+        </div>
+        <div class="service-name">Envío</div>
+      </div>
+    </div>
+
+    <!-- Confort queda en una segunda fila si lo querés destacar -->
+
+  </div>
+
+  <!-- bottom nav -->
+  <div class="bottom-nav">
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span class="nav-label">Inicio</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M5.64 5.64l1.42 1.42M2 12h2M5.64 18.36l1.42-1.42M12 22v-2M18.36 18.36l-1.42-1.42M22 12h-2M18.36 5.64l-1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg>
+      <span class="nav-label">Viajes</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      <span class="nav-label">Wallet</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="nav-label">Perfil</span>
+    </div>
+  </div>
+</div>
+
+<!-- NOTES PANEL -->
+<div class="notes">
+  <h1>Client home v2 <span class="tag">Capitolio</span></h1>
+  <p><strong>Tocá el 🌙 en la top bar</strong> para alternar light/dark.</p>
+
+  <h2>Cambios vs v1</h2>
+  <ul>
+    <li><strong>✅ Capitolio en el divider</strong> — cúpula icónica + 6 columnas + alas laterales + 2 palmeras muy sutiles a los costados. La pequeña luz naranja en la punta del aguja es un guiño brand.</li>
+    <li><strong>✅ Iconos 3D custom</strong> — usa <code>icons/*@2x.png</code> que subiste. Más color, más personalidad.</li>
+    <li><strong>✅ Sin promo card</strong> — eliminada.</li>
+    <li><strong>✅ Sin precios "desde X CUP"</strong> — service cards más limpias, solo nombre.</li>
+  </ul>
+
+  <h2>Observaciones sobre los iconos</h2>
+  <ul>
+    <li><code>confort.png</code> es idéntico a <code>auto.png</code> en el filesystem (mismo archivo). Si querés diferenciar Confort de Auto estándar, necesitamos un ícono distinto (sedan premium / negro / blanco).</li>
+    <li>Solo mostré 4 cards (Triciclo, Moto, Auto, Envío). Si querés Confort como 5º, va en fila 2.</li>
+    <li>Los iconos son muy expresivos pero pueden competir con el wordmark "TriciGo" en saturación naranja. En dark mode se ven mejor porque el fondo oscuro los aísla.</li>
+  </ul>
+
+  <h2>Qué decidir</h2>
+  <ol>
+    <li>¿El Capitolio te cierra o hay que iterarlo (más detalle, diferente composición)?</li>
+    <li>¿Confort lo sacamos del home o conseguís un ícono específico?</li>
+    <li>¿Los 4 servicios en una fila, o querés layout 2×2 más grande?</li>
+    <li>¿Iniciamos implementation en React Native con este look aprobado?</li>
+  </ol>
+
+  <h2>Si aprobás</h2>
+  <p>Escribo plan de implementation para <code>apps/client/app/(tabs)/index.tsx</code>: cómo reestructurar los 3600 líneas actuales, qué componentes nuevos crear en <code>packages/ui/</code>, cómo traer los iconos al bundle (expo asset system), y cómo wirear el toggle light/dark con el theme store existente.</p>
+</div>
+
+<script>
+  function toggleTheme() {
+    const phone = document.getElementById('phone');
+    const current = phone.getAttribute('data-theme');
+    phone.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  }
+</script>
+
+</body>
+</html>
