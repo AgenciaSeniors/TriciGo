@@ -1,9 +1,11 @@
-name: Android APK (debug-signed)
+name: Android APK (standalone debug-keystore)
 
 # Triggered by tags like `driver-v1.0.0-apk` or `client-v1.0.0-apk`.
-# Produces an APK downloadable as a workflow artifact.
-# NOTE: Debug-signed — good for sideload testing on real Android devices,
-# NOT submittable to Play Store. For production submission use EAS.
+# Produces a RELEASE-variant APK signed with a debug-style keystore
+# generated on the fly. The APK bundles JS natively — it runs
+# standalone on any Android device without needing Metro.
+# NOT submittable to Play Store (debug keystore, not a real release
+# cert). For Play Store use EAS production builds.
 
 on:
   push:
@@ -73,7 +75,60 @@ jobs:
           cd apps/${{ steps.target.outputs.app }}
           pnpm exec expo prebuild --platform android --no-install --clean
 
-      - name: Build debug APK
+      - name: Configure release to sign with debug keystore
+        run: |
+          cd apps/${{ steps.target.outputs.app }}/android/app
+          # Expo prebuild generates android/app/debug.keystore. We reuse it for
+          # release signing so CI produces a standalone sideload-able APK without
+          # needing external secrets. This keystore is NOT valid for Play Store.
+          if [ ! -f debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -storepass android -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=TriciGo,C=CU"
+          fi
+          # Patch build.gradle: point release signingConfig at debug keystore
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path('build.gradle')
+          src = p.read_text()
+          # Replace the default release signingConfig block to use debug keystore
+          new = re.sub(
+              r"signingConfigs\s*\{[^}]*release\s*\{[^}]*\}",
+              "",
+              src,
+              flags=re.DOTALL,
+          )
+          # Insert our signingConfig inside signingConfigs { ... }
+          inject = '''
+              release {
+                  storeFile file('debug.keystore')
+                  storePassword 'android'
+                  keyAlias 'androiddebugkey'
+                  keyPassword 'android'
+              }
+          '''
+          new = re.sub(
+              r"(signingConfigs\s*\{)",
+              r"\1" + inject,
+              new,
+              count=1,
+          )
+          # Make buildType release use that signing config
+          new = re.sub(
+              r"(buildTypes\s*\{[^}]*release\s*\{)",
+              r"\1\n            signingConfig signingConfigs.release",
+              new,
+              count=1,
+              flags=re.DOTALL,
+          )
+          p.write_text(new)
+          print(new[-2000:])
+          PY
+
+      - name: Build release APK (standalone, JS bundled)
         env:
           EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
@@ -86,28 +141,34 @@ jobs:
         run: |
           cd apps/${{ steps.target.outputs.app }}/android
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Rename APK
+      - name: Locate + rename APK
+        id: apk
         run: |
-          cd apps/${{ steps.target.outputs.app }}/android/app/build/outputs/apk/debug
+          cd apps/${{ steps.target.outputs.app }}/android/app/build/outputs/apk/release
           ls -la
-          mv app-debug.apk tricigo-${{ steps.target.outputs.app }}-${{ github.ref_name }}.apk
+          SRC=$(ls app-release.apk 2>/dev/null || ls app-release-unsigned.apk)
+          DEST=tricigo-${{ steps.target.outputs.app }}-${{ github.ref_name }}.apk
+          mv "$SRC" "$DEST"
+          echo "dest=$DEST" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: tricigo-${{ steps.target.outputs.app }}-apk
-          path: apps/${{ steps.target.outputs.app }}/android/app/build/outputs/apk/debug/*.apk
+          path: apps/${{ steps.target.outputs.app }}/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 90
 
       - name: Summary
         run: |
-          echo "### ✅ APK built" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Standalone APK built" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- App: **${{ steps.target.outputs.app }}**" >> $GITHUB_STEP_SUMMARY
-          echo "- Trigger: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- File: ${{ steps.apk.outputs.dest }}" >> $GITHUB_STEP_SUMMARY
           echo "- Download: [Actions → this run → Artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Install on Android:** enable \"Install from unknown sources\", then open the APK file." >> $GITHUB_STEP_SUMMARY
+          echo "JS is bundled — no Metro server needed." >> $GITHUB_STEP_SUMMARY
