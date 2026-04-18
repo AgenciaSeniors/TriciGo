@@ -31,7 +31,7 @@ type Campaign = {
 type Promotion = {
   id: string;
   code: string;
-  description: string | null;
+  type: string | null;
 };
 
 type City = { id: string; name: string; slug: string };
@@ -116,7 +116,7 @@ export default function CampaignsPage() {
             const supabase = getSupabaseClient();
             const { data } = await supabase
               .from('promotions')
-              .select('id, code, description')
+              .select('id, code, type')
               .eq('is_active', true)
               .order('code');
             return (data ?? []) as Promotion[];
@@ -453,7 +453,7 @@ export default function CampaignsPage() {
                 {promotions.map((promo) => (
                   <option key={promo.id} value={promo.id}>
                     {promo.code}
-                    {promo.description ? ` · ${promo.description}` : ''}
+                    {promo.type ? ` · ${promo.type}` : ''}
                   </option>
                 ))}
               </select>
