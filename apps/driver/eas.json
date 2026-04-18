@@ -6,7 +6,16 @@
   "build": {
     "base": {
       "node": "20.19.4",
-      "pnpm": "9.15.4"
+      "pnpm": "9.15.4",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296",
+        "EXPO_PUBLIC_POSTHOG_API_KEY": "phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9",
+        "SENTRY_ORG": "agencia-senores",
+        "SENTRY_PROJECT": "tricigo-mobile"
+      }
     },
     "development": {
       "extends": "base",
@@ -14,12 +23,6 @@
       "distribution": "internal",
       "ios": {
         "simulator": true
-      },
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
       }
     },
     "preview": {
@@ -27,23 +30,11 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
       }
     },
     "production": {
       "extends": "base",
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lqaufszburqvlslpcuac.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "MAPBOX_TOKEN_SET_IN_EAS_SECRETS",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "STRIPE_PK_SET_IN_EAS_SECRETS"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {
