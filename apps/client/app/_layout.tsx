@@ -12,6 +12,7 @@ import {
 } from '@expo-google-fonts/montserrat';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
+import { StripeBootstrap } from '@/lib/stripe-bootstrap';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
@@ -204,8 +205,10 @@ function RootLayoutInner() {
         }
       }}>
       <AppProviders>
-        <RootNavigator />
-        <Toast />
+        <StripeBootstrap>
+          <RootNavigator />
+          <Toast />
+        </StripeBootstrap>
       </AppProviders>
     </ErrorBoundary>
   );

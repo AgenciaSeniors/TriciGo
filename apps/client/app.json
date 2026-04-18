@@ -57,6 +57,13 @@
       "expo-sharing",
       "expo-image",
       [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.app.tricigo.client",
+          "enableGooglePay": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-logo-hd.png",

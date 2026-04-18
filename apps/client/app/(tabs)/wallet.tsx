@@ -8,6 +8,8 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
+import { paymentService } from '@tricigo/api/services/payment';
+import type { StripeRechargeConfig } from '@tricigo/types';
 import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
@@ -20,6 +22,20 @@ import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { LinearGradient } from 'expo-linear-gradient';
+
+// Lazy require Stripe SDK (native only). Fallbacks keep web build compiling.
+let useStripe: (() => {
+  initPaymentSheet: (opts: Record<string, unknown>) => Promise<{ error?: { message: string; code?: string } }>;
+  presentPaymentSheet: () => Promise<{ error?: { message: string; code?: string } }>;
+}) | null = null;
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    useStripe = require('@stripe/stripe-react-native').useStripe;
+  } catch {
+    useStripe = null;
+  }
+}
 
 type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
 
@@ -540,10 +556,14 @@ function NativeWalletScreen() {
     }
   }, [balance?.available]);
 
-  // Recharge state
+  // Recharge state — amount is in USD now (min 20 per business rules)
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
-  const [rechargeAmount, setRechargeAmount] = useState('10000');
+  const [rechargeAmount, setRechargeAmount] = useState('20');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
+  const [stripeConfig, setStripeConfig] = useState<StripeRechargeConfig | null>(null);
+
+  // Stripe SDK hook (null on web / if SDK not available)
+  const stripe = useStripe ? useStripe() : null;
 
   // Transfer state
   const [transferSheetVisible, setTransferSheetVisible] = useState(false);
@@ -580,6 +600,14 @@ function NativeWalletScreen() {
         const rate = await exchangeRateService.getUsdCupRate();
         if (rate) setExchangeRate(rate);
       } catch { /* use default */ }
+
+      // Fetch Stripe config (enabled + publishable key). Placeholder key
+      // ('pk_test_REPLACE_WITH_YOUR_KEY') means Stripe isn't yet provisioned
+      // for this env — UI will disable the card button with "Próximamente".
+      try {
+        const cfg = await paymentService.getStripeConfig();
+        setStripeConfig(cfg);
+      } catch { /* leave as null — card button stays disabled */ }
     } catch (err) {
       logger.error('Error fetching wallet', { error: String(err) });
     }
@@ -616,11 +644,114 @@ function NativeWalletScreen() {
 
   const MAX_RECHARGE_CUP = RIDE_CONFIG.MAX_RECHARGE_AMOUNT;
 
+  const MIN_RECHARGE_USD = 20;
+  const MAX_RECHARGE_USD = 500;
+  const stripeReady = !!stripeConfig
+    && stripeConfig.enabled
+    && !!stripeConfig.publishableKey
+    && !stripeConfig.publishableKey.includes('REPLACE')
+    && !!stripe;
+
   const submitRecharge = useCallback(async () => {
-    // Open web wallet for Stripe recharge (native Stripe SDK requires dev client builds)
-    setRechargeSheetVisible(false);
-    Linking.openURL('https://tricigo.com/wallet');
-  }, []);
+    if (!userId) return;
+
+    // If Stripe not configured yet, fall back to web wallet (preserves the
+    // current behaviour until real keys arrive).
+    if (!stripeReady) {
+      setRechargeSheetVisible(false);
+      Toast.show({
+        type: 'info',
+        text1: t('wallet.recharge_web_hint', {
+          defaultValue: 'Pagos con tarjeta desde la app — próximamente. Te llevamos a la versión web.',
+        }),
+      });
+      Linking.openURL('https://tricigo.com/wallet');
+      return;
+    }
+
+    const usd = parseFloat(rechargeAmount);
+    if (!usd || isNaN(usd)) {
+      Toast.show({ type: 'error', text1: t('wallet.invalid_amount', { defaultValue: 'Monto inválido' }) });
+      return;
+    }
+    if (usd < MIN_RECHARGE_USD) {
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.recharge_below_min', {
+          defaultValue: `El mínimo es $${MIN_RECHARGE_USD} USD`,
+        }),
+      });
+      return;
+    }
+    if (usd > MAX_RECHARGE_USD) {
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.recharge_above_max', {
+          defaultValue: `El máximo es $${MAX_RECHARGE_USD} USD`,
+        }),
+      });
+      return;
+    }
+
+    setRechargeSubmitting(true);
+    setIsProcessing(true);
+    try {
+      // USD → CUP (stored internally as CUP until TRC=USD rebase happens)
+      const amountCup = Math.round(usd * exchangeRate);
+
+      // 1. Create PaymentIntent on our backend (returns Stripe client_secret)
+      const intent = await paymentService.createStripePaymentIntent(userId, amountCup, 'customer');
+      const clientSecret = (intent as { client_secret?: string; clientSecret?: string }).client_secret
+        ?? (intent as { clientSecret?: string }).clientSecret;
+      const intentId = (intent as { intentId?: string; intent_id?: string }).intentId
+        ?? (intent as { intent_id?: string }).intent_id;
+      if (!clientSecret || !intentId) throw new Error('Payment intent response incomplete');
+
+      // 2. Initialize Stripe PaymentSheet with the client secret
+      if (!stripe) throw new Error('Stripe SDK not available');
+      const initRes = await stripe.initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'TriciGo',
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initRes.error) throw new Error(initRes.error.message);
+
+      // 3. Present sheet to user — they enter card + confirm
+      const presentRes = await stripe.presentPaymentSheet();
+      if (presentRes.error) {
+        // User canceled — silent exit
+        if (presentRes.error.code === 'Canceled') return;
+        throw new Error(presentRes.error.message);
+      }
+
+      // 4. Poll our payment_intents table until webhook processes (credits wallet)
+      Toast.show({
+        type: 'info',
+        text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
+      });
+      const final = await paymentService.pollIntentStatus(intentId);
+      if (final.status === 'completed') {
+        setRechargeSheetVisible(false);
+        Toast.show({
+          type: 'success',
+          text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
+          text2: `$${usd.toFixed(2)} USD ≈ ${amountCup.toLocaleString()} CUP`,
+        });
+        await fetchData();
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
+        });
+      }
+    } catch (err) {
+      logger.error('stripe_recharge_failed', { error: String(err) });
+      Toast.show({ type: 'error', text1: getErrorMessage(err) });
+    } finally {
+      setRechargeSubmitting(false);
+      setIsProcessing(false);
+    }
+  }, [userId, stripeReady, stripe, rechargeAmount, exchangeRate, t, fetchData]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // Transfer handlers
@@ -909,11 +1040,11 @@ function NativeWalletScreen() {
           </View>
           <Text variant="h4" className="mb-4">{t('wallet.request_recharge')}</Text>
           <Text variant="bodySmall" color="secondary" className="mb-3">
-            {t('wallet.recharge_amount')} (CUP)
+            {t('wallet.recharge_amount_usd', { defaultValue: 'Monto (USD)' })}
           </Text>
-          {/* UBER-4.2: Recharge preset amounts */}
+          {/* Recharge preset amounts — USD denominated */}
           <View className="flex-row justify-between mb-3">
-            {[500, 1000, 2000, 5000, 10000].map((amount) => (
+            {[20, 50, 100, 200].map((amount) => (
               <Pressable
                 key={amount}
                 onPress={() => setRechargeAmount(String(amount))}
@@ -924,31 +1055,50 @@ function NativeWalletScreen() {
                 }`}
               >
                 <Text className={rechargeAmount === String(amount) ? 'text-white font-semibold' : 'text-neutral-700 dark:text-neutral-300'}>
-                  ${amount.toLocaleString()}
+                  ${amount}
                 </Text>
               </Pressable>
             ))}
           </View>
           <Input
-            placeholder="500"
+            placeholder="20"
             value={rechargeAmount}
             onChangeText={setRechargeAmount}
             keyboardType="numeric"
           />
-          {parseInt(rechargeAmount, 10) > 0 && (
+          {parseFloat(rechargeAmount) > 0 && (
             <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
               <Text variant="caption" color="secondary">
-                ≈ ${(parseInt(rechargeAmount, 10) / exchangeRate).toFixed(2)} USD + $2.00 fee = ${((parseInt(rechargeAmount, 10) / exchangeRate) + 2).toFixed(2)} USD total
+                ≈ {Math.round(parseFloat(rechargeAmount) * exchangeRate).toLocaleString()} CUP
+                {stripeConfig?.feeUsd ? ` · +$${stripeConfig.feeUsd.toFixed(2)} USD fee` : ''}
+              </Text>
+              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
+                {t('wallet.recharge_min_hint', {
+                  defaultValue: `Mínimo $${MIN_RECHARGE_USD} USD · Conversión al tipo de cambio actual`,
+                })}
+              </Text>
+            </View>
+          )}
+          {!stripeReady && (
+            <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
+              <Text variant="caption" style={{ color: '#b45309' }}>
+                {t('wallet.stripe_not_ready', {
+                  defaultValue: 'Pagos con tarjeta desde la app — próximamente. Por ahora abrimos la versión web.',
+                })}
               </Text>
             </View>
           )}
           <Button
-            title={t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })}
+            title={
+              stripeReady
+                ? t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })
+                : t('wallet.pay_with_card_web', { defaultValue: 'Abrir versión web' })
+            }
             size="lg"
             fullWidth
             onPress={debouncedSubmitRecharge}
             loading={rechargeSubmitting}
-            disabled={isProcessing || !rechargeAmount || parseInt(rechargeAmount, 10) <= 0}
+            disabled={isProcessing || !rechargeAmount || parseFloat(rechargeAmount) < MIN_RECHARGE_USD}
           />
         </View>
       </BottomSheet>

@@ -26,6 +26,7 @@
     "@tricigo/types": "workspace:*",
     "@tricigo/ui": "workspace:*",
     "@tricigo/utils": "workspace:*",
+    "@stripe/stripe-react-native": "0.49.0",
     "expo": "~55.0.14",
     "expo-av": "~16.0.8",
     "expo-clipboard": "~7.0.1",
