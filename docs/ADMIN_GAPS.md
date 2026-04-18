@@ -1,32 +1,53 @@
 # Admin — Backend gaps
 
-**Fecha:** 2026-04-18
+**Fecha:** 2026-04-18 (actualizado tras verificación directa contra Supabase prod)
 **Scope:** páginas del admin panel que existen como UI pero no tienen backend (tabla/RPC en Supabase). Se muestran con "No pudimos cargar los datos" o similar al entrar.
 
 Este documento sirve como **triage**: qué features son placeholder, cuánto esfuerzo requieren para activarse, y en qué orden priorizarlas.
+
+## 🆕 Finding crítico (2026-04-18)
+
+Muchas páginas admin quedaron con `.from('profiles')` después del rediseño de lucia, pero **la tabla se llama `users`** en TriciGo. Además, `users.city_id` **no existe**. Esto causaba fallos en:
+- `/reviews` (join)
+- `/segments`
+- `/campaigns`
+
+Arreglados en commit 2026-04-18. Las tablas y columnas del schema real se verificaron con el Supabase MCP.
 
 ---
 
 ## Estado por página
 
-| Página | Service/query principal | Tabla(s) esperada(s) | Estado | Acción necesaria |
-|---|---|---|---|---|
-| `/content` | `cmsService.list/get/create/update/delete` | `cms_content` | ❌ tabla no existe | Migration + service wire |
-| `/blog` | `blogService.list/create/update/delete/publish` | `blog_posts` | ❌ tabla no existe | Migration + service wire |
-| `/quests` | `questService.list/create/update/delete` | `quests`, `user_quests` | ❌ tablas no existen | Migration + service wire |
-| `/segments` | `supabase.from('user_segments')` | `user_segments` | ❌ tabla no existe | Migration + service wire |
-| `/funnel` | `supabase.from('funnel_events')` | `funnel_events` | ❌ tabla no existe | Migration (o reusar analytics provider) |
-| `/campaigns` | `supabase.from('campaigns')` | `campaigns` | ⚠️ tabla existe, verificar columnas | Revisar schema vs query |
-| `/businesses`, `/businesses/[id]` | `corporateService.*` | `corporate_accounts`, `corporate_employees`, `corporate_rides` | ✅ tablas existen | Verificar que el page consume las columnas correctas |
-| `/disputes` | `disputeService.*` | `ride_disputes` (00038) | ✅ existe | Verificar nombre de tabla en el service (puede estar buscando `dispute_cases`) |
-| `/lost-found` | `lostItemService.*` | `lost_items` | ✅ existe | — |
-| `/fraud` | `fraudService.*` | `fraud_alerts` | ✅ existe | — |
-| `/validation` | — | `validation_events` | ✅ existe | — |
-| `/referrals` | `referralService.*` | `referrals` | ✅ existe | — |
-| `/reviews` | `supabase.rpc('get_global_review_stats')` | **RPC faltante**, tabla `reviews` existe | ✅ arreglado (commit 2026-04-18) — ahora agrega client-side | — |
-| `/wallet` (Retiros) | `adminService.getPendingRedemptions` con `status='pending'` | enum es `'requested'` | ✅ arreglado (commit 2026-04-18) | — |
-| `/settings/*` (13 páginas) | varias | cities, zones, pricing_rules, platform_config, promotions, surge_zones, feature_flags, etc. | ✅ todas verificadas | — |
-| Core (`/`, `/drivers`, `/rides`, `/users`, `/incidents`, `/audit`, `/reports`, `/live-map`, `/notifications`) | `adminService.*` | múltiples | ✅ todas verificadas | — |
+| Página | Service/query principal | Tabla(s) / estado real en DB | Acción |
+|---|---|---|---|
+| `/content` | `cmsService` | ✅ `cms_content` **existe** (columnas: slug, title_es, title_en, body_es, body_en, updated_at, updated_by) | Verificar que service usa esas columnas |
+| `/blog` | `blogService` | ✅ `blog_posts` **existe** (usa `is_published` boolean, no `status` enum) | Confirmado OK |
+| `/quests` | `questService` | ❌ `quests`, `user_quests` no existen | Migration + service wire |
+| `/segments` | consulta directa | ❌ `user_segments` no existe; users no tiene `city_id` | Parche aplicado (2026-04-18): segmentos new/power/inactive funcionan; `by_city` retorna vacío hasta agregar `city_id` a users |
+| `/funnel` | consulta directa | ❌ `funnel_events` no existe | Migration (o integrar PostHog analytics) |
+| `/campaigns` | consulta directa | ✅ `campaigns` **aplicada al DB** (2026-04-18) — usaba migration 00073 pero no se había ejecutado. Columnas: name, segment_type, segment_city_id, message_title, message_body, promo_code_id, channel, status, scheduled_at, sent_at, sent_count, created_by. | Funciona para segmentos all/new/power/inactive; by_city requiere users.city_id |
+| `/businesses`, `/businesses/[id]` | `corporateService` | ✅ `corporate_accounts`, `corporate_employees`, `corporate_rides` existen | — |
+| `/disputes` | `disputeService` | ✅ `ride_disputes` (usado correctamente por el service) | — |
+| `/lost-found` | `lostItemService` | ✅ `lost_items` existe | — |
+| `/fraud` | `fraudService` | ✅ `fraud_alerts` existe | — |
+| `/validation` | — | ✅ `validation_events` existe | — |
+| `/referrals` | `referralService` | ✅ `referrals` existe | — |
+| `/reviews` | consulta directa | ✅ `reviews` existe; RPC `get_global_review_stats` no existe (removido); join fix `profiles→users` aplicado | Funciona |
+| `/wallet` (Retiros) | `adminService.getPendingRedemptions` | ✅ `wallet_redemptions` existe; enum corregido a `'requested'` | Funciona |
+| `/settings/*` (13 páginas) | varias | ✅ todas verificadas | — |
+| Core (`/`, `/drivers`, `/rides`, `/users`, `/incidents`, `/audit`, `/reports`, `/live-map`, `/notifications`) | `adminService.*` | ✅ todas verificadas | — |
+
+### Tablas que aún faltan (5 páginas realmente placeholder)
+
+| Tabla | Página que la necesita | Prioridad |
+|---|---|---|
+| `quests`, `user_quests` | `/quests` | Media (gamification) |
+| `user_segments` | `/segments` (para segmentos custom guardables) | Baja (los 4 segmentos default ya funcionan) |
+| `funnel_events` | `/funnel` | Baja (reemplazable con PostHog) |
+
+### Columnas pendientes
+
+- `users.city_id` (o `users_cities` junction) → re-habilita segmento `by_city` en `/segments` y `/campaigns`.
 
 ---
 

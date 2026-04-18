@@ -89,7 +89,7 @@ export default function SegmentsPage() {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
       const { count: newCount } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', sevenDaysAgo);
 
@@ -116,7 +116,7 @@ export default function SegmentsPage() {
         .not('customer_id', 'is', null);
       const activeRiderIds = new Set((activeRiders ?? []).map((r) => r.customer_id));
       const { count: totalCustomers } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*', { count: 'exact', head: true })
         .eq('role', 'customer');
       const inactiveCount = (totalCustomers ?? 0) - activeRiderIds.size;
@@ -152,7 +152,7 @@ export default function SegmentsPage() {
 
         if (segment === 'new_users') {
           const { data } = await supabase
-            .from('profiles')
+            .from('users')
             .select('id')
             .gte('created_at', sevenDaysAgo)
             .range(offset, offset + PAGE_SIZE - 1);
@@ -180,7 +180,7 @@ export default function SegmentsPage() {
             .not('customer_id', 'is', null);
           const activeSet = new Set((activeRiders ?? []).map((r) => r.customer_id));
           const { data: allCustomers } = await supabase
-            .from('profiles')
+            .from('users')
             .select('id')
             .eq('role', 'customer');
           const inactiveIds = (allCustomers ?? [])
@@ -188,12 +188,9 @@ export default function SegmentsPage() {
             .map((u) => u.id);
           userIds = inactiveIds.slice(offset, offset + PAGE_SIZE);
         } else if (segment === 'by_city' && cityId) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('city_id', cityId)
-            .range(offset, offset + PAGE_SIZE - 1);
-          userIds = (data ?? []).map((u) => u.id);
+          // by_city segment disabled: users.city_id column does not exist yet.
+          // TODO: add city_id to users (or a users_cities junction) before re-enabling.
+          userIds = [];
         }
 
         if (userIds.length === 0) {
@@ -201,9 +198,11 @@ export default function SegmentsPage() {
           return;
         }
 
+        // NOTE: users.city_id column does not exist in the current schema;
+        // city_name falls back to null until a users→cities relationship is added.
         const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, phone, city_id')
+          .from('users')
+          .select('id, full_name, email, phone')
           .in('id', userIds);
 
         const { data: rides } = await supabase
@@ -219,16 +218,7 @@ export default function SegmentsPage() {
           if (!stat.lastRide || ride.created_at > stat.lastRide) stat.lastRide = ride.created_at;
         }
 
-        const cityIds = [...new Set((profiles ?? []).map((p) => p.city_id).filter(Boolean))];
-        const cityMap: Record<string, string> = {};
-        if (cityIds.length > 0) {
-          const { data: citiesData } = await supabase
-            .from('cities')
-            .select('id, name')
-            .in('id', cityIds);
-          for (const c of citiesData ?? []) cityMap[c.id] = c.name;
-        }
-
+        // City mapping disabled until users has a city_id / city_slug column.
         const result: SegmentUser[] = (profiles ?? []).map((p) => ({
           id: p.id,
           full_name: p.full_name,
@@ -236,7 +226,7 @@ export default function SegmentsPage() {
           phone: p.phone,
           rides_count: rideStats[p.id]?.count ?? 0,
           last_ride_date: rideStats[p.id]?.lastRide ?? null,
-          city_name: p.city_id ? cityMap[p.city_id] ?? null : null,
+          city_name: null,
         }));
 
         setUsers(result);
@@ -268,14 +258,8 @@ export default function SegmentsPage() {
     if (activeSegment === 'by_city' && cityId) {
       setPage(0);
       void loadSegmentUsers('by_city', 0, cityId);
-      const supabase = getSupabaseClient();
-      supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('city_id', cityId)
-        .then(({ count }) => {
-          setCounts((prev) => ({ ...prev, by_city: count ?? 0 }));
-        });
+      // users.city_id does not exist yet — keep by_city count at 0.
+      setCounts((prev) => ({ ...prev, by_city: 0 }));
     }
   };
 

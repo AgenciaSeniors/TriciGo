@@ -112,8 +112,8 @@ export default function ReviewsPage() {
         .from('reviews')
         .select(
           `*,
-          reviewer:profiles!reviews_reviewer_id_fkey(full_name),
-          reviewee:profiles!reviews_reviewee_id_fkey(full_name)`,
+          reviewer:users!reviews_reviewer_id_fkey(full_name),
+          reviewee:users!reviews_reviewee_id_fkey(full_name)`,
         )
         .order('created_at', { ascending: false })
         .range(from, to);

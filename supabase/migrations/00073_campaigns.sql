@@ -18,5 +18,5 @@ CREATE TABLE IF NOT EXISTS campaigns (
 ALTER TABLE campaigns ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admin full access on campaigns" ON campaigns
   FOR ALL USING (
-    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+    EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin')
   );

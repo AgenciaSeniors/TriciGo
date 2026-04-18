@@ -147,12 +147,12 @@ export default function CampaignsPage() {
     const now = new Date();
 
     if (formSegment === 'all') {
-      const { data } = await supabase.from('profiles').select('id').eq('role', 'customer');
+      const { data } = await supabase.from('users').select('id').eq('role', 'customer');
       return (data ?? []).map((u) => u.id);
     }
     if (formSegment === 'new_users') {
       const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase.from('profiles').select('id').gte('created_at', since);
+      const { data } = await supabase.from('users').select('id').gte('created_at', since);
       return (data ?? []).map((u) => u.id);
     }
     if (formSegment === 'power_users') {
@@ -177,14 +177,14 @@ export default function CampaignsPage() {
         .not('customer_id', 'is', null);
       const activeSet = new Set((activeRiders ?? []).map((r) => r.customer_id));
       const { data: allCustomers } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id')
         .eq('role', 'customer');
       return (allCustomers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
     }
     if (formSegment === 'by_city' && formCityId) {
-      const { data } = await supabase.from('profiles').select('id').eq('city_id', formCityId);
-      return (data ?? []).map((u) => u.id);
+      // by_city segment disabled: users.city_id column does not exist yet.
+      return [];
     }
     return [];
   };
