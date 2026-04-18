@@ -14,6 +14,7 @@ export interface DriverProfile {
   user_id: string;
   status: DriverStatus;
   is_online: boolean;
+  is_on_break: boolean;
   current_location: GeoPoint | null;
   current_heading: number | null;
   rating_avg: number;

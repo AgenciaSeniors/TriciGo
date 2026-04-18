@@ -691,7 +691,10 @@ export default function DriverDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-neutral-900 capitalize">
-                    {VEHICLE_TYPE_KEY[vehicle.type] ? t(VEHICLE_TYPE_KEY[vehicle.type]) : vehicle.type}
+                    {(() => {
+                      const key = VEHICLE_TYPE_KEY[vehicle.type];
+                      return key ? t(key) : vehicle.type;
+                    })()}
                   </p>
                   <p className="text-xs text-neutral-500">{vehicle.make} {vehicle.model}</p>
                 </div>

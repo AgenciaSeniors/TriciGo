@@ -30,32 +30,36 @@ const APPS = [
     name: 'driver',
     dir: path.join(ROOT, 'apps/driver/assets'),
     iconSource: 'icon.png',
-    wordmarkSource: 'logo-wordmark-white.png',
-    // Driver logo is ORANGE on NAVY. Keep pixels where red channel
-    // dominates (orange/warm), drop the cool-tone navy. No radial
-    // mask needed — the source has no outer-white area.
+    wordmarkSource: 'wordmark-hd.png',
+    // Driver icon logo is ORANGE on NAVY. Keep pixels where red channel
+    // dominates (orange/warm), drop the cool-tone navy. No radial mask
+    // needed.
     keepPixel: (r, g, _b) => r > 150 && r > g + 30,
     radialMaskRatio: null,
+    // Splash lives on a dark (#111111) background → recolor all non-
+    // transparent pixels of the wordmark to white for contrast.
+    splashRecolor: 'white',
   },
   {
     name: 'client',
     dir: path.join(ROOT, 'apps/client/assets'),
     iconSource: 'icon.png',
-    wordmarkSource: 'logo-wordmark-white.png',
-    // Client logo is WHITE on ORANGE — BUT the source icon.png also
-    // has a WHITE frame outside the rounded-square body. A pure color
-    // threshold grabs both. Constrain to radius 40% of the canvas so
-    // we only keep the center logo area (pin fits inside that circle)
-    // and drop the outer white frame.
+    wordmarkSource: 'wordmark-hd.png',
+    // Client icon logo is WHITE on ORANGE with an outer white frame.
+    // Keep only near-white pixels within the center 40% radius.
     keepPixel: (r, g, b) => r > 245 && g > 245 && b > 245,
     radialMaskRatio: 0.4,
+    // Splash lives on white background → use the wordmark AS-IS (color).
+    splashRecolor: null,
   },
 ];
 
 const ADAPTIVE_CANVAS = 1024;
 const SAFE_ZONE = 0.66;
-const SPLASH_TARGET_W = 2400;
-const SPLASH_TARGET_H = 572;
+// Splash uses the HD wordmark at native ratio (1536x1024 ≈ 3:2). We keep
+// the original aspect, just compress (no upscale needed — source is hi-res).
+const SPLASH_TARGET_W = 1536;
+const SPLASH_TARGET_H = 1024;
 
 async function extractLogo(srcPath, keepPixel, radialMaskRatio) {
   // Load raw RGBA, zero-out alpha where keepPixel returns false
@@ -129,7 +133,26 @@ async function regenerateSplashHd(app) {
   const srcPath = path.join(app.dir, app.wordmarkSource);
   const outPath = path.join(app.dir, 'splash-logo-hd.png');
 
-  await sharp(srcPath)
+  let pipeline = sharp(srcPath);
+
+  if (app.splashRecolor === 'white') {
+    // Recolor every opaque pixel to pure white while preserving alpha
+    // (for dark splash backgrounds where the original dark-text version
+    // would disappear into the background).
+    const { data, info } = await pipeline.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const out = Buffer.from(data);
+    for (let p = 0; p < out.length; p += 4) {
+      // Only touch non-transparent pixels
+      if (out[p + 3] > 0) {
+        out[p] = 255;
+        out[p + 1] = 255;
+        out[p + 2] = 255;
+      }
+    }
+    pipeline = sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } });
+  }
+
+  await pipeline
     .resize(SPLASH_TARGET_W, SPLASH_TARGET_H, {
       kernel: 'lanczos3',
       fit: 'contain',
@@ -138,7 +161,8 @@ async function regenerateSplashHd(app) {
     .png({ compressionLevel: 9 })
     .toFile(outPath);
 
-  console.log(`[${app.name}] splash-logo-hd.png → ${SPLASH_TARGET_W}×${SPLASH_TARGET_H} (Lanczos-3)`);
+  const recolorLabel = app.splashRecolor ? ` [recolored ${app.splashRecolor}]` : '';
+  console.log(`[${app.name}] splash-logo-hd.png → ${SPLASH_TARGET_W}×${SPLASH_TARGET_H}${recolorLabel}`);
 }
 
 async function main() {

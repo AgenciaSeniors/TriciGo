@@ -37,6 +37,9 @@ export const createRideSchema = z.object({
   insurance_premium_cup: z.number().nonnegative().optional(),
   rider_preferences: z.record(z.unknown()).optional(),
   ride_mode: z.enum(['passenger', 'cargo']).optional(),
+  // Ratio of fare to pay via wallet (TriciCoin) vs cash, for mixed payment.
+  // 0 = all cash, 1 = all wallet. Defaults to 0 on rides without wallet split.
+  wallet_ratio: z.number().min(0).max(1).optional(),
   delivery_details: z.object({
     package_description: z.string().min(1).max(1000),
     recipient_name: z.string().min(1).max(200),
