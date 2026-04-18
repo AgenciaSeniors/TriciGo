@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "tricigo-driver",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo-wordmark-white.png",
-      "backgroundColor": "#111111",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.driver",
@@ -71,7 +66,15 @@
           "photosPermission": "TriciGo necesita acceso a tus fotos para subir documentos."
         }
       ],
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-logo-hd.png",
+          "imageWidth": 240,
+          "backgroundColor": "#111111",
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "extra": {
       "router": {

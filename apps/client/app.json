@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "tricigo",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo-wordmark-white.png",
-      "backgroundColor": "#FF4D00",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.client",
@@ -61,7 +56,15 @@
       "expo-secure-store",
       "expo-sharing",
       "expo-image",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-logo-hd.png",
+          "imageWidth": 240,
+          "backgroundColor": "#FF4D00",
+          "resizeMode": "contain"
+        }
+      ],
       ["expo-image-picker", {
         "photosPermission": "TriciGo necesita acceso a tus fotos para tu avatar.",
         "cameraPermission": "TriciGo necesita acceso a la cámara para tu avatar."
