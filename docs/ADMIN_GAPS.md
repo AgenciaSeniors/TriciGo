@@ -37,17 +37,19 @@ Arreglados en commit 2026-04-18. Las tablas y columnas del schema real se verifi
 | `/settings/*` (13 páginas) | varias | ✅ todas verificadas | — |
 | Core (`/`, `/drivers`, `/rides`, `/users`, `/incidents`, `/audit`, `/reports`, `/live-map`, `/notifications`) | `adminService.*` | ✅ todas verificadas | — |
 
-### Tablas que aún faltan (5 páginas realmente placeholder)
+### Tablas / RPCs
 
-| Tabla | Página que la necesita | Prioridad |
-|---|---|---|
-| `quests`, `user_quests` | `/quests` | Media (gamification) |
-| `user_segments` | `/segments` (para segmentos custom guardables) | Baja (los 4 segmentos default ya funcionan) |
-| `funnel_events` | `/funnel` | Baja (reemplazable con PostHog) |
+Tras verificar uno por uno contra el schema real (2026-04-18):
 
-### Columnas pendientes
+| Item | Estado |
+|---|---|
+| `quests`, `user_quests` | ✅ Ya existen como `driver_quests` + `driver_quest_progress`. El page `/quests` las consume vía `questService`. |
+| `user_segments` | ❌ No existe **pero no la usa ningún código**. Los 4 segmentos default (new/power/inactive/by_city) se computan on-the-fly. Crear solo cuando se quiera persistir segmentos custom. |
+| `funnel_events` | ❌ No existe **pero no la usa ningún código**. `/funnel` computa desde `rides` + `users`. Alternativa real es PostHog. |
+| `count_power_users` RPC | ✅ Creado 2026-04-18 (migration 00130). Elimina el 404 que se veía en cada carga de `/segments`. |
+| `users.city_id` | ✅ Aplicado 2026-04-18 (migration 00129). Re-habilita segmento `by_city` en `/segments` y `/campaigns`. |
 
-- `users.city_id` (o `users_cities` junction) → re-habilita segmento `by_city` en `/segments` y `/campaigns`.
+**Conclusión:** no quedan gaps reales bloqueantes. Las 3 tablas "placeholder" que documenté originalmente (cms_content, blog_posts, user_segments, funnel_events, quests) o ya existían con otro nombre, o no eran necesarias para el funcionamiento actual del admin.
 
 ---
 

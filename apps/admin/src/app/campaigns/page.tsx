@@ -183,8 +183,8 @@ export default function CampaignsPage() {
       return (allCustomers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
     }
     if (formSegment === 'by_city' && formCityId) {
-      // by_city segment disabled: users.city_id column does not exist yet.
-      return [];
+      const { data } = await supabase.from('users').select('id').eq('city_id', formCityId);
+      return (data ?? []).map((u) => u.id);
     }
     return [];
   };

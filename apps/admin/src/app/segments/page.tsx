@@ -188,9 +188,12 @@ export default function SegmentsPage() {
             .map((u) => u.id);
           userIds = inactiveIds.slice(offset, offset + PAGE_SIZE);
         } else if (segment === 'by_city' && cityId) {
-          // by_city segment disabled: users.city_id column does not exist yet.
-          // TODO: add city_id to users (or a users_cities junction) before re-enabling.
-          userIds = [];
+          const { data } = await supabase
+            .from('users')
+            .select('id')
+            .eq('city_id', cityId)
+            .range(offset, offset + PAGE_SIZE - 1);
+          userIds = (data ?? []).map((u) => u.id);
         }
 
         if (userIds.length === 0) {
@@ -198,11 +201,9 @@ export default function SegmentsPage() {
           return;
         }
 
-        // NOTE: users.city_id column does not exist in the current schema;
-        // city_name falls back to null until a users→cities relationship is added.
         const { data: profiles } = await supabase
           .from('users')
-          .select('id, full_name, email, phone')
+          .select('id, full_name, email, phone, city_id')
           .in('id', userIds);
 
         const { data: rides } = await supabase
@@ -218,7 +219,16 @@ export default function SegmentsPage() {
           if (!stat.lastRide || ride.created_at > stat.lastRide) stat.lastRide = ride.created_at;
         }
 
-        // City mapping disabled until users has a city_id / city_slug column.
+        const cityIds = [...new Set((profiles ?? []).map((p) => p.city_id).filter(Boolean))];
+        const cityMap: Record<string, string> = {};
+        if (cityIds.length > 0) {
+          const { data: citiesData } = await supabase
+            .from('cities')
+            .select('id, name')
+            .in('id', cityIds as string[]);
+          for (const c of citiesData ?? []) cityMap[c.id] = c.name;
+        }
+
         const result: SegmentUser[] = (profiles ?? []).map((p) => ({
           id: p.id,
           full_name: p.full_name,
@@ -226,7 +236,7 @@ export default function SegmentsPage() {
           phone: p.phone,
           rides_count: rideStats[p.id]?.count ?? 0,
           last_ride_date: rideStats[p.id]?.lastRide ?? null,
-          city_name: null,
+          city_name: p.city_id ? cityMap[p.city_id] ?? null : null,
         }));
 
         setUsers(result);
@@ -258,8 +268,14 @@ export default function SegmentsPage() {
     if (activeSegment === 'by_city' && cityId) {
       setPage(0);
       void loadSegmentUsers('by_city', 0, cityId);
-      // users.city_id does not exist yet — keep by_city count at 0.
-      setCounts((prev) => ({ ...prev, by_city: 0 }));
+      const supabase = getSupabaseClient();
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('city_id', cityId)
+        .then(({ count }) => {
+          setCounts((prev) => ({ ...prev, by_city: count ?? 0 }));
+        });
     }
   };
 
