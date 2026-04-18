@@ -271,17 +271,17 @@
     font-size: 18px;
   }
 
-  /* Services — clean, no prices */
+  /* Services — clean, no prices, 5 in a row */
   .services-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 7px;
   }
   .service-card {
     background: var(--bg-elev-1);
     border: 1px solid var(--line);
-    border-radius: 20px;
-    padding: 14px 6px 10px 6px;
+    border-radius: 16px;
+    padding: 12px 4px 8px 4px;
     text-align: center;
     cursor: pointer;
     transition: all 180ms ease;
@@ -293,7 +293,7 @@
     box-shadow: 0 8px 28px rgba(255, 77, 0, 0.18);
   }
   .service-icon-wrap {
-    width: 56px; height: 56px;
+    width: 48px; height: 48px;
     margin: 0 auto 6px auto;
     display: flex; align-items: center; justify-content: center;
   }
@@ -303,7 +303,7 @@
   }
   .service-name {
     font-family: 'Bricolage Grotesque', sans-serif;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--ink-primary);
     letter-spacing: -0.2px;
@@ -550,7 +550,7 @@
       </svg>
     </div>
 
-    <!-- Servicios: iconos 3D custom del user, sin precios -->
+    <!-- Servicios: 5 en fila, iconos 3D custom, sin precios -->
     <div class="section-label">Servicios</div>
     <div class="services-grid">
       <div class="service-card">
@@ -573,13 +573,17 @@
       </div>
       <div class="service-card">
         <div class="service-icon-wrap">
+          <img src="icons/confort@2x.png" alt="Confort" />
+        </div>
+        <div class="service-name">Confort</div>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
           <img src="icons/mensajeria@2x.png" alt="Envío" />
         </div>
         <div class="service-name">Envío</div>
       </div>
     </div>
-
-    <!-- Confort queda en una segunda fila si lo querés destacar -->
 
   </div>
 
