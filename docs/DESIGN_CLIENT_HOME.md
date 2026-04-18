@@ -191,10 +191,26 @@ Cambiamos **cómo se ve** y **qué siente el usuario en los primeros 3 segundos*
 
 ---
 
-## 10. Preguntas para vos (antes de generar mockup)
+## 10. Respuestas del usuario (2026-04-18)
 
-1. ¿El home tiene que mostrar el **balance** TC siempre, o solo si el usuario tiene saldo > 0?
-2. ¿Querés que haya una sección de **"historial reciente"** (últimos 2-3 viajes) visible, o va en otra tab?
-3. ¿El usuario ya conoce el logo TriciGo o querés que la **inicial "T"** o wordmark pequeño aparezca en la top bar?
-4. ¿Algún iconicon cubano querés incluir (ejemplo: bandera, silueta del Capitolio, el malecón) aunque sea muy sutil?
-5. ¿Dark mode es el default o el light mode?
+1. **Balance siempre visible** (no condicional al saldo).
+2. **Sí, mostrar historial reciente** en el home (últimos 2-3 viajes).
+3. **Logo wordmark** en top bar (no solo la inicial).
+4. **Silueta cubana sí, sutil** — Malecón o Capitolio como elemento decorativo (no folclórico).
+5. **Light mode default + toggle a dark mode** (ambos soportados).
+
+### Decisiones derivadas
+
+- **Pattern cubano**: silueta line-art del **Malecón al atardecer** como divider sutil entre secciones (línea con farola + edificios Vedado). No Capitolio (riesgo turístico). No colores de bandera (lo haría caricatura).
+- **Top bar**: wordmark TriciGo compacto (altura 20px) + toggle light/dark + avatar/notificaciones.
+- **Paleta light mode**:
+  - `bg.paper` `#FFFBF5` (crema tibia, no blanco puro)
+  - `ink.primary` `#1A1414` (casi negro, cálido)
+  - `accent.orange` `#FF4D00` (sin cambio)
+  - `accent.warm` `#FFB547` (sin cambio)
+  - `accent.dusk` `#6B7F8F` (azul ceniza más claro para light bg)
+- **Paleta dark mode** (toggle): usa los valores definidos en §2 arriba.
+
+## 11. Mockup HTML
+
+Archivo: `docs/mockups/client-home-v1.html` — abrir en cualquier browser para ver la propuesta renderizada en ambos modos (light/dark con toggle). Probado con la paleta + typography + layout de este doc.
