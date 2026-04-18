@@ -74,11 +74,6 @@ export default function ReviewsPage() {
       .from('reviews')
       .select('*', { count: 'exact', head: true });
 
-    const { data: avgData } = (await supabase.rpc('get_global_review_stats')) as {
-      data: { average_rating: number } | null;
-      error: unknown;
-    };
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const { count: todayCount } = await supabase
@@ -86,8 +81,11 @@ export default function ReviewsPage() {
       .select('*', { count: 'exact', head: true })
       .gte('created_at', todayStart.toISOString());
 
-    let avg = avgData?.average_rating ?? 0;
-    if (!avg && totalCount && totalCount > 0) {
+    // Compute average rating from the reviews table directly.
+    // (An RPC `get_global_review_stats` would be cheaper at scale but is not
+    // deployed yet; admin volume is low enough that a full select is fine.)
+    let avg = 0;
+    if (totalCount && totalCount > 0) {
       const { data: allRatings } = await supabase.from('reviews').select('rating');
       if (allRatings && allRatings.length > 0) {
         const sum = allRatings.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0);

@@ -1228,7 +1228,7 @@ export const adminService = {
     const { data, error } = await supabase
       .from('wallet_redemptions')
       .select('*, driver_profiles!inner(users!inner(full_name))')
-      .eq('status', 'pending')
+      .eq('status', 'requested')
       .order('requested_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -1576,10 +1576,10 @@ export const adminService = {
     // Log admin action
     await supabase.from('admin_actions').insert({
       admin_id: adminId,
-      action_type: isVerified ? 'verify_document' : 'reject_document',
+      action: isVerified ? 'verify_document' : 'reject_document',
       target_type: 'driver_document',
       target_id: documentId,
-      details: { notes },
+      reason: notes ?? null,
     });
   },
 
