@@ -24,7 +24,25 @@ Checklist reproducible paso a paso para ir de código en `master` a apps en Test
 
 ## Fase B — Internal Android APK (HOY, gratis)
 
-Requiere: cuenta Expo/EAS con `EXPO_TOKEN` en `~/.eas.json` o env local.
+### Opción 1 (Recomendada mientras EAS esté sin cuota): GitHub Actions
+
+Workflow: `.github/workflows/android-apk.yml`. Corre en runners de GitHub (JDK 17 + Android SDK preinstalados). Gratis bajo el free tier de GH Actions.
+
+```bash
+# Driver
+git tag driver-v1.0.0-apk
+git push origin driver-v1.0.0-apk
+
+# Client
+git tag client-v1.0.0-apk
+git push origin client-v1.0.0-apk
+```
+
+Después de ~15-20 min, el APK queda disponible en Actions → run → Artifacts. También se puede disparar manualmente desde la UI de Actions con "Run workflow" + seleccionar `driver` o `client`.
+
+**Limitación:** debug-signed. Sirve para sideload en Android real, NO para submit a Play Store.
+
+### Opción 2: EAS cloud (requiere cuota disponible o upgrade)
 
 ```bash
 # Driver
