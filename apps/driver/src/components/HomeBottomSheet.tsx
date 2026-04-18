@@ -402,7 +402,14 @@ function SheetContent({
 
   const ctaPortal = (
     <View style={styles.ctaCircleContainer}>
-      {/* 3 concentric pulse rings (offline only) */}
+      {/* Static symmetric glow (always visible when offline) */}
+      {!isOnline && (
+        <>
+          <View style={styles.ctaGlow} />
+          <View style={styles.ctaGlowInner} />
+        </>
+      )}
+      {/* 3 concentric pulse rings (offline only, animated) */}
       {!isOnline && (
         <>
           {[ring1Anim, ring2Anim, ring3Anim].map((anim, i) => (
@@ -745,14 +752,34 @@ const styles = StyleSheet.create({
         boxShadow:
           '0 0 40px rgba(255,77,0,0.5), 0 0 80px rgba(255,77,0,0.2), inset 0 0 30px rgba(255,140,92,0.15)',
       } as any,
-      default: {
+      ios: {
         shadowColor: '#FF4D00',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.6,
         shadowRadius: 30,
-        elevation: 15,
       },
+      // Android: omit `elevation` — Android renders elevation shadows
+      // as an asymmetric drop (light source top) which makes the glow
+      // look vertically offset. The static `ctaGlow` View below
+      // provides a symmetric halo via a centered semi-transparent ring.
+      android: {},
     }),
+  },
+  // Static symmetric glow behind the CTA button (Android + iOS)
+  // — positioned absolutely inside ctaCircleContainer, same center.
+  ctaGlow: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,77,0,0.12)',
+  },
+  ctaGlowInner: {
+    position: 'absolute',
+    width: 148,
+    height: 148,
+    borderRadius: 74,
+    backgroundColor: 'rgba(255,77,0,0.18)',
   },
   ctaCircleOnline: {
     width: 64,

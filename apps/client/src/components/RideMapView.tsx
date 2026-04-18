@@ -16,6 +16,26 @@ function getMapboxGL(): any {
   return _MapboxGL;
 }
 
+// Ensure Mapbox access token is set synchronously before any MapView
+// mounts. Guards against the _layout race where token gets applied too
+// late on cold start.
+let _mapboxTokenApplied = false;
+function ensureMapboxToken() {
+  if (_mapboxTokenApplied || Platform.OS === 'web') return;
+  const M = getMapboxGL();
+  if (!M) return;
+  try {
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    M.setAccessToken(token);
+    if (typeof M.setWellKnownTileServer === 'function') M.setWellKnownTileServer('Mapbox');
+    if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
+    _mapboxTokenApplied = true;
+  } catch {
+    // _layout useEffect retry will pick it up
+  }
+}
+ensureMapboxToken();
+
 // Vehicle marker images (top-down view)
 const vehicleMarkerImages: Record<string, any> = {
   'marker-triciclo': require('../../assets/vehicles/markers/triciclo.png'),
@@ -160,6 +180,7 @@ function RideMapViewInner({
   onCameraChanged,
   fullscreen,
 }: RideMapViewProps) {
+  ensureMapboxToken();
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();

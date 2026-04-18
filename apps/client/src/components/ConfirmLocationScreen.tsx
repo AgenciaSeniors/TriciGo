@@ -17,6 +17,22 @@ function getMapboxGL(): any {
   return _MapboxGL;
 }
 
+// Sync token init before MapView mounts (see note in RideMapView)
+let _mapboxTokenApplied = false;
+function ensureMapboxToken() {
+  if (_mapboxTokenApplied || Platform.OS === 'web') return;
+  const M = getMapboxGL();
+  if (!M) return;
+  try {
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    M.setAccessToken(token);
+    if (typeof M.setWellKnownTileServer === 'function') M.setWellKnownTileServer('Mapbox');
+    if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
+    _mapboxTokenApplied = true;
+  } catch { /* retry via _layout */ }
+}
+ensureMapboxToken();
+
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
 
 /* POI category colors (same as RideMapView) */
@@ -55,6 +71,7 @@ export function ConfirmLocationScreen({
   onConfirm,
   onClose,
 }: ConfirmLocationScreenProps) {
+  ensureMapboxToken();
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);

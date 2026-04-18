@@ -15,6 +15,30 @@ try {
   MapboxGL = null;
 }
 
+// Ensure Mapbox access token is set SYNCHRONOUSLY before any MapView
+// is instantiated. This runs once per process (guarded by module-scoped
+// flag). Release builds on Android race between _layout's setAccessToken
+// and the first MapView mount — calling it here guarantees the token is
+// in place before React returns the MapView element to the native bridge.
+let _mapboxTokenApplied = false;
+function ensureMapboxToken() {
+  if (_mapboxTokenApplied || Platform.OS === 'web' || !MapboxGL) return;
+  try {
+    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    MapboxGL.setAccessToken(token);
+    if (typeof MapboxGL.setWellKnownTileServer === 'function') {
+      MapboxGL.setWellKnownTileServer('Mapbox');
+    }
+    if (typeof MapboxGL.setTelemetryEnabled === 'function') {
+      MapboxGL.setTelemetryEnabled(false);
+    }
+    _mapboxTokenApplied = true;
+  } catch {
+    // If it fails, _layout.tsx useEffect retry will pick it up
+  }
+}
+ensureMapboxToken();
+
 // Web map (browser) — conditional import
 let mapboxgl: any = null;
 if (Platform.OS === 'web') {
@@ -575,6 +599,11 @@ function RideMapViewInner(
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
+  // Synchronous re-check: if Mapbox token wasn't applied at module load
+  // (e.g. native bridge wasn't ready), apply it NOW before we return any
+  // MapView element. Idempotent — guarded by module-scoped flag.
+  ensureMapboxToken();
+
   const { t } = useTranslation('driver');
   const cameraRef = useRef<any>(null);
   const [markerImageError, setMarkerImageError] = useState(false);
