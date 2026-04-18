@@ -15,11 +15,10 @@ import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
-import { driverService, getSupabaseClient, useFeatureFlag, notificationService } from '@tricigo/api';
+import { driverService, getSupabaseClient, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
 import {
   HAVANA_CENTER,
   trackEvent,
-  trackValidationEvent,
   haversineDistance,
   logger,
   getErrorMessage,

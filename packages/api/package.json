@@ -34,6 +34,7 @@
     "./services/dispute": "./src/services/dispute.service.ts",
     "./services/lost-item": "./src/services/lost-item.service.ts",
     "./services/trusted-contact": "./src/services/trusted-contact.service.ts",
+    "./services/validation": "./src/services/validation.service.ts",
     "./hooks/useFeatureFlag": "./src/hooks/useFeatureFlag.ts",
     "./lib/offlineQueue": "./src/lib/offlineQueue.ts",
     "./lib/offlineMutations": "./src/lib/offlineMutations.ts",
