@@ -3,14 +3,16 @@
 **Propósito:** dar a lucia (y a cualquier merge futuro) un mapa completo de lo que cambió en `master` mientras su rama trabaja el rediseño de admin, para anticipar conflictos y coordinar.
 
 **Merge-base:** `e236977` — último `Merge branch 'master' into lucia` del **2 abr 2026**.
-**Última verificación:** 2026-04-17.
-**Commits en master no presentes en lucia:** 90+.
+**Última verificación:** 2026-04-17 (post-Fase 2 i18n + fix ciclo api↔utils).
+**Commits en master no presentes en lucia:** 95+.
 
 ---
 
 ## 🚨 TL;DR para lucia
 
 - **Admin:** tocamos `apps/admin/src/app/drivers/page.tsx`, `apps/admin/src/app/drivers/[id]/page.tsx`, `apps/admin/src/app/page.tsx`, `apps/admin/next.config.ts` y `packages/api/src/services/admin.service.ts`. **Si tu rediseño toca estos archivos, hay conflicto garantizado.**
+- **i18n admin (NUEVO 2026-04-17):** restauramos `useTranslation` + `t()` wrapping en **22 páginas admin** (Fase 2 completa). Lucia migró esas páginas pero había dropeado las llamadas `t()` — ya están de vuelta sin romper el diseño nuevo (`defaultValue` = string exacto de Lucia). Cambios en `packages/i18n/src/locales/{es,en,pt}/admin.json` (~1770 keys cada uno), `apps/admin/src/lib/status-registry.ts`, y los componentes `StatusBadge` / `FilterBar` / `DataTable`.
+- **Ciclo `api ↔ utils` (NUEVO 2026-04-17):** `trackValidationEvent` se movió de `packages/utils/src/analytics.ts` a `packages/api/src/services/validation.service.ts`. Driver apps importan desde `@tricigo/api` ahora.
 - **Driver/Client/Packages:** trabajo pesado que lucia probablemente **no toca** — pero confirmar.
 - **Supabase:** 10 migrations nuevas (00116 → 00128). **Si lucia creó alguna migration con número ≤ 00128, renombrar.**
 
@@ -231,6 +233,45 @@ Cuando lucia termine su rama:
 - Migrations 00001–00114 (intactas)
 - `apps/admin/tailwind.config.*`, theme files
 - `packages/theme/**`
+
+---
+
+## 8.5. Addendum 2026-04-17 — Fase 2 i18n + fix ciclo packages
+
+### i18n restaurado en admin (22 páginas)
+
+Lucia migró 22 páginas de admin a su nuevo sistema de primitivos pero dropeó las llamadas `useTranslation` y `t()`. En master, ahora las 22 páginas vuelven a usar `t('namespace.key', { defaultValue: 'Spanish exacto de lucia' })`, preservando 100% del diseño.
+
+**Commits:** `fd9bef0`, `95ef71b`, `bd4bd89`, `d5c71a3`, `2f93c6c`, `dce8a04`, `33f5fe7`, `498567a`, `247bb4d`, `7ebfde4` (10 commits).
+
+**Páginas tocadas:**
+- Operaciones: `rides`, `incidents`, `fraud`, `validation`, `disputes`, `lost-found`
+- Gente: `users`, `reviews`, `support`, `wallet`
+- Crecimiento: `businesses`, `funnel`, `quests`, `referrals`, `segments`, `campaigns`
+- Contenido+Sistema: `content`, `blog`, `notifications`, `audit`, `settings`, `reports`
+
+**Infra compartida modificada:**
+- `apps/admin/src/lib/status-registry.ts` — campo `i18nKey` agregado a cada StatusMeta.
+- `apps/admin/src/components/data/StatusBadge.tsx` — resuelve vía `t()`.
+- `apps/admin/src/components/data/FilterBar.tsx` — placeholders + arias.
+- `apps/admin/src/components/data/DataTable.tsx` — error/reintentar strings.
+- `packages/i18n/src/locales/{es,en,pt}/admin.json` — **~1770 keys por locale, paridad 100%**.
+
+**Si lucia rediseñó cualquiera de estas 22 páginas en paralelo:** el conflicto NO es estructural (diseño idéntico) pero sí textual (yo agregué imports de `useTranslation` + wraps de `t()`). Reconciliar a favor de mi versión conservando los ajustes visuales nuevos de lucia.
+
+### Ciclo `api ↔ utils` eliminado
+
+Antes: `packages/utils/src/analytics.ts` tenía `trackValidationEvent` que hacía `await import('@tricigo/api')` dinámicamente. Turbo detectaba ciclo al declarar api como dep.
+
+Ahora: `trackValidationEvent` vive en `packages/api/src/services/validation.service.ts`. Utils solo expone el wrapper PostHog genérico (`initAnalytics`, `trackEvent`, `identifyUser`, `resetAnalytics`). Driver apps importan `trackValidationEvent` desde `@tricigo/api`.
+
+**Commit:** `a5aef6b`.
+
+**Archivos:**
+- **Nuevo:** `packages/api/src/services/validation.service.ts`
+- **Modificados:** `packages/api/src/index.ts`, `packages/api/package.json`, `packages/utils/src/analytics.ts`, `packages/utils/src/index.ts`, `apps/driver/app/(tabs)/index.tsx`, `apps/driver/src/components/DriverTripView.tsx`, `apps/driver/src/components/IncomingRideCard.tsx`.
+
+**Si lucia tocó `analytics.ts` en paralelo:** merge debe respetar la nueva estructura — analytics.ts ya no exporta `trackValidationEvent`, el barrel `utils/index.ts` tampoco lo re-exporta.
 
 ---
 
