@@ -27,6 +27,7 @@
     "@tricigo/utils": "workspace:*",
     "expo": "~55.0.14",
     "expo-asset": "~55.0.14",
+    "expo-av": "~16.0.8",
     "expo-constants": "~55.0.7",
     "expo-dev-client": "~55.0.27",
     "expo-font": "^55.0.6",
