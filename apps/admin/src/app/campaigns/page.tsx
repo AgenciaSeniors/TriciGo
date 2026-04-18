@@ -239,12 +239,70 @@ export default function CampaignsPage() {
 
       if (formSendNow) {
         const userIds = await getSegmentUserIds();
-        const result = await notificationService.sendToMultipleUsers(userIds, 'campaign', {
-          title: formTitle,
-          body: formBody,
-        });
+        let sentCount = 0;
+
+        // PUSH — always-on for 'push' and 'both'
+        if (formChannel === 'push' || formChannel === 'both') {
+          const result = await notificationService.sendToMultipleUsers(userIds, 'campaign', {
+            title: formTitle,
+            body: formBody,
+          });
+          sentCount = Math.max(sentCount, result.sent);
+        }
+
+        // EMAIL — for 'email' and 'both'. Call bulk edge function.
+        if ((formChannel === 'email' || formChannel === 'both') && userIds.length > 0) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+            const res = await fetch(`${supabaseUrl}/functions/v1/send-bulk-email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session?.access_token ?? ''}`,
+                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+              },
+              body: JSON.stringify({
+                user_ids: userIds,
+                subject: formTitle,
+                body_html: `<p>${formBody.replace(/\n/g, '<br/>')}</p>`,
+                promo_code_id: formPromoId || null,
+              }),
+            });
+            const json = await res.json();
+            if (json.sent) sentCount = Math.max(sentCount, json.sent);
+          } catch (err) {
+            console.error('[campaigns] email send failed', err);
+          }
+        }
+
+        // SMS — for 'sms' and 'both'. Call bulk edge function.
+        if ((formChannel === 'sms' || formChannel === 'both') && userIds.length > 0) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+            // Keep SMS body short (<160 chars for single-segment delivery)
+            const smsBody = formTitle.length + formBody.length > 140
+              ? `${formTitle}: ${formBody.slice(0, 140 - formTitle.length)}…`
+              : `${formTitle}: ${formBody}`;
+            const res = await fetch(`${supabaseUrl}/functions/v1/send-bulk-sms`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session?.access_token ?? ''}`,
+                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+              },
+              body: JSON.stringify({ user_ids: userIds, body: smsBody }),
+            });
+            const json = await res.json();
+            if (json.sent) sentCount = Math.max(sentCount, json.sent);
+          } catch (err) {
+            console.error('[campaigns] sms send failed', err);
+          }
+        }
+
         campaignData.sent_at = new Date().toISOString();
-        campaignData.sent_count = result.sent;
+        campaignData.sent_count = sentCount;
       }
 
       const { error: dbError } = await supabase.from('campaigns').insert(campaignData);
