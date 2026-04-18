@@ -64,6 +64,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Write google-services.json (from GH secret, else placeholder)
+        env:
+          DRIVER_GS: ${{ secrets.DRIVER_GOOGLE_SERVICES_JSON }}
+          CLIENT_GS: ${{ secrets.CLIENT_GOOGLE_SERVICES_JSON }}
+        run: |
+          APP="${{ steps.target.outputs.app }}"
+          SECRET=""
+          if [ "$APP" = "driver" ] && [ -n "$DRIVER_GS" ]; then
+            echo "$DRIVER_GS" > "apps/$APP/google-services.json"
+            echo "✓ Wrote real google-services.json from DRIVER_GOOGLE_SERVICES_JSON secret"
+          elif [ "$APP" = "client" ] && [ -n "$CLIENT_GS" ]; then
+            echo "$CLIENT_GS" > "apps/$APP/google-services.json"
+            echo "✓ Wrote real google-services.json from CLIENT_GOOGLE_SERVICES_JSON secret"
+          else
+            # Placeholder so prebuild doesn't fail — the file must exist
+            # because app.json references it, but without real FCM
+            # credentials push notifications won't reach the device.
+            cat > "apps/$APP/google-services.json" <<'PLACEHOLDER'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "tricigo-placeholder",
+              "storage_bucket": "tricigo-placeholder.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "app.tricigo.__APP__"
+                  }
+                },
+                "api_key": [{ "current_key": "PLACEHOLDER_API_KEY" }],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          PLACEHOLDER
+            sed -i "s/__APP__/$APP/g" "apps/$APP/google-services.json"
+            echo "⚠ No GH secret — wrote placeholder. Push notifications will not work in this build."
+          fi
+
       - name: Expo prebuild (native android project)
         env:
           EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co

@@ -64,6 +64,25 @@ eas build --profile preview --platform android --non-interactive
 
 **Alternativa CI:** tagear `git tag driver-v1.0.0 && git push --tags` — dispara GitHub Action `eas-build.yml` (requiere `EXPO_TOKEN` secret en el repo).
 
+## Fase B.5 — Firebase Cloud Messaging (para push notifications en APKs standalone)
+
+Los APKs de GitHub Actions bypasean EAS → Expo no puede usar su proyecto Firebase interno, hay que configurar uno propio. **Gratis** (Firebase Spark plan cubre todo el uso de FCM).
+
+- [ ] **Firebase console** (https://console.firebase.google.com) — crear proyecto "TriciGo"
+- [ ] Añadir Android app al proyecto:
+  - [ ] Package: `app.tricigo.driver` — descargar `google-services.json`
+  - [ ] Package: `app.tricigo.client` — descargar `google-services.json` (distinto del driver)
+- [ ] **Opción A — Build local manual**: guardar cada JSON como `apps/driver/google-services.json` + `apps/client/google-services.json` (ya están gitignored)
+- [ ] **Opción B — Build en GH Actions**: subir los JSONs como secrets del repo:
+  - Settings → Secrets and variables → Actions → New repository secret
+  - Name: `DRIVER_GOOGLE_SERVICES_JSON`, value: **todo el contenido** del archivo JSON (pegalo crudo)
+  - Name: `CLIENT_GOOGLE_SERVICES_JSON`, value: ídem para client
+  - El workflow decodifica en runtime antes del prebuild. Sin secrets → usa un placeholder que NO rompe el build pero deshabilita push.
+- [ ] Retriggerear tag `driver-v1.x.x-apk` para probar con FCM real
+- [ ] Verificar en el device: instalar app → login → abrir Expo dashboard → enviar push de prueba al token registrado → debería llegar
+
+Sin este paso, las ofertas de viaje solo llegan cuando la app está abierta (realtime WebSocket). Con app cerrada, el driver no se entera.
+
 ## Fase C — Cuentas pagas (requiere decisión del usuario)
 
 - [ ] **Apple Developer Program** ($99/año) — https://developer.apple.com/programs

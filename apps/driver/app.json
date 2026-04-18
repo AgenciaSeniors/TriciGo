@@ -27,6 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111111"
       },
+      "googleServicesFile": "./google-services.json",
       "package": "app.tricigo.driver",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
