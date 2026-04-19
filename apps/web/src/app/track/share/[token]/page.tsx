@@ -217,6 +217,7 @@ export default function SharedTrackingPage() {
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
             vehicleType={ride.vehicle_type ?? undefined}
+            waypoints={ride.waypoints}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 

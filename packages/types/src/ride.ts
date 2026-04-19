@@ -408,6 +408,17 @@ export interface SharedRideView {
   vehicle_plate: string | null;
   vehicle_photo_url: string | null;
   vehicle_type: string | null;
+
+  // Waypoints (intermediate stops, in visit order). Address is kept
+  // out on purpose — coords are enough to draw the route + markers.
+  waypoints: Array<{
+    id: string;
+    sort_order: number;
+    latitude: number;
+    longitude: number;
+    arrived_at: string | null;
+    departed_at: string | null;
+  }>;
 }
 
 /** Trip progress state for Uber-style progress bar */

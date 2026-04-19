@@ -60,11 +60,30 @@ export function RideActiveView() {
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
   const driverPosition = driverPosState.position;
+
+  // Waypoints state — declared early so useRoutePolyline below can
+  // include them in the route fetch. State is populated by a useEffect
+  // further down (initial fetch + realtime subscription).
+  const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
+
+  // Route polyline through pickup → waypoints → dropoff. Recomputes
+  // automatically when a stop is added (waypoints state changes →
+  // JSON.stringify dep in useRoutePolyline re-fetches).
+  const waypointPoints = useMemo(
+    () =>
+      waypoints
+        .filter((w) => typeof w.latitude === 'number' && typeof w.longitude === 'number')
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((w) => ({ latitude: w.latitude, longitude: w.longitude })),
+    [waypoints],
+  );
   const routeData = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
+    waypointPoints,
   );
   const routeCoordinates = routeData.coordinates;
+
   const driverToPickupRoute = useDriverToPickupRoute(
     driverPosition,
     activeRide?.pickup_location ?? null,
@@ -281,8 +300,9 @@ export function RideActiveView() {
     ? (Date.now() - new Date(driverPosState.cachedAt).getTime()) > 60_000
     : false;
 
-  // Waypoints state
-  const [waypoints, setWaypoints] = useState<Array<{ id: string; address: string; sort_order: number; latitude: number; longitude: number; arrived_at?: string | null; departed_at?: string | null }>>([]);
+  // `waypoints` state is declared earlier (near the useRoutePolyline
+  // call) so the route hook sees them. Only the add-stop UI state
+  // lives here.
   const [addStopVisible, setAddStopVisible] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
 
@@ -300,20 +320,22 @@ export function RideActiveView() {
     }
 
     if (!activeRide) return;
-    rideService.getRideWaypoints(activeRide.id)
-      .then((wps) => setWaypoints(wps))
-      .catch(() => {});
+    const rideId = activeRide.id;
+    const refetch = () => {
+      rideService.getRideWaypoints(rideId)
+        .then((wps) => setWaypoints(wps as typeof waypoints))
+        .catch(() => {});
+    };
+    refetch();
 
+    // Realtime payloads arrive with `location` as opaque GEOGRAPHY
+    // hex (no latitude/longitude extracted). Instead of trying to
+    // merge partial data, re-fetch the authoritative list through
+    // the RPC so the state always has proper lat/lng.
     waypointChannelRef.current = rideService.subscribeToWaypoints(
-      activeRide.id,
-      (newWp) => {
-        setWaypoints((prev) => [...prev, newWp]);
-      },
-      (updatedWp) => {
-        setWaypoints((prev) =>
-          prev.map((wp) => (wp.id === updatedWp.id ? { ...wp, ...updatedWp } : wp)),
-        );
-      },
+      rideId,
+      () => refetch(),
+      () => refetch(),
     );
 
     return () => {
@@ -399,7 +421,17 @@ export function RideActiveView() {
         pendingStop.location.latitude,
         pendingStop.location.longitude,
       );
-      setWaypoints((prev) => [...prev, wp]);
+      // Merge coords we know locally (DB returns `location` as opaque
+      // GEOGRAPHY WKB — ride.service.getRideWaypoints goes through an
+      // RPC to extract lat/lng, but here we short-circuit with the
+      // coords the user just picked so the map redraws immediately
+      // without waiting for the re-fetch).
+      const wpWithCoords = {
+        ...(wp as unknown as Record<string, unknown>),
+        latitude: pendingStop.location.latitude,
+        longitude: pendingStop.location.longitude,
+      } as typeof waypoints[number];
+      setWaypoints((prev) => [...prev, wpWithCoords]);
       setPendingStop(null);
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
@@ -659,6 +691,7 @@ export function RideActiveView() {
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
           routeCoordinates={routeCoordinates}
           driverToPickupRoute={driverToPickupRoute}
+          waypointLocations={waypointPoints}
           height={mapHeight}
         />
         {!driverPosition && (

@@ -1204,6 +1204,21 @@ export const rideService = {
       return null;
     }
 
+    // Fetch waypoints for this ride via a public-token RPC so the
+    // shared-tracking map can draw the full route through each stop.
+    const { data: waypointsData } = await supabase
+      .rpc('get_ride_waypoints_by_share_token', { p_token: token });
+    const waypoints = (waypointsData ?? []).map(
+      (w: { id: string; sort_order: number; latitude: number; longitude: number; arrived_at: string | null; departed_at: string | null }) => ({
+        id: w.id,
+        sort_order: w.sort_order,
+        latitude: w.latitude,
+        longitude: w.longitude,
+        arrived_at: w.arrived_at,
+        departed_at: w.departed_at,
+      }),
+    );
+
     const result: SharedRideView = {
       id: ride.id,
       status: ride.status as SharedRideView['status'],
@@ -1225,6 +1240,7 @@ export const rideService = {
       vehicle_plate: null,
       vehicle_photo_url: null,
       vehicle_type: null,
+      waypoints,
     };
 
     // Fetch driver safe fields (first name only — no phone)
@@ -1545,13 +1561,15 @@ export const rideService = {
    */
   async getRideWaypoints(rideId: string): Promise<Waypoint[]> {
     const supabase = getSupabaseClient();
+    // Use RPC so we get numeric latitude/longitude columns. Raw
+    // `.select('*')` would return the GEOGRAPHY `location` as an
+    // opaque WKB hex the JS client can't read, leaving lat/lng
+    // undefined on the waypoints state — which is why the route
+    // polyline never included the stops in the map.
     const { data, error } = await supabase
-      .from('ride_waypoints')
-      .select('*')
-      .eq('ride_id', rideId)
-      .order('sort_order', { ascending: true });
+      .rpc('get_ride_waypoints_with_coords', { p_ride_id: rideId });
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []) as Waypoint[];
   },
 
   /**

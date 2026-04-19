@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { fetchRoute, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import { fetchRoute, fetchMultiStopRoute, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
@@ -17,6 +17,8 @@ export interface TrackingMapProps {
   driverHeading?: number;
   vehicleType?: string;
   nearbyVehicles?: Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>;
+  /** Intermediate stops in visit order (pickup → waypoints → dropoff). */
+  waypoints?: Array<{ latitude: number; longitude: number; sort_order?: number }>;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -102,6 +104,7 @@ export default function TrackingMap({
   driverHeading,
   vehicleType,
   nearbyVehicles,
+  waypoints,
   className,
   style: styleProp,
 }: TrackingMapProps) {
@@ -111,6 +114,7 @@ export default function TrackingMap({
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const waypointMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
   // Validate coordinates to prevent Mapbox NaN crash
@@ -243,17 +247,37 @@ export default function TrackingMap({
     }
   }, [driverLat, driverLng, driverHeading, mapReady]);
 
-  /* ── Fetch and draw route ── */
+  /* ── Fetch and draw route (through waypoints if any) ── */
+  // Stable dep key for waypoints so reference changes don't re-fetch.
+  const waypointsKey = waypoints
+    ?.map((w) => `${w.latitude},${w.longitude}`)
+    .join('|') ?? '';
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
 
     let cancelled = false;
 
     (async () => {
-      const result = await fetchRoute(
-        { lat: pickupLat, lng: pickupLng },
-        { lat: dropoffLat, lng: dropoffLng },
-      );
+      const sortedStops = (waypoints ?? [])
+        .filter((w) => typeof w.latitude === 'number' && typeof w.longitude === 'number')
+        .slice()
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+      let result: { coordinates: [number, number][]; distance_m: number; duration_s: number } | null = null;
+      if (sortedStops.length > 0) {
+        // Multi-stop: pickup → waypoint[0] → ... → dropoff
+        const points = [
+          { lat: pickupLat, lng: pickupLng },
+          ...sortedStops.map((w) => ({ lat: w.latitude, lng: w.longitude })),
+          { lat: dropoffLat, lng: dropoffLng },
+        ];
+        result = await fetchMultiStopRoute(points);
+      } else {
+        result = await fetchRoute(
+          { lat: pickupLat, lng: pickupLng },
+          { lat: dropoffLat, lng: dropoffLng },
+        );
+      }
 
       if (cancelled) return;
       const map = mapRef.current;
@@ -263,7 +287,7 @@ export default function TrackingMap({
       if (!source) return;
 
       if (result && result.coordinates.length > 1) {
-        // coordinates are [lat, lng] from OSRM/Mapbox — convert to [lng, lat] for Mapbox GL
+        // coordinates are [lat, lng] — convert to [lng, lat] for Mapbox GL
         const coords = result.coordinates.map(([lat, lng]) => [lng, lat] as [number, number]);
         source.setData({
           type: 'Feature',
@@ -271,23 +295,52 @@ export default function TrackingMap({
           geometry: { type: 'LineString', coordinates: coords },
         });
       } else {
-        // Fallback straight line
+        // Fallback: straight line through pickup → waypoints → dropoff
+        const fallback: [number, number][] = [
+          [pickupLng, pickupLat],
+          ...sortedStops.map((w) => [w.longitude, w.latitude] as [number, number]),
+          [dropoffLng, dropoffLat],
+        ];
         source.setData({
           type: 'Feature',
           properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [pickupLng, pickupLat],
-              [dropoffLng, dropoffLat],
-            ],
-          },
+          geometry: { type: 'LineString', coordinates: fallback },
         });
       }
     })();
 
     return () => { cancelled = true; };
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady]);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady, waypointsKey]);
+
+  /* ── Waypoint markers (orange rings with number) ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Remove previous
+    for (const m of waypointMarkersRef.current) m.remove();
+    waypointMarkersRef.current = [];
+
+    const sortedStops = (waypoints ?? [])
+      .filter((w) => typeof w.latitude === 'number' && typeof w.longitude === 'number')
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+    sortedStops.forEach((w, idx) => {
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <div style="position:relative;width:24px;height:24px;">
+          <div style="position:absolute;inset:0;border-radius:50%;background:#FF4D00;opacity:0.25;"></div>
+          <div style="position:relative;width:24px;height:24px;border-radius:50%;background:white;border:3px solid #FF4D00;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25);">
+            <span style="font-size:11px;font-weight:700;color:#FF4D00;line-height:1;">${idx + 1}</span>
+          </div>
+        </div>`;
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([w.longitude, w.latitude])
+        .addTo(map);
+      waypointMarkersRef.current.push(marker);
+    });
+  }, [waypointsKey, mapReady]);
 
   /* ── Fit bounds to show all markers ── */
   useEffect(() => {
@@ -301,11 +354,16 @@ export default function TrackingMap({
       if (driverLat != null && driverLng != null) {
         bounds.extend([driverLng, driverLat]);
       }
+      for (const w of waypoints ?? []) {
+        if (typeof w.latitude === 'number' && typeof w.longitude === 'number') {
+          bounds.extend([w.longitude, w.latitude]);
+        }
+      }
       map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
     } catch (err) {
       console.error('[TrackingMap] fitBounds failed:', err);
     }
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, driverLat, driverLng, mapReady]);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, driverLat, driverLng, mapReady, waypointsKey]);
 
   if (!hasValidCoords) {
     return (
