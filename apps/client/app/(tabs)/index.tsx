@@ -20,6 +20,7 @@ import { walletService, customerService, useFeatureFlag, notificationService, ge
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { useRideInit, useRideActions } from '@/hooks/useRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { WebMapView } from '@/components/WebMapView';
@@ -37,7 +38,14 @@ import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { Skeleton, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { FareBreakdownCard } from '@tricigo/ui/FareBreakdownCard';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
-import { colors } from '@tricigo/theme';
+import { colors, cubanLight, cubanDark } from '@tricigo/theme';
+import {
+  DisplayHeading,
+  BalanceHeroCard,
+  ServiceIconButton,
+  RecentPlacesList,
+  CapitolioDivider,
+} from '@tricigo/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
@@ -1592,6 +1600,10 @@ function IdleView() {
   const user = useAuthStore((s) => s.user);
   const draft = useRideStore((s) => s.draft);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const setMode = useThemeStore((s) => s.setMode);
+  const mode: 'light' | 'dark' = resolvedScheme;
+  const tokens = mode === 'dark' ? cubanDark : cubanLight;
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setPickup = useRideStore((s) => s.setPickup);
   const prefetchedPickup = useRideStore((s) => s.prefetchedPickup);
@@ -1801,172 +1813,208 @@ function IdleView() {
     );
   }
 
+  // ── Recent places for the new home ──
+  // Build a map from id → raw address so the onSelect handler can look up coords
+  const recentAddressById = new Map<string, typeof recentAddresses[number]>();
+  const recentPlaces = recentAddresses.slice(0, 3).map((ra, i) => {
+    const id = `recent-${i}-${ra.timestamp}`;
+    recentAddressById.set(id, ra);
+    const ago = Date.now() - (ra.timestamp ?? 0);
+    const hoursAgo = Math.floor(ago / (60 * 60 * 1000));
+    const when =
+      hoursAgo < 1
+        ? t('home.just_now', { defaultValue: 'Hace un rato' })
+        : hoursAgo < 24
+          ? t('home.hours_ago', { defaultValue: `Hace ${hoursAgo}h`, hours: hoursAgo })
+          : hoursAgo < 48
+            ? t('home.yesterday', { defaultValue: 'Ayer' })
+            : t('home.days_ago', { defaultValue: `Hace ${Math.floor(hoursAgo / 24)}d`, days: Math.floor(hoursAgo / 24) });
+    return { id, name: ra.address, when };
+  });
+
+  const handleRecentSelect = (p: { id: string }) => {
+    const raw = recentAddressById.get(p.id);
+    if (!raw) return;
+    setDropoff(raw.address, { latitude: raw.latitude, longitude: raw.longitude });
+    setFlowStep('reviewing');
+  };
+
+  const greetingName = (user?.full_name ?? 'Viajero').split(' ')[0] ?? 'Viajero';
+  const initial = greetingName.charAt(0).toUpperCase();
+
   return (
-    <View style={{ flex: 1 }}>
-      {/* ── Fullscreen Map Background ── */}
-      {(() => {
-        const Mapbox = getMapboxGL();
-        if (!Mapbox) return <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#e5e7eb' }]} />;
-        return (
-          <Mapbox.MapView
-            style={StyleSheet.absoluteFillObject}
-            styleURL={MAP_STYLE_LIGHT}
-            attributionEnabled={false}
-            logoEnabled={false}
-            scaleBarEnabled={false}
-            compassEnabled={false}
-            scrollEnabled={true}
-            zoomEnabled={true}
-            pitchEnabled={true}
-            rotateEnabled={true}
-          >
-            <Mapbox.Camera
-              defaultSettings={{
-                centerCoordinate: userCenter ?? [-82.3666, 23.1136],
-                zoomLevel: userCenter ? 15 : 14,
+    <View style={{ flex: 1, backgroundColor: tokens.bg.paper }}>
+      <ScrollView
+        contentContainerStyle={{
+          paddingTop: insets.top + 8,
+          paddingHorizontal: 20,
+          paddingBottom: 120,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Top bar ── */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={{ fontFamily: 'BricolageGrotesque_700Bold', fontSize: 20, letterSpacing: -0.5, color: tokens.ink.primary }}>
+              Trici
+            </Text>
+            <Text style={{ fontFamily: 'BricolageGrotesque_700Bold', fontSize: 20, letterSpacing: -0.5, color: tokens.accent.orange }}>
+              Go
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            {/* Theme toggle */}
+            <Pressable
+              onPress={() => setMode(mode === 'dark' ? 'light' : 'dark')}
+              style={{
+                width: 36, height: 36, borderRadius: 18,
+                backgroundColor: tokens.bg.elev1,
+                borderWidth: 1, borderColor: tokens.line,
+                alignItems: 'center', justifyContent: 'center',
               }}
-              animationMode="flyTo"
-            />
-            <Mapbox.UserLocation
-              visible={true}
-              onUpdate={(location: { coords: { latitude: number; longitude: number } }) => {
-                // Center map on first location fix only
-                if (location?.coords?.latitude && location?.coords?.longitude && !userLocationSet.current) {
-                  userLocationSet.current = true;
-                }
-              }}
-            />
-          </Mapbox.MapView>
-        );
-      })()}
-
-      {/* ── Floating Search Bar (top) ── */}
-      <View style={[idleStyles.searchBarContainer, { top: insets.top + 20 }]}>
-        <Pressable
-          style={idleStyles.searchBar}
-          onPress={() => setFlowStep('selecting')}
-          accessibilityRole="search"
-          accessibilityLabel={t('home.where_to')}
-          accessibilityHint={t('a11y.opens_destination', { ns: 'common' })}
-        >
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand.orange, marginRight: 12 }} />
-          <Text variant="body" color="tertiary" style={{ flex: 1 }}>
-            {t('home.where_to')}
-          </Text>
-          <Ionicons name="search" size={20} color={colors.neutral[400]} />
-        </Pressable>
-      </View>
-
-      {/* ── Driver Count Badge (top-right, below search bar) ── */}
-      {driverCount !== null && driverCount > 0 && (
-        <View style={[idleStyles.driverBadge, { top: insets.top + 72 }]}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 6 }} />
-          <Text variant="caption" style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
-            {t('home.drivers_active', { count: driverCount })}
-          </Text>
-        </View>
-      )}
-
-      {/* ── Notification Bell (top-right, next to search) ── */}
-      {notifCenterEnabled && (
-        <Pressable
-          onPress={() => router.push('/notifications')}
-          style={[idleStyles.notifBell, { top: insets.top + 20 }]}
-          accessibilityRole="button"
-          accessibilityLabel={unreadCount > 0 ? `${t('notifications.title')}, ${t('a11y.unread_count', { ns: 'common', count: unreadCount })}` : t('notifications.title')}
-        >
-          <Ionicons
-            name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
-            size={22}
-            color={colors.neutral[700]}
-          />
-          {unreadCount > 0 && (
-            <View style={idleStyles.notifBadge}>
-              <Text variant="caption" style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.toggle_theme', { defaultValue: 'Cambiar tema' })}
+            >
+              <Ionicons
+                name={mode === 'dark' ? 'sunny-outline' : 'moon-outline'}
+                size={16}
+                color={tokens.ink.primary}
+              />
+            </Pressable>
+            {/* Notifications */}
+            {notifCenterEnabled && (
+              <Pressable
+                onPress={() => router.push('/notifications')}
+                style={{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: tokens.bg.elev1,
+                  borderWidth: 1, borderColor: tokens.line,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('notifications.title')}
+              >
+                <Ionicons name={unreadCount > 0 ? 'notifications' : 'notifications-outline'} size={16} color={tokens.ink.primary} />
+                {unreadCount > 0 && (
+                  <View style={{ position: 'absolute', top: 8, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: tokens.accent.orange }} />
+                )}
+              </Pressable>
+            )}
+            {/* Avatar */}
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: tokens.accent.orange, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontFamily: 'BricolageGrotesque_700Bold', fontSize: 15, color: '#FFFBF5' }}>
+                {initial}
               </Text>
             </View>
-          )}
-        </Pressable>
-      )}
-
-      {/* ── Location permission denied banner (floating) ── */}
-      {locationDenied && (
-        <Pressable
-          onPress={async () => {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === 'granted') setLocationDenied(false);
-          }}
-          style={[idleStyles.locationBanner, { top: insets.top + 72 }]}
-        >
-          <Ionicons name="location-outline" size={18} color="#D97706" />
-          <Text variant="caption" style={{ color: '#92400E', flex: 1, marginLeft: 8, fontWeight: '600' }}>
-            {t('home.location_denied_title', { defaultValue: 'Ubicación desactivada' })}
-          </Text>
-          <Ionicons name="chevron-forward" size={14} color="#D97706" />
-        </Pressable>
-      )}
-
-      {/* ── Bottom Panel (fixed card above tab bar) ── */}
-      <View style={idleStyles.bottomPanel}>
-        {/* Greeting + Balance row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600' }}>
-            {t('home.greeting', { name: user?.full_name ?? 'Viajero' })}
-          </Text>
-          <BalanceBadge balance={walletBalance} size="sm" coinIcon={tricoinSmall} />
+          </View>
         </View>
 
-        {/* Pending split invites */}
-        <SplitInviteCard />
-
-        {/* Predicted destinations — horizontal scroll cards */}
-        {predictions.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
-            <Text variant="caption" color="secondary" style={{ marginBottom: 8 }}>
-              {t('prediction.suggested_for_you', { defaultValue: 'Sugerencias para ti' })}
+        {/* ── Location-denied banner ── */}
+        {locationDenied && (
+          <Pressable
+            onPress={async () => {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status === 'granted') setLocationDenied(false);
+            }}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              padding: 12, marginBottom: 14, borderRadius: 12,
+              backgroundColor: mode === 'dark' ? 'rgba(255,181,71,0.14)' : '#FEF3C7',
+            }}
+          >
+            <Ionicons name="location-outline" size={18} color={tokens.accent.warm} />
+            <Text style={{ flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, color: tokens.ink.primary }}>
+              {t('home.location_denied_title', { defaultValue: 'Activá tu ubicación para encontrar viajes' })}
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {predictions.slice(0, 3).map((pred, idx) => (
-                <Pressable
-                  key={`pred-${idx}`}
-                  style={idleStyles.predictionCard}
-                  onPress={() => handleOneTapPrediction(pred)}
-                  accessibilityRole="button"
-                  accessibilityLabel={pred.address}
-                >
-                  <View style={idleStyles.predictionIcon}>
-                    <Ionicons
-                      name={pred.reason === 'time_pattern' ? 'time-outline' : pred.reason === 'frequent' ? 'star' : 'navigate-outline'}
-                      size={18}
-                      color={colors.brand.orange}
-                    />
-                  </View>
-                  <Text variant="caption" numberOfLines={2} style={{ color: '#1a1a1a', flex: 1 }}>
-                    {pred.address}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+          </Pressable>
+        )}
+
+        {/* ── Balance ── */}
+        <BalanceHeroCard
+          balanceTc={walletBalance}
+          balanceUsd={walletBalance / 500}
+          mode={mode}
+          label={t('home.balance_label', { defaultValue: 'Saldo disponible' })}
+          onPress={() => router.push('/wallet' as never)}
+        />
+
+        {/* ── Destination ask ── */}
+        <View style={{ marginTop: 28 }}>
+          <DisplayHeading mode={mode}>
+            {t('home.where_to_cuban', { defaultValue: '¿A dónde vamos hoy?' })}
+          </DisplayHeading>
+          <Pressable
+            onPress={() => setFlowStep('selecting')}
+            style={{
+              marginTop: 14,
+              flexDirection: 'row', alignItems: 'center', gap: 12,
+              backgroundColor: tokens.bg.elev1,
+              borderRadius: 999,
+              borderWidth: 1, borderColor: tokens.line,
+              paddingHorizontal: 18, paddingVertical: 14,
+            }}
+            accessibilityRole="search"
+            accessibilityLabel={t('home.where_to')}
+          >
+            <Ionicons name="search" size={20} color={tokens.accent.orange} />
+            <Text style={{ flex: 1, fontFamily: 'Inter_500Medium', fontSize: 15, color: tokens.ink.secondary }}>
+              {t('home.search_placeholder_cuban', { defaultValue: 'Buscar dirección o lugar…' })}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* ── Split invites inline (existing feature) ── */}
+        <View style={{ marginTop: 12 }}>
+          <SplitInviteCard />
+        </View>
+
+        {/* ── Recientes ── */}
+        {recentPlaces.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.recents_label', { defaultValue: 'RECIENTES' })}
+            </Text>
+            <RecentPlacesList
+              places={recentPlaces}
+              onSelect={handleRecentSelect}
+              mode={mode}
+            />
           </View>
         )}
 
-        {/* Service types — horizontal scroll */}
-        <Text variant="bodySmall" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
-          {t('home.services', { defaultValue: 'Servicios' })}
+        {/* ── Capitolio divider (Cuban identity marker) ── */}
+        <CapitolioDivider mode={mode} height={72} />
+
+        {/* ── Servicios — 5 en fila ── */}
+        <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 10 }}>
+          {t('home.services_label', { defaultValue: 'SERVICIOS' })}
         </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole="radiogroup">
-          {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
-            <View key={slug} style={{ width: 72, marginRight: 10 }}>
-              <ServiceTypeCard
-                slug={slug}
-                name={t(`service_type.${slug}` as const)}
-                icon={vehicleSelectionImages[slug]}
-              />
-            </View>
+        <View style={{ flexDirection: 'row', gap: 7 }}>
+          {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => (
+            <ServiceIconButton
+              key={slug}
+              icon={vehicleSelectionImages[slug]}
+              name={t(`service_type_short.${slug}` as const, { defaultValue: slug.split('_')[0]!.charAt(0).toUpperCase() + slug.split('_')[0]!.slice(1) })}
+              dense
+              mode={mode}
+              onPress={() => {
+                // Preselect service type then go to selecting view
+                setFlowStep('selecting');
+              }}
+            />
           ))}
-        </ScrollView>
-      </View>
+        </View>
+
+        {/* ── Driver count chip (subtle) ── */}
+        {driverCount !== null && driverCount > 0 && (
+          <View style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: tokens.bg.elev1, borderWidth: 1, borderColor: tokens.line }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' }} />
+            <Text style={{ fontFamily: 'JetBrainsMono_500Medium', fontSize: 11, color: tokens.ink.secondary }}>
+              {t('home.drivers_active_short', { defaultValue: `${driverCount} conductores activos`, count: driverCount })}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
