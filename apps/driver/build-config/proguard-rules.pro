@@ -35,6 +35,40 @@
 # ── React Native Gesture Handler ───────────────────────────────────
 -keep class com.swmansion.gesturehandler.** { *; }
 
+# ── React Native community libs (AsyncStorage, NetInfo, WebView, …) ─
+# Catch-all para cualquier lib bajo el namespace com.reactnativecommunity.
+# Cubre @react-native-async-storage/async-storage, @react-native-community/netinfo,
+# react-native-webview, y futuras libs que sigan esta convención.
+-keep class com.reactnativecommunity.** { *; }
+-keep interface com.reactnativecommunity.** { *; }
+-dontwarn com.reactnativecommunity.**
+
+# ── AsyncStorage (explícito, además del catch-all) ─────────────────
+# Usado en boot: auth store, location buffer, voice guidance pref.
+-keep class com.reactnativecommunity.asyncstorage.** { *; }
+-keepclassmembers class com.reactnativecommunity.asyncstorage.** { *; }
+
+# ── Safe Area Context (th3rdwave) ──────────────────────────────────
+-keep class com.th3rdwave.safeareacontext.** { *; }
+-dontwarn com.th3rdwave.safeareacontext.**
+
+# ── DateTimePicker (reactcommunity) ────────────────────────────────
+-keep class com.reactcommunity.rndatetimepicker.** { *; }
+-dontwarn com.reactcommunity.**
+
+# ── Vector Icons (oblador) ─────────────────────────────────────────
+# Carga fuentes TTF por nombre en runtime; keepnames por seguridad.
+-keep class com.oblador.vectoricons.** { *; }
+-keepnames class com.oblador.** { *; }
+
+# ── Assets referenciados por nombre (fonts, raw) ──────────────────
+# shrinkResources puede eliminar TTFs si no detecta referencia estática.
+# RN/Expo cargan fuentes por nombre string → R8 no las puede trazar.
+-keep class **.R$* { *; }
+-keepclassmembers class **.R$raw { *; }
+-keepclassmembers class **.R$font { *; }
+-keepclassmembers class **.R$drawable { *; }
+
 # ── Expo modules core ──────────────────────────────────────────────
 -keep class expo.modules.** { *; }
 -keep class expo.** { *; }
