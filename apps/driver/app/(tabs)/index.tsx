@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
+import { getMapFallbackLatLng } from '@/config/demo';
 import {
   HAVANA_CENTER,
   trackEvent,
@@ -479,7 +480,11 @@ function NativeDriverHomeScreen() {
     setToggling(true);
     try {
       const newStatus = !isOnline;
-      await driverService.setOnlineStatus(profile.id, newStatus, newStatus ? HAVANA_CENTER : undefined);
+      // Use demo-aware fallback so a driver testing in Brazil sends
+      // São Paulo (or whatever EXPO_PUBLIC_DEMO_CITY resolves to)
+      // instead of Havana as their initial online position when GPS
+      // isn't available. In prod, demo mode is off → same as HAVANA_CENTER.
+      await driverService.setOnlineStatus(profile.id, newStatus, newStatus ? getMapFallbackLatLng() : undefined);
       setOnline(newStatus);
       trackEvent(newStatus ? 'driver_went_online' : 'driver_went_offline');
     } catch {
