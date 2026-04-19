@@ -259,6 +259,133 @@ function renderWinBackEmail(data: Record<string, unknown>): string {
 </html>`;
 }
 
+function renderDriverUnderReviewEmail(data: Record<string, unknown>): string {
+  const fullName = escapeHtml(data.full_name ?? '—');
+  const phone = escapeHtml(data.phone ?? '—');
+  const email = escapeHtml(data.email ?? '—');
+  const driverId = escapeHtml(data.driver_id ?? '—');
+  const userId = escapeHtml(data.user_id ?? '—');
+  const submittedAt = formatDate(data.submitted_at, 'es');
+
+  // Deep-link to the admin review page. business_notification_email is an
+  // internal ops inbox so a direct link into /drivers/[id] is safe.
+  const reviewUrl = `https://admin.tricigo.com/drivers/${driverId}`;
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nuevo conductor pendiente de aprobación - TriciGo</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f4f5;">
+    <tr>
+      <td align="center" style="padding:24px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#F97316;padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">TriciGo</h1>
+              <p style="margin:8px 0 0;font-size:13px;color:rgba(255,255,255,0.9);font-weight:400;letter-spacing:0.3px;">Ops · Conductores</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 32px 16px;">
+              <div style="display:inline-block;padding:4px 12px;border-radius:999px;background-color:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:16px;">
+                Revisión pendiente
+              </div>
+              <h2 style="margin:0 0 12px;font-size:22px;color:#111827;font-weight:700;">Nuevo conductor en cola</h2>
+              <p style="margin:0 0 24px;font-size:14px;color:#4B5563;line-height:1.6;">
+                Un conductor terminó de subir sus documentos y está listo para que lo revises.
+                Su cuenta permanecerá inactiva hasta que un admin la apruebe o la rechace.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Driver data card -->
+          <tr>
+            <td style="padding:0 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">
+                <tr>
+                  <td style="padding:14px 18px;color:#6B7280;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;background-color:#F9FAFB;border-bottom:1px solid #E5E7EB;">Conductor</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 18px 4px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td style="padding:6px 0;color:#6B7280;font-size:13px;width:35%;">Nombre</td>
+                        <td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${fullName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;color:#6B7280;font-size:13px;border-top:1px solid #F3F4F6;">Teléfono</td>
+                        <td style="padding:6px 0;color:#111827;font-size:13px;text-align:right;border-top:1px solid #F3F4F6;">${phone}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;color:#6B7280;font-size:13px;border-top:1px solid #F3F4F6;">Email</td>
+                        <td style="padding:6px 0;color:#111827;font-size:13px;text-align:right;border-top:1px solid #F3F4F6;">${email}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;color:#6B7280;font-size:13px;border-top:1px solid #F3F4F6;">Enviado</td>
+                        <td style="padding:6px 0;color:#111827;font-size:13px;text-align:right;border-top:1px solid #F3F4F6;">${submittedAt}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0 14px;color:#6B7280;font-size:11px;border-top:1px solid #F3F4F6;font-family:'SF Mono',Menlo,Monaco,monospace;">ID</td>
+                        <td style="padding:6px 0 14px;color:#6B7280;font-size:11px;text-align:right;border-top:1px solid #F3F4F6;font-family:'SF Mono',Menlo,Monaco,monospace;">${driverId.slice(0, 12)}…</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:24px 32px 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td align="center">
+                    <a href="${reviewUrl}" style="display:inline-block;background-color:#F97316;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:8px;">
+                      Revisar documentos →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Context line -->
+          <tr>
+            <td style="padding:16px 32px 8px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5;">
+                Recibes este correo porque tu dirección está configurada como
+                <code style="color:#6B7280;">business_notification_email</code> en la plataforma.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 32px 28px;text-align:center;border-top:1px solid #F3F4F6;margin-top:16px;">
+              <p style="margin:0;font-size:11px;color:#9CA3AF;">
+                User ID: <span style="font-family:monospace;">${userId.slice(0, 12)}…</span>
+              </p>
+              <p style="margin:12px 0 0;font-size:11px;color:#D1D5DB;">TriciGo Ops &copy; ${new Date().getFullYear()}</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 function renderRideReceipt(data: Record<string, unknown>, locale: string): string {
   const l = getLabels(locale);
 
@@ -544,6 +671,8 @@ Deno.serve(async (req) => {
       html = renderWelcomeEmail(data);
     } else if (template === 'win_back') {
       html = renderWinBackEmail(data);
+    } else if (template === 'driver_under_review') {
+      html = renderDriverUnderReviewEmail(data);
     } else {
       // Generic template: render data as key-value pairs with TriciGo branding
       html = `<!DOCTYPE html>
