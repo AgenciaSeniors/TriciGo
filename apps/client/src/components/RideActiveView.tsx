@@ -356,18 +356,51 @@ export function RideActiveView() {
     };
   }, [activeRide?.id, activeRide?.is_split]);
 
+  // I3: pending stop waiting for user confirmation + its fare delta preview.
+  const [pendingStop, setPendingStop] = useState<
+    | { address: string; location: GeoPoint; extraDistanceKm: number; extraFareCup: number }
+    | null
+  >(null);
+  const [estimatingStop, setEstimatingStop] = useState(false);
+
   const handleAddStop = async (address: string, location: GeoPoint) => {
     if (!activeRide) return;
+    setEstimatingStop(true);
+    try {
+      const existing = waypoints.map((w) => ({
+        latitude: w.latitude,
+        longitude: w.longitude,
+      }));
+      const { extraDistanceKm, extraFareCup } = await rideService.estimateWaypointAddition(
+        activeRide.id,
+        location.latitude,
+        location.longitude,
+        existing,
+      );
+      setPendingStop({ address, location, extraDistanceKm, extraFareCup });
+      setAddStopVisible(false);
+    } catch (err) {
+      logger.error('Failed to estimate waypoint addition', { error: String(err) });
+      // Fall back to adding without preview rather than blocking the feature.
+      setPendingStop({ address, location, extraDistanceKm: 0, extraFareCup: 0 });
+      setAddStopVisible(false);
+    } finally {
+      setEstimatingStop(false);
+    }
+  };
+
+  const confirmAddStop = async () => {
+    if (!activeRide || !pendingStop) return;
     setAddingStop(true);
     try {
       const wp = await rideService.addWaypointToActiveRide(
         activeRide.id,
-        address,
-        location.latitude,
-        location.longitude,
+        pendingStop.address,
+        pendingStop.location.latitude,
+        pendingStop.location.longitude,
       );
       setWaypoints((prev) => [...prev, wp]);
-      setAddStopVisible(false);
+      setPendingStop(null);
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
       if (typeof errObj?.message === 'string' && errObj.message === 'MAX_WAYPOINTS_REACHED') {
@@ -985,10 +1018,71 @@ export function RideActiveView() {
           placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
           onSelect={handleAddStop}
         />
-        {addingStop && (
-          <Text variant="caption" color="secondary" className="mt-2 text-center">
-            {t('ride.adding_stop', { defaultValue: 'Agregando parada...' })}
-          </Text>
+        {estimatingStop && (
+          <View className="flex-row items-center justify-center mt-3">
+            <ActivityIndicator size="small" />
+            <Text variant="caption" color="secondary" className="ml-2">
+              {t('ride.estimating_stop', { defaultValue: 'Calculando costo adicional...' })}
+            </Text>
+          </View>
+        )}
+      </BottomSheet>
+
+      {/* I3: confirm-waypoint sheet with fare delta preview */}
+      <BottomSheet visible={!!pendingStop} onClose={() => setPendingStop(null)}>
+        {pendingStop && (
+          <View>
+            <Text variant="h4" className="mb-2">
+              {t('ride.confirm_stop_title', { defaultValue: '¿Agregar esta parada?' })}
+            </Text>
+            <Text variant="body" color="secondary" className="mb-4" numberOfLines={2}>
+              {pendingStop.address}
+            </Text>
+
+            <View className="bg-surface-elev rounded-2xl p-4 mb-4">
+              <View className="flex-row justify-between items-center mb-2">
+                <Text variant="caption" color="secondary">
+                  {t('ride.extra_distance', { defaultValue: 'Distancia adicional' })}
+                </Text>
+                <Text variant="body" weight="600">
+                  +{pendingStop.extraDistanceKm.toFixed(1)} km
+                </Text>
+              </View>
+              <View className="flex-row justify-between items-center">
+                <Text variant="caption" color="secondary">
+                  {t('ride.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}
+                </Text>
+                <Text variant="body" weight="700" className="text-primary-600">
+                  +{formatTRC(pendingStop.extraFareCup)}
+                </Text>
+              </View>
+            </View>
+
+            <Text variant="caption" color="secondary" className="mb-4 text-center">
+              {t('ride.confirm_stop_note', {
+                defaultValue: 'Es una estimación. El total final se calcula según la ruta real.',
+              })}
+            </Text>
+
+            <View className="flex-row gap-3">
+              <Button
+                label={t('common.cancel', { defaultValue: 'Cancelar' })}
+                variant="outline"
+                size="md"
+                onPress={() => setPendingStop(null)}
+                disabled={addingStop}
+                fullWidth
+              />
+              <Button
+                label={t('ride.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
+                variant="primary"
+                size="md"
+                onPress={confirmAddStop}
+                loading={addingStop}
+                fullWidth
+              />
+            </View>
+          </View>
         )}
       </BottomSheet>
 

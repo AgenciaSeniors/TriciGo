@@ -1440,6 +1440,74 @@ export const rideService = {
   },
 
   /**
+   * Estimate the fare/distance delta of inserting a new waypoint into
+   * an active ride. Purely a preview — does not mutate the ride.
+   *
+   * Uses haversine legs against the ride's pickup/dropoff and any
+   * existing waypoints; the per-km rate comes from service_type_configs
+   * (same source as getLocalFareEstimate). No network route is fetched
+   * to keep the preview fast; the real route recalc happens after the
+   * waypoint lands and Mapbox re-runs the directions.
+   *
+   * I3 ride-flow review: drivers and riders need to see the incremental
+   * cost before committing the stop.
+   */
+  async estimateWaypointAddition(
+    rideId: string,
+    latitude: number,
+    longitude: number,
+    /**
+     * Existing waypoint coords (in visit order) that the caller has in
+     * local state. We use the last one — if empty, we fall back to the
+     * ride's pickup coords. Passed in rather than re-fetched to avoid
+     * having to parse PostGIS GEOGRAPHY on the client.
+     */
+    existingWaypointsLatLng: Array<{ latitude: number; longitude: number }> = [],
+  ): Promise<{ extraDistanceKm: number; extraFareCup: number }> {
+    const supabase = getSupabaseClient();
+
+    const { data: ride, error: rideErr } = await supabase
+      .from('rides')
+      .select('service_type, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng')
+      .eq('id', rideId)
+      .maybeSingle();
+    if (rideErr) throw rideErr;
+    if (!ride) throw new Error('Ride not found');
+
+    const lastStop = existingWaypointsLatLng.length > 0
+      ? existingWaypointsLatLng[existingWaypointsLatLng.length - 1]!
+      : { latitude: ride.pickup_lat as number, longitude: ride.pickup_lng as number };
+
+    const dropoff = {
+      latitude: ride.dropoff_lat as number,
+      longitude: ride.dropoff_lng as number,
+    };
+    const newStop = { latitude, longitude };
+
+    // Extra haversine distance = (last→new) + (new→dropoff) − (last→dropoff)
+    const oldLegM = haversineDistance(lastStop, dropoff);
+    const newLegM =
+      haversineDistance(lastStop, newStop) +
+      haversineDistance(newStop, dropoff);
+    const extraStraightM = Math.max(0, newLegM - oldLegM);
+    const extraRoadM = estimateRoadDistance(extraStraightM);
+    const extraDistanceKm = Math.round((extraRoadM / 1000) * 100) / 100;
+
+    // Pull the per-km rate for this service so we can price the detour.
+    const { data: svc } = await supabase
+      .from('service_type_configs')
+      .select('per_km_rate_cup')
+      .eq('slug', ride.service_type)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    const perKm = (svc?.per_km_rate_cup as number | undefined) ?? 0;
+    const extraFareCup = Math.round((extraRoadM / 1000) * perKm);
+
+    return { extraDistanceKm, extraFareCup };
+  },
+
+  /**
    * Add a waypoint to an active ride (max 3 waypoints).
    */
   async addWaypointToActiveRide(
