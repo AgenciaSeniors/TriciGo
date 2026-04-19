@@ -1,0 +1,114 @@
+# ============================================================
+# TriciGo Client — ProGuard / R8 rules
+# ============================================================
+# Every dependency that uses reflection, JNI, or serialization at
+# runtime needs an explicit -keep so R8 doesn't strip it. Adding a
+# new native lib or Stripe-style SDK? Add a rule here before shipping.
+# ============================================================
+
+# Preserve line numbers so Sentry stack traces are useful.
+-keepattributes LineNumberTable,SourceFile
+-renamesourcefileattribute SourceFile
+
+# ── Hermes VM ──────────────────────────────────────────────────────
+-keep class com.facebook.hermes.** { *; }
+-keep class com.facebook.jni.** { *; }
+
+# ── React Native new-architecture / Fabric / TurboModules ─────────
+# newArchEnabled=true means codegen'd classes must stick around.
+-keep class com.facebook.react.bridge.** { *; }
+-keep class com.facebook.react.turbomodule.** { *; }
+-keep @com.facebook.proguard.annotations.DoNotStrip class *
+-keepclassmembers class * {
+    @com.facebook.proguard.annotations.DoNotStrip *;
+}
+
+# ── Reanimated / Worklets ─────────────────────────────────────────
+-keep class com.swmansion.reanimated.** { *; }
+-keep class com.swmansion.worklets.** { *; }
+
+# ── React Native Screens ───────────────────────────────────────────
+-keep class com.swmansion.rnscreens.** { *; }
+
+# ── React Native SVG ───────────────────────────────────────────────
+-keep class com.horcrux.svg.** { *; }
+
+# ── React Native Gesture Handler ───────────────────────────────────
+-keep class com.swmansion.gesturehandler.** { *; }
+
+# ── Expo modules core ──────────────────────────────────────────────
+-keep class expo.modules.** { *; }
+-keep class expo.** { *; }
+-dontwarn expo.modules.**
+
+# ── Mapbox Maps SDK v10 ────────────────────────────────────────────
+# Mapbox loads native .so via JNI and uses reflection on GL configs.
+-keep class com.mapbox.** { *; }
+-keep interface com.mapbox.** { *; }
+-dontwarn com.mapbox.**
+
+# rnmapbox/maps bridge
+-keep class com.rnmapbox.rnmbx.** { *; }
+-dontwarn com.rnmapbox.rnmbx.**
+
+# ── Stripe (@stripe/stripe-react-native) ───────────────────────────
+# Stripe SDK serializes payment method models via reflection.
+-keep class com.stripe.android.** { *; }
+-keep class com.reactnativestripesdk.** { *; }
+-keepclassmembers class com.stripe.android.model.** { *; }
+-dontwarn com.stripe.**
+
+# ── Sentry (@sentry/react-native) ──────────────────────────────────
+-keep class io.sentry.** { *; }
+-keep class com.getsentry.** { *; }
+-keep class io.sentry.android.** { *; }
+-dontwarn io.sentry.**
+
+# ── PostHog analytics ──────────────────────────────────────────────
+-keep class com.posthog.** { *; }
+-dontwarn com.posthog.**
+
+# ── OkHttp / Okio (Supabase client transport) ─────────────────────
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+-keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
+
+# ── Kotlin coroutines ──────────────────────────────────────────────
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembernames class kotlinx.** { volatile <fields>; }
+-dontwarn kotlinx.coroutines.flow.**
+
+# ── Firebase / Google Play Services (push notifications) ──────────
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# ── Parcelable / Serializable classes ──────────────────────────────
+-keepclassmembers class * implements android.os.Parcelable {
+  public static final android.os.Parcelable$Creator CREATOR;
+}
+-keepnames class * implements java.io.Serializable
+-keepclassmembers class * implements java.io.Serializable {
+  static final long serialVersionUID;
+  private static final java.io.ObjectStreamField[] serialPersistentFields;
+  !static !transient <fields>;
+  private void writeObject(java.io.ObjectOutputStream);
+  private void readObject(java.io.ObjectInputStream);
+  java.lang.Object writeReplace();
+  java.lang.Object readResolve();
+}
+
+# ── Enums & native methods ─────────────────────────────────────────
+-keepclassmembers enum * {
+  public static **[] values();
+  public static ** valueOf(java.lang.String);
+}
+-keepclasseswithmembernames class * {
+  native <methods>;
+}
+
+# ── App package (TriciGo) ──────────────────────────────────────────
+-keep class app.tricigo.client.** { *; }

@@ -132,6 +132,35 @@ jobs:
           fi
           grep "^org.gradle.jvmargs" gradle.properties
 
+      - name: APK size diet (arm64-only + ProGuard/R8 + resource shrink)
+        run: |
+          APP="${{ steps.target.outputs.app }}"
+          cd "apps/$APP/android"
+          # ── 1. Only ship arm64-v8a ────────────────────────────────
+          # Drops x86/x86_64 (emulator-only) and armeabi-v7a (pre-2017
+          # phones, <5% Cuba install base in 2026). Saves ~113MB per APK.
+          sed -i 's|^reactNativeArchitectures=.*|reactNativeArchitectures=arm64-v8a|' gradle.properties
+          grep "^reactNativeArchitectures" gradle.properties
+          # ── 2. Enable ProGuard/R8 minification + resource shrink ──
+          # Requires proguard-rules.pro to have keep-rules for every
+          # reflection-based lib (Mapbox, Stripe, Sentry, PostHog, Expo,
+          # Supabase/OkHttp). Those rules live in apps/$APP/build-config/
+          # and get copied below.
+          if grep -q "^android.enableMinifyInReleaseBuilds=" gradle.properties; then
+            sed -i 's|^android.enableMinifyInReleaseBuilds=.*|android.enableMinifyInReleaseBuilds=true|' gradle.properties
+          else
+            echo "android.enableMinifyInReleaseBuilds=true" >> gradle.properties
+          fi
+          if grep -q "^android.enableShrinkResourcesInReleaseBuilds=" gradle.properties; then
+            sed -i 's|^android.enableShrinkResourcesInReleaseBuilds=.*|android.enableShrinkResourcesInReleaseBuilds=true|' gradle.properties
+          else
+            echo "android.enableShrinkResourcesInReleaseBuilds=true" >> gradle.properties
+          fi
+          grep -E "^(android\.enableMinify|android\.enableShrink)" gradle.properties
+          # ── 3. Install comprehensive ProGuard keep-rules ──────────
+          cp "../build-config/proguard-rules.pro" "app/proguard-rules.pro"
+          echo "✓ Installed custom proguard-rules.pro (size: $(wc -l < app/proguard-rules.pro) lines)"
+
       - name: Configure release to sign with debug keystore
         run: |
           cd apps/${{ steps.target.outputs.app }}/android/app
