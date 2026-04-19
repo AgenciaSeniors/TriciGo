@@ -269,6 +269,65 @@ export const driverStandardLightColors = {
   sheetHandle: '#CBD5E1',
 } as const;
 
+// ============================================================
+// Cuban Modern — Client home redesign palette (light + dark)
+//
+// Reference: docs/DESIGN_CLIENT_HOME.md §2
+// Used by the redesigned passenger home to achieve the "cuban modern"
+// aesthetic — warm, grounded, honest. Stays compatible with the
+// existing brand.orange token.
+// ============================================================
+
+export const cubanLight = {
+  bg: {
+    paper: '#FFFBF5',      // Main background — tibia crema, no white clínico
+    elev1: '#FFFFFF',       // Cards, inputs, sheets
+    elev2: '#F4EEE2',       // Outer frame, subtle contrast
+  },
+  ink: {
+    primary: '#1A1414',     // Headings, body principal (casi negro cálido)
+    secondary: '#6B7F8F',   // Labels, secondary text
+    subtle: '#A9B4BC',      // Placeholders, meta, disabled
+  },
+  accent: {
+    orange: '#FF4D00',      // Primary accent (brand)
+    orangeGlow: 'rgba(255, 77, 0, 0.18)',
+    warm: '#FFB547',        // Secondary — precios, badges, highlights cálidos
+    dusk: '#6B7F8F',        // Azul ceniza — dividers, accent frío
+  },
+  line: 'rgba(26, 20, 20, 0.08)',
+  shadow: {
+    card: '0 2px 20px rgba(30, 20, 10, 0.04), 0 1px 2px rgba(30, 20, 10, 0.06)',
+    hero: '0 8px 40px rgba(255, 77, 0, 0.15), 0 2px 6px rgba(30, 20, 10, 0.08)',
+  },
+} as const;
+
+export const cubanDark = {
+  bg: {
+    paper: '#0A0E1A',       // Main background — navy profundo
+    elev1: '#11172A',       // Cards, inputs
+    elev2: '#18203A',       // Outer frame / modal backdrop
+  },
+  ink: {
+    primary: '#F4F0EA',     // Texto — crema tibia, no white clínico
+    secondary: '#B7C4CF',   // Secondary
+    subtle: '#6B7F8F',      // Placeholders
+  },
+  accent: {
+    orange: '#FF4D00',
+    orangeGlow: 'rgba(255, 77, 0, 0.25)',
+    warm: '#FFB547',
+    dusk: '#4A6278',        // Dusk más oscuro para dark bg
+  },
+  line: 'rgba(244, 240, 234, 0.08)',
+  shadow: {
+    card: '0 2px 20px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.4)',
+    hero: '0 8px 40px rgba(255, 77, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.5)',
+  },
+} as const;
+
+export type CubanToken = typeof cubanLight;
+
 export type ColorToken = typeof colors;
 export type DarkColorToken = typeof darkColors;
 export type DriverDarkColorToken = typeof driverDarkColors;
