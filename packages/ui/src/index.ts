@@ -76,3 +76,15 @@ export type { TripProgressBarProps } from './TripProgressBar';
 
 export { DraggableSheet } from './DraggableSheet';
 export type { DraggableSheetProps } from './DraggableSheet';
+
+// ── Cuban Modern home (client) ──
+export { DisplayHeading } from './DisplayHeading';
+export type { DisplayHeadingProps } from './DisplayHeading';
+export { BalanceHeroCard } from './BalanceHeroCard';
+export type { BalanceHeroCardProps } from './BalanceHeroCard';
+export { ServiceIconButton } from './ServiceIconButton';
+export type { ServiceIconButtonProps } from './ServiceIconButton';
+export { RecentPlacesList } from './RecentPlacesList';
+export type { RecentPlacesListProps, RecentPlace } from './RecentPlacesList';
+export { CapitolioDivider } from './CapitolioDivider';
+export type { CapitolioDividerProps } from './CapitolioDivider';
