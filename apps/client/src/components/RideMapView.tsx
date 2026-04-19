@@ -405,11 +405,18 @@ function RideMapViewInner({
                   bounds: {
                     ne: bounds.ne,
                     sw: bounds.sw,
-                    paddingTop: 50,
-                    paddingRight: 50,
-                    paddingBottom: 50,
-                    paddingLeft: 50,
+                    // Padding 160px was 50px before, which made Mapbox
+                    // fit the two points into almost the entire viewport
+                    // → zoom 19-20. User saw a green dot + 2 roofs with
+                    // no streets around. Wider padding + maxZoomLevel
+                    // cap keeps context like Uber (~15-16) so rider
+                    // knows where they are.
+                    paddingTop: 160,
+                    paddingRight: 120,
+                    paddingBottom: 180,
+                    paddingLeft: 120,
                   },
+                  maxZoomLevel: 16,
                   animationDuration: 500,
                 }
               : {})}

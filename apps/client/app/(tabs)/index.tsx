@@ -1835,8 +1835,16 @@ function IdleView() {
   const handleRecentSelect = (p: { id: string }) => {
     const raw = recentAddressById.get(p.id);
     if (!raw) return;
+    // Auto-fill pickup if we have the prefetched current location —
+    // one-tap-book behavior, same as handleOneTapPrediction.
+    if (prefetchedPickup) {
+      setPickup(prefetchedPickup.address, prefetchedPickup.location);
+    }
     setDropoff(raw.address, { latitude: raw.latitude, longitude: raw.longitude });
-    setFlowStep('reviewing');
+    // Go to `selecting` (mapa + vehicle picker) — NOT `reviewing`, which
+    // would render null because fareEstimate is still null until the
+    // selecting view triggers handleEstimateAll().
+    setFlowStep('selecting');
   };
 
   const greetingName = (user?.full_name ?? 'Viajero').split(' ')[0] ?? 'Viajero';

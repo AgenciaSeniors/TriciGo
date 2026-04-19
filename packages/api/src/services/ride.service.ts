@@ -94,6 +94,34 @@ export interface CreateRideParams {
   };
 }
 
+// ─── In-flight request dedupe (coalesces concurrent calls) ───
+// Used to prevent the 4-service-type fare estimate burst from firing
+// the same heavy request (Mapbox route, surge RPC, exchange rate)
+// four times in parallel. TTL short enough that stale data is never
+// an issue for fare previews.
+const _dedupeCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+const DEDUPE_TTL_MS = 20_000;
+
+function dedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const existing = _dedupeCache.get(key);
+  if (existing && Date.now() - existing.at < DEDUPE_TTL_MS) {
+    return existing.promise as Promise<T>;
+  }
+  const promise = fetcher().finally(() => {
+    // Keep resolved value for TTL so repeat callers within the window
+    // still get it; only expire via the at-check above.
+  });
+  _dedupeCache.set(key, { at: Date.now(), promise });
+  // Garbage-collect expired entries opportunistically.
+  if (_dedupeCache.size > 50) {
+    const now = Date.now();
+    for (const [k, v] of _dedupeCache) {
+      if (now - v.at > DEDUPE_TTL_MS) _dedupeCache.delete(k);
+    }
+  }
+  return promise;
+}
+
 export const rideService = {
   /**
    * Get fare estimate using local calculation (no RPC needed).
@@ -121,6 +149,14 @@ export const rideService = {
     const dropoff = { latitude: params.dropoff_lat, longitude: params.dropoff_lng };
 
     // ─── Parallel Block: fetch all independent data at once ───
+    // Shared fetches (route, surge, exchange rate) are keyed by their
+    // inputs and deduped — so when the home screen fires 4 concurrent
+    // getLocalFareEstimate calls (one per service_type), each shared
+    // request hits the wire exactly once instead of four times.
+    const routeKey = `route:${params.pickup_lat.toFixed(6)},${params.pickup_lng.toFixed(6)}->${params.dropoff_lat.toFixed(6)},${params.dropoff_lng.toFixed(6)}`;
+    const surgeKey = `surge:${params.pickup_lat.toFixed(4)},${params.pickup_lng.toFixed(4)}`;
+    const exchangeKey = 'exchange:usd_cup';
+
     const [configResult, rulesResult, routeResult, surgeResult, experimentResult, exchangeRate] =
       await Promise.all([
         supabase
@@ -134,26 +170,28 @@ export const rideService = {
           .select('*')
           .eq('service_type', params.service_type)
           .eq('is_active', true),
-        fetchRoute(
+        dedupe(routeKey, () => fetchRoute(
           { lat: params.pickup_lat, lng: params.pickup_lng },
           { lat: params.dropoff_lat, lng: params.dropoff_lng },
-        ).catch(() => null),
-        Promise.resolve(supabase.rpc('calculate_dynamic_surge', {
-          p_zone_id: null,
-          p_lat: params.pickup_lat,
-          p_lng: params.pickup_lng,
-          p_radius_m: 3000,
-        })).catch(() => {
-          console.warn('[ride.service] Surge RPC failed, falling back to multiplier 1.0');
-          return { data: 1.0 as number, error: null };
-        }),
+        ).catch(() => null)),
+        dedupe(surgeKey, () =>
+          Promise.resolve(supabase.rpc('calculate_dynamic_surge', {
+            p_zone_id: null,
+            p_lat: params.pickup_lat,
+            p_lng: params.pickup_lng,
+            p_radius_m: 3000,
+          })).catch(() => {
+            console.warn('[ride.service] Surge RPC failed, falling back to multiplier 1.0');
+            return { data: 1.0 as number, error: null };
+          }),
+        ),
         supabase
           .from('pricing_experiments')
           .select('*')
           .eq('status', 'active')
           .eq('service_type', params.service_type)
           .maybeSingle(),
-        exchangeRateService.getUsdCupRate().catch(() => 300),
+        dedupe(exchangeKey, () => exchangeRateService.getUsdCupRate().catch(() => 300)),
       ]);
 
     if (configResult.error) throw configResult.error;
