@@ -3,6 +3,7 @@ import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-nat
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import { StopMarker } from '@tricigo/ui';
 import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
@@ -62,6 +63,9 @@ interface RideMapViewProps {
   driverLocation?: GeoPoint | null;
   routeCoordinates?: GeoPoint[] | null;
   waypointLocations?: GeoPoint[];
+  /** Status per waypoint (same order as waypointLocations). Used to
+   *  drive the StopMarker pulse: the first 'current' one pulses. */
+  waypointStatuses?: Array<'pending' | 'current' | 'completed'>;
   nearbyVehicles?: NearbyVehicleMarker[];
   /** Opacity for the driver marker (0-1). Use < 1 when showing cached position. */
   driverMarkerOpacity?: number;
@@ -165,6 +169,7 @@ function RideMapViewInner({
   driverLocation,
   routeCoordinates,
   waypointLocations,
+  waypointStatuses,
   nearbyVehicles,
   driverMarkerOpacity = 1,
   onPickupDrag,
@@ -625,31 +630,26 @@ function RideMapViewInner({
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Waypoint markers */}
-        {waypointLocations?.map((wp, idx) => (
-          <MapboxGL.PointAnnotation
-            key={`waypoint-${idx}`}
-            id={`waypoint-${idx}`}
-            coordinate={toCoord(wp)}
-          >
-            <View
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 10,
-                backgroundColor: colors.brand.orange,
-                borderWidth: 2,
-                borderColor: 'white',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+        {/* Waypoint markers — Cuban Modern StopMarker. Taller (36px)
+         *  so it's legible over the map; the first "current" pulses
+         *  via its internal animation to signal the next stop. */}
+        {waypointLocations?.map((wp, idx) => {
+          const status = waypointStatuses?.[idx] ?? 'pending';
+          return (
+            <MapboxGL.PointAnnotation
+              key={`waypoint-${idx}`}
+              id={`waypoint-${idx}`}
+              coordinate={toCoord(wp)}
             >
-              <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
-                {idx + 1}
-              </Text>
-            </View>
-          </MapboxGL.PointAnnotation>
-        ))}
+              <StopMarker
+                index={idx + 1}
+                status={status}
+                size={36}
+                mode={isDark ? 'dark' : 'light'}
+              />
+            </MapboxGL.PointAnnotation>
+          );
+        })}
 
         {/* Driver marker — premium vehicle in dark container + pulsing ring */}
         {animatedDriver && (

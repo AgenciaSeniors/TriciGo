@@ -88,3 +88,7 @@ export { RecentPlacesList } from './RecentPlacesList';
 export type { RecentPlacesListProps, RecentPlace } from './RecentPlacesList';
 export { CapitolioDivider } from './CapitolioDivider';
 export type { CapitolioDividerProps } from './CapitolioDivider';
+export { StopMarker } from './StopMarker';
+export type { StopMarkerProps, StopStatus } from './StopMarker';
+export { StopsList } from './StopsList';
+export type { StopsListProps, StopsListItem } from './StopsList';

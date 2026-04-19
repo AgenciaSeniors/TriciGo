@@ -6,6 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
+import { StopsList } from '@tricigo/ui';
 import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
@@ -77,6 +78,21 @@ export function RideActiveView() {
         .map((w) => ({ latitude: w.latitude, longitude: w.longitude })),
     [waypoints],
   );
+  /** Status array parallel to waypointPoints — used by RideMapView to
+   *  pulse the marker of the next stop the driver is going to. */
+  const waypointStatuses = useMemo<Array<'pending' | 'current' | 'completed'>>(() => {
+    const sorted = [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
+    // First one that has neither arrived nor departed is "current".
+    let currentAssigned = false;
+    return sorted.map((w) => {
+      if (w.departed_at) return 'completed';
+      if (!currentAssigned) {
+        currentAssigned = true;
+        return 'current';
+      }
+      return 'pending';
+    });
+  }, [waypoints]);
   const routeData = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
@@ -692,6 +708,7 @@ export function RideActiveView() {
           routeCoordinates={routeCoordinates}
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}
+          waypointStatuses={waypointStatuses}
           height={mapHeight}
         />
         {!driverPosition && (
@@ -967,23 +984,35 @@ export function RideActiveView() {
         </View>
       )}
 
-      {/* Route info */}
+      {/* Route info — pickup + dropoff (paradas abajo en el nuevo StopsList) */}
       <Card variant="outlined" padding="md" className="mb-4">
         <RouteSummary
           pickupAddress={activeRide.pickup_address}
           dropoffAddress={activeRide.dropoff_address}
           pickupLabel={t('ride.pickup')}
           dropoffLabel={t('ride.dropoff')}
-          waypoints={waypoints.map((wp) => ({
-            address: wp.address,
-            label: wp.departed_at
-              ? `✅ ${t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}`
-              : wp.arrived_at
-                ? `📍 ${t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}`
-                : t('ride.stop_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` }),
-          }))}
         />
       </Card>
+
+      {/* Lista de paradas — Cuban Modern, no emojis. */}
+      {waypoints.length > 0 && (
+        <View className="mb-4">
+          <StopsList
+            mode={isDark ? 'dark' : 'light'}
+            stops={waypoints.map((wp) => ({
+              id: wp.id,
+              sort_order: wp.sort_order,
+              address: wp.address,
+              arrived_at: wp.arrived_at,
+              departed_at: wp.departed_at,
+            }))}
+            /* Durante in_progress, el backend bloquea eliminar paradas
+             * que ya fueron visitadas. El filtrado adicional lo hace
+             * el propio StopsList internamente (solo muestra × en
+             * stops sin arrived_at ni departed_at). */
+          />
+        </View>
+      )}
 
       {/* Add stop button (only during active trip, max 3 stops) */}
       {activeRide.status === 'in_progress' && waypoints.length < 3 && (
@@ -995,10 +1024,6 @@ export function RideActiveView() {
             fullWidth
             onPress={() => setAddStopVisible(true)}
           />
-          {/* UBER-2.3: Waypoint cost/time preview */}
-          <Text variant="caption" color="secondary" className="text-center mt-1">
-            {t('ride.add_stop_preview', { defaultValue: 'Agregar parada · +~$200 · +~5 min' })}
-          </Text>
         </View>
       )}
 

@@ -45,6 +45,7 @@ import {
   ServiceIconButton,
   RecentPlacesList,
   CapitolioDivider,
+  StopsList,
 } from '@tricigo/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
@@ -2185,6 +2186,9 @@ const VEHICLE_ICONS: Record<string, any> = {
 function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | null) => void }) {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const mode: 'light' | 'dark' = resolvedScheme;
+  const tokens = mode === 'dark' ? cubanDark : cubanLight;
   const {
     draft,
     prefetchedPickup,
@@ -2588,24 +2592,52 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               </View>
             )}
 
-            {/* Waypoints — add stops */}
-            <View style={{ marginBottom: 8 }}>
-              {draft.waypoints.filter(wp => wp.address).map((wp, idx) => (
-                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.neutral[50], borderRadius: 8, padding: 8, marginBottom: 4 }}>
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand.orange, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{idx + 1}</Text>
+            {/* Paradas — Cuban Modern, StopsList + add-stop CTA on-brand */}
+            <View style={{ marginBottom: 12 }}>
+              <StopsList
+                mode={mode}
+                stops={draft.waypoints
+                  .filter(wp => wp.address)
+                  .map((wp, i) => ({
+                    sort_order: i + 1,
+                    address: wp.address,
+                  }))}
+                onRemove={(idx) => {
+                  // StopsList shows only waypoints that have an address;
+                  // map back to the real draft index using the address.
+                  const wp = draft.waypoints.filter(x => x.address)[idx];
+                  if (!wp) return;
+                  const realIdx = draft.waypoints.findIndex(x => x === wp);
+                  if (realIdx >= 0) removeWaypoint(realIdx);
+                }}
+              />
+              {draft.waypoints.filter(wp => wp.address).length < 3 && (
+                <Pressable
+                  onPress={() => { addWaypoint(); setSearchingField('waypoint' as any); }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    marginTop: draft.waypoints.filter(wp => wp.address).length > 0 ? 10 : 0,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: tokens.accent.orange,
+                    backgroundColor: pressed ? tokens.accent.orangeGlow : 'transparent',
+                  })}
+                  accessibilityRole="button"
+                >
+                  {/* Plus built from two rotated lines — sticks to the
+                      design language (no Ionicons). */}
+                  <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ position: 'absolute', width: 14, height: 1.8, backgroundColor: tokens.accent.orange, borderRadius: 2 }} />
+                    <View style={{ position: 'absolute', width: 1.8, height: 14, backgroundColor: tokens.accent.orange, borderRadius: 2 }} />
                   </View>
-                  <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>{wp.address}</Text>
-                  <Pressable onPress={() => removeWaypoint(idx)} hitSlop={8} style={{ padding: 4 }}>
-                    <Ionicons name="close-circle" size={18} color={colors.neutral[400]} />
-                  </Pressable>
-                </View>
-              ))}
-              {draft.waypoints.length < 3 && (
-                <Pressable onPress={() => { addWaypoint(); setSearchingField('waypoint' as any); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 }}>
-                  <Ionicons name="add-circle-outline" size={18} color={colors.brand.orange} />
-                  <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600' }}>
-                    {t('ride.add_stop', { defaultValue: '+ Agregar parada' })} ({draft.waypoints.length}/3)
+                  <Text style={{ fontFamily: 'JetBrainsMono_500Medium', fontSize: 11, letterSpacing: 2, color: tokens.accent.orange }}>
+                    {`AGREGAR PARADA · ${draft.waypoints.filter(wp => wp.address).length}/3`}
                   </Text>
                 </Pressable>
               )}
