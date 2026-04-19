@@ -11,6 +11,12 @@ import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
+import {
+  DEMO_MODE,
+  DEMO_DIAL_CODES,
+  isValidDemoPhone,
+  normalizeDemoPhone,
+} from '@/config/demo';
 
 const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
 
@@ -18,6 +24,10 @@ export default function LoginScreen() {
   const { t } = useTranslation('common');
   const { isPhone } = useResponsive();
   const [phone, setPhone] = useState('');
+  const [dialCode, setDialCode] = useState<string>(
+    DEMO_MODE ? DEMO_DIAL_CODES[0]!.code : '+53',
+  );
+  const [dialPickerOpen, setDialPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,12 +37,17 @@ export default function LoginScreen() {
   const handleSendCode = async () => {
     setError('');
 
-    if (!isValidCubanPhone(phone)) {
+    // Demo mode: permissive validation + use picked dial code.
+    // Prod: strict Cuban format.
+    const isValid = DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone);
+    if (!isValid) {
       setError(t('auth.invalid_phone'));
       return;
     }
 
-    const normalized = normalizeCubanPhone(phone);
+    const normalized = DEMO_MODE
+      ? normalizeDemoPhone(phone, dialCode)
+      : normalizeCubanPhone(phone);
     setLoading(true);
     try {
       await authService.sendOTP(normalized);
@@ -103,14 +118,29 @@ export default function LoginScreen() {
               {t('auth.enter_phone_description', { defaultValue: 'Ingresa tu número para comenzar' })}
             </Text>
 
-            {/* Phone input with country prefix */}
+            {/* Phone input with country prefix.
+                In demo mode the prefix is a picker (BR/CU); in prod
+                it stays fixed at +53 Cuba. */}
             <View className="flex-row items-center gap-2 mb-1">
-              <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center">
-                <Text variant="body" className="font-semibold">🇨🇺 +53</Text>
-              </View>
+              {DEMO_MODE ? (
+                <Pressable
+                  onPress={() => setDialPickerOpen(true)}
+                  className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center gap-1"
+                  accessibilityRole="button"
+                >
+                  <Text variant="body" className="font-semibold">
+                    {DEMO_DIAL_CODES.find((d) => d.code === dialCode)?.emoji ?? '🏳️'} {dialCode}
+                  </Text>
+                  <Ionicons name="chevron-down" size={14} color="#6B7F8F" />
+                </Pressable>
+              ) : (
+                <View className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-3 py-3.5 flex-row items-center">
+                  <Text variant="body" className="font-semibold">🇨🇺 +53</Text>
+                </View>
+              )}
               <View className="flex-1">
                 <Input
-                  placeholder="5XXXXXXX"
+                  placeholder={DEMO_MODE ? '999999999' : '5XXXXXXX'}
                   keyboardType="phone-pad"
                   value={phone}
                   onChangeText={setPhone}
@@ -118,6 +148,36 @@ export default function LoginScreen() {
                 />
               </View>
             </View>
+
+            {/* Dial-code picker (demo mode only) */}
+            {DEMO_MODE && dialPickerOpen && (
+              <Modal transparent animationType="fade" onRequestClose={() => setDialPickerOpen(false)}>
+                <Pressable
+                  style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 24 }}
+                  onPress={() => setDialPickerOpen(false)}
+                >
+                  <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 12 }}>
+                    {DEMO_DIAL_CODES.map((d) => (
+                      <Pressable
+                        key={d.code}
+                        onPress={() => { setDialCode(d.code); setDialPickerOpen(false); }}
+                        style={({ pressed }) => ({
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: 14,
+                          borderRadius: 12,
+                          backgroundColor: pressed ? '#F4EEE2' : 'transparent',
+                        })}
+                      >
+                        <Text variant="body" className="font-semibold">{d.emoji} {d.code}</Text>
+                        <Text variant="body" color="secondary">{d.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </Pressable>
+              </Modal>
+            )}
 
             {error ? (
               <Text variant="bodySmall" color="error" className="mb-2">

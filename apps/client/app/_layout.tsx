@@ -27,6 +27,7 @@ import { StripeBootstrap } from '@/lib/stripe-bootstrap';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
+import { DemoBanner } from '@/components/DemoBanner';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
@@ -226,6 +227,9 @@ function RootLayoutInner() {
       <AppProviders>
         <StripeBootstrap>
           <RootNavigator />
+          {/* DemoBanner only renders when EXPO_PUBLIC_DEMO_MODE=true.
+              Otherwise it returns null — zero overhead in prod builds. */}
+          <DemoBanner />
           <Toast />
         </StripeBootstrap>
       </AppProviders>

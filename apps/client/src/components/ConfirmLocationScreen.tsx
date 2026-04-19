@@ -8,6 +8,7 @@ import type { GeoPoint, ViewportPoi } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
+import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { useViewportPois } from '@/hooks/useViewportPois';
 
 let _MapboxGL: any = undefined;
@@ -33,7 +34,8 @@ function ensureMapboxToken() {
 }
 ensureMapboxToken();
 
-const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
+// Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
+const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 
 /* POI category colors (same as RideMapView) */
 const POI_COLORS: Record<string, string> = {

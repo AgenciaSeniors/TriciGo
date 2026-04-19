@@ -4,6 +4,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
+import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
@@ -94,7 +95,9 @@ interface RideMapViewProps {
   fullscreen?: boolean;
 }
 
-const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136]; // [lng, lat]
+// Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
+// when the demo flag is on (see config/demo.ts + docs/DEMO_MODE.md).
+const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 
 /* Ant-march dash animation — 28 frames (interpolated from web's 14 for smoother motion) */
 const DASH_SEQUENCE: number[][] = [
