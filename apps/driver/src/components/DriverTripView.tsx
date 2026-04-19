@@ -25,6 +25,7 @@ import { useDriverETA } from '@/hooks/useDriverETA';
 import { ETABadge } from '@tricigo/ui/ETABadge';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInAppNavigation } from '@/hooks/useInAppNavigation';
+import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverProximityAlert } from '@/hooks/useDriverProximityAlert';
@@ -157,13 +158,14 @@ export function DriverTripView() {
   const prevNearDropoffRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // In-app navigation
+  // In-app navigation (with TTS voice guidance toggle)
   const driverLat = useLocationStore((s) => s.latitude);
   const driverLng = useLocationStore((s) => s.longitude);
   const driverLocation = driverLat != null && driverLng != null
     ? { latitude: driverLat, longitude: driverLng }
     : null;
-  const inAppNav = useInAppNavigation(driverLocation);
+  const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useVoiceGuidancePref();
+  const inAppNav = useInAppNavigation(driverLocation, voiceGuidanceEnabled);
 
   // ── Driver proximity haptic alert ──
   useDriverProximityAlert(
@@ -674,6 +676,8 @@ export function DriverTripView() {
               ? `Pickup: ${activeTrip.pickup_address}`
               : `Destino: ${nextWaypoint?.address || activeTrip.dropoff_address}`
           }
+          voiceEnabled={voiceGuidanceEnabled}
+          onToggleVoice={() => setVoiceGuidanceEnabled(!voiceGuidanceEnabled)}
         />
       )}
 

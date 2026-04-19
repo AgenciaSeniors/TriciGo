@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import * as Speech from 'expo-speech';
 import {
   fetchNavigationRoute,
   haversineDistance,
@@ -47,9 +48,13 @@ export interface UseInAppNavigationReturn extends InAppNavState {
 /**
  * Hook for in-app turn-by-turn navigation.
  * Tracks driver's position against OSRM route steps and auto-advances.
+ *
+ * @param driverLocation Current driver GPS location.
+ * @param voiceEnabled Whether to speak each step transition (defaults to true).
  */
 export function useInAppNavigation(
   driverLocation: GeoPoint | null,
+  voiceEnabled: boolean = true,
 ): UseInAppNavigationReturn {
   const [isNavigating, setIsNavigating] = useState(false);
   const [route, setRoute] = useState<NavigationRouteResult | null>(null);
@@ -59,6 +64,17 @@ export function useInAppNavigation(
 
   const destinationRef = useRef<GeoPoint | null>(null);
   const lastRerouteRef = useRef(0);
+  /** Index of the last step we spoke out loud — avoids re-announcing on re-render. */
+  const spokenStepIndexRef = useRef<number>(-1);
+  /** Keep voiceEnabled fresh without re-running the step-advance effect. */
+  const voiceEnabledRef = useRef(voiceEnabled);
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+    // If the driver toggles voice off mid-route, stop any in-flight utterance.
+    if (!voiceEnabled) {
+      Speech.stop().catch(() => {});
+    }
+  }, [voiceEnabled]);
 
   const steps = route?.steps ?? [];
   const currentStep = steps[currentStepIndex] ?? null;
@@ -112,6 +128,40 @@ export function useInAppNavigation(
     setRoute(null);
     setCurrentStepIndex(0);
     destinationRef.current = null;
+    spokenStepIndexRef.current = -1;
+    // Cancel any pending utterance when navigation ends.
+    Speech.stop().catch(() => {});
+  }, []);
+
+  /**
+   * Speak the current step instruction whenever the index changes (and
+   * voice is enabled). Uses a ref so repeated renders with the same
+   * index don't re-announce the same turn.
+   */
+  useEffect(() => {
+    if (!isNavigating) return;
+    if (!voiceEnabledRef.current) return;
+    if (currentStepIndex === spokenStepIndexRef.current) return;
+    const step = steps[currentStepIndex];
+    if (!step) return;
+
+    spokenStepIndexRef.current = currentStepIndex;
+    const text = buildSpokenInstruction(step);
+    if (!text) return;
+
+    // Cancel anything previous so we don't stack utterances.
+    Speech.stop()
+      .catch(() => {})
+      .finally(() => {
+        Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+      });
+  }, [isNavigating, currentStepIndex, steps]);
+
+  // Cleanup: stop TTS if the hook unmounts mid-utterance.
+  useEffect(() => {
+    return () => {
+      Speech.stop().catch(() => {});
+    };
   }, []);
 
   // Auto-advance steps based on driver location
@@ -193,6 +243,37 @@ export function useInAppNavigation(
     startNavigation,
     stopNavigation,
   };
+}
+
+/**
+ * Build a plain-Spanish sentence for text-to-speech from a NavigationStep.
+ * Independent of i18n so the TTS effect can stay decoupled from React
+ * translation contexts. Cuban market is Spanish-first, so we hardcode ES.
+ */
+export function buildSpokenInstruction(step: NavigationStep): string {
+  const { maneuver_type, maneuver_modifier, name } = step;
+  const street = name?.trim();
+
+  if (maneuver_type === 'arrive') return 'Llegaste a tu destino';
+  if (maneuver_type === 'depart') {
+    return street ? `Dirígete por ${street}` : 'Inicia el recorrido';
+  }
+
+  const direction = (() => {
+    switch (maneuver_modifier) {
+      case 'left': return 'Gira a la izquierda';
+      case 'sharp left': return 'Gira cerrado a la izquierda';
+      case 'slight left': return 'Gira ligeramente a la izquierda';
+      case 'right': return 'Gira a la derecha';
+      case 'sharp right': return 'Gira cerrado a la derecha';
+      case 'slight right': return 'Gira ligeramente a la derecha';
+      case 'uturn': return 'Haz un giro en U';
+      case 'straight':
+      default: return 'Continúa recto';
+    }
+  })();
+
+  return street ? `${direction} por ${street}` : direction;
 }
 
 /**

@@ -15,6 +15,9 @@ interface NavigationOverlayProps {
   isRerouting: boolean;
   onStop: () => void;
   destinationLabel?: string;
+  /** TTS voice-guidance toggle state (N1 from ride-flow review). */
+  voiceEnabled?: boolean;
+  onToggleVoice?: () => void;
 }
 
 function formatDistance(meters: number): string {
@@ -40,6 +43,8 @@ function NavigationOverlayInner({
   isRerouting,
   onStop,
   destinationLabel,
+  voiceEnabled,
+  onToggleVoice,
 }: NavigationOverlayProps) {
   const { t } = useTranslation('driver');
 
@@ -136,16 +141,36 @@ function NavigationOverlayInner({
               </Text>
             )}
           </View>
-          <Pressable
-            onPress={onStop}
-            className="bg-error px-4 py-2 rounded-full"
-            accessibilityRole="button"
-            accessibilityLabel={t('nav.stop', { defaultValue: 'Detener navegación' })}
-          >
-            <Text className="text-white text-xs font-bold">
-              {t('nav.stop_short', { defaultValue: 'Salir' })}
-            </Text>
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            {onToggleVoice && (
+              <Pressable
+                onPress={onToggleVoice}
+                className="bg-neutral-800 w-9 h-9 rounded-full items-center justify-center"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  voiceEnabled
+                    ? t('nav.voice_off', { defaultValue: 'Silenciar voz' })
+                    : t('nav.voice_on', { defaultValue: 'Activar voz' })
+                }
+              >
+                <Ionicons
+                  name={voiceEnabled ? 'volume-high' : 'volume-mute'}
+                  size={16}
+                  color={voiceEnabled ? colors.primary[400] : colors.neutral[500]}
+                />
+              </Pressable>
+            )}
+            <Pressable
+              onPress={onStop}
+              className="bg-error px-4 py-2 rounded-full"
+              accessibilityRole="button"
+              accessibilityLabel={t('nav.stop', { defaultValue: 'Detener navegación' })}
+            >
+              <Text className="text-white text-xs font-bold">
+                {t('nav.stop_short', { defaultValue: 'Salir' })}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
