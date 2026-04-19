@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Determine target app
+      - name: Determine target app + demo flag
         id: target
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -38,6 +38,16 @@ jobs:
             echo "app=client" >> "$GITHUB_OUTPUT"
           else
             echo "Unknown trigger" >&2 ; exit 1
+          fi
+          # Tag suffix "-demo-apk" (e.g. client-v1.1.7-demo-apk) turns
+          # on EXPO_PUBLIC_DEMO_MODE for this build. See docs/DEMO_MODE.md.
+          if [[ "${{ github.ref }}" == *"-demo-apk" ]]; then
+            echo "demo=true" >> "$GITHUB_OUTPUT"
+            echo "demo_city=sao_paulo" >> "$GITHUB_OUTPUT"
+            echo "✓ Demo mode ON (city=sao_paulo)"
+          else
+            echo "demo=false" >> "$GITHUB_OUTPUT"
+            echo "demo_city=havana" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
@@ -114,6 +124,8 @@ jobs:
           EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
           EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
           EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+          EXPO_PUBLIC_DEMO_MODE: ${{ steps.target.outputs.demo }}
+          EXPO_PUBLIC_DEMO_CITY: ${{ steps.target.outputs.demo_city }}
         run: |
           cd apps/${{ steps.target.outputs.app }}
           pnpm exec expo prebuild --platform android --no-install --clean
@@ -216,6 +228,8 @@ jobs:
           EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
           EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
           EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+          EXPO_PUBLIC_DEMO_MODE: ${{ steps.target.outputs.demo }}
+          EXPO_PUBLIC_DEMO_CITY: ${{ steps.target.outputs.demo_city }}
           SENTRY_ORG: agencia-senores
           SENTRY_PROJECT: tricigo-mobile
           NODE_OPTIONS: --max_old_space_size=4096
