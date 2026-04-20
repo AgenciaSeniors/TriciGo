@@ -704,6 +704,11 @@ export function useRideActions() {
 
       scheduleSearchTimeout();
     } catch (err) {
+      logger.error('confirmRide failed', {
+        error: String(err),
+        stack: (err as Error)?.stack,
+        name: (err as Error)?.name,
+      });
       const errMsg = getErrorMessage(err);
       setError(errMsg);
       setFlowStep('selecting');

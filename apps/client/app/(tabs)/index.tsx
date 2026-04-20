@@ -1475,7 +1475,8 @@ function NativeHomeScreen() {
   const draft = useRideStore((s) => s.draft);
   const setPickup = useRideStore((s) => s.setPickup);
   const setDropoff = useRideStore((s) => s.setDropoff);
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | null>(null);
+  const updateWaypoint = useRideStore((s) => s.updateWaypoint);
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'waypoint' | null>(null);
 
   // Crossfade animation between flow steps
   const flowFadeAnim = useRef(new Animated.Value(1)).current;
@@ -1506,14 +1507,28 @@ function NativeHomeScreen() {
     // Render ONLY the map picker when active to avoid two Mapbox MapView
     // instances fighting for gestures on Android (caused frozen pan/zoom).
     if (mapPickerMode) {
+      const lastWaypoint = draft.waypoints.length > 0 ? draft.waypoints[draft.waypoints.length - 1] : null;
+      const pickerInitialLoc =
+        mapPickerMode === 'pickup'
+          ? draft.pickup?.location ?? null
+          : mapPickerMode === 'waypoint'
+            ? lastWaypoint?.location ?? null
+            : draft.dropoff?.location ?? null;
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
-            mode={mapPickerMode}
-            initialLocation={mapPickerMode === 'pickup' ? draft.pickup?.location ?? null : draft.dropoff?.location ?? null}
+            mode={mapPickerMode === 'waypoint' ? 'dropoff' : mapPickerMode}
+            initialLocation={pickerInitialLoc}
             onConfirm={(address, location) => {
               if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
-              if (mapPickerMode === 'pickup') { setPickup(address, location); } else { setDropoff(address, location); }
+              if (mapPickerMode === 'pickup') {
+                setPickup(address, location);
+              } else if (mapPickerMode === 'waypoint') {
+                const wpIdx = draft.waypoints.length - 1;
+                if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
+              } else {
+                setDropoff(address, location);
+              }
               setMapPickerMode(null);
             }}
             onClose={() => setMapPickerMode(null)}
@@ -1544,31 +1559,39 @@ function NativeHomeScreen() {
             />
           )}
         </Screen>
-        {mapPickerMode && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-            <ConfirmLocationScreen
-              mode={mapPickerMode}
-              initialLocation={
-                mapPickerMode === 'pickup'
-                  ? draft.pickup?.location ?? null
-                  : draft.dropoff?.location ?? null
-              }
-              onConfirm={(address, location) => {
-                if (!isValidCoordinate(location.latitude, location.longitude)) {
+        {mapPickerMode && (() => {
+          const lastWaypoint = draft.waypoints.length > 0 ? draft.waypoints[draft.waypoints.length - 1] : null;
+          const pickerInitialLoc =
+            mapPickerMode === 'pickup'
+              ? draft.pickup?.location ?? null
+              : mapPickerMode === 'waypoint'
+                ? lastWaypoint?.location ?? null
+                : draft.dropoff?.location ?? null;
+          return (
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+              <ConfirmLocationScreen
+                mode={mapPickerMode === 'waypoint' ? 'dropoff' : mapPickerMode}
+                initialLocation={pickerInitialLoc}
+                onConfirm={(address, location) => {
+                  if (!isValidCoordinate(location.latitude, location.longitude)) {
+                    setMapPickerMode(null);
+                    return;
+                  }
+                  if (mapPickerMode === 'pickup') {
+                    setPickup(address, location);
+                  } else if (mapPickerMode === 'waypoint') {
+                    const wpIdx = draft.waypoints.length - 1;
+                    if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
+                  } else {
+                    setDropoff(address, location);
+                  }
                   setMapPickerMode(null);
-                  return;
-                }
-                if (mapPickerMode === 'pickup') {
-                  setPickup(address, location);
-                } else {
-                  setDropoff(address, location);
-                }
-                setMapPickerMode(null);
-              }}
-              onClose={() => setMapPickerMode(null)}
-            />
-          </View>
-        )}
+                }}
+                onClose={() => setMapPickerMode(null)}
+              />
+            </View>
+          );
+        })()}
       </>
     );
   }

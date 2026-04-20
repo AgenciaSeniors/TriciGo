@@ -3,6 +3,12 @@
     "name": "TriciGo",
     "slug": "tricigo-client",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": false
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tricigo",
