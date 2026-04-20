@@ -1503,25 +1503,25 @@ function NativeHomeScreen() {
 
   // SelectingView renders fullscreen (no scroll) for map background
   if (flowStep === 'selecting') {
-    return (
-      <>
-        <SelectingView setMapPickerMode={setMapPickerMode} />
-        {mapPickerMode && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-            <ConfirmLocationScreen
-              mode={mapPickerMode}
-              initialLocation={mapPickerMode === 'pickup' ? draft.pickup?.location ?? null : draft.dropoff?.location ?? null}
-              onConfirm={(address, location) => {
-                if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
-                if (mapPickerMode === 'pickup') { setPickup(address, location); } else { setDropoff(address, location); }
-                setMapPickerMode(null);
-              }}
-              onClose={() => setMapPickerMode(null)}
-            />
-          </View>
-        )}
-      </>
-    );
+    // Render ONLY the map picker when active to avoid two Mapbox MapView
+    // instances fighting for gestures on Android (caused frozen pan/zoom).
+    if (mapPickerMode) {
+      return (
+        <View style={{ flex: 1 }}>
+          <ConfirmLocationScreen
+            mode={mapPickerMode}
+            initialLocation={mapPickerMode === 'pickup' ? draft.pickup?.location ?? null : draft.dropoff?.location ?? null}
+            onConfirm={(address, location) => {
+              if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
+              if (mapPickerMode === 'pickup') { setPickup(address, location); } else { setDropoff(address, location); }
+              setMapPickerMode(null);
+            }}
+            onClose={() => setMapPickerMode(null)}
+          />
+        </View>
+      );
+    }
+    return <SelectingView setMapPickerMode={setMapPickerMode} />;
   }
 
   // Other non-idle flow steps use Screen with scroll
@@ -2221,7 +2221,13 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const insets = useSafeAreaInsets();
-  const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const waypointPoints = useMemo(
+    () => draft.waypoints
+      .filter((w) => w.address && w.location)
+      .map((w) => ({ latitude: w.location.latitude, longitude: w.location.longitude })),
+    [draft.waypoints],
+  );
+  const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, waypointPoints);
   const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
 
   // Compute selectedEstimate from allFareEstimates for the current service type
@@ -2505,7 +2511,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                   <View style={{ alignItems: 'flex-end' }}>
                     {est ? (
                       <>
-                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : colors.neutral[900] }}>{formatCUP(est.estimated_fare_cup)}</Text>
+                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : colors.neutral[900] }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
                         {est.estimated_duration_s ? (
                           <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
                         ) : null}
@@ -2648,7 +2654,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               <View style={{ borderWidth: 2, borderColor: colors.brand.orange, borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text variant="caption" color="secondary">{t('ride.estimated_fare', { defaultValue: 'Tarifa estimada' })}</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatCUP(selectedEstimate.estimated_fare_cup)}</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
                   <Text variant="caption" color="tertiary">{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</Text>
@@ -2750,7 +2756,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               </View>
             )}
           </ScrollView>
-          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Solicitar'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatCUP(selectedEstimate.estimated_fare_cup)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
+          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Solicitar'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
@@ -2842,7 +2848,13 @@ function ReviewingView() {
         eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
-  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location);
+  const reviewWaypointPoints = useMemo(
+    () => draft.waypoints
+      .filter((w) => w.address && w.location)
+      .map((w) => ({ latitude: w.location.latitude, longitude: w.location.longitude })),
+    [draft.waypoints],
+  );
+  const { coordinates: routeCoordinates } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, reviewWaypointPoints);
   const nearbyVehicles = useNearbyVehicles(
     draft.pickup?.location?.latitude ?? null,
     draft.pickup?.location?.longitude ?? null,

@@ -249,7 +249,16 @@ export function useRideActions() {
     }
 
     const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
-    if (!d.pickup || !d.dropoff) { isSubmittingRef.current = false; pendingRequestIdRef.current = null; return; }
+    if (!d.pickup || !d.dropoff) {
+      isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
+      Toast.show({
+        type: 'error',
+        text1: i18next.t('rider:ride.missing_locations_title', { defaultValue: 'Falta recogida o destino' }),
+        text2: i18next.t('rider:ride.missing_locations_msg', { defaultValue: 'Selecciona ambos puntos antes de solicitar el viaje.' }),
+      });
+      return;
+    }
 
     // Bug 25: Validate minimum distance in confirmRide (guards deep-link bypass)
     const { haversineDistance } = await import('@tricigo/utils');
@@ -695,8 +704,14 @@ export function useRideActions() {
 
       scheduleSearchTimeout();
     } catch (err) {
-      setError(getErrorMessage(err));
+      const errMsg = getErrorMessage(err);
+      setError(errMsg);
       setFlowStep('selecting');
+      Toast.show({
+        type: 'error',
+        text1: i18next.t('rider:ride.request_failed_title', { defaultValue: 'No se pudo solicitar el viaje' }),
+        text2: errMsg,
+      });
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
