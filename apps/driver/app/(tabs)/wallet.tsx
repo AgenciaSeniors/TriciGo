@@ -76,8 +76,9 @@ export default function WalletScreen() {
   const fetchData = useCallback(async () => {
     if (!driverProfile?.id || !userId) return;
     try {
-      // BUG-081: Sequential fetch — balance first, then transactions to avoid stale values
-      const balanceData = await walletService.getBalance(userId);
+      // BUG-081: Sequential fetch — balance first, then transactions to avoid stale values.
+      // Driver balance lives in driver_cash (NOT customer_cash default).
+      const balanceData = await walletService.getBalance(userId, 'driver_cash');
       setBalance(balanceData?.available ?? 0);
       setHoldBalance(balanceData?.held ?? 0);
 

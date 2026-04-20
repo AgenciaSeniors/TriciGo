@@ -389,7 +389,8 @@ function NativeEarningsScreen() {
 
       // Critical data — fetch in parallel (4 calls → renders immediately)
       const [balanceData, trips, commRateStr, ratingData] = await Promise.all([
-        walletService.getBalance(userId),
+        // Driver earnings live in driver_cash, NOT customer_cash.
+        walletService.getBalance(userId, 'driver_cash'),
         driverService.getTripHistoryByDateRange(
           driverProfileId,
           start.toISOString(),
@@ -485,7 +486,8 @@ function NativeEarningsScreen() {
     if (!userId || txLoading) return;
     setTxLoading(true);
     try {
-      const account = await walletService.getAccount(userId);
+      // Driver transaction list must come from driver_cash, not customer_cash.
+      const account = await walletService.getAccount(userId, 'driver_cash');
       if (!account) return;
       const data = await walletService.getTransactions(account.id, txPage, 10);
       if (data.length < 10) setTxHasMore(false);

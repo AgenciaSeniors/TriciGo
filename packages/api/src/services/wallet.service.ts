@@ -21,15 +21,25 @@ import { NotFoundError } from '../errors';
 
 export const walletService = {
   /**
-   * Get the wallet account for the current user.
+   * Get a wallet account for the current user.
+   *
+   * `accountType` defaults to 'customer_cash' for backward compat
+   * (the old signature was effectively `getAccount(userId)` = rider).
+   * Drivers MUST pass 'driver_cash' — their earnings/quota live on a
+   * separate account and the two never mix. A driver with rider
+   * activity too will have BOTH rows in wallet_accounts; calling
+   * without a type returns the rider one.
    */
-  async getAccount(userId: string): Promise<WalletAccount | null> {
+  async getAccount(
+    userId: string,
+    accountType: WalletAccountKind = 'customer_cash',
+  ): Promise<WalletAccount | null> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('wallet_accounts')
       .select('*')
       .eq('user_id', userId)
-      .eq('account_type', 'customer_cash')
+      .eq('account_type', accountType)
       .single();
     if (error && error.code !== 'PGRST116') throw error;
     return data as WalletAccount | null;
@@ -114,8 +124,16 @@ export const walletService = {
   /**
    * Get balance (read-only, derived from ledger).
    */
-  async getBalance(userId: string): Promise<{ available: number; held: number }> {
-    const account = await walletService.getAccount(userId);
+  /**
+   * Get available + held balance. Same backward-compat rule as
+   * `getAccount`: defaults to 'customer_cash' (rider). Drivers MUST
+   * pass 'driver_cash' to see their real earnings.
+   */
+  async getBalance(
+    userId: string,
+    accountType: WalletAccountKind = 'customer_cash',
+  ): Promise<{ available: number; held: number }> {
+    const account = await walletService.getAccount(userId, accountType);
     if (!account) return { available: 0, held: 0 };
     return {
       available: account.balance,
