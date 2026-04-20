@@ -1,24 +1,25 @@
 -- ============================================================
--- Migration 00140: admin_* RPCs aceptan super_admin
+-- Migration 00140: admin_* RPCs — 3 bugs consolidados
 --
--- Bug: admin_adjust_wallet, admin_grant_grace_trips y
--- admin_refund_ride_commission (todos introducidos en migration
--- 00133) checkeaban literal `role = 'admin'`, así que cualquier
--- usuario con role `super_admin` recibía "Forbidden: admin role
--- required" al intentar ajustar saldo de conductores, conceder
--- grace trips o reembolsar comisiones.
+-- El RPC admin_adjust_wallet (y sus primos grace_trips /
+-- refund_ride_commission) de migration 00133 tenía TRES bugs que
+-- hacían imposible usarlos desde el admin:
 --
--- El dueño del sistema (Eduardo) tiene role super_admin, así que
--- hasta ahora NINGUNA de estas operaciones funcionaba en prod
--- salvo para la cuenta Luis Manuel Calero (única con role=admin
--- exacto).
+-- 1) Check literal `role = 'admin'` rechazaba super_admin.
+--    Fix: aceptar IN ('admin', 'super_admin').
 --
--- Fix: chequear `role IN ('admin', 'super_admin')` — alineado con
--- lo que hace la función is_admin() en las RLS policies.
+-- 2) INSERT INTO ledger_transactions con `status = 'completed'`,
+--    pero el enum ledger_transaction_status solo tiene
+--    'pending', 'posted', 'archived', 'reversed'.
+--    Fix: usar 'posted' (transacción confirmada en el ledger).
 --
--- Visible en la UI: botón "Ajustar saldo TC" en /drivers/[id] y
--- /users/[id], botón "Bonificar viajes" del driver, acción de
--- refund en el detalle del viaje.
+-- 3) INSERT INTO ledger_transactions omitía `idempotency_key`,
+--    que es NOT NULL. Fix: generar uno único por llamada con
+--    'admin_adjust:' || gen_random_uuid().
+--
+-- Estos 3 bugs estuvieron vivos en prod desde que se aplicó
+-- 00133. Ningún super_admin pudo ajustar saldos durante ese
+-- tiempo.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.admin_adjust_wallet(
@@ -50,8 +51,8 @@ BEGIN
     VALUES (p_target_user_id, p_account_type, 0, 0, 'CUP', true) RETURNING id INTO v_account_id;
   END IF;
 
-  INSERT INTO ledger_transactions (type, status, reference_type, reference_id, description, created_by)
-  VALUES ('adjustment', 'completed', 'admin_action', p_admin_user_id, p_reason, p_admin_user_id)
+  INSERT INTO ledger_transactions (idempotency_key, type, status, reference_type, reference_id, description, created_by)
+  VALUES ('admin_adjust:' || gen_random_uuid()::TEXT, 'adjustment', 'posted', 'admin_action', p_admin_user_id, p_reason, p_admin_user_id)
   RETURNING id INTO v_tx_id;
 
   UPDATE wallet_accounts SET balance = balance + p_amount_cup, updated_at = NOW()
