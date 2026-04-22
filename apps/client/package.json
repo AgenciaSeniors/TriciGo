@@ -33,7 +33,7 @@
     "react-native-svg": "^15.15.3",
     "expo": "~55.0.14",
     "expo-av": "~16.0.8",
-    "expo-clipboard": "~7.0.1",
+    "expo-clipboard": "~55.0.9",
     "expo-constants": "~55.0.7",
     "expo-dev-client": "~55.0.27",
     "expo-device": "~55.0.6",

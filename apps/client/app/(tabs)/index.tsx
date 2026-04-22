@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -2246,7 +2246,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const insets = useSafeAreaInsets();
   const waypointPoints = useMemo(
     () => draft.waypoints
-      .filter((w) => w.address && w.location)
+      .filter((w): w is { address: string; location: NonNullable<typeof w.location> } => w.address !== '' && w.location !== null)
       .map((w) => ({ latitude: w.location.latitude, longitude: w.location.longitude })),
     [draft.waypoints],
   );
@@ -2380,12 +2380,17 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     }
   }, []); // Only on mount
 
-  // Auto-fetch estimates when both pickup and dropoff are set (web-like flow)
+  // Auto-fetch estimates when both pickup and dropoff are set, or when waypoints change.
+  // Track both lat AND lng so moving within same latitude band triggers a re-estimate.
+  // Do NOT gate on !isFareEstimating: if route changes mid-flight, we'd skip and never retry
+  // (isFareEstimating is not in deps, so returning to false doesn't re-run the effect).
+  const waypointLocationKey = draft.waypoints.map((w) => w.location ? `${w.location.latitude},${w.location.longitude}` : 'null').join('|');
   useEffect(() => {
-    if (draft.pickup?.location && draft.dropoff?.location && !isFareEstimating) {
+    if (draft.pickup?.location && draft.dropoff?.location) {
       requestEstimate();
     }
-  }, [draft.pickup?.location?.latitude, draft.dropoff?.location?.latitude]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude, draft.dropoff?.location?.latitude, draft.dropoff?.location?.longitude, waypointLocationKey]);
 
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
@@ -2407,7 +2412,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         dropoffLocation={draft.dropoff?.location ?? null}
         routeCoordinates={routeCoordinates ?? null}
         nearbyVehicles={nearbyVehicles ?? []}
-        waypointLocations={draft.waypoints.filter((wp) => wp.location).map((wp) => wp.location!)}
+        waypointLocations={draft.waypoints.filter((wp) => wp.location !== null).map((wp) => wp.location!)}
         pois={pois}
         onCameraChanged={onPoiCameraChanged}
       />
@@ -3723,7 +3728,20 @@ function SearchingView() {
         variant="outline"
         size="lg"
         fullWidth
-        onPress={() => cancelRide(t('ride.canceled_by_passenger', { defaultValue: 'Cancelado por el pasajero' }))}
+        onPress={() => {
+          Alert.alert(
+            t('ride.cancel_ride_title', { defaultValue: '¿Cancelar la búsqueda?' }),
+            t('ride.cancel_ride_msg', { defaultValue: 'Perderás el progreso de la búsqueda actual. Si un conductor ya aceptó, podría aplicar una tarifa de cancelación.' }),
+            [
+              { text: t('common.back', { defaultValue: 'Volver' }), style: 'cancel' },
+              {
+                text: t('ride.cancel_ride', { defaultValue: 'Cancelar viaje' }),
+                style: 'destructive',
+                onPress: () => cancelRide(t('ride.canceled_by_passenger', { defaultValue: 'Cancelado por el pasajero' })),
+              },
+            ],
+          );
+        }}
         loading={isLoading}
       />
     </View>

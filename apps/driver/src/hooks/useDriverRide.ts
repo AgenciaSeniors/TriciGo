@@ -295,17 +295,68 @@ export function useDriverRideActions() {
         });
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const errorMessages: Record<string, string> = {
-        ride_already_taken: i18next.t('driver:common.ride_already_accepted'),
-        ride_not_found: i18next.t('driver:common.ride_not_found', { defaultValue: 'Viaje no encontrado' }),
-        driver_not_online: i18next.t('driver:common.driver_not_online', { defaultValue: 'Debes estar en línea para aceptar viajes' }),
-        driver_stale_heartbeat: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Conexión perdida. Verifica tu internet.' }),
-        driver_has_active_ride: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tienes un viaje activo' }),
-        driver_not_found: i18next.t('driver:common.driver_not_found_profile', { defaultValue: 'Perfil de conductor no encontrado' }),
+      // Extract a useful error code from whatever shape the error has.
+      // Supabase postgrest errors are plain objects (not Error instances) with
+      // shape { code, message, details, hint }. RPC business errors thrown from
+      // driver.service.ts are Error with .message = server error code.
+      const rawMsg = err instanceof Error ? err.message : (
+        (err as { code?: string; message?: string })?.code
+        ?? (err as { message?: string })?.message
+        ?? String(err)
+      );
+      const errorMessages: Record<string, { title: string; subtitle?: string; type: 'error' | 'info' }> = {
+        ride_already_taken: {
+          title: i18next.t('driver:common.ride_already_accepted'),
+          type: 'info',
+        },
+        offer_not_found_or_expired: {
+          title: i18next.t('driver:common.offer_expired', { defaultValue: 'La oferta expiró' }),
+          subtitle: i18next.t('driver:common.offer_expired_sub', { defaultValue: 'Esperá la próxima oferta.' }),
+          type: 'info',
+        },
+        ride_not_found: {
+          title: i18next.t('driver:common.ride_not_found', { defaultValue: 'Viaje no disponible' }),
+          type: 'error',
+        },
+        driver_not_online: {
+          title: i18next.t('driver:common.driver_not_online', { defaultValue: 'Debes estar en línea para aceptar viajes' }),
+          type: 'error',
+        },
+        driver_stale_heartbeat: {
+          title: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Conexión perdida. Verificá tu internet.' }),
+          type: 'error',
+        },
+        driver_has_active_ride: {
+          title: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tenés un viaje activo' }),
+          type: 'error',
+        },
+        driver_not_found: {
+          title: i18next.t('driver:common.driver_not_found_profile', { defaultValue: 'Perfil de conductor no encontrado' }),
+          type: 'error',
+        },
+        unauthorized: {
+          title: i18next.t('driver:common.unauthorized', { defaultValue: 'Sesión inválida' }),
+          type: 'error',
+        },
+        unauthenticated: {
+          title: i18next.t('driver:common.unauthorized', { defaultValue: 'Sesión inválida' }),
+          type: 'error',
+        },
       };
-      const text1 = errorMessages[msg] ?? i18next.t('driver:common.ride_already_accepted');
-      Toast.show({ type: 'error', text1 });
+      const entry = errorMessages[rawMsg];
+      if (entry) {
+        Toast.show({ type: entry.type, text1: entry.title, text2: entry.subtitle });
+      } else {
+        // Unknown error — do NOT fall back to "ride_already_accepted".
+        // Surface the real reason so drivers aren't misled when the RPC
+        // never even fired (e.g. RLS denied a pre-RPC SELECT, network error).
+        Toast.show({
+          type: 'error',
+          text1: i18next.t('driver:common.accept_failed', { defaultValue: 'No se pudo aceptar el viaje' }),
+          text2: rawMsg ? String(rawMsg).slice(0, 120) : undefined,
+        });
+        logger.error('[Accept] unknown failure', { ride_id: rideId, raw: rawMsg, err });
+      }
       removeRequest(rideId);
     } finally {
       acceptingRef.current = false;

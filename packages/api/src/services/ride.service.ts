@@ -41,6 +41,7 @@ import {
   maskPhone,
   isLocationInCuba,
   fetchRoute,
+  fetchMultiStopRoute,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
@@ -133,6 +134,7 @@ export const rideService = {
     pickup_lng: number;
     dropoff_lat: number;
     dropoff_lng: number;
+    waypoints?: { lat: number; lng: number }[];
   }): Promise<FareEstimate> {
     // Validate ride distance is within reasonable bounds (50km max)
     const directDistance = haversineDistance(
@@ -153,9 +155,16 @@ export const rideService = {
     // inputs and deduped — so when the home screen fires 4 concurrent
     // getLocalFareEstimate calls (one per service_type), each shared
     // request hits the wire exactly once instead of four times.
-    const routeKey = `route:${params.pickup_lat.toFixed(6)},${params.pickup_lng.toFixed(6)}->${params.dropoff_lat.toFixed(6)},${params.dropoff_lng.toFixed(6)}`;
+    const waypointKeyPart = params.waypoints?.map((w) => `${w.lat.toFixed(6)},${w.lng.toFixed(6)}`).join('+') ?? '';
+    const routeKey = `route:${params.pickup_lat.toFixed(6)},${params.pickup_lng.toFixed(6)}->${waypointKeyPart ? waypointKeyPart + '->' : ''}${params.dropoff_lat.toFixed(6)},${params.dropoff_lng.toFixed(6)}`;
     const surgeKey = `surge:${params.pickup_lat.toFixed(4)},${params.pickup_lng.toFixed(4)}`;
     const exchangeKey = 'exchange:usd_cup';
+
+    const allRoutePoints = [
+      { lat: params.pickup_lat, lng: params.pickup_lng },
+      ...(params.waypoints ?? []),
+      { lat: params.dropoff_lat, lng: params.dropoff_lng },
+    ];
 
     const [configResult, rulesResult, routeResult, surgeResult, experimentResult, exchangeRate] =
       await Promise.all([
@@ -170,10 +179,14 @@ export const rideService = {
           .select('*')
           .eq('service_type', params.service_type)
           .eq('is_active', true),
-        dedupe(routeKey, () => fetchRoute(
-          { lat: params.pickup_lat, lng: params.pickup_lng },
-          { lat: params.dropoff_lat, lng: params.dropoff_lng },
-        ).catch(() => null)),
+        dedupe(routeKey, () =>
+          allRoutePoints.length > 2
+            ? fetchMultiStopRoute(allRoutePoints).catch(() => null)
+            : fetchRoute(
+                { lat: params.pickup_lat, lng: params.pickup_lng },
+                { lat: params.dropoff_lat, lng: params.dropoff_lng },
+              ).catch(() => null),
+        ),
         dedupe(surgeKey, () =>
           Promise.resolve(supabase.rpc('calculate_dynamic_surge', {
             p_zone_id: null,
@@ -389,12 +402,15 @@ export const rideService = {
   async createRide(params: CreateRideParams): Promise<Ride> {
     const validParams = validate(createRideSchema, params);
 
-    // Validate coordinates are within Cuba
-    if (!isLocationInCuba(validParams.pickup_latitude, validParams.pickup_longitude)) {
-      throw new ValidationError('Pickup location is outside the service area');
-    }
-    if (!isLocationInCuba(validParams.dropoff_latitude, validParams.dropoff_longitude)) {
-      throw new ValidationError('Dropoff location is outside the service area');
+    // Validate coordinates are within Cuba (skipped in demo mode for testing abroad)
+    const IS_DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+    if (!IS_DEMO) {
+      if (!isLocationInCuba(validParams.pickup_latitude, validParams.pickup_longitude)) {
+        throw new ValidationError('Pickup location is outside the service area');
+      }
+      if (!isLocationInCuba(validParams.dropoff_latitude, validParams.dropoff_longitude)) {
+        throw new ValidationError('Dropoff location is outside the service area');
+      }
     }
 
     const supabase = getSupabaseClient();

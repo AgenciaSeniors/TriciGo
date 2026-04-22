@@ -1270,15 +1270,20 @@ function TripCompleteView() {
           </Text>
         )}
 
-        <Button
-          title={t('trip.download_receipt', { defaultValue: 'Descargar recibo' })}
-          variant="outline"
-          size="lg"
-          fullWidth
-          forceDark
-          onPress={handleDownloadReceipt}
-          className="mb-3"
-        />
+        {/* Receipt download: native-only. expo-print.printToFileAsync is not
+            implemented on web (returns undefined), so the button is hidden
+            there to avoid a destructure crash. Native APK keeps the feature. */}
+        {Platform.OS !== 'web' && (
+          <Button
+            title={t('trip.download_receipt', { defaultValue: 'Descargar recibo' })}
+            variant="outline"
+            size="lg"
+            fullWidth
+            forceDark
+            onPress={handleDownloadReceipt}
+            className="mb-3"
+          />
+        )}
 
         {/* Rider rating */}
         {showRating && rideWithRider && driverProfile?.user_id && (

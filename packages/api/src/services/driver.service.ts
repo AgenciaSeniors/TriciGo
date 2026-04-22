@@ -17,9 +17,8 @@ import type {
   SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
-import { cupToTrcCentavos, logger } from '@tricigo/utils';
+import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
-import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 
 /**
@@ -315,95 +314,30 @@ export const driverService = {
   async acceptRide(rideId: string, driverId: string): Promise<Ride> {
     const supabase = getSupabaseClient();
 
-    // 1. Fetch the driver's custom rate
-    const { data: driverProfile, error: dpErr } = await supabase
-      .from('driver_profiles')
-      .select('custom_per_km_rate_cup')
-      .eq('id', driverId)
-      .single();
-    if (dpErr) throw dpErr;
-
-    const driverCustomRate: number | null = driverProfile?.custom_per_km_rate_cup ?? null;
-
-    // 2. Fetch the ride to get service_type, distance, duration, exchange_rate
-    const { data: rideData, error: rideErr } = await supabase
-      .from('rides')
-      .select('*')
-      .eq('id', rideId)
-      .single();
-    if (rideErr) throw rideErr;
-    const ride = rideData as Ride;
-
-    // 3. Fetch service config for base_fare, per_km_rate (fallback), per_minute_rate, min_fare
-    const { data: svcConfig, error: svcErr } = await supabase
-      .from('service_type_configs')
-      .select('base_fare_cup, per_km_rate_cup, per_minute_rate_cup, min_fare_cup')
-      .eq('slug', ride.service_type)
-      .eq('is_active', true)
-      .single();
-    if (svcErr) throw svcErr;
-
-    // 4. Recalculate fare using driver's rate (or platform default)
-    const effectivePerKmRate = driverCustomRate ?? svcConfig.per_km_rate_cup;
-    const distanceKm = ride.estimated_distance_m / 1000;
-    const durationMin = ride.estimated_duration_s / 60;
-
-    const rawFare = Math.round(
-      svcConfig.base_fare_cup +
-      distanceKm * effectivePerKmRate +
-      durationMin * svcConfig.per_minute_rate_cup,
-    );
-    const baseFare = Math.max(rawFare, svcConfig.min_fare_cup);
-
-    // Apply surge multiplier
-    const surgeMultiplier = ride.surge_multiplier ?? 1.0;
-    const fareAfterSurge = Math.round(baseFare * surgeMultiplier);
-
-    // Apply discount
-    const discount = ride.discount_amount_cup ?? 0;
-    const estimatedFareCup = Math.max(fareAfterSurge - discount, 0);
-
-    // Convert CUP to TRC
-    const exchangeRate = ride.exchange_rate_usd_cup
-      ?? await exchangeRateService.getUsdCupRate();
-    const estimatedFareTrc = cupToTrcCentavos(estimatedFareCup, exchangeRate);
-
-    // 5. Atomic accept via RPC (handles locking, idempotency, heartbeat, active-ride check)
-    const { data: result, error: rpcError } = await supabase.rpc('accept_ride', {
+    // Single atomic RPC: authorization + offer validation + heartbeat check
+    // + active-ride check + fare calculation + ride/offer mutations.
+    // See migration 00142_accept_ride_v2.sql. Prior versions did 3 RLS-gated
+    // SELECTs BEFORE the RPC, which could fail (offer expired, network) and
+    // leave the driver with a misleading error while the RPC never fired.
+    const { data: result, error: rpcError } = await supabase.rpc('accept_ride_v2', {
       p_ride_id: rideId,
       p_driver_id: driverId,
     });
 
     if (rpcError) throw rpcError;
 
-    logger.info('[Accept] RPC result', {
+    logger.info('[Accept] RPC v2 result', {
       ride_id: rideId,
       result: result?.success ? 'ok' : result?.error,
       idempotent: result?.idempotent || false,
     });
 
     if (result?.error) {
-      if (result.error === 'ride_already_taken' || result.error === 'ride_not_found') {
-        throw new Error(result.error);
-      }
-      if (result.idempotent) {
-        // Same driver already accepted this ride — treat as success
-        logger.info('[Accept] Idempotent success', { ride_id: rideId });
-      } else {
-        throw new Error(result.error);
-      }
+      // Idempotent path is reported as success: true with idempotent: true
+      throw new Error(result.error);
     }
 
-    // 6. Update fare data (non-critical follow-up after atomic accept)
-    if (result?.success) {
-      await supabase.from('rides').update({
-        estimated_fare_cup: estimatedFareCup,
-        estimated_fare_trc: estimatedFareTrc,
-        driver_custom_rate_cup: driverCustomRate,
-      }).eq('id', rideId);
-    }
-
-    // 7. Return the updated ride
+    // Fetch the updated ride to return (RLS now passes because driver_id = self)
     const { data: updatedRide, error: fetchErr } = await supabase
       .from('rides')
       .select('*')
@@ -411,9 +345,15 @@ export const driverService = {
       .single();
     if (fetchErr) throw fetchErr;
 
-    const acceptedRide = updatedRide as Ride;
+    // Convert PostGIS geography (WKB hex) to { latitude, longitude } GeoPoint
+    // objects so RideMapView can render pickup/dropoff markers + auto-fit
+    // camera to the route. Without this, `activeTrip.pickup_location` would
+    // be a raw WKB string and the map renders empty (no pins, no bounds).
+    // Other driver.service.ts methods already do this — accept path was
+    // missed in the v2 refactor.
+    const acceptedRide = transformRideCoordinates(updatedRide as Record<string, unknown>);
 
-    // 8. Notify customer — delivery-specific message
+    // Notify customer — delivery-specific message (non-blocking)
     if (acceptedRide.ride_mode === 'cargo') {
       notificationService.notifyUser(
         acceptedRide.customer_id,

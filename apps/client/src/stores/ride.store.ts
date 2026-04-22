@@ -48,6 +48,11 @@ interface LocationDraft {
   location: GeoPoint;
 }
 
+interface WaypointDraft {
+  address: string;
+  location: GeoPoint | null;
+}
+
 interface DeliveryDraft {
   packageDescription: string;
   recipientName: string;
@@ -83,7 +88,7 @@ interface RideRequestDraft {
   paymentMethod: PaymentMethod;
   scheduledAt: Date | null;
   delivery: DeliveryDraft;
-  waypoints: LocationDraft[];
+  waypoints: WaypointDraft[];
   corporateAccountId: string | null;
   insuranceSelected: boolean;
   ridePreferences: RidePreferences;
@@ -305,12 +310,18 @@ export const useRideStore = create<RideState>((set, get) => ({
   addWaypoint: () =>
     set((s) => {
       if (s.draft.waypoints.length >= RIDE_CONFIG.MAX_WAYPOINTS) return s;
-      return { draft: { ...s.draft, waypoints: [...s.draft.waypoints, { address: '', location: { latitude: 0, longitude: 0 } }] } };
+      return {
+        draft: { ...s.draft, waypoints: [...s.draft.waypoints, { address: '', location: null }] },
+        fareEstimate: null,
+        fareEstimatedAt: null,
+      };
     }),
 
   removeWaypoint: (index) =>
     set((s) => ({
       draft: { ...s.draft, waypoints: s.draft.waypoints.filter((_, i) => i !== index) },
+      fareEstimate: null,
+      fareEstimatedAt: null,
     })),
 
   updateWaypoint: (index, address, location) =>
@@ -321,6 +332,8 @@ export const useRideStore = create<RideState>((set, get) => ({
           i === index ? { address, location } : wp
         ),
       },
+      fareEstimate: null,
+      fareEstimatedAt: null,
     })),
 
   setInsurance: (insuranceSelected) =>

@@ -503,6 +503,11 @@ const NOMINATIM_HEADERS: Record<string, string> = {
 /** Cuba bounding box for Nominatim search (SW lng, SW lat, NE lng, NE lat) */
 const CUBA_VIEWBOX = '-85.0,19.5,-74.0,23.5';
 
+/** Returns true if the given lat/lng is within Cuba's geographic bounding box */
+function isInCubaBox(lat: number, lng: number): boolean {
+  return lat >= 19.5 && lat <= 23.5 && lng >= -85.0 && lng <= -74.0;
+}
+
 /* ─── Shared Mapbox Token Helper ─── */
 
 function getMapboxToken(): string {
@@ -1919,13 +1924,16 @@ export async function searchAddressMapbox(
       )) || '';
     if (!token) return [];
 
+    const inCuba = proximity ? isInCubaBox(proximity.latitude, proximity.longitude) : true;
     const params = new URLSearchParams({
       q: query,
-      country: 'cu',
       language: 'es',
       limit: String(limit),
       access_token: token,
     });
+    if (inCuba) {
+      params.set('country', 'cu');
+    }
     if (proximity) {
       params.set('proximity', `${proximity.longitude},${proximity.latitude}`);
     }

@@ -156,12 +156,17 @@ export function useRideActions() {
     setFareEstimating(true);
     setError(null);
     try {
+      const validWaypoints = draft.waypoints
+        .filter((w) => w.location !== null && w.address !== '')
+        .map((w) => ({ lat: w.location!.latitude, lng: w.location!.longitude }));
+
       const estimate = await rideService.getLocalFareEstimate({
         service_type: draft.serviceType,
         pickup_lat: draft.pickup.location.latitude,
         pickup_lng: draft.pickup.location.longitude,
         dropoff_lat: draft.dropoff.location.latitude,
         dropoff_lng: draft.dropoff.location.longitude,
+        waypoints: validWaypoints.length > 0 ? validWaypoints : undefined,
       });
       setFareEstimate(estimate);
       // Auto-estimate stays on 'selecting' — inline prices, no ReviewingView transition
@@ -184,6 +189,7 @@ export function useRideActions() {
             pickup_lng: draft.pickup!.location.longitude,
             dropoff_lat: draft.dropoff!.location.latitude,
             dropoff_lng: draft.dropoff!.location.longitude,
+            waypoints: validWaypoints.length > 0 ? validWaypoints : undefined,
           }).then((est) => {
             estimates[slug] = est;
             setAllFareEstimates({ ...estimates });
@@ -231,7 +237,10 @@ export function useRideActions() {
   const pendingRequestIdRef = useRef<string | null>(null);
 
   const confirmRide = useCallback(async () => {
-    if (isSubmittingRef.current) return; // Block double-tap
+    if (isSubmittingRef.current) {
+      Toast.show({ type: 'info', text1: i18next.t('rider:ride.processing', { defaultValue: 'Procesando tu solicitud...' }) });
+      return;
+    }
     if (pendingRequestIdRef.current !== null) return; // Request already in flight
 
     const requestId = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -409,14 +418,17 @@ export function useRideActions() {
         // BUG-068: Validate discount is non-negative before sending
         discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discountAmount ?? 0) : undefined,
         scheduled_at: d.scheduledAt ? d.scheduledAt.toISOString() : undefined,
-        waypoints: d.waypoints.length > 0
-          ? d.waypoints.map((wp, i) => ({
-              sort_order: i + 1,
-              latitude: wp.location.latitude,
-              longitude: wp.location.longitude,
-              address: wp.address,
-            }))
-          : undefined,
+        waypoints: (() => {
+          const valid = d.waypoints.filter((wp) => wp.location !== null && wp.address !== '');
+          return valid.length > 0
+            ? valid.map((wp, i) => ({
+                sort_order: i + 1,
+                latitude: wp.location!.latitude,
+                longitude: wp.location!.longitude,
+                address: wp.address,
+              }))
+            : undefined;
+        })(),
         corporate_account_id: d.corporateAccountId ?? undefined,
         insurance_selected: d.insuranceSelected,
         insurance_premium_cup: d.insuranceSelected ? (fareEstimate?.insurance_premium_cup ?? 0) : 0,
@@ -770,7 +782,23 @@ export function useRideActions() {
         });
       }
     } catch (err) {
-      setError(getErrorMessage(err));
+      // If the ride is already closed on the server (auto-canceled by search timeout
+      // or manually closed from another session), treat it as a successful cancel:
+      // client state is out of sync and resetting is the right recovery.
+      const msg = getErrorMessage(err);
+      if (msg.includes('ride_already_closed') || msg.includes('already_closed')) {
+        channelRef.current?.unsubscribe();
+        channelRef.current = null;
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        resetAll();
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('rider:ride.already_closed_title', { defaultValue: 'El viaje ya se había cerrado' }),
+          text2: i18next.t('rider:ride.already_closed_msg', { defaultValue: 'Se canceló automáticamente porque no se encontró conductor.' }),
+        });
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

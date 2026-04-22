@@ -322,6 +322,18 @@ function NativeDriverHomeScreen() {
     [driverLat, driverLng],
   );
 
+  // Auto-fly the camera to the first GPS fix. The <Camera /> defaultSettings
+  // only applies on mount — if the map renders before location is available
+  // (fallback demo/Havana center) and driverLocation later transitions from
+  // null → coords, we need to explicitly move the camera.
+  const hasFlownToInitialFixRef = useRef(false);
+  useEffect(() => {
+    if (!hasFlownToInitialFixRef.current && driverLocation) {
+      hasFlownToInitialFixRef.current = true;
+      mapRef.current?.flyTo(driverLocation.latitude, driverLocation.longitude, 15);
+    }
+  }, [driverLocation]);
+
   // Center for hotspot/peer lookups (stable reference so polling doesn't
   // thrash every render). Only updates when crossing ~300m.
   const mapCenter = useMemo(
@@ -480,11 +492,13 @@ function NativeDriverHomeScreen() {
     setToggling(true);
     try {
       const newStatus = !isOnline;
-      // Use demo-aware fallback so a driver testing in Brazil sends
-      // São Paulo (or whatever EXPO_PUBLIC_DEMO_CITY resolves to)
-      // instead of Havana as their initial online position when GPS
-      // isn't available. In prod, demo mode is off → same as HAVANA_CENTER.
-      await driverService.setOnlineStatus(profile.id, newStatus, newStatus ? getMapFallbackLatLng() : undefined);
+      // Don't write a fallback location on toggle — the real GPS from
+      // watchPositionAsync (in useDriverLocationTracking) is the single
+      // source of truth for current_location. Writing a fallback here
+      // would persist stale/wrong coords if GPS permission is denied or
+      // the first fix is slow, making the driver discoverable at a
+      // location they aren't actually at.
+      await driverService.setOnlineStatus(profile.id, newStatus, undefined);
       setOnline(newStatus);
       trackEvent(newStatus ? 'driver_went_online' : 'driver_went_offline');
     } catch {

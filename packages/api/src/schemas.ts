@@ -3,8 +3,16 @@ import { z } from 'zod';
 // Base validators
 export const uuidSchema = z.string().uuid('ID inválido');
 export const cubanPhoneSchema = z.string().regex(/^\+53\d{8}$/, 'Número cubano inválido (+53XXXXXXXX)');
-export const cubaLatSchema = z.number().min(19.5).max(23.5);
-export const cubaLngSchema = z.number().min(-85.0).max(-74.0);
+
+// Demo mode: when EXPO_PUBLIC_DEMO_MODE=true, relax geographic bounds to global
+// so the app can be tested outside Cuba (see docs/DEMO_MODE.md).
+const IS_DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+export const cubaLatSchema = IS_DEMO
+  ? z.number().min(-90).max(90)
+  : z.number().min(19.5).max(23.5);
+export const cubaLngSchema = IS_DEMO
+  ? z.number().min(-180).max(180)
+  : z.number().min(-85.0).max(-74.0);
 
 // Enums
 export const serviceTypeSchema = z.enum(['triciclo_basico', 'triciclo_premium', 'triciclo_cargo', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria']);

@@ -6,6 +6,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
+import { getMapFallbackCoordLngLat } from '../config/demo';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -102,7 +103,9 @@ const vehicleMarkerImages: Record<string, any> = {
   confort: require('../../assets/vehicles/markers/confort.png'),
 };
 
-const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136]; // [lng, lat]
+// Demo-aware map fallback: returns São Paulo when EXPO_PUBLIC_DEMO_MODE=true,
+// Havana otherwise. Same pattern as apps/client/src/components/RideMapView.tsx.
+const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const STYLE_DARK_NAV = 'mapbox://styles/mapbox/navigation-night-v1';
 const STYLE_STREETS = MAP_STYLE_LIGHT;

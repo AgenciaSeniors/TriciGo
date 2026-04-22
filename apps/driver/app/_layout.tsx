@@ -16,6 +16,7 @@ import { AppProviders } from '@/providers/app-providers';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
+import { useLocationStore } from '@/stores/location.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
@@ -96,6 +97,57 @@ function RootNavigator() {
   // initMapbox() call above.
   useEffect(() => {
     initMapbox();
+  }, []);
+
+  // Request foreground GPS permission early and seed useLocationStore with
+  // an initial fix so the map centers on the real user location instead of
+  // staying on the demo/Havana fallback. Tries getLastKnownPositionAsync first
+  // (instant if cached), then getCurrentPositionAsync at Low accuracy (wifi/cell,
+  // not waiting for satellite lock). Non-blocking: on failure, map uses fallback.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const Location = await import('expo-location');
+        const perm = await Location.requestForegroundPermissionsAsync();
+        console.log('[DriverLocation] permission status:', perm.status);
+        if (perm.status !== 'granted' || cancelled) return;
+
+        // Fast path: last known position (cached by OS from recent GPS use)
+        try {
+          const last = await Location.getLastKnownPositionAsync({
+            maxAge: 60 * 60 * 1000,   // up to 1h old
+            requiredAccuracy: 500,    // ≤500m horizontal accuracy
+          });
+          if (last && !cancelled) {
+            console.log('[DriverLocation] last known fix:', last.coords.latitude, last.coords.longitude);
+            useLocationStore.getState().setLocation(
+              last.coords.latitude,
+              last.coords.longitude,
+              last.coords.heading ?? null,
+            );
+          }
+        } catch (e) {
+          console.log('[DriverLocation] getLastKnownPositionAsync error:', String(e));
+        }
+
+        // Fresh fix: low accuracy is fast (wifi/cell, no satellite wait)
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Low,
+        });
+        if (cancelled) return;
+        console.log('[DriverLocation] current fix:', pos.coords.latitude, pos.coords.longitude);
+        useLocationStore.getState().setLocation(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          pos.coords.heading ?? null,
+        );
+      } catch (err) {
+        console.log('[DriverLocation] startup fix failed:', String(err));
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Download Havana offline map tiles (runs once per week)
