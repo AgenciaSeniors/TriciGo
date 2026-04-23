@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Image } from 'react-native';
+import { View, Image, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -111,10 +112,29 @@ export default function ReviewScreen() {
     } catch (err) {
       console.error('Onboarding submit error:', err);
       setError(t('errors.generic'));
+      // Consistent with other onboarding screens: global toast in case
+      // the inline red text is below the fold.
+      Toast.show({ type: 'error', text1: t('errors.generic'), visibilityTime: 3000 });
     } finally {
       setSubmitting(false);
     }
   };
+
+  // UX: tiny "Editar" header-action that jumps back to a specific step.
+  // Without this, a driver who spots a typo has no visible way to fix it
+  // short of killing the app and starting over.
+  const EditLink = ({ step }: { step: 'personal-info' | 'vehicle-info' | 'documents' }) => (
+    <Pressable
+      onPress={() => router.push(`/onboarding/${step}`)}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={t('onboarding.edit_section', { defaultValue: 'Editar sección' })}
+    >
+      <Text variant="caption" style={{ color: '#FF4D00', fontWeight: '600' }}>
+        {t('common.edit', { defaultValue: 'Editar' })}
+      </Text>
+    </Pressable>
+  );
 
   return (
     <Screen scroll bg="dark" statusBarStyle="light-content" padded>
@@ -130,9 +150,12 @@ export default function ReviewScreen() {
 
         {/* Personal Info */}
         <Card forceDark variant="surface" padding="md" className="mb-4">
-          <Text variant="label" color="secondary" className="mb-2">
-            {t('onboarding.personal_info_summary')}
-          </Text>
+          <View className="flex-row items-center justify-between mb-2">
+            <Text variant="label" color="secondary">
+              {t('onboarding.personal_info_summary')}
+            </Text>
+            <EditLink step="personal-info" />
+          </View>
           <Text variant="body" color="inverse">{personalInfo.full_name}</Text>
           <Text variant="bodySmall" color="secondary">{personalInfo.phone || user?.phone}</Text>
           {personalInfo.email ? (
@@ -142,9 +165,12 @@ export default function ReviewScreen() {
 
         {/* Vehicle — Visual card with image */}
         <Card forceDark variant="surface" padding="md" className="mb-4">
-          <Text variant="label" color="secondary" className="mb-3">
-            {t('onboarding.vehicle_summary')}
-          </Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text variant="label" color="secondary">
+              {t('onboarding.vehicle_summary')}
+            </Text>
+            <EditLink step="vehicle-info" />
+          </View>
           <View className="flex-row items-center mb-3">
             {vehicle.service_type_slug && VEHICLE_IMAGES[vehicle.service_type_slug] && (
               <Image
@@ -186,9 +212,12 @@ export default function ReviewScreen() {
 
         {/* Documents */}
         <Card forceDark variant="surface" padding="md" className="mb-6">
-          <Text variant="label" color="secondary" className="mb-2">
-            {t('onboarding.documents_summary')}
-          </Text>
+          <View className="flex-row items-center justify-between mb-2">
+            <Text variant="label" color="secondary">
+              {t('onboarding.documents_summary')}
+            </Text>
+            <EditLink step="documents" />
+          </View>
           <View className="flex-row items-center">
             <Ionicons
               name={uploadedCount === 5 ? 'checkmark-circle' : 'alert-circle'}
@@ -213,6 +242,17 @@ export default function ReviewScreen() {
           loading={submitting}
           disabled={submitting || uploadedCount < 5 || !driverProfileId}
         />
+        {/* UX: when Submit is disabled because docs are missing, say so
+             explicitly. Previously the button just looked grayed out with
+             no explanation — drivers thought the app was broken. */}
+        {!submitting && uploadedCount < 5 && (
+          <Text variant="caption" style={{ color: '#F59E0B', textAlign: 'center', marginTop: 8 }}>
+            {t('onboarding.submit_disabled_docs', {
+              missing: 5 - uploadedCount,
+              defaultValue: `Falta${5 - uploadedCount === 1 ? '' : 'n'} ${5 - uploadedCount} documento${5 - uploadedCount === 1 ? '' : 's'} por subir.`,
+            })}
+          </Text>
+        )}
       </View>
     </Screen>
   );

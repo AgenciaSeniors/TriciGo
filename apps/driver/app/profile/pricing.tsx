@@ -7,9 +7,10 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
+import Toast from 'react-native-toast-message';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
-import { formatCUP, validateDriverRate } from '@tricigo/utils';
+import { formatCUP, triggerHaptic, validateDriverRate } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 
 export default function DriverPricingScreen() {
@@ -75,13 +76,44 @@ export default function DriverPricingScreen() {
       await driverService.updateCustomRate(driverProfile.id, numValue);
       setCurrentRate(numValue);
       setSaved(true);
+      triggerHaptic('success');
+      Toast.show({
+        type: 'success',
+        text1: t('pricing.saved_title', { defaultValue: 'Tarifa actualizada' }),
+        text2: t('pricing.saved_sub', {
+          rate: formatCUP(numValue),
+          defaultValue: `${formatCUP(numValue)}/km activa en tu próximo viaje`,
+        }),
+        visibilityTime: 2500,
+      });
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       setError(t('pricing.error_saving'));
+      Toast.show({ type: 'error', text1: t('pricing.error_saving'), visibilityTime: 2500 });
     } finally {
       setSaving(false);
     }
   }
+
+  // UX: clear error the moment user retypes — old red shouldn't linger
+  // while they're fixing the value.
+  const handleInputChange = (v: string) => {
+    // strip non-digits so paste/autofill behaves
+    const digits = v.replace(/[^0-9]/g, '');
+    setInputValue(digits);
+    if (error) setError(null);
+    if (saved) setSaved(false);
+  };
+
+  // UX: live preview. Without it the driver types a rate blind — they
+  // don't see how their choice affects ride earnings until they've
+  // completed a whole ride. A 10km preview at the typed rate is the
+  // cheapest way to make the trade-off concrete.
+  const previewFor10km = (() => {
+    const num = parseInt(inputValue, 10);
+    if (isNaN(num) || num <= 0) return null;
+    return num * 10;
+  })();
 
   async function handleReset() {
     if (!driverProfile?.id) return;
@@ -180,7 +212,7 @@ export default function DriverPricingScreen() {
           <View className="flex-row items-center gap-3">
             <TextInput
               value={inputValue}
-              onChangeText={setInputValue}
+              onChangeText={handleInputChange}
               keyboardType="number-pad"
               placeholder={String(defaultRate)}
               placeholderTextColor="#94A3B8"
@@ -201,6 +233,20 @@ export default function DriverPricingScreen() {
               CUP/km
             </Text>
           </View>
+
+          {/* Live preview of earnings impact for a 10km reference trip.
+               Helps the driver reason about the trade-off concretely. */}
+          {previewFor10km !== null && !error && (
+            <View className="flex-row items-center gap-1 mt-2">
+              <Ionicons name="analytics-outline" size={14} color="#64748B" />
+              <Text variant="caption" style={{ color: '#64748B' }}>
+                {t('pricing.preview_10km', {
+                  amount: formatCUP(previewFor10km),
+                  defaultValue: `Un viaje de 10 km: ${formatCUP(previewFor10km)}`,
+                })}
+              </Text>
+            </View>
+          )}
 
           {error && (
             <Text variant="caption" className="text-red-400 mt-2">

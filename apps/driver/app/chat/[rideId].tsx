@@ -136,9 +136,11 @@ export default function ChatScreen() {
               {t('chat.online', { defaultValue: 'En línea' })}
             </Text>
           </View>
-          <Pressable style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="call-outline" size={22} color="#0F172A" />
-          </Pressable>
+          {/* UX: the previous call-outline Pressable had no onPress handler —
+               it silently did nothing when tapped, breaking trust. Until we
+               can wire a real call path (requires fetching rider phone with
+               RLS-safe RPC), remove the button entirely. Drivers can still
+               reach the rider via the chat itself or SOS from the trip view. */}
         </View>
 
         {/* Messages */}
