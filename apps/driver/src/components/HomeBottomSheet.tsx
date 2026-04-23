@@ -302,8 +302,15 @@ function SheetContent({
           {t('home.searching_rides', {
             defaultValue: 'Buscando viajes cerca de ti...',
           })}
-          {estimatedWaitMinutes ? `  · ~${estimatedWaitMinutes} min` : ''}
         </RNText>
+        {/* UX: promote estimated wait time from an inline "· ~5 min" suffix
+             to a second line with stronger visual weight, so drivers parse
+             it at a glance instead of mixing it into the searching label. */}
+        {estimatedWaitMinutes ? (
+          <RNText style={{ color: '#FF4D00', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 4 }}>
+            ~{estimatedWaitMinutes} {t('home.wait_minutes', { defaultValue: 'min de espera estimado' })}
+          </RNText>
+        ) : null}
       </View>
     </Animated.View>
   ) : null;

@@ -311,17 +311,25 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
         />
       </View>
 
-      {/* ── Net earnings — hero value ── */}
+      {/* ── Net earnings — hero value ──
+           UX: add a "Ganás" micro-label so the big number is immediately
+           understood as the driver's cut (not the total fare). Without it,
+           "$2550" + "Tarifa total: 3,000 CUP" below was ambiguous — drivers
+           could mis-read which number they actually take home. */}
+      <Text variant="caption" style={{ color: '#9CA3AF', fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 }}>
+        {t('home.net_earnings_label', { defaultValue: 'Ganás' })}
+      </Text>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
         <Text variant="stat" style={{ color: profitColor }}>
           ${netEarnings.toLocaleString()}
         </Text>
       </View>
 
-      {/* Fare (secondary) */}
+      {/* Fare (secondary) — reword to make it clear this is what the
+           passenger pays, distinct from what the driver earns. */}
       <View style={{ marginBottom: 16 }} accessible accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(driverFare.cup) })}>
         <Text variant="caption" color="secondary">
-          {t('trip.total_fare')}: {formatCUP(driverFare.cup)}
+          {t('home.passenger_pays', { defaultValue: 'El pasajero paga' })}: {formatCUP(driverFare.cup)}
           {driverFare.trc != null ? ` (~${formatTRC(driverFare.trc)})` : ''}
         </Text>
       </View>

@@ -626,7 +626,9 @@ export function DriverTripView() {
         />
       )}
 
-      {/* 2. Bottom toolbar row — navigate, chat, SOS, cancel */}
+      {/* 2. Bottom toolbar row — navigate (external), compass (in-app nav),
+           chat, SOS. Labeled with tiny captions below each icon so new
+           drivers can identify each action without memorising icons. */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8, marginTop: 4 }}>
         {navTarget && !inAppNav.isNavigating && (
           <Pressable
@@ -634,11 +636,14 @@ export function DriverTripView() {
               AsyncStorage.setItem('preferred_nav', 'external');
               openNavigation(navTarget.latitude, navTarget.longitude);
             }}
-            style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
+            style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
             accessibilityRole="button"
             accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
           >
             <Ionicons name="navigate" size={22} color="#60A5FA" />
+            <Text variant="caption" style={{ color: '#60A5FA', fontSize: 10, marginTop: 2 }}>
+              {t('trip.toolbar_maps', { defaultValue: 'Maps' })}
+            </Text>
           </Pressable>
         )}
         {navTarget && !inAppNav.isNavigating && (
@@ -647,29 +652,38 @@ export function DriverTripView() {
               AsyncStorage.setItem('preferred_nav', 'inapp');
               inAppNav.startNavigation(navTarget);
             }}
-            style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
+            style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
             accessibilityRole="button"
             accessibilityLabel={t('trip.restart_nav', { defaultValue: 'Restart navigation' })}
           >
             <Ionicons name="compass" size={22} color="#FF4D00" />
+            <Text variant="caption" style={{ color: '#FF4D00', fontSize: 10, marginTop: 2 }}>
+              {t('trip.toolbar_guide', { defaultValue: 'Guía' })}
+            </Text>
           </Pressable>
         )}
         <Pressable
           onPress={() => router.push(`/chat/${activeTrip.id}`)}
-          style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
+          style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
           accessibilityRole="button"
           accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
         >
           <Ionicons name="chatbubble" size={22} color="#9CA3AF" />
+          <Text variant="caption" style={{ color: '#9CA3AF', fontSize: 10, marginTop: 2 }}>
+            {t('trip.toolbar_chat', { defaultValue: 'Chat' })}
+          </Text>
         </Pressable>
         <Pressable
           onPress={handleSOS}
-          style={{ padding: 12, minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center' }}
+          style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
           accessibilityRole="button"
           accessibilityLabel="SOS"
           accessibilityHint={t('trip.sos_body')}
         >
           <Ionicons name="alert-circle" size={22} color="#EF4444" />
+          <Text variant="caption" style={{ color: '#EF4444', fontSize: 10, marginTop: 2 }}>
+            SOS
+          </Text>
         </Pressable>
       </View>
 
