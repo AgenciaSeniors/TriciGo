@@ -493,10 +493,24 @@ export function RideActiveView() {
       }
       const url = buildShareUrl(token);
 
-      await Share.share({
+      const shareResult = await Share.share({
         message: t('ride.share_message', { url }),
         url, // iOS uses this field
       });
+      /* UX: Share.share() completes silently from the user's POV — they
+         return from WhatsApp/SMS and see the same screen with no change.
+         A light haptic + toast confirms "link compartido" so they know
+         the loop closed. Only fires when the OS confirms the share
+         actually happened (not on cancel/dismiss). */
+      if (shareResult.action === Share.sharedAction) {
+        triggerHaptic('light');
+        Toast.show({
+          type: 'success',
+          text1: t('ride.share_success_title', { defaultValue: 'Viaje compartido' }),
+          text2: t('ride.share_success_body', { defaultValue: 'Podés dejar de compartir desde este viaje.' }),
+          visibilityTime: 2500,
+        });
+      }
     } catch (err: unknown) {
       // Share.share rejects on iOS if user cancels — ignore that
       const message = err instanceof Error ? err.message : '';
@@ -614,6 +628,7 @@ export function RideActiveView() {
 
   const handleCancelPress = async () => {
     if (!userId) return;
+    triggerHaptic('light');
     setPreviewLoading(true);
     try {
       // Fetch both penalty preview and cancellation fee in parallel
@@ -631,6 +646,20 @@ export function RideActiveView() {
       setCancellationFeePreview(
         feeResult.status === 'fulfilled' ? feeResult.value : null,
       );
+
+      /* UX: when the fee preview fetch fails, the sheet used to open
+         with fee=$0 silently — riders tapped confirm thinking cancelling
+         was free, and were sometimes charged afterwards. Surface the
+         uncertainty explicitly so they can decide whether to proceed
+         without a reliable estimate, wait a moment, or keep the ride. */
+      if (feeResult.status === 'rejected' && activeRide?.status !== 'searching') {
+        Toast.show({
+          type: 'info',
+          text1: t('ride.cancel_fee_preview_failed_title', { defaultValue: 'No se pudo calcular la tarifa' }),
+          text2: t('ride.cancel_fee_preview_failed_body', { defaultValue: 'Si cancelás ahora podría aplicarse un cargo. Esperá un momento e intentá de nuevo si preferís certeza.' }),
+          visibilityTime: 4000,
+        });
+      }
     } catch {
       setPenaltyPreview({ penaltyAmount: 0, cancelCount24h: 0 });
       setCancellationFeePreview(null);
@@ -731,39 +760,57 @@ export function RideActiveView() {
           </View>
         )}
       </View>
-      {positionIsStale && (
-        <View
-          className="flex-row items-center justify-center mt-2 mx-4 px-3 py-2 rounded-lg"
-          style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
-        >
-          <Ionicons name="warning-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
-          <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
-            {t('ride.position_stale', { defaultValue: 'Posición desactualizada' })}
-          </Text>
-        </View>
-      )}
-      {driverPosState.isCached && driverPosState.cachedAt && !positionIsStale && (
-        <View className="items-center mt-1">
-          <Text variant="caption" color="secondary" className="opacity-60">
-            {t('ride.last_seen', {
-              time: formatTimeAgo(driverPosState.cachedAt),
-              defaultValue: 'Visto hace {{time}}',
-            })}
-          </Text>
-        </View>
-      )}
-      {/* Driver not moving warning banner (4.2) */}
-      {driverNotMoving && (
-        <View
-          className="flex-row items-center justify-center mx-4 mt-2 px-3 py-2 rounded-lg"
-          style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
-        >
-          <Ionicons name="alert-circle-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
-          <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
-            {t('ride.driver_not_moving', { defaultValue: 'Tu conductor no se ha movido en 5 minutos' })}
-          </Text>
-        </View>
-      )}
+      {/* Live-tracking state — UX: three overlapping banners (stale,
+           last-seen, not-moving) used to cluster vertically with mixed
+           messaging. Riders couldn't tell if any one of them was the
+           "real" problem. Collapse to a single banner with priority:
+             1. stuck       — highest urgency ("not moving 5+ min")
+             2. stale       — position feed lagging
+             3. cached-ok   — subtle "última actualización" when source
+                              flipped to cache but freshness is fine
+           so only one status message is ever visible and they compose
+           into a clear hierarchy. */}
+      {(() => {
+        if (driverNotMoving) {
+          return (
+            <View
+              className="flex-row items-center justify-center mx-4 mt-2 px-3 py-2 rounded-lg"
+              style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
+            >
+              <Ionicons name="alert-circle-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
+              <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
+                {t('ride.driver_not_moving', { defaultValue: 'Tu conductor no se ha movido en 5 minutos' })}
+              </Text>
+            </View>
+          );
+        }
+        if (positionIsStale) {
+          return (
+            <View
+              className="flex-row items-center justify-center mt-2 mx-4 px-3 py-2 rounded-lg"
+              style={{ backgroundColor: isDark ? '#92400E' : '#FEF3C7' }}
+            >
+              <Ionicons name="warning-outline" size={16} color={isDark ? '#FDE68A' : '#92400E'} />
+              <Text variant="caption" className="ml-1 font-semibold" style={{ color: isDark ? '#FDE68A' : '#92400E' }}>
+                {t('ride.position_stale', { defaultValue: 'Posición desactualizada' })}
+              </Text>
+            </View>
+          );
+        }
+        if (driverPosState.isCached && driverPosState.cachedAt) {
+          return (
+            <View className="items-center mt-1">
+              <Text variant="caption" color="secondary" className="opacity-60">
+                {t('ride.last_seen', {
+                  time: formatTimeAgo(driverPosState.cachedAt),
+                  defaultValue: 'Visto hace {{time}}',
+                })}
+              </Text>
+            </View>
+          );
+        }
+        return null;
+      })()}
 
       <View className="h-4" />
 
@@ -916,7 +963,13 @@ export function RideActiveView() {
           </Pressable>
           {/* I4.1: See more / See less toggle — min 44px touch target */}
           <Pressable
-            onPress={() => setDriverExpanded(!driverExpanded)}
+            onPress={() => {
+              // UX: match the receipt-actions expander from R2 — a light
+              // haptic on every tap confirms the toggle landed even when
+              // the content shift is subtle (adding a single "year" row).
+              triggerHaptic('light');
+              setDriverExpanded(!driverExpanded);
+            }}
             style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}
             accessibilityRole="button"
           >
