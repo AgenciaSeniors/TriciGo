@@ -15,12 +15,13 @@ import { ErrorState } from '@tricigo/ui/ErrorState';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
+import { useRideStore } from '@/stores/ride.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
 import type { ChatMessage } from '@tricigo/types';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { IconButton } from '@tricigo/ui/IconButton';
 import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
-import { getQuickRepliesForRole } from '@tricigo/utils';
+import { getQuickRepliesForRole, triggerHaptic } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -36,6 +37,7 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
   const remoteTyping = useChatStore((s) => s.remoteTyping);
+  const rideWithDriver = useRideStore((s) => s.rideWithDriver);
 
   useChatInit(rideId!);
   const { sendMessage, notifyTyping } = useChatActions(rideId!);
@@ -69,6 +71,10 @@ export default function ChatScreen() {
     if (!text.trim()) return;
     const msg = text;
     setText('');
+    // UX: a light haptic confirms the message left the keyboard — the
+    // send button loses focus + the text field clears anyway, but the
+    // tactile tap closes the action loop on the rider's finger.
+    triggerHaptic('light');
     await sendMessage(msg);
   };
 
@@ -117,20 +123,41 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
-        {/* Header */}
+        {/* Header — UX: a generic "Chat del conductor" gave no context for
+             who the rider is actually talking to. If we have the driver's
+             name + plate (we always do during an active ride) show them
+             so the rider has instant certainty they're messaging the
+             right person. Falls back to the generic label pre-match. */}
         <View className="px-4 py-3 border-b border-neutral-100">
           <ScreenHeader
-            title={t('chat.chat_driver')}
+            title={rideWithDriver?.driver_name
+              ? rideWithDriver.driver_name.split(' ')[0]
+              : t('chat.chat_driver')}
+            subtitle={
+              rideWithDriver?.vehicle_plate || rideWithDriver?.vehicle_make
+                ? [
+                    rideWithDriver.vehicle_make,
+                    rideWithDriver.vehicle_model,
+                    rideWithDriver.vehicle_plate ? `· ${rideWithDriver.vehicle_plate}` : null,
+                  ].filter(Boolean).join(' ')
+                : undefined
+            }
             onBack={() => router.back()}
             className="mb-0"
           />
         </View>
 
-        {/* Offline banner */}
+        {/* Offline banner — UX: the old copy promised auto-delivery on
+             reconnect ("se enviarán cuando vuelvas a estar en línea") but
+             the chat service doesn't actually queue offline sends — it
+             fails immediately with a _failed flag on the optimistic
+             message. Be honest: tell the rider the connection is gone
+             and to retry manually, so they don't assume a typed message
+             is safely buffered. */}
         {isOffline && (
           <View className="bg-red-500 px-4 py-2">
             <Text variant="caption" color="inverse" className="text-center">
-              {t('chat.offline_banner', { defaultValue: 'Sin conexión. Los mensajes se enviarán cuando vuelvas a estar en línea.' })}
+              {t('chat.offline_banner', { defaultValue: 'Sin conexión. Intentá enviar de nuevo cuando se restablezca.' })}
             </Text>
           </View>
         )}
@@ -160,9 +187,16 @@ export default function ChatScreen() {
           accessibilityLiveRegion="polite"
           contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center">
-              <Text variant="body" color="secondary">
+            /* UX: a lone "no_messages" line felt dead — riders who opened
+               the chat screen wondered if it was broken. Add a gentle
+               suggestion pointing at the quick-reply bar right below so
+               they can kick off the conversation with one tap. */
+            <View className="flex-1 items-center justify-center px-8">
+              <Text variant="body" color="secondary" className="text-center mb-2">
                 {t('chat.no_messages')}
+              </Text>
+              <Text variant="caption" color="tertiary" className="text-center">
+                {t('chat.no_messages_hint', { defaultValue: 'Tocá una respuesta rápida o escribí abajo para comenzar.' })}
               </Text>
             </View>
           }
@@ -189,25 +223,40 @@ export default function ChatScreen() {
         />
 
         {/* Input bar */}
-        <View className="flex-row items-center px-4 py-2 border-t border-neutral-100">
-          <TextInput
-            value={text}
-            onChangeText={(v) => { setText(v); notifyTyping(); }}
-            placeholder={t('chat.placeholder')}
-            accessibilityLabel={t('chat.placeholder')}
-            className="flex-1 bg-neutral-100 rounded-full px-4 py-2 text-base"
-            multiline
-            maxLength={500}
-          />
-          <IconButton
-            icon="send"
-            variant={text.trim() ? 'primary' : 'secondary'}
-            size="md"
-            onPress={handleSend}
-            disabled={!text.trim()}
-            className="ml-2"
-            label={t('chat.send', { defaultValue: 'Send' })}
-          />
+        <View className="px-4 py-2 border-t border-neutral-100">
+          <View className="flex-row items-center">
+            <TextInput
+              value={text}
+              onChangeText={(v) => { setText(v); notifyTyping(); }}
+              placeholder={t('chat.placeholder')}
+              accessibilityLabel={t('chat.placeholder')}
+              className="flex-1 bg-neutral-100 rounded-full px-4 py-2 text-base"
+              multiline
+              maxLength={500}
+            />
+            <IconButton
+              icon="send"
+              variant={text.trim() ? 'primary' : 'secondary'}
+              size="md"
+              onPress={handleSend}
+              disabled={!text.trim()}
+              className="ml-2"
+              label={t('chat.send', { defaultValue: 'Send' })}
+            />
+          </View>
+          {/* UX: no counter by default avoids noise, but drivers writing
+               a longer explanation hit the cap silently and wondered why
+               typing stopped registering. Surface the counter only in
+               the last ~20% of the limit so short messages stay clean. */}
+          {text.length >= 400 && (
+            <Text
+              variant="caption"
+              color={text.length >= 490 ? 'error' : 'tertiary'}
+              className="text-right mt-1 mr-2"
+            >
+              {text.length}/500
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Screen>

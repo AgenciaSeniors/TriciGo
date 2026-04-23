@@ -6,6 +6,8 @@ import { colors } from '@tricigo/theme';
 
 export interface ScreenHeaderProps {
   title: string;
+  /** Optional second line under the title — used for context like vehicle plate in chat. */
+  subtitle?: string;
   onBack?: () => void;
   rightAction?: React.ReactNode;
   className?: string;
@@ -15,6 +17,7 @@ export interface ScreenHeaderProps {
 
 export function ScreenHeader({
   title,
+  subtitle,
   onBack,
   rightAction,
   className,
@@ -32,7 +35,19 @@ export function ScreenHeader({
           <Ionicons name="arrow-back" size={20} color={light ? 'white' : colors.neutral[900]} />
         </Pressable>
       )}
-      <Text variant="h3" className="flex-1" color={light ? 'inverse' : undefined}>{title}</Text>
+      <View className="flex-1">
+        <Text variant="h3" color={light ? 'inverse' : undefined}>{title}</Text>
+        {subtitle ? (
+          <Text
+            variant="caption"
+            color={light ? 'inverse' : 'secondary'}
+            style={light ? { opacity: 0.8 } : undefined}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
       {rightAction && <View>{rightAction}</View>}
     </View>
   );
