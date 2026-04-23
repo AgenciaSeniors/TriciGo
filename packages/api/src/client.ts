@@ -143,6 +143,42 @@ export function getSupabaseClient(): SupabaseClient {
   // Patch locks as a safety net (belt + suspenders)
   if (_isWeb) patchClientLocks(clientInstance);
 
+  // Realtime JWT sync fix.
+  //
+  // supabase-js 2.49.x has a known gotcha: realtime.setAuth() is supposed to
+  // be called automatically via onAuthStateChange, but in practice the
+  // realtime connection gets established with only the apikey (no user JWT)
+  // when the session is hydrated from storage *after* the client is
+  // constructed — which is exactly what happens on web (persistSession).
+  // The result is that postgres_changes events are silently filtered by RLS
+  // as the `anon` role (auth.uid() = NULL), so authenticated users never
+  // see updates for rows they own.
+  //
+  // We explicitly pump the user's access_token into realtime:
+  //   1. On initial session load (whatever the auth client finds).
+  //   2. On every SIGNED_IN / TOKEN_REFRESHED / SIGNED_OUT event.
+  //
+  // Verified end-to-end via the .realtime-probe.mjs script (2026-04-23):
+  // without setAuth, events for rides.customer_id = current user DO NOT
+  // arrive. With setAuth, events arrive within ~1s of the server-side
+  // UPDATE, as expected.
+  const setRealtimeAuth = (token: string | null) => {
+    try {
+      // Passing null resets realtime auth to the anon apikey (sign-out path).
+      clientInstance.realtime.setAuth(token ?? supabaseAnonKey);
+    } catch { /* best-effort */ }
+  };
+
+  // (1) One-shot initial: whatever session is in storage at boot.
+  clientInstance.auth.getSession().then(({ data }) => {
+    setRealtimeAuth(data.session?.access_token ?? null);
+  }).catch(() => { /* ignore */ });
+
+  // (2) Subscribe to future auth state changes.
+  clientInstance.auth.onAuthStateChange((_event, session) => {
+    setRealtimeAuth(session?.access_token ?? null);
+  });
+
   setClientInstance(clientInstance);
   return clientInstance;
 }
