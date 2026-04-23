@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
-import { getInitials, logger } from '@tricigo/utils';
+import { getInitials, logger, triggerHaptic } from '@tricigo/utils';
 import { reviewService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { useRideStore } from '@/stores/ride.store';
@@ -55,12 +55,27 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
 
   const handleCall = useCallback(() => {
     const phone = rideWithDriver?.driver_masked_phone ?? rideWithDriver?.driver_phone;
-    if (phone) Linking.openURL(`tel:${phone}`);
+    if (phone) {
+      // UX: match the consistent pattern from R2/R5/R6 — a light haptic
+      // confirms the tap landed before the phone app hand-off.
+      triggerHaptic('light');
+      Linking.openURL(`tel:${phone}`);
+    }
   }, [rideWithDriver]);
 
   const handleChat = useCallback(() => {
     const rideId = rideWithDriver?.id;
-    if (rideId) router.push(`/chat/${rideId}`);
+    if (rideId) {
+      triggerHaptic('light');
+      router.push(`/chat/${rideId}`);
+    }
+  }, [rideWithDriver, router]);
+
+  const handleReport = useCallback(() => {
+    const rideId = rideWithDriver?.id;
+    if (!rideId) return;
+    triggerHaptic('warning');
+    router.push(`/ride/dispute/${rideId}`);
   }, [rideWithDriver, router]);
 
   // Derive data from rideWithDriver (already in store)
@@ -96,7 +111,12 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Avatar */}
+        {/* Avatar — UX: while summary + reviews fetch, the rest of the
+             page used to render with placeholder zeros (rating 0.0, 0
+             trips) that looked broken. Wrap the ratings area in a
+             lightweight loading guard so numbers only surface once
+             they're real. Avatar + name come from the ride store and
+             are available immediately, so they stay visible. */}
         <View style={styles.avatarSection}>
           {avatarUrl ? (
             <Image source={{ uri: avatarUrl }} style={styles.avatar} />
@@ -106,10 +126,28 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
             </View>
           )}
           <Text style={styles.driverName}>{driverName}</Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={18} color="#F59E0B" />
-            <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-          </View>
+          {loading && !summary ? (
+            /* Subtle skeleton instead of "0.0 ★" which reads as failed. */
+            <View style={[styles.ratingRow, { opacity: 0.5 }]}>
+              <View style={{ width: 80, height: 18, borderRadius: 4, backgroundColor: '#E5E7EB' }} />
+            </View>
+          ) : (
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={18} color="#F59E0B" />
+              <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+              {/* UX: a rating number without a sample size hides the real
+                   trust signal — 4.9 (1,200 reviews) is very different from
+                   4.9 (3 reviews). Show the count when we have it. */}
+              {summary && summary.total_reviews > 0 && (
+                <Text style={styles.reviewCountText}>
+                  {t('ride.driver_profile_review_count', {
+                    count: summary.total_reviews,
+                    defaultValue: `· ${summary.total_reviews} reseñas`,
+                  })}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Stats row */}
@@ -184,6 +222,27 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
           </Pressable>
         </View>
 
+        {/* UX: the dispute path (/ride/dispute/[rideId]) existed but was
+             only reachable from deep menus. Riders rarely find it when
+             they need it most — mid-trip they opened the driver profile
+             instinctively. A muted ghost button right below the Call/Chat
+             row gives them a clear path to report issues without
+             dominating the visual hierarchy. Only shows when there's an
+             active ride to dispute. */}
+        {rideWithDriver?.id && (
+          <Pressable
+            style={styles.reportButton}
+            onPress={handleReport}
+            accessibilityRole="button"
+            accessibilityLabel={t('ride.report_driver', { defaultValue: 'Reportar un problema con el conductor' })}
+          >
+            <Ionicons name="flag-outline" size={16} color="#9CA3AF" />
+            <Text style={styles.reportButtonText}>
+              {t('ride.report_driver', { defaultValue: 'Reportar un problema' })}
+            </Text>
+          </Pressable>
+        )}
+
         {/* Reviews section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
@@ -210,6 +269,7 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
 // ── Review card sub-component ──────────────────────────────
 
 function ReviewCard({ review }: { review: ReviewWithReviewer }) {
+  const { t } = useTranslation('rider');
   const stars = Array.from({ length: 5 }, (_, i) => (
     <Ionicons
       key={i}
@@ -219,7 +279,7 @@ function ReviewCard({ review }: { review: ReviewWithReviewer }) {
     />
   ));
 
-  const relativeDate = getRelativeDate(review.created_at);
+  const relativeDate = getRelativeDate(review.created_at, t);
 
   return (
     <View style={styles.reviewCard}>
@@ -274,16 +334,20 @@ function ReviewCard({ review }: { review: ReviewWithReviewer }) {
 
 // ── Helpers ─────────────────────────────────────────────────
 
-function getRelativeDate(iso: string): string {
+// UX: dates were hardcoded in Spanish; for the English / Portuguese
+// clients this rendered a jarring mix of languages. Thread t() through
+// so the labels follow the user's selected locale. Defaults keep the
+// previous Spanish copy so nothing regresses on existing setups.
+function getRelativeDate(iso: string, t: (key: string, opts?: any) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const days = Math.floor(diff / 86_400_000);
-  if (days === 0) return 'Hoy';
-  if (days === 1) return 'Ayer';
-  if (days < 7) return `Hace ${days} días`;
+  if (days === 0) return t('common.today', { defaultValue: 'Hoy' });
+  if (days === 1) return t('common.yesterday', { defaultValue: 'Ayer' });
+  if (days < 7) return t('common.days_ago', { count: days, defaultValue: `Hace ${days} días` });
   const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `Hace ${weeks} sem`;
+  if (weeks < 5) return t('common.weeks_ago', { count: weeks, defaultValue: `Hace ${weeks} sem` });
   const months = Math.floor(days / 30);
-  return `Hace ${months} mes${months > 1 ? 'es' : ''}`;
+  return t('common.months_ago', { count: months, defaultValue: `Hace ${months} mes${months > 1 ? 'es' : ''}` });
 }
 
 // ── Styles ──────────────────────────────────────────────────
@@ -355,6 +419,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  reviewCountText: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginLeft: 2,
   },
 
   // Stats
@@ -464,6 +533,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#0EA5E9',
+  },
+  reportButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginTop: 4,
+  },
+  reportButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
 
   // Reviews
