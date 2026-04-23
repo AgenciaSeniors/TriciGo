@@ -690,15 +690,24 @@ function NativeEarningsScreen() {
                 </Text>
               )}
               {trendPct !== null && (
-                <Text
-                  variant="badge"
-                  style={{ color: trendPct >= 0 ? colors.success.DEFAULT : '#EF4444' }}
-                  className="mt-0.5"
-                >
-                  {trendPct >= 0
-                    ? t('earnings.trend_up', { pct: trendPct, defaultValue: `+${trendPct}% vs anterior` })
-                    : t('earnings.trend_down', { pct: Math.abs(trendPct), defaultValue: `${trendPct}% vs anterior` })}
-                </Text>
+                /* UX: arrow icon + color is a clearer at-a-glance trend
+                   signal than plain text. Drivers scan dashboards fast —
+                   the ↑/↓ gets parsed pre-verbally. */
+                <View className="flex-row items-center mt-0.5 gap-1">
+                  <Ionicons
+                    name={trendPct >= 0 ? 'trending-up' : 'trending-down'}
+                    size={13}
+                    color={trendPct >= 0 ? colors.success.DEFAULT : '#EF4444'}
+                  />
+                  <Text
+                    variant="badge"
+                    style={{ color: trendPct >= 0 ? colors.success.DEFAULT : '#EF4444' }}
+                  >
+                    {trendPct >= 0
+                      ? t('earnings.trend_up', { pct: trendPct, defaultValue: `+${trendPct}% vs anterior` })
+                      : t('earnings.trend_down', { pct: Math.abs(trendPct), defaultValue: `${trendPct}% vs anterior` })}
+                  </Text>
+                </View>
               )}
             </Card>
             <Card
