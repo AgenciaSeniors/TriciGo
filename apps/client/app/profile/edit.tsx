@@ -122,13 +122,24 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (!user) return;
+    // UX: validation errors used a blocking Alert.alert. Matching our
+    // rounds pattern, switch to a warning-haptic + Toast so the user
+    // stays in context and can fix the field immediately.
     if (fullName.trim().length < 2) {
-      Alert.alert('Error', t('profile.name_too_short', { defaultValue: 'El nombre debe tener al menos 2 caracteres' }));
+      triggerHaptic('warning');
+      Toast.show({
+        type: 'info',
+        text1: t('profile.name_too_short', { defaultValue: 'El nombre debe tener al menos 2 caracteres' }),
+      });
       return;
     }
     const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     if (email.trim() && !EMAIL_REGEX.test(email.trim())) {
-      Alert.alert('Error', t('profile.invalid_email', { defaultValue: 'Ingresa un email válido' }));
+      triggerHaptic('warning');
+      Toast.show({
+        type: 'info',
+        text1: t('profile.invalid_email', { defaultValue: 'Ingresa un email válido' }),
+      });
       return;
     }
     setSaving(true);
@@ -199,7 +210,10 @@ export default function EditProfileScreen() {
           {LANGUAGES.map((lang) => (
             <Pressable
               key={lang.value}
-              onPress={() => setLanguage(lang.value)}
+              onPress={() => {
+                if (language !== lang.value) triggerHaptic('light');
+                setLanguage(lang.value);
+              }}
               className={`flex-1 py-3 rounded-lg items-center border ${
                 language === lang.value
                   ? 'bg-primary-500 border-primary-500'
@@ -223,7 +237,10 @@ export default function EditProfileScreen() {
           {PAYMENT_METHODS.map((pm) => (
             <Pressable
               key={pm.value}
-              onPress={() => setPaymentMethod(pm.value)}
+              onPress={() => {
+                if (paymentMethod !== pm.value) triggerHaptic('light');
+                setPaymentMethod(pm.value);
+              }}
               className={`flex-1 py-3 rounded-lg items-center border ${
                 paymentMethod === pm.value
                   ? 'bg-primary-500 border-primary-500'

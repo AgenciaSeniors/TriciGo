@@ -80,9 +80,21 @@ export default function ReferralScreen() {
 
   const handleShare = async () => {
     try {
-      await Share.share({
+      // UX: mirror R5's share-ride pattern — confirm the OS share
+      // completed with a light haptic + toast so the rider knows their
+      // referral landed somewhere instead of staring at the same
+      // screen wondering if the share sheet closed prematurely.
+      const result = await Share.share({
         message: t('profile.referral_share_message', { code: myCode }),
       });
+      if (result.action === Share.sharedAction) {
+        triggerHaptic('light');
+        Toast.show({
+          type: 'success',
+          text1: t('profile.referral_share_success', { defaultValue: 'Código compartido' }),
+          visibilityTime: 1800,
+        });
+      }
     } catch {
       /* user cancelled share */
     }

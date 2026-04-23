@@ -118,6 +118,7 @@ export default function SavedLocationsScreen() {
   };
 
   const handleDelete = (index: number) => {
+    triggerHaptic('warning');
     Alert.alert('', t('profile.delete_location_confirm'), [
       { text: t('cancel'), style: 'cancel' },
       {
@@ -129,6 +130,15 @@ export default function SavedLocationsScreen() {
           try {
             await customerService.updateProfile(profile.id, { saved_locations: updated });
             setLocations(updated);
+            // UX: silent delete success left the user wondering if the
+            // row vanished because of a network error — add a confirm
+            // toast + light haptic so the action feels complete.
+            triggerHaptic('success');
+            Toast.show({
+              type: 'success',
+              text1: t('profile.saved_location_deleted', { defaultValue: 'Ubicación eliminada' }),
+              visibilityTime: 1800,
+            });
           } catch {
             Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
           }

@@ -96,6 +96,7 @@ export default function HelpScreen() {
   }, [fetchTickets]);
 
   const handleCreateTicket = () => {
+    triggerHaptic('light');
     setCategory('ride_issue');
     setSubject('');
     setDescription('');
@@ -103,7 +104,19 @@ export default function HelpScreen() {
   };
 
   const submitTicket = async () => {
-    if (!userId || !subject.trim()) return;
+    if (!userId) return;
+    // UX: silent return when subject was empty left the Submit button
+    // feeling unresponsive. Nudge the user toward the required field
+    // with a warning haptic + info toast, matching the edit.tsx and
+    // emergency-contact.tsx patterns.
+    if (!subject.trim()) {
+      triggerHaptic('warning');
+      Toast.show({
+        type: 'info',
+        text1: t('profile.help_subject_required', { defaultValue: 'Ingresá un asunto para tu ticket' }),
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       await supportService.createTicket({

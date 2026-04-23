@@ -12,6 +12,7 @@ import { colors } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, authService } from '@tricigo/api';
+import { triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -70,6 +71,10 @@ export default function SettingsScreen() {
   }, [userId]);
 
   const toggleLanguage = () => {
+    // UX: cycling through languages without any feedback was disorienting —
+    // the label changed silently but users tapping repeatedly didn't feel
+    // that each tap advanced. A light haptic per tap closes the loop.
+    triggerHaptic('light');
     const cycle = ['es', 'en', 'pt'] as const;
     const idx = cycle.indexOf(currentLang as typeof cycle[number]);
     const next = cycle[(idx + 1) % cycle.length];
@@ -142,7 +147,10 @@ export default function SettingsScreen() {
             {THEME_OPTIONS.map((option) => (
               <Pressable
                 key={option.value}
-                onPress={() => setThemeMode(option.value)}
+                onPress={() => {
+                  if (themeMode !== option.value) triggerHaptic('light');
+                  setThemeMode(option.value);
+                }}
                 className={`flex-1 py-2.5 items-center flex-row justify-center ${
                   themeMode === option.value
                     ? 'bg-primary-500'

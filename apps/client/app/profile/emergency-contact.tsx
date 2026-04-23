@@ -60,11 +60,16 @@ export default function EmergencyContactScreen() {
 
   const handleSave = async () => {
     if (!profile || !user) return;
+    // UX: consistent with the rest of the client rounds — validation
+    // errors fire a warning haptic alongside the toast so the user
+    // feels the rejection even if they looked away from the screen.
     if (!name.trim() || name.trim().length < 2) {
+      triggerHaptic('warning');
       Toast.show({ type: 'error', text1: t('emergency.name_required', { defaultValue: 'Ingresa el nombre del contacto' }) });
       return;
     }
     if (!isValidCubanPhone(phone.trim())) {
+      triggerHaptic('warning');
       Toast.show({ type: 'error', text1: t('emergency.invalid_phone', { defaultValue: 'Ingresa un número de teléfono cubano válido' }) });
       return;
     }
