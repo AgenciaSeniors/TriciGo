@@ -91,6 +91,9 @@ export function RideCompleteView() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [isFirstRide, setIsFirstRide] = useState(false);
   const [showTipConfetti, setShowTipConfetti] = useState(false);
+  const [customTipOpen, setCustomTipOpen] = useState(false);
+  const [customTipValue, setCustomTipValue] = useState('');
+  const [receiptActionsOpen, setReceiptActionsOpen] = useState(false);
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
@@ -443,45 +446,70 @@ export function RideCompleteView() {
         />
       </Card>
 
-      {/* Share ride */}
-      {activeRide.share_token && (
-        <Button
-          title={t('ride.share_ride', { defaultValue: 'Compartir viaje' })}
-          variant="outline"
-          size="md"
-          fullWidth
-          onPress={() => Share.share({ message: `https://tricigo.com/ride/${activeRide.share_token}` })}
-          className="mb-4"
-        />
-      )}
-
-      {/* Download receipt */}
-      <Button
-        title={t('ride.download_receipt', { defaultValue: 'Descargar recibo' })}
-        variant="outline"
-        size="md"
-        fullWidth
-        onPress={handleDownloadReceipt}
-        className="mb-2"
-      />
-
-      {/* Email receipt */}
-      {!receiptEmailed ? (
-        <Button
-          title={t('ride.email_receipt', { defaultValue: 'Enviar recibo por email' })}
-          variant="ghost"
-          size="md"
-          fullWidth
-          loading={sendingEmail}
-          disabled={sendingEmail}
-          onPress={handleEmailReceipt}
-          className="mb-4"
-        />
-      ) : (
-        <View className="mb-4 items-center" accessibilityLiveRegion="polite">
-          <Text variant="bodySmall" className="text-success-dark">
-            {'✓ '}{t('ride.receipt_emailed', { defaultValue: 'Recibo enviado a tu email' })}
+      {/* Receipt + share actions.
+           UX: these three buttons used to sit full-width between the route
+           summary and the star rating — they pushed the rating way down
+           the screen, sometimes below the fold on short viewports, and
+           made the "ask" (rate the driver) feel secondary to admin tasks.
+           Collapse them behind a compact expandable so rating gets the
+           prime real estate it deserves; users who actually want a
+           receipt are one tap away. */}
+      <Pressable
+        onPress={() => setReceiptActionsOpen((v) => !v)}
+        className="w-full mb-3 flex-row items-center justify-between py-2 px-3 rounded-lg bg-neutral-100 dark:bg-neutral-800"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: receiptActionsOpen }}
+      >
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="receipt-outline" size={16} color={isDark ? darkColors.text.secondary : '#555555'} />
+          <Text variant="bodySmall" color="secondary" className="font-semibold">
+            {t('ride.receipt_and_share', { defaultValue: 'Recibo y compartir' })}
           </Text>
+        </View>
+        <Ionicons
+          name={receiptActionsOpen ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={isDark ? darkColors.text.secondary : '#888888'}
+        />
+      </Pressable>
+
+      {receiptActionsOpen && (
+        <View className="w-full mb-4">
+          {activeRide.share_token && (
+            <Button
+              title={t('ride.share_ride', { defaultValue: 'Compartir viaje' })}
+              variant="outline"
+              size="sm"
+              fullWidth
+              onPress={() => Share.share({ message: `https://tricigo.com/ride/${activeRide.share_token}` })}
+              className="mb-2"
+            />
+          )}
+          <Button
+            title={t('ride.download_receipt', { defaultValue: 'Descargar recibo' })}
+            variant="outline"
+            size="sm"
+            fullWidth
+            onPress={handleDownloadReceipt}
+            className="mb-2"
+          />
+          {!receiptEmailed ? (
+            <Button
+              title={t('ride.email_receipt', { defaultValue: 'Enviar recibo por email' })}
+              variant="ghost"
+              size="sm"
+              fullWidth
+              loading={sendingEmail}
+              disabled={sendingEmail}
+              onPress={handleEmailReceipt}
+            />
+          ) : (
+            <View className="items-center" accessibilityLiveRegion="polite">
+              <Text variant="bodySmall" className="text-success-dark">
+                {'✓ '}{t('ride.receipt_emailed', { defaultValue: 'Recibo enviado a tu email' })}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -499,12 +527,39 @@ export function RideCompleteView() {
               />
             ))}
           </View>
+          {/* UX: a personalized prompt gets a much warmer response than a
+               generic "Califica al conductor". If we know the driver's name
+               we use just the first word (to avoid long display names
+               wrapping into the stars row); otherwise we fall back. */}
           <Text variant="caption" color="tertiary" className="mb-2">
-            {t('ride.rate_driver')}
+            {rideWithDriver?.driver_name
+              ? t('ride.rate_driver_named', {
+                  name: rideWithDriver.driver_name.split(' ')[0],
+                  defaultValue: `¿Cómo fue tu experiencia con ${rideWithDriver.driver_name.split(' ')[0]}?`,
+                })
+              : t('ride.rate_driver')}
           </Text>
 
-          {/* Skip rating */}
-          <Pressable onPress={resetAll} className="mb-4" accessibilityRole="button" accessibilityLabel={t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}>
+          {/* Skip rating — UX: if the user already engaged (tapped a star,
+               wrote a comment, or chose a tag) skipping would discard real
+               feedback. Confirm first in that case. Un-engaged users tap
+               skip freely (usually they just want to close the sheet). */}
+          <Pressable
+            onPress={() => {
+              const hasEngaged = !!selectedRating || comment.trim().length > 0 || selectedTags.length > 0;
+              if (!hasEngaged) { resetAll(); return; }
+              Toast.show({
+                type: 'info',
+                text1: t('ride.skip_confirm_title', { defaultValue: '¿Saltar calificación?' }),
+                text2: t('ride.skip_confirm_body', { defaultValue: 'Toca otra vez para descartar tu feedback.' }),
+                visibilityTime: 3000,
+                onPress: () => { resetAll(); Toast.hide(); },
+              });
+            }}
+            className="mb-4"
+            accessibilityRole="button"
+            accessibilityLabel={t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}
+          >
             <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}</Text>
           </Pressable>
 
@@ -514,7 +569,7 @@ export function RideCompleteView() {
               <Text variant="bodySmall" color="secondary" className="text-center mb-2">
                 {t('ride.tip_title')}
               </Text>
-              <View className="flex-row gap-2 justify-center">
+              <View className="flex-row gap-2 justify-center flex-wrap">
                 {[5000, 10000, 20000].map((amount) => (
                   <Pressable
                     key={amount}
@@ -527,7 +582,49 @@ export function RideCompleteView() {
                     <Text variant="bodySmall">{formatTRC(amount)}</Text>
                   </Pressable>
                 ))}
+                {/* UX: three fixed amounts forced users who wanted to tip
+                     outside the preset range to either pick the nearest
+                     option or skip tipping entirely. "Otro monto" opens
+                     an inline input so they can dial in the exact amount
+                     without leaving the screen. */}
+                <Pressable
+                  className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 flex-row items-center gap-1"
+                  onPress={() => { triggerHaptic('light'); setCustomTipOpen((v) => !v); }}
+                  disabled={sendingTip}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.tip_custom', { defaultValue: 'Otro monto' })}
+                >
+                  <Ionicons name={customTipOpen ? 'chevron-up' : 'add'} size={14} color={isDark ? darkColors.text.secondary : '#888888'} />
+                  <Text variant="bodySmall">
+                    {t('ride.tip_custom', { defaultValue: 'Otro monto' })}
+                  </Text>
+                </Pressable>
               </View>
+              {customTipOpen && (
+                <View className="flex-row items-center gap-2 mt-3 justify-center">
+                  <Input
+                    placeholder={t('ride.tip_custom_placeholder', { defaultValue: 'Monto en TRC' })}
+                    value={customTipValue}
+                    onChangeText={(v) => setCustomTipValue(v.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    style={{ minHeight: 40, flex: 1, maxWidth: 180 }}
+                  />
+                  <Button
+                    title={t('ride.tip_send', { defaultValue: 'Enviar' })}
+                    size="md"
+                    disabled={sendingTip || !customTipValue || parseInt(customTipValue, 10) <= 0}
+                    loading={sendingTip}
+                    onPress={() => {
+                      const n = parseInt(customTipValue, 10);
+                      if (!n || n <= 0) return;
+                      triggerHaptic('medium');
+                      handleTip(n);
+                      setCustomTipOpen(false);
+                      setCustomTipValue('');
+                    }}
+                  />
+                </View>
+              )}
             </View>
           )}
           {/* U3.3: Tip thank-you animated badge */}
@@ -602,7 +699,26 @@ export function RideCompleteView() {
             title={selectedRating ? t('ride.submit_review') : t('ride.done', { defaultValue: 'Listo' })}
             size="lg"
             fullWidth
-            onPress={selectedRating ? handleSubmitReview : resetAll}
+            onPress={() => {
+              if (selectedRating) { handleSubmitReview(); return; }
+              // UX: when the user typed a comment or picked a tag without
+              // choosing stars, the previous behavior silently discarded
+              // that text via resetAll. A toast nudging them to add stars
+              // preserves the work and converts un-submitted feedback
+              // into submitted feedback.
+              const hasPartialFeedback = comment.trim().length > 0 || selectedTags.length > 0;
+              if (hasPartialFeedback) {
+                triggerHaptic('warning');
+                Toast.show({
+                  type: 'info',
+                  text1: t('ride.rating_required_title', { defaultValue: 'Elegí una calificación' }),
+                  text2: t('ride.rating_required_body', { defaultValue: 'Tu comentario necesita estrellas para enviarse.' }),
+                  visibilityTime: 2800,
+                });
+                return;
+              }
+              resetAll();
+            }}
             loading={submitting}
             disabled={hasSubmitted || submitting}
             accessibilityHint={selectedRating ? 'Enviar calificación al conductor' : undefined}
