@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, FlatList, Pressable, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
@@ -9,7 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { notificationService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { logger, formatTimestamp } from '@tricigo/utils';
+import { logger, formatTimestamp, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification, NotificationType } from '@tricigo/types';
@@ -34,17 +35,6 @@ function buildIconMap(isDark: boolean): Record<NotificationType, { name: keyof t
 
 function timeAgo(dateStr: string): string {
   return formatTimestamp(dateStr, 'relative');
-}
-
-function getDateGroup(dateStr: string, t: (key: string) => string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-
-  if (d >= today) return t('notifications.today');
-  if (d >= yesterday) return t('notifications.yesterday');
-  return t('notifications.older');
 }
 
 export default function NotificationsScreen() {
@@ -105,12 +95,25 @@ export default function NotificationsScreen() {
     try {
       await notificationService.markAllAsRead(user.id);
       markAllRead();
+      // UX: silent "everything marked read" left the user wondering
+      // if it actually did anything. A light haptic + toast closes
+      // the action loop, same pattern as R5/R6.
+      triggerHaptic('light');
+      Toast.show({
+        type: 'success',
+        text1: t('notifications.mark_all_read_toast', { defaultValue: 'Todas marcadas como leídas' }),
+        visibilityTime: 2000,
+      });
     } catch (err) {
       logger.error('Error marking all as read', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('errors.generic', { ns: 'common', defaultValue: 'Error' }) });
     }
   };
 
   const handleTap = async (notif: AppNotification) => {
+    // UX: a light haptic confirms the tap was registered even before
+    // the markAsRead call round-trips.
+    triggerHaptic('light');
     if (!notif.read) {
       try {
         await notificationService.markAsRead(notif.id);
@@ -138,21 +141,11 @@ export default function NotificationsScreen() {
   const filtered = filter === 'unread'
     ? notifications.filter(n => !n.read)
     : notifications;
-
-  // Group by date (memoized)
-  const sections = useMemo(() => {
-    const result: { title: string; data: AppNotification[] }[] = [];
-    const groupMap = new Map<string, AppNotification[]>();
-    for (const n of filtered) {
-      const group = getDateGroup(n.created_at, t);
-      if (!groupMap.has(group)) groupMap.set(group, []);
-      groupMap.get(group)!.push(n);
-    }
-    for (const [title, data] of groupMap) {
-      result.push({ title, data });
-    }
-    return result;
-  }, [filtered, t]);
+  // UX / cleanup: the sections memo that grouped notifications by
+  // "Hoy / Ayer / Antes" was computed on every render but never
+  // consumed — the FlatList below rendered the flat array. Removed to
+  // stop paying the allocation + keep the component honest. If/when
+  // date separators ship, wire them through a SectionList instead.
 
   const renderItem = ({ item }: { item: AppNotification }) => {
     const icon = ICON_MAP[item.type] ?? ICON_MAP.system;
@@ -190,11 +183,17 @@ export default function NotificationsScreen() {
         title={t('notifications.title')}
         onBack={() => router.back()}
         rightAction={
-          <Pressable onPress={handleMarkAllRead} className="px-2">
-            <Text variant="caption" color="primary" className="font-semibold">
-              {t('notifications.mark_all_read')}
-            </Text>
-          </Pressable>
+          /* UX: the "mark all read" action used to render even when
+               there were no unread notifications — tapping did nothing
+               visible because the server had nothing to mark. Hide the
+               affordance when it's a no-op so it stops feeling broken. */
+          notifications.some((n) => !n.read) ? (
+            <Pressable onPress={handleMarkAllRead} className="px-2">
+              <Text variant="caption" color="primary" className="font-semibold">
+                {t('notifications.mark_all_read')}
+              </Text>
+            </Pressable>
+          ) : undefined
         }
       />
 
@@ -203,7 +202,10 @@ export default function NotificationsScreen() {
         {(['all', 'unread'] as const).map((f) => (
           <Pressable
             key={f}
-            onPress={() => setFilter(f)}
+            onPress={() => {
+              if (filter !== f) triggerHaptic('light');
+              setFilter(f);
+            }}
             className={`px-3 py-1.5 rounded-full ${
               filter === f ? 'bg-primary-500' : 'bg-neutral-100 dark:bg-neutral-800'
             }`}
@@ -225,11 +227,29 @@ export default function NotificationsScreen() {
           ))}
         </View>
       ) : filtered.length === 0 && !isLoading ? (
-        <EmptyState
-          icon="notifications-off-outline"
-          title={t('notifications.empty')}
-          description={t('notifications.empty_desc')}
-        />
+        /* UX: the same empty state fired whether the user had zero
+             notifications or had filtered to "unread" while being fully
+             caught up. Those are very different moods — reframe the
+             "caught up" case as a positive instead of "sin
+             notificaciones". Falls back to the generic copy when
+             filter='all'. */
+        filter === 'unread' && notifications.length > 0 ? (
+          <EmptyState
+            icon="checkmark-done-circle-outline"
+            title={t('notifications.all_caught_up_title', { defaultValue: 'Todo al día' })}
+            description={t('notifications.all_caught_up_desc', { defaultValue: 'No tenés notificaciones sin leer.' })}
+            action={{
+              label: t('notifications.show_all', { defaultValue: 'Ver todas' }),
+              onPress: () => { triggerHaptic('light'); setFilter('all'); },
+            }}
+          />
+        ) : (
+          <EmptyState
+            icon="notifications-off-outline"
+            title={t('notifications.empty')}
+            description={t('notifications.empty_desc')}
+          />
+        )
       ) : (
         <FlatList
           data={filtered}
