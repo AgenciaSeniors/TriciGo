@@ -54,8 +54,9 @@ export function getMapFallbackLatLng(): { latitude: number; longitude: number } 
 
 /** Dial codes allowed in demo mode (login picker). */
 export const DEMO_DIAL_CODES: Array<{ code: string; label: string; emoji: string }> = [
-  { code: '+55', label: 'Brasil', emoji: '🇧🇷' },
+  // Cuba first: our active testers are Cuban; the picker still offers +55 for Brazilian demo runs.
   { code: '+53', label: 'Cuba', emoji: '🇨🇺' },
+  { code: '+55', label: 'Brasil', emoji: '🇧🇷' },
 ];
 
 /** Normalize a phone to E.164 using the given dial code. */

@@ -816,9 +816,14 @@ export const rideService = {
    */
   async getActiveRide(userId: string): Promise<Ride | null> {
     const supabase = getSupabaseClient();
+    // UX: `arrived_at_destination` was missing — if the driver tapped
+    // "Llegué al destino" and the client reloaded during that window, the
+    // client lost the ride and had to start from the home screen. The
+    // transition is brief but real (driver may take ~30s to tap Finalizar
+    // afterwards), and refresh/reconnect during it was a dead end.
     const activeStatuses: RideStatus[] = [
       'searching', 'accepted', 'driver_en_route',
-      'arrived_at_pickup', 'in_progress',
+      'arrived_at_pickup', 'in_progress', 'arrived_at_destination',
     ];
 
     const { data, error } = await supabase
