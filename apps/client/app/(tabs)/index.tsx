@@ -3598,6 +3598,10 @@ function SearchingView() {
     const round = offerStats?.dispatch_round ?? null;
     if (round !== null && prevRoundRef.current !== null && round > prevRoundRef.current) {
       setShowExpandingMsg(true);
+      // UX: a text flash alone is easy to miss if the rider glances away
+      // at the 30s mark. Pair it with a soft haptic tap so they feel the
+      // search advance even without looking at the screen.
+      triggerHaptic('light');
       const id = setTimeout(() => setShowExpandingMsg(false), 2500);
       return () => clearTimeout(id);
     }
@@ -3646,6 +3650,24 @@ function SearchingView() {
     return () => clearTimeout(timeout);
   }, []);
 
+  // UX: drivers show an elapsed time counter so the rider can frame their
+  // own wait — is this normal? am I stuck? — without counting in their head.
+  // The counter also lets us gate reassurance and hint messages on time.
+  const searchStartedAtRef = useRef(Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - searchStartedAtRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedLabel = (() => {
+    const total = elapsedSeconds;
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
+  })();
+
   // I3.3: Retry handler
   const handleRetrySearch = useCallback(() => {
     setSearchTimedOut(false);
@@ -3683,10 +3705,13 @@ function SearchingView() {
         defaultValue: `${pending} conductor${pending === 1 ? '' : 'es'} evaluando tu viaje`,
       });
     }
-    // No pending offers but still searching — either pre-dispatch, mid-retry, or last round
+    // No pending offers but still searching — either pre-dispatch, mid-retry, or last round.
+    // UX: the literal "Sin conductores disponibles" felt terminal — riders
+    // read it as "the app failed" and canceled. The search is actually
+    // still running (dispatch_round 3 just means the zone widened); say so.
     if ((offerStats?.dispatch_round ?? 0) >= 3) {
       return t('home.no_drivers_final', {
-        defaultValue: 'Sin conductores disponibles…',
+        defaultValue: 'Buscando en un área más amplia…',
       });
     }
     return fallbackMessage;
@@ -3769,10 +3794,28 @@ function SearchingView() {
       ) : !acceptedDriver ? (
         <>
           <Animated.View style={{ opacity: searchFadeAnim }}>
-            <Text variant="bodySmall" color="secondary" className="mb-4 text-center">
+            <Text variant="bodySmall" color="secondary" className="mb-2 text-center">
               {searchMessage}
             </Text>
           </Animated.View>
+          {/* UX: frame the expected wait so riders don't read silent
+               searching as a stuck app. Only show before there's a
+               pending offer (which has its own live countdown) and only
+               during the opening window so it doesn't shout at users who
+               are already deep in the wait. */}
+          {elapsedSeconds < 15 && (offerStats?.pending_count ?? 0) === 0 && (
+            <Text variant="caption" color="tertiary" className="mb-4 text-center">
+              {t('home.typical_wait_hint', { defaultValue: 'Normalmente menos de 2 minutos' })}
+            </Text>
+          )}
+          {/* UX: at the mid-wait mark, reassure the rider that the search
+               is still actively running. 45-90s is exactly the zone where
+               anxiety spikes but timeout hasn't fired. */}
+          {elapsedSeconds >= 45 && elapsedSeconds < 90 && (offerStats?.pending_count ?? 0) === 0 && (
+            <Text variant="caption" color="tertiary" className="mb-4 text-center">
+              {t('home.still_searching_hint', { defaultValue: 'Seguimos buscando — podés cancelar si necesitás.' })}
+            </Text>
+          )}
 
           {/* Thin progress bar — when a pending offer exists, show the
                30s offer window draining; otherwise keep the legacy
@@ -3810,7 +3853,11 @@ function SearchingView() {
       ) : null}
 
       <Button
-        title={t('ride.cancel_ride')}
+        /* UX: append elapsed wait to the cancel label so the rider has
+             their own timer in the primary escape action. "Cancelar
+             búsqueda · 1:23" feels like control; a bare "Cancelar" after
+             a silent 2-minute wait felt like surrender. */
+        title={`${t('ride.cancel_ride')} · ${elapsedLabel}`}
         variant="outline"
         size="lg"
         fullWidth
