@@ -533,6 +533,15 @@ export function DriverTripView() {
         // Could track sheet position for analytics
       }}
     >
+      {/* UX: on web, the NavigationOverlay is absolutely positioned at top:0 z:50
+          and overlaps the DraggableSheet (which on web is a fixed bottom panel
+          with maxHeight 85%). Shift the sheet content down when nav is active
+          so the primary action button stays tappable. On native, the sheet is
+          a proper bottom drawer — no overlap, so padding only applies to web. */}
+      {Platform.OS === 'web' && inAppNav.isNavigating && (
+        <View style={{ height: 180 }} aria-hidden />
+      )}
+
       {/* 1. Action button — color-coded by phase, always visible at top */}
       {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && !needsDeliveryPhoto && !needsPickupPhoto && (
         <Animated.View style={{ transform: [{ scale: nearDropoff ? pulseAnim : 1 }], marginBottom: 8 }}>
@@ -602,16 +611,18 @@ export function DriverTripView() {
         />
       )}
 
-      {/* Cancel */}
+      {/* Cancel — lower visual hierarchy than the primary action (size md vs lg,
+          dimmed). Keeps full width for tap-ability but doesn't compete for
+          attention with the color-coded "advance status" button above. */}
       {canCancel && (
         <Button
           title={t('trip.cancel_trip')}
           variant="outline"
-          size="lg"
+          size="md"
           fullWidth
           forceDark
           onPress={handleCancel}
-          className="mb-2"
+          className="mb-2 opacity-80"
         />
       )}
 
@@ -1304,7 +1315,19 @@ function TripCompleteView() {
           title={t('trip.done', { defaultValue: 'Listo' })}
           size="lg"
           fullWidth
-          onPress={clearCompletedTrip}
+          onPress={() => {
+            // UX: give positive feedback on trip dismissal instead of an
+            // abrupt cut to the home "searching" screen. Haptic + toast
+            // make the transition feel intentional and celebrate the driver.
+            triggerHaptic('success');
+            Toast.show({
+              type: 'success',
+              text1: t('trip.done_toast_title', { defaultValue: '¡Viaje cobrado!' }),
+              text2: t('trip.done_toast_subtitle', { defaultValue: 'Buscando tu próximo viaje...' }),
+              visibilityTime: 2500,
+            });
+            clearCompletedTrip();
+          }}
         />
       </View>
     </DraggableSheet>
