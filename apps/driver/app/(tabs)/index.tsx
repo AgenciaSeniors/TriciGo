@@ -609,11 +609,47 @@ function NativeDriverHomeScreen() {
         <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
       </View>
 
-      {/* Top floating badges */}
+      {/* Top floating badges.
+           UX: the old "Alta demanda" chip was vague — drivers couldn't tell
+           if there's 1 hotspot or 20, or how far the nearest was. Now the
+           banner states the count and, when we know it, the distance to the
+           closest zone — information that actually helps the driver decide
+           to move. Still non-interactive (map gestures). */}
       {isOnline && demandHotspots.length > 0 && (
-        <View style={[styles.heatmapBadge, { top: insets.top + 64 }]} pointerEvents="none">
-          <Ionicons name="flame" size={12} color={colors.brand.orange} />
-          <RNText style={styles.heatmapBadgeText}>{t('home.high_demand', { defaultValue: 'Alta demanda' })}</RNText>
+        <View
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            top: insets.top + 64,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: 'rgba(255,77,0,0.18)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,77,0,0.45)',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 14,
+          }}
+          pointerEvents="none"
+        >
+          <Ionicons name="flame" size={20} color={colors.brand.orange} />
+          <View style={{ flex: 1 }}>
+            <RNText style={{ color: '#FFE4D3', fontSize: 14, fontWeight: '700', fontFamily: 'Inter' }}>
+              {demandHotspots.length === 1
+                ? t('home.hotspots_one', { defaultValue: '1 zona con alta demanda' })
+                : t('home.hotspots_many', { count: demandHotspots.length, defaultValue: `${demandHotspots.length} zonas con alta demanda` })}
+            </RNText>
+            {nearestHotZone && (
+              <RNText style={{ color: 'rgba(255,228,211,0.7)', fontSize: 11, fontFamily: 'Inter', marginTop: 2 }}>
+                {t('home.hotspot_nearest', {
+                  km: (nearestHotZone.distance / 1000).toFixed(1),
+                  defaultValue: `Más cercana a ${(nearestHotZone.distance / 1000).toFixed(1)} km`,
+                })}
+              </RNText>
+            )}
+          </View>
         </View>
       )}
       {isOnline && surgeZones.length > 0 && (

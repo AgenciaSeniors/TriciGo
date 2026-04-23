@@ -3,6 +3,7 @@ import { View, Pressable, Switch, Platform, ScrollView, KeyboardAvoidingView } f
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -179,7 +180,18 @@ export default function PersonalInfoScreen() {
   };
 
   const handleNext = () => {
-    if (!validate()) return;
+    if (!validate()) {
+      // UX: without a global cue, drivers hit "Siguiente" and the button
+      // appears to do nothing — the inline red marks are easy to miss on
+      // a tall form. This toast tells them WHY it didn't advance.
+      Toast.show({
+        type: 'error',
+        text1: t('onboarding.validation_summary_title', { defaultValue: 'Revisá los campos' }),
+        text2: t('onboarding.validation_summary_sub', { defaultValue: 'Faltan datos o hay errores marcados en rojo.' }),
+        visibilityTime: 3000,
+      });
+      return;
+    }
     const finalPhone = phone.trim().startsWith('+53') ? phone.trim() : `+53${phone.trim()}`;
     setPersonalInfo({
       full_name: sanitizeText(fullName),
@@ -284,7 +296,7 @@ export default function PersonalInfoScreen() {
                   )}
                 </View>
                 <Input
-                  label={t('onboarding.email')}
+                  label={`${t('onboarding.email')} ${t('common.optional_suffix', { defaultValue: '(opcional)' })}`}
                   placeholder="email@ejemplo.com"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -364,9 +376,20 @@ export default function PersonalInfoScreen() {
             <AnimatedCard delay={500} duration={400}>
               <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text variant="body" color="inverse" className="flex-1">
-                    {t('onboarding.criminal_record')}
-                  </Text>
+                  <View className="flex-1 mr-3">
+                    <Text variant="body" color="inverse">
+                      {t('onboarding.criminal_record')}
+                    </Text>
+                    {/* UX: antecedentes is a sensitive question. Without a
+                         why-we-ask line, some drivers bail out assuming it
+                         disqualifies them. It doesn't — declaring honestly
+                         just changes the review timeline. */}
+                    <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+                      {t('onboarding.criminal_record_hint', {
+                        defaultValue: 'Requisito de verificación. Declarar antecedentes no te descalifica automáticamente.',
+                      })}
+                    </Text>
+                  </View>
                   <Switch
                     value={hasCriminalRecord}
                     onValueChange={setHasCriminalRecord}

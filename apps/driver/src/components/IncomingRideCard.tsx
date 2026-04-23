@@ -319,10 +319,33 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
       <Text variant="caption" style={{ color: '#9CA3AF', fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 }}>
         {t('home.net_earnings_label', { defaultValue: 'Ganás' })}
       </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
         <Text variant="stat" style={{ color: profitColor }}>
           ${netEarnings.toLocaleString()}
         </Text>
+        {/* Surge badge — when this specific ride has surge > 1x, show it
+             next to the hero number so drivers immediately see the bump.
+             The big home-screen surge banner only tells them "there's surge
+             in the area"; this per-ride badge confirms the offer itself
+             includes the multiplier. */}
+        {(ride.surge_multiplier ?? 1) > 1 && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: 'rgba(239,68,68,0.2)',
+            borderWidth: 1,
+            borderColor: 'rgba(239,68,68,0.45)',
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 10,
+          }}>
+            <Ionicons name="flame" size={13} color="#ef4444" />
+            <Text variant="caption" style={{ color: '#fecaca', fontWeight: '700' }}>
+              {(ride.surge_multiplier ?? 1).toFixed(1)}x
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Fare (secondary) — reword to make it clear this is what the
