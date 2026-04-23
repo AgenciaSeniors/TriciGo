@@ -242,10 +242,34 @@ function NativeTripsScreen() {
               />
             }
             ListEmptyComponent={
-              <EmptyState
-                icon="car-outline"
-                title={t('trips_history.no_trips')}
-              />
+              // UX: first-time drivers saw a lonely icon + title and no idea
+              // what to do next. Differentiate two very different empty cases:
+              //   1. Filters applied → "no results with these filters" + clear CTA
+              //   2. Truly empty (new driver) → encouraging message + "Ir a Inicio"
+              Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
+                <EmptyState
+                  icon="filter-outline"
+                  title={t('trips_history.no_results_title', { defaultValue: 'Sin resultados' })}
+                  description={t('trips_history.no_results_description', { defaultValue: 'No hay viajes que coincidan con los filtros seleccionados.' })}
+                  action={{
+                    label: t('trips_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
+                    onPress: () => {
+                      setFilters({});
+                      setPage(0);
+                    },
+                  }}
+                />
+              ) : (
+                <EmptyState
+                  icon="car-outline"
+                  title={t('trips_history.no_trips_title', { defaultValue: 'Aún no has hecho viajes' })}
+                  description={t('trips_history.no_trips_description', { defaultValue: 'Cuando completes tu primer viaje aparecerá aquí con todos los detalles.' })}
+                  action={{
+                    label: t('trips_history.go_online_cta', { defaultValue: 'Ir a Inicio' }),
+                    onPress: () => router.push('/(tabs)'),
+                  }}
+                />
+              )
             }
             ListFooterComponent={
               trips.length >= (page + 1) * PAGE_SIZE ? (

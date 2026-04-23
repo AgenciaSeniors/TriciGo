@@ -23,6 +23,7 @@ import {
   haversineDistance,
   logger,
   getErrorMessage,
+  triggerHaptic,
 } from '@tricigo/utils';
 import { openNavigation } from '@/utils/navigation';
 import { useLocationStore } from '@/stores/location.store';
@@ -501,8 +502,24 @@ function NativeDriverHomeScreen() {
       await driverService.setOnlineStatus(profile.id, newStatus, undefined);
       setOnline(newStatus);
       trackEvent(newStatus ? 'driver_went_online' : 'driver_went_offline');
+      // UX: positive confirmation closes the loop after the toggle. Without
+      // this, the toggle button state is the only feedback — drivers on a
+      // flaky connection frequently tap twice because they aren't sure the
+      // server received the change. Haptic + toast reassures them.
+      triggerHaptic(newStatus ? 'success' : 'light');
+      Toast.show({
+        type: 'success',
+        text1: newStatus
+          ? t('driver.now_online_title', { defaultValue: 'Estás en línea' })
+          : t('driver.now_offline_title', { defaultValue: 'Estás desconectado' }),
+        text2: newStatus
+          ? t('driver.now_online_sub', { defaultValue: 'Recibirás ofertas de viaje cerca de ti.' })
+          : t('driver.now_offline_sub', { defaultValue: 'No recibirás nuevas ofertas hasta que te conectes.' }),
+        visibilityTime: 2200,
+      });
     } catch {
       Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+      triggerHaptic('error');
     } finally {
       setToggling(false);
     }

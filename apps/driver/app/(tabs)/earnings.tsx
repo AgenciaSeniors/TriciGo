@@ -658,10 +658,25 @@ function NativeEarningsScreen() {
 
           {/* Empty state when no earnings data */}
           {hasNoEarningsData ? (
+            // UX: weak "0s everywhere" is discouraging for a new driver, and
+            // period-agnostic copy ("no tienes ganancias") felt wrong for a
+            // driver checking the "Mes" tab on day 2. Period-specific copy +
+            // a direct "Ir a Inicio" CTA makes the zero feel actionable rather
+            // than terminal.
             <EmptyState
               icon="wallet-outline"
-              title={t('earnings.no_earnings_title', { defaultValue: 'Sin ganancias' })}
-              description={t('earnings.no_earnings_yet', { defaultValue: 'Aún no tienes ganancias en este periodo. Completa viajes para ver tus estadísticas aquí.' })}
+              title={
+                period === 'day'
+                  ? t('earnings.no_earnings_today_title', { defaultValue: 'Sin ganancias hoy' })
+                  : period === 'week'
+                    ? t('earnings.no_earnings_week_title', { defaultValue: 'Sin ganancias esta semana' })
+                    : t('earnings.no_earnings_month_title', { defaultValue: 'Sin ganancias este mes' })
+              }
+              description={t('earnings.no_earnings_cta_description', { defaultValue: 'Conectate en Inicio para empezar a recibir ofertas. Tus ganancias aparecerán aquí al completar el primer viaje.' })}
+              action={{
+                label: t('earnings.go_online_cta', { defaultValue: 'Ir a Inicio' }),
+                onPress: () => router.push('/(tabs)'),
+              }}
             />
           ) : (
           <>
