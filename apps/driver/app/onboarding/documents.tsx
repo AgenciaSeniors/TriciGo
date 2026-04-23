@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -14,6 +15,7 @@ import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
 import type { DocumentType } from '@tricigo/types';
 
 function useSteps() {
@@ -132,7 +134,25 @@ export default function DocumentsScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const fileName = asset.fileName ?? `${docType}_${Date.now()}.jpg`;
-    await uploadFile(docType, asset.uri, fileName, asset.mimeType ?? 'image/jpeg');
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+
+    // Compress before upload. Cuba's slow connections would otherwise
+    // time out the 30s upload budget on a 4–6 MB raw photo. A 1600px
+    // JPEG @ 0.7 typically lands at 200–400 KB — good enough for
+    // human document review.
+    const compressed = await compressDocument(asset.uri, mimeType);
+    if (compressed.wasCompressed && compressed.originalBytes > 0) {
+      Toast.show({
+        type: 'info',
+        text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+        text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+        visibilityTime: 2000,
+      });
+    }
+    // After compression the output is always JPEG, so the original mimeType
+    // doesn't apply — use 'image/jpeg' explicitly if we compressed.
+    const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
+    await uploadFile(docType, compressed.uri, fileName, uploadMime);
   };
 
   const pickDocument = async (docType: DocumentType) => {
@@ -144,7 +164,21 @@ export default function DocumentsScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       const fileName = asset.name ?? `${docType}_${Date.now()}.pdf`;
-      await uploadFile(docType, asset.uri, fileName, asset.mimeType ?? 'application/pdf');
+      const mimeType = asset.mimeType ?? 'application/pdf';
+
+      // Compress images; PDFs pass through (compressDocument is a no-op
+      // for non-image mime types). Crucial for Cuba's connectivity.
+      const compressed = await compressDocument(asset.uri, mimeType);
+      if (compressed.wasCompressed && compressed.originalBytes > 0) {
+        Toast.show({
+          type: 'info',
+          text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+          text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+          visibilityTime: 2000,
+        });
+      }
+      const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
+      await uploadFile(docType, compressed.uri, fileName, uploadMime);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[Documents] Document pick failed:', docType, msg);

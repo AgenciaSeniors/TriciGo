@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import Toast from 'react-native-toast-message';
+import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -83,7 +85,21 @@ export default function DocumentsScreen() {
 
       const asset = result.assets[0];
       const fileName = `${docType}-${Date.now()}.jpg`;
-      await driverService.uploadDocument(driverId, docType, asset.uri, fileName, asset.mimeType ?? 'image/jpeg');
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+
+      // Compress before upload — see compressDocument.ts docstring for
+      // rationale (Cuba connectivity).
+      const compressed = await compressDocument(asset.uri, mimeType);
+      if (compressed.wasCompressed && compressed.originalBytes > 0) {
+        Toast.show({
+          type: 'info',
+          text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+          text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+          visibilityTime: 2000,
+        });
+      }
+      const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
+      await driverService.uploadDocument(driverId, docType, compressed.uri, fileName, uploadMime);
       await fetchData();
     } catch (err) {
       Alert.alert('Error', t('common.error'));
@@ -108,7 +124,21 @@ export default function DocumentsScreen() {
 
       const asset = result.assets[0];
       const fileName = asset.name ?? `${docType}-${Date.now()}.pdf`;
-      await driverService.uploadDocument(driverId, docType, asset.uri, fileName, asset.mimeType ?? 'application/pdf');
+      const mimeType = asset.mimeType ?? 'application/pdf';
+
+      // PDF passes through compressDocument untouched; images get
+      // compressed. Either way we get a smaller payload when possible.
+      const compressed = await compressDocument(asset.uri, mimeType);
+      if (compressed.wasCompressed && compressed.originalBytes > 0) {
+        Toast.show({
+          type: 'info',
+          text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+          text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+          visibilityTime: 2000,
+        });
+      }
+      const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
+      await driverService.uploadDocument(driverId, docType, compressed.uri, fileName, uploadMime);
       await fetchData();
     } catch (err) {
       Alert.alert('Error', t('common.error'));

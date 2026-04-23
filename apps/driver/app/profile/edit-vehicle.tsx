@@ -3,6 +3,8 @@ import { View, Pressable, Alert, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import Toast from 'react-native-toast-message';
+import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -122,13 +124,25 @@ export default function EditVehicleScreen() {
       if (result.canceled || !result.assets?.[0]) return;
 
       const asset = result.assets[0];
+      // Compress now (while the user is still looking at the picker) so
+      // the subsequent save uploads a small file. Cuba connectivity:
+      // 3 × 4 MB vehicle photos takes forever on edge/3G.
+      const compressed = await compressDocument(asset.uri, asset.mimeType ?? 'image/jpeg');
+      if (compressed.wasCompressed && compressed.originalBytes > 0) {
+        Toast.show({
+          type: 'info',
+          text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+          text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+          visibilityTime: 2000,
+        });
+      }
       setPhotos((prev) => prev.map((p, i) =>
-        i === index ? { ...p, uri: asset.uri, uploaded: false, error: null } : p,
+        i === index ? { ...p, uri: compressed.uri, uploaded: false, error: null } : p,
       ));
     } catch {
       Alert.alert('Error', tc('errors.generic'));
     }
-  }, [tc]);
+  }, [tc, t]);
 
   // ── Validation ────────────────────────────────────────────────────────────
   const validate = (): boolean => {
