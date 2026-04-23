@@ -1051,6 +1051,19 @@ function WebHomeScreen() {
                   onAddRecent={(a) => addRecentAddress(a.address, a.latitude, a.longitude)}
                 />
               </div>
+              {/* UX: first-time users (no recent/saved addresses) see two
+                   silent text inputs and don't realize they autocomplete.
+                   The WebAddressInput's dropdown only opens after they start
+                   typing OR if they have history — neither is obvious on
+                   day 1. A one-liner caption below the pair tells them
+                   typing a street or landmark will bring up suggestions,
+                   and quietly disappears once they've taken their first
+                   ride and the history-driven dropdown takes over. */}
+              {(savedLocations?.length ?? 0) === 0 && (recentAddresses?.length ?? 0) === 0 && (
+                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: -4, marginBottom: 0, paddingLeft: 2 }}>
+                  💡 Escribí una calle, esquina o lugar conocido — verás sugerencias al tipear.
+                </p>
+              )}
             </div>
 
             {/* Use my location button */}
@@ -1143,7 +1156,18 @@ function WebHomeScreen() {
                             </div>
                           </>
                         ) : (
-                          <div style={{ fontSize: 13, color: '#d1d5db' }}>—</div>
+                          /* UX: "—" was ambiguous — user couldn't tell if the
+                             estimate was still loading or simply unavailable
+                             for this service in the current zone. The
+                             isLoadingEst branch above now owns the "loading"
+                             state, so hitting this branch means we have a
+                             definitive no-estimate answer. Say so. */
+                          <div
+                            title="Este servicio no está disponible para el trayecto seleccionado"
+                            style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}
+                          >
+                            No disponible
+                          </div>
                         )}
                       </div>
                     </button>
@@ -1188,11 +1212,32 @@ function WebHomeScreen() {
                 </div>
 
                 {/* Recipient phone */}
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Teléfono *</label>
-                  <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX"
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
-                </div>
+                {(() => {
+                  // UX: phone format errors used to surface only when the
+                  // user hit "Solicitar" — by then they had typed 5 other
+                  // fields and the feedback felt punitive. Live-validate
+                  // the format (+DD DDDDDDDD minimum) so they see the red
+                  // border and helper as they type, not after.
+                  const phoneDigits = deliveryPhone.replace(/\s/g, '');
+                  const phoneLooksValid = phoneDigits === '' || /^\+\d{8,15}$/.test(phoneDigits);
+                  const phoneShowError = deliveryPhone.length > 0 && !phoneLooksValid;
+                  return (
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Teléfono *</label>
+                      <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX"
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: 8,
+                          border: phoneShowError ? '1px solid #ef4444' : '1px solid #e5e5e5',
+                          fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none',
+                        }} />
+                      {phoneShowError && (
+                        <p style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
+                          Usa formato internacional con +: ej. +5356622516
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Package category */}
                 <div style={{ marginBottom: 8 }}>
@@ -1313,10 +1358,27 @@ function WebHomeScreen() {
                   <button type="button" onClick={handleApplyPromo}
                     disabled={!promoCode.trim() || !selectedEstimate || promoValidating}
                     style={{
-                      padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: (!promoCode.trim() || !selectedEstimate || promoValidating) ? 'not-allowed' : 'pointer',
+                      padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      cursor: (!promoCode.trim() || !selectedEstimate || promoValidating) ? 'not-allowed' : 'pointer',
                       background: (!promoCode.trim() || !selectedEstimate || promoValidating) ? '#d1d5db' : colors.brand.orange,
                       color: '#fff',
                     }}>
+                    {/* UX: text-only 'Validando...' was static; the server call
+                         takes 1–3s on Cuba's connection, and a dormant button
+                         feels broken. Pair the text with a rotating glyph so
+                         the user gets clear visual motion during the wait. */}
+                    {promoValidating && (
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 10, height: 10, borderRadius: '50%',
+                          border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff',
+                          animation: 'pulse 0.8s linear infinite',
+                          display: 'inline-block',
+                        }}
+                      />
+                    )}
                     {promoValidating ? 'Validando...' : 'Aplicar'}
                   </button>
                 )}
@@ -1347,9 +1409,33 @@ function WebHomeScreen() {
 
             {/* Error */}
             {error && (
-              <p style={{ fontSize: 13, color: '#ef4444', marginBottom: 12, padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.05)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
-                {error}
-              </p>
+              /* UX: plain-text error got lost between the promo + schedule
+                   rows on a tall panel. A muted red banner reads fine for
+                   sighted users but blends in; the alert glyph anchors the
+                   eye to the problem, and the close button gives the user
+                   an explicit way to dismiss (useful when they fix the
+                   cause themselves — e.g., retype the address — and the
+                   stale message is now irrelevant). */
+              <div style={{
+                display: 'flex', alignItems: 'flex-start', gap: 8,
+                fontSize: 13, color: '#b91c1c', marginBottom: 12, padding: '10px 12px',
+                backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: 8,
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+                <span style={{ fontSize: 16, lineHeight: '18px' }} aria-hidden>⚠</span>
+                <span style={{ flex: 1, lineHeight: '18px' }}>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  aria-label="Cerrar error"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: '#b91c1c', fontSize: 14, padding: 0, lineHeight: '18px',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             )}
 
             {/* ═══ Request button ═══ */}
