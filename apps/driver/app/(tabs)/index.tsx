@@ -617,20 +617,40 @@ function NativeDriverHomeScreen() {
         </View>
       )}
       {isOnline && surgeZones.length > 0 && (
+        /* UX: surge is a real earning opportunity — make it a proper card
+             instead of a tiny 11px badge. Bigger padding, 2 lines (headline
+             + CTA context), flame icon. Still non-interactive so it doesn't
+             compete with map gestures. */
         <View
-          style={[
-            styles.heatmapBadge,
-            { top: insets.top + (demandHotspots.length > 0 ? 92 : 64), backgroundColor: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)' },
-          ]}
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            top: insets.top + (demandHotspots.length > 0 ? 92 : 64),
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: 'rgba(239,68,68,0.18)',
+            borderWidth: 1,
+            borderColor: 'rgba(239,68,68,0.45)',
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 14,
+          }}
           pointerEvents="none"
         >
-          <Ionicons name="trending-up" size={12} color="#ef4444" />
-          <RNText style={[styles.heatmapBadgeText, { color: '#fca5a5' }]}>
-            {t('home.surge_active', {
-              defaultValue: `Tarifa dinamica ${Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1)}x`,
-              multiplier: Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1),
-            })}
-          </RNText>
+          <Ionicons name="flame" size={20} color="#ef4444" />
+          <View style={{ flex: 1 }}>
+            <RNText style={{ color: '#fecaca', fontSize: 14, fontWeight: '700', fontFamily: 'Inter' }}>
+              {t('home.surge_active', {
+                defaultValue: `Tarifa dinámica ${Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1)}x`,
+                multiplier: Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1),
+              })}
+            </RNText>
+            <RNText style={{ color: 'rgba(252,202,202,0.7)', fontSize: 11, fontFamily: 'Inter', marginTop: 2 }}>
+              {t('home.surge_hint', { defaultValue: 'Los viajes en esta zona pagan más' })}
+            </RNText>
+          </View>
         </View>
       )}
 

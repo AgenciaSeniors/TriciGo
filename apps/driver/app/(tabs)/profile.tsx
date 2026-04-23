@@ -157,7 +157,11 @@ function NativeDriverProfileScreen() {
           </View>
         </Card>
 
-        {/* ── Stats row ── */}
+        {/* ── Stats row ──
+             UX: 3-stat layout instead of 2. Adding acceptance_rate (already
+             stored on driverProfile, no extra fetch needed) gives drivers a
+             third at-a-glance metric they care about — it affects their
+             dispatch ranking and is often invisible in driver dashboards. */}
         {driverProfile && (
           <View className="flex-row gap-3 mb-6">
             <View className="flex-1">
@@ -167,6 +171,15 @@ function NativeDriverProfileScreen() {
                   ? driverProfile.rating_avg.toFixed(1) : '--'}
                 label={td('earnings.rating')}
                 iconColor="#FBBF24"
+              />
+            </View>
+            <View className="flex-1">
+              <StatCard
+                icon="checkmark-circle-outline"
+                value={driverProfile.acceptance_rate != null && !isNaN(driverProfile.acceptance_rate)
+                  ? `${Math.round(driverProfile.acceptance_rate * 100)}%` : '--'}
+                label={td('profile.acceptance_rate', { defaultValue: 'Aceptación' })}
+                iconColor="#10B981"
               />
             </View>
             <View className="flex-1">
