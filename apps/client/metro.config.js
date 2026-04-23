@@ -30,6 +30,13 @@ config.resolver.unstable_enablePackageExports = true;
 // - @stripe/stripe-react-native: imports RN internals (RendererProxy, InitializeCore)
 //   that fail on web. stripe-bootstrap.tsx already gates usage with
 //   Platform.OS !== 'web', but Metro still statically traces the require().
+// - React Native DevTools internal specs: RN 0.83 ships InitializeCore that
+//   calls setUpReactDevTools → setUpFuseboxReactDevToolsDispatcher + reads
+//   NativeReactDevToolsRuntimeSettingsModule (TurboModule specs). These
+//   cause `__fbBatchedBridgeConfig is not set` at runtime boot on web
+//   because web has no native bridge. Stubbing them is safe — they only
+//   add devtools integration in __DEV__ that's redundant with React's
+//   own React DevTools browser extension.
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (platform === 'web') {
@@ -37,6 +44,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       return { type: 'empty' };
     }
     if (moduleName === '@stripe/stripe-react-native' || moduleName.startsWith('@stripe/stripe-react-native/')) {
+      return { type: 'empty' };
+    }
+    if (
+      moduleName.endsWith('/ReactDevToolsSettingsManager') ||
+      moduleName.endsWith('/setUpReactDevTools') ||
+      moduleName.endsWith('/setUpFuseboxReactDevToolsDispatcher') ||
+      moduleName.includes('/rndevtools/specs/')
+    ) {
       return { type: 'empty' };
     }
   }
