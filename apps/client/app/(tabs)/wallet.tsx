@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView } from 'react-native';
+import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -344,11 +345,32 @@ function WebWalletScreen() {
               <SkeletonListItem />
             </View>
           ) : filteredTransactions.length === 0 ? (
-            <EmptyState
-              icon="receipt-outline"
-              title={t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}
-              description={t('wallet.no_transactions_desc', { defaultValue: 'Tus movimientos apareceran aqui.' })}
-            />
+            /* UX: split truly-empty from filter-empty. A first-time user
+               (all transactions = 0, filter = 'all') gets a push-to-home
+               CTA so "your wallet is empty" doesn't feel like a dead end.
+               A filter-empty (e.g., filtered to "Recargas" but never
+               recharged) gets a one-click clear. */
+            activeFilter !== 'all' ? (
+              <EmptyState
+                icon="filter-outline"
+                title={t('wallet.no_results_title', { defaultValue: 'Sin resultados' })}
+                description={t('wallet.no_results_desc', { defaultValue: 'No hay transacciones que coincidan con este filtro.' })}
+                action={{
+                  label: t('wallet.show_all', { defaultValue: 'Mostrar todos' }),
+                  onPress: () => setActiveFilter('all'),
+                }}
+              />
+            ) : (
+              <EmptyState
+                icon="receipt-outline"
+                title={t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Pedí un viaje o recibí una transferencia para ver movimientos acá.' })}
+                action={{
+                  label: t('wallet.request_ride_cta', { defaultValue: 'Pedí tu primer viaje' }),
+                  onPress: () => router.push('/(tabs)'),
+                }}
+              />
+            )
           ) : (
             <View className="mb-6">
               {filteredTransactions.map((tx) => {
@@ -1020,11 +1042,32 @@ function NativeWalletScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />
           }
           ListEmptyComponent={
-            <EmptyState
-              icon="receipt-outline"
-              title={t('wallet.no_transactions')}
-              description={t('wallet.no_transactions_desc', { defaultValue: 'Tus movimientos aparecerán aquí.' })}
-            />
+            /* UX: native gets the same split as web plus access to the
+               recharge bottom sheet (web can't charge cards directly).
+               Filter-empty → "Mostrar todos"; truly-empty → "Recargar
+               saldo" as the primary because funding the wallet is the
+               natural first step on day 1. */
+            activeFilter !== 'all' ? (
+              <EmptyState
+                icon="filter-outline"
+                title={t('wallet.no_results_title', { defaultValue: 'Sin resultados' })}
+                description={t('wallet.no_results_desc', { defaultValue: 'No hay transacciones que coincidan con este filtro.' })}
+                action={{
+                  label: t('wallet.show_all', { defaultValue: 'Mostrar todos' }),
+                  onPress: () => setActiveFilter('all'),
+                }}
+              />
+            ) : (
+              <EmptyState
+                icon="wallet-outline"
+                title={t('wallet.no_transactions')}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Recargá tu billetera o pedí un viaje para ver movimientos acá.' })}
+                action={{
+                  label: t('wallet.recharge_cta', { defaultValue: 'Recargar saldo' }),
+                  onPress: () => { triggerHaptic('light'); setRechargeSheetVisible(true); },
+                }}
+              />
+            )
           }
         />
       </View>

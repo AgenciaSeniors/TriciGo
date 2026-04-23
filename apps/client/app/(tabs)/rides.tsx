@@ -179,16 +179,49 @@ function WebRidesScreen() {
           </div>
         )}
 
-        {/* Empty */}
+        {/* Empty — UX: split by cause so the CTA matches the situation.
+             First-time users (filter = 'all') get a warm push-to-home;
+             users who filtered themselves into an empty result get a
+             one-click way to restore 'all'. Bare "Sin viajes todavía"
+             was a dead end on day 1 and "No hay viajes con este filtro"
+             didn't offer the obvious next step. */}
         {!loading && rides.length === 0 && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2.7-3.6A2 2 0 0013.7 5H10l-2.7 1.4L5 10 2.5 11.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a', marginBottom: 8 }}>
               {activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
             </div>
-            <div style={{ fontSize: 14, color: '#999' }}>
-              {activeTab === 'all' ? 'Cuando completes un viaje, aparecerá aquí.' : 'No hay viajes con este filtro.'}
+            <div style={{ fontSize: 14, color: '#999', marginBottom: 20 }}>
+              {activeTab === 'all'
+                ? 'Cuando completes un viaje, aparecerá aquí con todos los detalles.'
+                : 'No hay viajes con este filtro.'}
             </div>
+            {activeTab === 'all' ? (
+              <button
+                type="button"
+                onClick={() => router.push('/(tabs)')}
+                style={{
+                  padding: '10px 20px', borderRadius: 10, border: 'none',
+                  background: colors.brand.orange, color: '#fff', fontSize: 14,
+                  fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Pedí tu primer viaje
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setActiveTab('all'); setRides([]); setPage(0); }}
+                style={{
+                  padding: '10px 20px', borderRadius: 10,
+                  background: '#fff', color: colors.brand.orange, fontSize: 14,
+                  fontWeight: 600, cursor: 'pointer',
+                  border: '1px solid ' + colors.brand.orange,
+                }}
+              >
+                Mostrar todos
+              </button>
+            )}
           </div>
         )}
 
@@ -629,10 +662,31 @@ function NativeRidesScreen() {
               />
             }
             ListEmptyComponent={
-              <EmptyState
-                icon="car-outline"
-                title={t('rides_history.no_rides')}
-              />
+              /* UX: mirror the web split. Truly-empty (no filters applied)
+                 gets a warm push-to-home CTA; filtered-empty gets a one-tap
+                 "limpiar filtros". Same pattern shipped in the driver
+                 trips.tsx Round 8 empty state. */
+              Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
+                <EmptyState
+                  icon="filter-outline"
+                  title={t('rides_history.no_results_title', { defaultValue: 'Sin resultados' })}
+                  description={t('rides_history.no_results_description', { defaultValue: 'No hay viajes que coincidan con los filtros seleccionados.' })}
+                  action={{
+                    label: t('rides_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
+                    onPress: () => { setFilters({}); setPage(0); },
+                  }}
+                />
+              ) : (
+                <EmptyState
+                  icon="car-outline"
+                  title={t('rides_history.no_rides_title', { defaultValue: 'Aún no has hecho viajes' })}
+                  description={t('rides_history.no_rides_description', { defaultValue: 'Cuando completes tu primer viaje aparecerá aquí con todos los detalles.' })}
+                  action={{
+                    label: t('rides_history.request_cta', { defaultValue: 'Pedí tu primer viaje' }),
+                    onPress: () => router.push('/(tabs)'),
+                  }}
+                />
+              )
             }
             ListFooterComponent={
               rides.length >= (page + 1) * PAGE_SIZE ? (
