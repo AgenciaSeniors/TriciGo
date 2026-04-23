@@ -3,6 +3,7 @@ import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Ani
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -53,6 +54,14 @@ export default function LoginScreen() {
     const isValid = DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone);
     if (!isValid) {
       setError(t('auth.invalid_phone'));
+      // UX: on larger screens the inline red message can sit outside the
+      // keyboard-focused viewport — user hits the disabled Send button and
+      // nothing appears to happen. Toast reinforces visibility.
+      Toast.show({
+        type: 'error',
+        text1: t('auth.invalid_phone'),
+        visibilityTime: 2500,
+      });
       return;
     }
 
@@ -65,9 +74,18 @@ export default function LoginScreen() {
       router.push({ pathname: '/(auth)/verify-otp', params: { phone: normalized } });
     } catch {
       setError(t('errors.generic'));
+      Toast.show({ type: 'error', text1: t('errors.generic'), visibilityTime: 2500 });
     } finally {
       setLoading(false);
     }
+  };
+
+  // UX: clear error as soon as the user starts editing. Without this, old
+  // red error text hangs around while they retype, even though the input
+  // now looks valid.
+  const handlePhoneChange = (v: string) => {
+    setPhone(v);
+    if (error) setError('');
   };
 
   return (
@@ -183,7 +201,7 @@ export default function LoginScreen() {
                   placeholder={DEMO_MODE ? '999999999' : '5XXXXXXX'}
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={handlePhoneChange}
                   variant="dark"
                   autoFocus
                   accessibilityLabel={t('auth.phone_input_label', { defaultValue: 'Número de teléfono' })}

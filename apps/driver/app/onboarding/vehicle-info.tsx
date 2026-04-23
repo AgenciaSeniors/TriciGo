@@ -3,6 +3,7 @@ import { View, Pressable, Switch, Image, ScrollView, KeyboardAvoidingView, Platf
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -135,7 +136,18 @@ export default function VehicleInfoScreen() {
   };
 
   const handleNext = () => {
-    if (!validate()) return;
+    if (!validate()) {
+      // Same pattern as personal-info.tsx — a global toast when the
+      // button appears to do nothing. Vehicle form is even longer,
+      // errors are easier to miss inline.
+      Toast.show({
+        type: 'error',
+        text1: t('onboarding.validation_summary_title', { defaultValue: 'Revisá los campos' }),
+        text2: t('onboarding.validation_summary_sub', { defaultValue: 'Faltan datos o hay errores marcados en rojo.' }),
+        visibilityTime: 3000,
+      });
+      return;
+    }
     setVehicle({
       type: vehicleType,
       service_type_slug: selectedSlug || undefined,

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -20,6 +21,9 @@ export default function VerifyOTPScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
+  // Prevent the auto-submit effect from firing multiple times if code stays
+  // at 6 digits (e.g. user retyped the same value).
+  const autoVerifiedRef = useRef(false);
 
   useEffect(() => {
     if (resendTimer <= 0) return;
@@ -33,6 +37,7 @@ export default function VerifyOTPScreen() {
     setError('');
     if (!isValidOTP(code)) {
       setError(t('auth.invalid_otp'));
+      Toast.show({ type: 'error', text1: t('auth.invalid_otp'), visibilityTime: 2500 });
       return;
     }
 
@@ -51,17 +56,46 @@ export default function VerifyOTPScreen() {
       }
     } catch {
       setError(t('errors.generic'));
+      Toast.show({ type: 'error', text1: t('auth.invalid_otp', { defaultValue: 'Código inválido' }), visibilityTime: 2500 });
+      // Let the user retry with a new code — reset the auto-submit guard.
+      autoVerifiedRef.current = false;
     } finally {
       setLoading(false);
     }
+  };
+
+  // UX: auto-submit when 6 digits entered — saves a tap on the most
+  // common path. Guarded by autoVerifiedRef to avoid resubmit loops and
+  // `loading` so we don't fire while a previous attempt is in flight.
+  useEffect(() => {
+    if (code.length === 6 && !autoVerifiedRef.current && !loading) {
+      autoVerifiedRef.current = true;
+      handleVerify();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  // UX: clear error as soon as user retypes so red text doesn't linger.
+  const handleCodeChange = (v: string) => {
+    // strip non-digits
+    const digits = v.replace(/[^0-9]/g, '').slice(0, 6);
+    setCode(digits);
+    if (error) setError('');
+    if (digits.length < 6) autoVerifiedRef.current = false;
   };
 
   const handleResend = async () => {
     try {
       await authService.sendOTP(phone!);
       setResendTimer(60);
+      Toast.show({
+        type: 'success',
+        text1: t('auth.otp_resent', { defaultValue: 'Código reenviado' }),
+        visibilityTime: 2000,
+      });
     } catch {
       setError(t('errors.generic'));
+      Toast.show({ type: 'error', text1: t('errors.generic'), visibilityTime: 2500 });
     }
   };
 
@@ -81,7 +115,7 @@ export default function VerifyOTPScreen() {
           keyboardType="number-pad"
           maxLength={6}
           value={code}
-          onChangeText={setCode}
+          onChangeText={handleCodeChange}
           autoFocus
           variant="dark"
         />
