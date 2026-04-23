@@ -161,7 +161,12 @@ export default function CompleteProfileScreen() {
             </Pressable>
           </View>
 
-          {/* Name input */}
+          {/* Name input — UX: the Continue button stays disabled until
+               the user types 2+ chars, but nothing on screen tells them
+               why. A single-letter name submitted + shows a silent
+               non-responsive button → confusion. An inline hint shows
+               the requirement upfront so the disabled state never feels
+               mysterious. Disappears once satisfied. */}
           <Input
             label={t('profile.name')}
             placeholder={t('profile.name_placeholder', { defaultValue: 'Tu nombre completo' })}
@@ -170,6 +175,11 @@ export default function CompleteProfileScreen() {
             leftIcon={<Ionicons name="person-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
             autoFocus
           />
+          {fullName.trim().length > 0 && fullName.trim().length < 2 && (
+            <Text variant="caption" color="tertiary" className="mt-1 ml-1">
+              {t('profile.name_min_hint', { defaultValue: 'Necesitamos al menos 2 letras para identificarte.' })}
+            </Text>
+          )}
 
           <Button
             title={t('continue', { defaultValue: 'Continuar' })}

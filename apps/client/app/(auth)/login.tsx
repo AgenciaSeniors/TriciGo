@@ -3,6 +3,7 @@ import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Lin
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -10,7 +11,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
-import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, triggerHaptic } from '@tricigo/utils';
 import {
   DEMO_MODE,
   DEMO_DIAL_CODES,
@@ -187,9 +188,25 @@ export default function LoginScreen() {
 
             <Button
               title={t('auth.send_code')}
-              onPress={handleSendCode}
+              /* UX: instead of a silently-disabled button (user taps and
+                 nothing happens), accept the tap and nudge with a toast
+                 when the phone is too short. Same pattern we use in
+                 driver rounds so the user always gets feedback. */
+              onPress={() => {
+                if (phone.length < 7) {
+                  triggerHaptic('warning');
+                  Toast.show({
+                    type: 'info',
+                    text1: t('auth.phone_too_short_title', { defaultValue: 'Teléfono incompleto' }),
+                    text2: t('auth.phone_too_short_body', { defaultValue: 'Ingresá el número completo para recibir el código.' }),
+                    visibilityTime: 2500,
+                  });
+                  return;
+                }
+                handleSendCode();
+              }}
               loading={loading}
-              disabled={phone.length < 7 || loading}
+              disabled={loading}
               fullWidth
               size="lg"
               className="mt-2"

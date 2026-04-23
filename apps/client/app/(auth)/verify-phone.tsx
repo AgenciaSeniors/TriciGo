@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, KeyboardAvoidingView, Platform, Alert, Pressable, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
-import { isValidCubanPhone, normalizeCubanPhone, isValidOTP } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, isValidOTP, triggerHaptic } from '@tricigo/utils';
 import { DEMO_MODE, DEMO_DIAL_CODES, isValidDemoPhone, normalizeDemoPhone } from '@/config/demo';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
@@ -100,6 +101,15 @@ export default function VerifyPhoneScreen() {
     try {
       await authService.linkPhone(normalizedPhone);
       setResendTimer(60);
+      // UX: mirrors verify-otp + driver R5 — silent resend makes the
+      // user wonder if the send actually fired.
+      triggerHaptic('light');
+      Toast.show({
+        type: 'success',
+        text1: t('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
+        text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        visibilityTime: 2500,
+      });
     } catch {
       setError(t('errors.generic'));
     }
@@ -233,7 +243,12 @@ export default function VerifyPhoneScreen() {
                 keyboardType="number-pad"
                 maxLength={6}
                 value={code}
-                onChangeText={setCode}
+                onChangeText={(v) => {
+                  // UX: clear stale error as the user retypes — same pattern
+                  // we use everywhere else in the auth flow.
+                  if (error) setError('');
+                  setCode(v);
+                }}
                 leftIcon={<Ionicons name="keypad-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
                 autoFocus
               />

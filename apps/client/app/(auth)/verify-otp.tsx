@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Pressable } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
-import { isValidOTP } from '@tricigo/utils';
+import { isValidOTP, triggerHaptic } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
@@ -24,6 +25,9 @@ export default function VerifyOTPScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
+  // UX: auto-submit guard so we don't fire handleVerify twice if the user
+  // pastes then also taps Verify. Same pattern shipped in driver R5.
+  const autoVerifiedRef = useRef(false);
 
   // Guard: phone param is required
   if (!phone) {
@@ -77,10 +81,32 @@ export default function VerifyOTPScreen() {
     try {
       await authService.sendOTP(phone);
       setResendTimer(60);
+      // UX: silent success used to leave the user wondering whether a new
+      // SMS was actually triggered — they'd stare at their inbox. A toast
+      // confirms the send and matches driver R5.
+      triggerHaptic('light');
+      Toast.show({
+        type: 'success',
+        text1: t('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
+        text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        visibilityTime: 2500,
+      });
     } catch {
       setError(t('errors.generic'));
     }
   };
+
+  // Auto-submit when user reaches the 6-digit code (pastes or types the last
+  // digit). Mirrors driver R5's auto-verify — eliminates the redundant tap.
+  useEffect(() => {
+    if (code.length === 6 && !loading && !autoVerifiedRef.current) {
+      autoVerifiedRef.current = true;
+      handleVerify();
+    }
+    // Reset guard if user shortens the code (backspace after fail)
+    if (code.length < 6) autoVerifiedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   return (
     <Screen bg="white" padded={false}>
@@ -134,7 +160,13 @@ export default function VerifyOTPScreen() {
           keyboardType="number-pad"
           maxLength={6}
           value={code}
-          onChangeText={setCode}
+          onChangeText={(v) => {
+            // UX: clear any stale error the moment the user starts
+            // retyping — seeing "Código inválido" while typing the
+            // corrected value felt punitive. Pattern from driver R5.
+            if (error) setError('');
+            setCode(v);
+          }}
           leftIcon={<Ionicons name="keypad-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
           autoFocus
         />
