@@ -444,7 +444,9 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
         <View style={{ marginBottom: 12, marginTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <Text variant="caption" color="secondary">
-              {t('home.auto_accepting_in', { seconds: autoAcceptSecondsLeft })}
+              {autoAcceptSecondsLeft > 0
+                ? t('home.auto_accepting_in', { seconds: autoAcceptSecondsLeft })
+                : t('home.auto_accepting_now', { defaultValue: 'Aceptando viaje...' })}
             </Text>
             <Pressable onPress={toggleAutoAccept} hitSlop={8}>
               <Text variant="badge" style={{ color: colors.neutral[400] }}>

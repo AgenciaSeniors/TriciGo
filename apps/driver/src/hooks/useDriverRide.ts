@@ -334,6 +334,11 @@ export function useDriverRideActions() {
           title: i18next.t('driver:common.driver_not_found_profile', { defaultValue: 'Perfil de conductor no encontrado' }),
           type: 'error',
         },
+        service_config_missing: {
+          title: i18next.t('driver:common.service_config_missing', { defaultValue: 'Servicio temporalmente no disponible' }),
+          subtitle: i18next.t('driver:common.service_config_missing_sub', { defaultValue: 'Intentá con otra oferta en unos segundos.' }),
+          type: 'error',
+        },
         unauthorized: {
           title: i18next.t('driver:common.unauthorized', { defaultValue: 'Sesión inválida' }),
           type: 'error',
@@ -456,6 +461,33 @@ export function useDriverRideActions() {
           ...activeTrip,
           status: nextStatus,
         });
+        // UX: confirm the status change with haptic + a context-specific toast.
+        // Previously only the final "completed" step had feedback — drivers
+        // had no cue whether their tap registered, especially at
+        // arrived_at_pickup / in_progress which matter operationally
+        // (passenger has arrived; trip is now metered).
+        triggerHaptic('success');
+        if (nextStatus === 'arrived_at_pickup') {
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.arrived_pickup_title', { defaultValue: 'Llegaste al pasajero' }),
+            text2: i18next.t('driver:trip.arrived_pickup_sub', { defaultValue: 'Esperá al pasajero y tocá "Iniciar viaje"' }),
+            visibilityTime: 2500,
+          });
+        } else if (nextStatus === 'in_progress') {
+          Toast.show({
+            type: 'success',
+            text1: i18next.t('driver:trip.started_title', { defaultValue: 'Viaje iniciado' }),
+            visibilityTime: 1500,
+          });
+        } else if (nextStatus === 'arrived_at_destination') {
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.at_dest_title', { defaultValue: 'Llegaste al destino' }),
+            text2: i18next.t('driver:trip.at_dest_sub', { defaultValue: 'Tocá "Finalizar viaje" para cobrar' }),
+            visibilityTime: 2500,
+          });
+        }
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);

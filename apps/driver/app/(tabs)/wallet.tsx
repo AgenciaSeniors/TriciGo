@@ -196,17 +196,33 @@ export default function WalletScreen() {
           </AnimatedCard>
         )}
 
-        {/* Earnings Balance Card */}
+        {/* Earnings Balance Card.
+            UX: when balance is negative it means the driver owes commission
+            from cash rides (platform deducts it on next recharge). Without
+            context a "-85 TRC" number is alarming. Show an amber warning
+            tint + an explanation line so the driver knows WHY it's negative
+            and that it's normal. */}
         <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
           style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
         >
           <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
-            {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
+            {balance < 0
+              ? t('wallet.pending_commission', { defaultValue: 'Comisión pendiente' })
+              : t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
           </Text>
-          <Text variant="stat" style={{ color: lt.text.primary }}>{formatTRC(balance)}</Text>
+          <Text variant="stat" style={{ color: balance < 0 ? '#F59E0B' : lt.text.primary }}>
+            {formatTRC(balance)}
+          </Text>
           <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-0.5">
             {'\u2248'} {formatUSD(trcToUsd(balance, exchangeRate))}
           </Text>
+          {balance < 0 && (
+            <Text variant="caption" style={{ color: '#F59E0B' }} className="mt-2">
+              {t('wallet.negative_balance_hint', {
+                defaultValue: 'Comisión de viajes en efectivo. Se descuenta cuando recargues tu saldo.',
+              })}
+            </Text>
+          )}
           {holdBalance > 0 && (
             <Text variant="caption" style={{ color: lt.text.secondary }} className="mt-1">
               {t('wallet.hold_balance', { defaultValue: 'En retencion' })}: {formatTRC(holdBalance)}
