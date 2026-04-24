@@ -15,10 +15,12 @@ type FunnelStep = {
 
 export default function FunnelPage() {
   const { t } = useTranslation('admin');
+  // Stage labels for the new monotonically-decreasing funnel
+  // (see fetchData comment for stage definitions).
   const STEP_LABELS: Record<string, string> = {
-    sessions: t('funnel.step_sessions', { defaultValue: 'Sesiones únicas' }),
-    searches: t('funnel.step_searches', { defaultValue: 'Búsquedas de viaje' }),
     requests: t('funnel.step_requests', { defaultValue: 'Solicitudes creadas' }),
+    searches: t('funnel.step_quoted', { defaultValue: 'Con estimado de tarifa' }),
+    sessions: t('funnel.step_dispatched', { defaultValue: 'Enviadas a conductor' }),
     accepted: t('funnel.step_accepted', { defaultValue: 'Aceptadas por conductor' }),
     completed: t('funnel.step_completed', { defaultValue: 'Viajes completados' }),
   };
@@ -36,8 +38,28 @@ export default function FunnelPage() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString();
 
-      const [sessionsRes, searchesRes, requestsRes, acceptedRes, completedRes] = await Promise.all([
-        supabase.from('rides').select('customer_id', { count: 'exact', head: false }).gte('created_at', since),
+      // Funnel stages must be monotonically decreasing for conversion
+      // rates to be meaningful. The previous version had two problems:
+      //
+      //   1. Step 3 filtered `.neq('status', 'draft')` but 'draft' is
+      //      NOT a valid ride_status enum value — the comparison fails
+      //      silently and returns 0, producing an impossible "step 3 = 0
+      //      but step 4 = 10" chart.
+      //   2. Step 1 counted DISTINCT customers (cardinality) against
+      //      Step 2 counting ride rows, yielding rates like 1775% when
+      //      a few customers create many rides.
+      //
+      // New stages, from widest to narrowest, all counting rides:
+      //   1. Solicitudes creadas  = all rides
+      //   2. Con estimado         = rides.estimated_fare_cup > 0
+      //   3. Enviadas a dispatch  = rides.dispatch_round > 0
+      //   4. Aceptadas            = status IN (accepted | en_route | ...)
+      //   5. Completadas          = status = 'completed'
+      const [allRes, quotedRes, dispatchedRes, acceptedRes, completedRes] = await Promise.all([
+        supabase
+          .from('rides')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', since),
         supabase
           .from('rides')
           .select('*', { count: 'exact', head: true })
@@ -47,12 +69,12 @@ export default function FunnelPage() {
           .from('rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
-          .neq('status', 'draft'),
+          .gt('dispatch_round', 0),
         supabase
           .from('rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
-          .in('status', ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'completed']),
+          .in('status', ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed']),
         supabase
           .from('rides')
           .select('*', { count: 'exact', head: true })
@@ -60,14 +82,10 @@ export default function FunnelPage() {
           .eq('status', 'completed'),
       ]);
 
-      const uniqueCustomers = sessionsRes.data
-        ? new Set(sessionsRes.data.map((r: { customer_id: string }) => r.customer_id)).size
-        : 0;
-
       setSteps([
-        { key: 'sessions', label: STEP_LABELS.sessions!, count: uniqueCustomers },
-        { key: 'searches', label: STEP_LABELS.searches!, count: searchesRes.count ?? 0 },
-        { key: 'requests', label: STEP_LABELS.requests!, count: requestsRes.count ?? 0 },
+        { key: 'requests', label: STEP_LABELS.requests!, count: allRes.count ?? 0 },
+        { key: 'quoted', label: STEP_LABELS.searches!, count: quotedRes.count ?? 0 },
+        { key: 'dispatched', label: STEP_LABELS.sessions!, count: dispatchedRes.count ?? 0 },
         { key: 'accepted', label: STEP_LABELS.accepted!, count: acceptedRes.count ?? 0 },
         { key: 'completed', label: STEP_LABELS.completed!, count: completedRes.count ?? 0 },
       ]);
