@@ -527,6 +527,35 @@ export const adminService = {
   },
 
   /**
+   * Get platform earnings snapshot (balance + today/week/month + rate).
+   *
+   * Backed by the `get_platform_earnings` RPC (migration 00149). The
+   * RPC returns a scalar record so Supabase serializes it as either a
+   * 1-row array or a single tuple depending on client version —
+   * normalize both shapes into a plain object so callers don't have
+   * to care.
+   */
+  async getPlatformEarnings(): Promise<{
+    platform_balance: number;
+    earnings_today: number;
+    earnings_this_week: number;
+    earnings_this_month: number;
+    commission_rate: number;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_platform_earnings');
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      platform_balance: Number(row?.platform_balance ?? 0),
+      earnings_today: Number(row?.earnings_today ?? 0),
+      earnings_this_week: Number(row?.earnings_this_week ?? 0),
+      earnings_this_month: Number(row?.earnings_this_month ?? 0),
+      commission_rate: Number(row?.commission_rate ?? 0.15),
+    };
+  },
+
+  /**
    * Get all ledger transactions for admin view.
    */
   async getAdminTransactions(

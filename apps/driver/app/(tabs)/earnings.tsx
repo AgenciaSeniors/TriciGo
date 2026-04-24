@@ -517,7 +517,14 @@ function NativeEarningsScreen() {
     for (const trip of periodTrips) {
       const fare = trip.final_fare_cup ?? trip.estimated_fare_cup;
       totalEarnings += fare;
-      totalCommission += Math.round(fare * commissionRate);
+      // Prefer the server-recorded commission (final snapshot) so
+      // rate changes don't retroactively alter historical earnings.
+      // Fall back to the live rate only when no snapshot is attached
+      // (legacy rides completed before the snapshot pipeline landed).
+      const serverCommission = (trip as Ride & { commission_amount?: number | null }).commission_amount;
+      totalCommission += serverCommission != null
+        ? serverCommission
+        : Math.round(fare * commissionRate);
       completedCount++;
       totalDurationSec += trip.actual_duration_s ?? trip.estimated_duration_s ?? 0;
     }

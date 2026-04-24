@@ -497,9 +497,16 @@ export const driverService = {
     endDate: string,
   ): Promise<Ride[]> {
     const supabase = getSupabaseClient();
+    // Join the final pricing snapshot so the earnings screen can show
+    // the *actual* server-recorded commission (from migration 00112)
+    // instead of recomputing `fare * current_rate` client-side. The
+    // recomputation was wrong whenever the commission rate had been
+    // changed between the ride's completion and the query — old rides
+    // showed rates they weren't actually billed at. Reading the
+    // snapshot is the source of truth.
     const { data, error } = await supabase
       .from('rides')
-      .select('id, status, created_at, completed_at, final_fare_cup, estimated_fare_cup, final_fare_trc, actual_distance_m, actual_duration_s, service_type, payment_method, pickup_address, dropoff_address, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng')
+      .select('id, status, created_at, completed_at, final_fare_cup, estimated_fare_cup, final_fare_trc, actual_distance_m, actual_duration_s, service_type, payment_method, pickup_address, dropoff_address, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_pricing_snapshots(snapshot_type, commission_amount)')
       .eq('driver_id', driverId)
       .eq('status', 'completed')
       .gte('completed_at', startDate)
@@ -507,7 +514,22 @@ export const driverService = {
       .order('completed_at', { ascending: false })
       .limit(200);
     if (error) throw error;
-    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
+    // Flatten the nested final-snapshot into a top-level
+    // `commission_amount` field so callers don't need to deal with the
+    // array. `ride_pricing_snapshots` is 1:N (estimate + final), so
+    // pick the `final` row.
+    return (data ?? []).map((r) => {
+      const snaps = (r as Record<string, unknown>).ride_pricing_snapshots as
+        | Array<{ snapshot_type?: string; commission_amount?: number }>
+        | null
+        | undefined;
+      const finalSnap = snaps?.find((s) => s.snapshot_type === 'final');
+      return transformRideCoordinates({
+        ...(r as Record<string, unknown>),
+        ride_pricing_snapshots: undefined,
+        commission_amount: finalSnap?.commission_amount ?? null,
+      });
+    });
   },
 
   /**

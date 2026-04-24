@@ -82,8 +82,16 @@ export default function WalletScreen() {
       setBalance(balanceData?.available ?? 0);
       setHoldBalance(balanceData?.held ?? 0);
 
+      // Bugfix: getTransactions expects the wallet account UUID, not
+      // the user id. Passing userId silently returned zero rows
+      // because the inner-join on ledger_entries.account_id never
+      // matched a user id (it stores the account PK). Resolve the
+      // driver_cash account first, then paginate its transactions.
+      const driverAccount = await walletService.getAccount(userId, 'driver_cash');
       const [txData, quotaData, rateData] = await Promise.all([
-        walletService.getTransactions(userId, 0, 50),
+        driverAccount
+          ? walletService.getTransactions(driverAccount.id, 0, 50)
+          : Promise.resolve([]),
         walletService.getQuotaStatus(userId).catch(() => null),
         exchangeRateService.getUsdCupRate().catch(() => DEFAULT_EXCHANGE_RATE),
       ]);
