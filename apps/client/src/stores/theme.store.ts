@@ -16,7 +16,12 @@ const themeStore = createThemeStore('light');
 // Load persisted theme on startup
 AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
   if (stored === 'light' || stored === 'dark' || stored === 'system') {
-    const systemScheme = Appearance.getColorScheme() ?? 'light';
+    // Appearance.getColorScheme() is typed ColorSchemeName which in
+    // some RN .d.ts versions widens to include 'no-preference' or
+    // similar string literals. Normalize explicitly to the 'light' |
+    // 'dark' accepted by setSystemScheme.
+    const raw = Appearance.getColorScheme();
+    const systemScheme: 'light' | 'dark' = raw === 'dark' ? 'dark' : 'light';
     themeStore.getState().setSystemScheme(systemScheme);
     themeStore.getState().setMode(stored);
   }
@@ -44,7 +49,9 @@ export function setThemeMode(mode: ThemeMode) {
 export function useSystemThemeSync() {
   useEffect(() => {
     const subscription = Appearance.addChangeListener(({ colorScheme }) => {
-      themeStore.getState().setSystemScheme(colorScheme ?? 'light');
+      // Normalize like the boot-time block above.
+      const systemScheme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+      themeStore.getState().setSystemScheme(systemScheme);
     });
     return () => subscription.remove();
   }, []);

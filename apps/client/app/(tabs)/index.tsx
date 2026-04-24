@@ -2413,7 +2413,10 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     for (const v of nearbyVehicles) {
       const dist = haversineDistance(draft.pickup!.location, { latitude: v.latitude, longitude: v.longitude });
       const etaMin = Math.max(1, Math.round((dist * 1.3 / 1000) / 20 * 60));
-      if (!(v.vehicle_type in result) || etaMin < result[v.vehicle_type]) {
+      // Narrow through a local so `result[...]` doesn't resolve to
+      // `number | undefined` under noUncheckedIndexedAccess.
+      const existing = result[v.vehicle_type];
+      if (existing === undefined || etaMin < existing) {
         result[v.vehicle_type] = etaMin;
       }
     }
@@ -2727,7 +2730,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 </ScrollView>
                 {/* Description + Weight */}
                 <TextInput value={draft.delivery.packageDescription} onChangeText={(v) => setDeliveryField('packageDescription', v)} placeholder={t('delivery.description_placeholder', { defaultValue: 'Descripción del paquete' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
-                <TextInput value={draft.delivery.estimatedWeightKg ? String(draft.delivery.estimatedWeightKg) : ''} onChangeText={(v) => setDeliveryField('estimatedWeightKg', Number(v) || 0)} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                {/* Bugfix: estimatedWeightKg is typed as string in the
+                     store (matches the raw input). Keep the value as a
+                     string — server-side parses to number via fare
+                     estimate. Stripping non-digits keeps the input
+                     numeric-looking without breaking the store type. */}
+                <TextInput value={draft.delivery.estimatedWeightKg} onChangeText={(v) => setDeliveryField('estimatedWeightKg', v.replace(/[^0-9.]/g, ''))} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
                 {/* Special instructions */}
                 <TextInput value={draft.delivery.specialInstructions} onChangeText={(v) => setDeliveryField('specialInstructions', v)} placeholder={t('delivery.instructions', { defaultValue: 'Instrucciones especiales (opcional)' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
                 {/* Client accompanies toggle */}
@@ -3291,7 +3299,7 @@ function ReviewingView() {
               totalCup={fareEstimate.estimated_fare_cup}
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}
-              discountTrc={discount} /* discountAmount is in CUP; TRC = CUP 1:1 — discount applies to base fare only, before insurance */
+              discountCup={discount} /* Bugfix: prop is discountCup (TRC = CUP 1:1, the component computes TRC internally). `discountTrc` was never accepted by FareBreakdownCardProps so the value was silently dropped — the card rendered without the discount. */
               discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
               minFareApplied={fareEstimate.min_fare_applied}
               minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}

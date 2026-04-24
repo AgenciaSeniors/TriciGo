@@ -201,7 +201,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
             }`}
           >
             <Ionicons
-              name={icon as string}
+              name={icon as keyof typeof Ionicons.glyphMap}
               size={18}
               color={serviceType === slug ? colors.primary[500] : colors.neutral[500]}
             />
@@ -227,7 +227,7 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
             }`}
           >
             <Ionicons
-              name={icon as string}
+              name={icon as keyof typeof Ionicons.glyphMap}
               size={18}
               color={paymentMethod === key ? colors.primary[500] : colors.neutral[500]}
             />

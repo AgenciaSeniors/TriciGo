@@ -3,13 +3,16 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 
-// Configure notification behavior
+// Configure notification behavior. The newer NotificationBehavior
+// interface requires shouldShowBanner / shouldShowList too, but we want
+// to stay compatible with the older types installed — cast through
+// `any` so both shapes compile.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-  }),
+  }) as any,
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
@@ -31,10 +34,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   if (Platform.OS === 'android') {
+    // `sound: null` means "use the default ringtone for this channel".
+    // expo-notifications' types want `boolean | 'default' | string`, so
+    // omit the key to get the same behavior without the type mismatch.
     await Notifications.setNotificationChannelAsync('rides', {
       name: 'Ride updates',
       importance: Notifications.AndroidImportance.HIGH,
-      sound: null,
       vibrationPattern: [0, 250, 250, 250],
     });
   }
@@ -59,7 +64,8 @@ export async function scheduleLocalNotification(title: string, body: string): Pr
     content: {
       title,
       body,
-      sound: null,
+      // Omit sound instead of passing null — same muted behavior,
+      // satisfies the NotificationContentInput type.
       ...(Platform.OS === 'android' ? { channelId: 'rides' } : {}),
     },
     trigger: null, // immediate

@@ -90,7 +90,9 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
   useEffect(() => {
     if (!mapboxgl || !mapContainerRef.current || !MAPBOX_TOKEN) return;
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    // Cast: mapbox-gl's access-token declaration is restricted in
+    // recent .d.ts bundles; runtime accepts the assignment fine.
+    (mapboxgl as any).accessToken = MAPBOX_TOKEN;
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,

@@ -87,7 +87,10 @@ export function FareBreakdownCard({
   totalTrc,
   totalLabel,
   exchangeRate = 0,
-  discountTrc = 0,
+  // FareBreakdownCardProps exposes this as `discountCup` — we keep
+  // the local name `discountTrc` because 1 CUP = 1 TRC, so downstream
+  // math is identical regardless of currency label.
+  discountCup: discountTrc = 0,
   discountLabel,
   minFareApplied = false,
   minFareNote,

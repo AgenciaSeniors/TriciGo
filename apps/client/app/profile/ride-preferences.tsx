@@ -165,7 +165,7 @@ export default function RidePreferencesScreen() {
                     }`}
                   >
                     <Ionicons
-                      name={opt.icon as string}
+                      name={opt.icon as keyof typeof Ionicons.glyphMap}
                       size={16}
                       color={selected ? colors.primary[500] : colors.neutral[400]}
                     />
@@ -254,7 +254,7 @@ export default function RidePreferencesScreen() {
                   }`}
                 >
                   <Ionicons
-                    name={opt.icon as string}
+                    name={opt.icon as keyof typeof Ionicons.glyphMap}
                     size={20}
                     color={selected ? colors.primary[500] : colors.neutral[400]}
                   />

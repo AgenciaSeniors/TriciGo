@@ -359,7 +359,9 @@ export function useRideActions() {
     if (d.paymentMethod === 'corporate' && d.corporateAccountId && fareEstimate) {
       try {
         const { corporateService } = await import('@tricigo/api');
-        const freshAccount = await corporateService.getAccountDetails(d.corporateAccountId);
+        // Bugfix: method is `getAccount`, not `getAccountDetails` —
+        // same return shape (CorporateAccount).
+        const freshAccount = await corporateService.getAccount(d.corporateAccountId);
         const remainingBudget = freshAccount.monthly_budget_trc - freshAccount.current_month_spent;
         if (remainingBudget < (fareEstimate.estimated_fare_trc ?? 0)) {
           isSubmittingRef.current = false;
@@ -577,7 +579,7 @@ export function useRideActions() {
               title: i18next.t('ride.rate_reminder_title', { ns: 'rider' }),
               body: i18next.t('ride.rate_reminder_body', { ns: 'rider' }),
               data: { type: 'ride', ride_id: updated.id, action: 'rate' },
-              sound: null,
+              // Omit sound (null isn't accepted) — same silent behavior.
             },
             trigger: { seconds: 300, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
           }).then((reminderId) => {

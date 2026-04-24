@@ -205,9 +205,11 @@ function AddressSearchInputInner({
           ...streetResults.map(normalize),
           ...poiResults.map(normalize),
         ];
+        // searchAddress already returns AddressSearchResult[] — no
+        // normalize map needed on the fallback branch.
         const searchResults: AddressSearchResult[] = merged.length > 0
           ? merged
-          : (await searchAddress(text, 5, userLocation)).map(normalize);
+          : await searchAddress(text, 5, userLocation);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results

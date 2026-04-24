@@ -51,10 +51,12 @@ export function useSearchingDrivers(rideId: string | null) {
 
     const handleSync = (drivers: SearchingDriverPresence[]) => {
       setSearchingDrivers(drivers);
+      // Serialize driverIds to a comma-joined string so it fits the
+      // LogContext primitive shape.
       logger.info('[SearchPresence] sync', {
         rideId,
         driverCount: drivers.length,
-        driverIds: drivers.map((d) => d.driverId),
+        driverIds: drivers.map((d) => d.driverId).join(','),
       });
     };
 

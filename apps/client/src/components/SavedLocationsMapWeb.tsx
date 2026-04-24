@@ -87,7 +87,10 @@ export default function SavedLocationsMapWeb({ locations, selectMode, onMapClick
   useEffect(() => {
     if (!mapboxgl || !containerRef.current || mapRef.current) return;
     ensureMapboxCSS();
-    mapboxgl.accessToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    // Bugfix: mapbox-gl's types expose accessToken as a readonly-ish
+    // namespace member depending on the version; cast through `any`
+    // since the runtime accepts the assignment fine.
+    (mapboxgl as any).accessToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -160,7 +163,10 @@ export default function SavedLocationsMapWeb({ locations, selectMode, onMapClick
     });
 
     if (locations.length === 1) {
-      map.flyTo({ center: [locations[0].longitude, locations[0].latitude], zoom: 15, duration: 800 });
+      // Bugfix: guard `locations[0]` for noUncheckedIndexedAccess —
+      // length === 1 proves it exists but TS can't see that.
+      const first = locations[0]!;
+      map.flyTo({ center: [first.longitude, first.latitude], zoom: 15, duration: 800 });
     } else {
       map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
     }
