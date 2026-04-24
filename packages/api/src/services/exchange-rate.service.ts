@@ -7,10 +7,16 @@ import type { ExchangeRate } from '@tricigo/types';
 import { DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 
-// In-memory cache (5 min TTL)
+// In-memory cache. BUG-097: dropped TTL from 5min → 60s so admin rate
+// changes propagate to driver/client app instances within ~1 min instead
+// of 5. Each app instance has its own memory cache so there's no
+// cross-process invalidation; shorter TTL is the pragmatic fix.
+// Admins that want immediate effect should still call invalidateCache()
+// locally after setManualRate (which setManualRate does implicitly by
+// overwriting cachedRate).
 let cachedRate: number | null = null;
 let cacheTimestamp = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 export const exchangeRateService = {
   /**
