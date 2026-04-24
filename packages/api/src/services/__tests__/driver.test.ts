@@ -7,7 +7,15 @@ const mockRpc = vi.fn();
 const mockStorageUpload = vi.fn();
 const mockStorageFrom = vi.fn(() => ({ upload: mockStorageUpload }));
 const mockStorage = { from: mockStorageFrom };
-const mockSupabase = { from: mockFrom, rpc: mockRpc, storage: mockStorage };
+// Stub realtime broadcast chain used by updateLocation's best-effort broadcast.
+const mockChannelSend = vi.fn(() => Promise.resolve({ error: null }));
+const mockChannelBuilder = vi.fn(() => ({ send: mockChannelSend }));
+const mockSupabase = {
+  from: mockFrom,
+  rpc: mockRpc,
+  storage: mockStorage,
+  channel: mockChannelBuilder,
+};
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -101,11 +109,13 @@ describe('driverService', () => {
   });
 
   // ==================== uploadDocument ====================
+  //
+  // Implementation switched from `fetch(uri).blob()` → `FormData` with the
+  // native file URI, because fetch() doesn't support `file://` / `content://`
+  // schemes on Android. The upload call now includes explicit content-type
+  // options and passes a FormData body instead of a Blob.
   describe('uploadDocument', () => {
-    it('uploads file to storage and creates document record', async () => {
-      const mockBlob = new Blob(['file-content']);
-      mockFetch.mockResolvedValueOnce({ blob: () => Promise.resolve(mockBlob) });
-
+    it('uploads file to storage via FormData and creates document record', async () => {
       mockStorageUpload.mockResolvedValueOnce({ error: null });
 
       const mockDoc = {
@@ -114,6 +124,7 @@ describe('driverService', () => {
         document_type: 'license',
         storage_path: 'driver-docs/d-1/license/license.jpg',
         file_name: 'license.jpg',
+        mime_type: 'image/jpeg',
       };
       const chain = createMockQueryChain();
       chain.single.mockResolvedValue({ data: mockDoc, error: null });
@@ -129,7 +140,8 @@ describe('driverService', () => {
       expect(mockStorageFrom).toHaveBeenCalledWith('driver-documents');
       expect(mockStorageUpload).toHaveBeenCalledWith(
         'driver-docs/d-1/license/license.jpg',
-        mockBlob,
+        expect.any(FormData),
+        { contentType: 'multipart/form-data', upsert: true },
       );
       expect(mockFrom).toHaveBeenCalledWith('driver_documents');
       expect(chain.insert).toHaveBeenCalledWith({
@@ -137,6 +149,7 @@ describe('driverService', () => {
         document_type: 'license',
         storage_path: 'driver-docs/d-1/license/license.jpg',
         file_name: 'license.jpg',
+        mime_type: 'image/jpeg',
       });
       expect(result).toEqual(mockDoc);
     });
@@ -317,60 +330,33 @@ describe('driverService', () => {
   });
 
   // ==================== acceptRide ====================
+  //
+  // Migration 00142 collapsed the old multi-SELECT + `accept_ride` flow into
+  // a single atomic RPC call to `accept_ride_v2`. Migration 00153 (wallet
+  // floor gate) added the 'insufficient_balance' error branch. The tests
+  // below cover the three real paths: RPC success, RPC business error, and
+  // Supabase-level error.
   describe('acceptRide', () => {
-    function mockAcceptRideFromCalls() {
-      // 1. driver_profiles select (custom rate)
-      const chain1 = createMockQueryChain();
-      chain1.single.mockResolvedValue({ data: { custom_per_km_rate_cup: null }, error: null });
-
-      // 2. rides select (ride data)
-      const chain2 = createMockQueryChain();
-      chain2.single.mockResolvedValue({
-        data: {
-          id: 'r-1', service_type: 'triciclo', estimated_distance_m: 5000,
-          estimated_duration_s: 600, surge_multiplier: 1, discount_amount_cup: 0,
-          exchange_rate_usd_cup: 300,
-        },
-        error: null,
-      });
-
-      // 3. service_type_configs select
-      const chain3 = createMockQueryChain();
-      chain3.single.mockResolvedValue({
-        data: { base_fare_cup: 2000, per_km_rate_cup: 1000, per_minute_rate_cup: 200, min_fare_cup: 5000 },
-        error: null,
-      });
-
-      mockFrom
-        .mockReturnValueOnce(chain1)
-        .mockReturnValueOnce(chain2)
-        .mockReturnValueOnce(chain3);
-    }
-
-    it('updates ride with driver_id and accepted status', async () => {
-      mockAcceptRideFromCalls();
-
-      // 4. RPC accept_ride
+    it('calls accept_ride_v2 RPC and returns the refreshed ride', async () => {
       mockRpc.mockResolvedValueOnce({
         data: { success: true, ride_id: 'r-1' },
         error: null,
       });
 
-      // 5. from('rides').update (fare data) — uses default chain
-      // 6. from('rides').select('*') — fetch updated ride
+      // Post-RPC fetch: from('rides').select('*').eq('id', ...).single()
       const rideChain = createMockQueryChain();
       rideChain.single.mockResolvedValue({
-        data: { id: 'r-1', driver_id: 'd-1', status: 'accepted', ride_mode: 'passenger' },
+        data: {
+          id: 'r-1', driver_id: 'd-1', status: 'accepted', ride_mode: 'passenger',
+          pickup_lat: 4.6, pickup_lng: -74.08, dropoff_lat: 4.7, dropoff_lng: -74.09,
+        },
         error: null,
       });
-      // The 4th from() returns default (for fare update), 5th returns rideChain
-      mockFrom
-        .mockReturnValueOnce(createMockQueryChain()) // rides.update (fare)
-        .mockReturnValueOnce(rideChain);             // rides.select (fetch)
+      mockFrom.mockReturnValueOnce(rideChain);
 
       const result = await driverService.acceptRide('r-1', 'd-1');
 
-      expect(mockRpc).toHaveBeenCalledWith('accept_ride', {
+      expect(mockRpc).toHaveBeenCalledWith('accept_ride_v2', {
         p_ride_id: 'r-1',
         p_driver_id: 'd-1',
       });
@@ -378,11 +364,31 @@ describe('driverService', () => {
       expect(result.status).toBe('accepted');
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Ride not found', code: 'PGRST116' };
-      const chain1 = createMockQueryChain();
-      chain1.single.mockResolvedValue({ data: null, error: err });
-      mockFrom.mockReturnValueOnce(chain1);
+    it('throws an Error with rpcError/rpcPayload when RPC returns a business error', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          error: 'insufficient_balance',
+          balance_trc: -500,
+          required_trc: 62,
+          commission_rate: 0.15,
+        },
+        error: null,
+      });
+
+      try {
+        await driverService.acceptRide('r-1', 'd-1');
+        throw new Error('expected rejection');
+      } catch (err) {
+        expect((err as Error).message).toBe('insufficient_balance');
+        const enriched = err as Error & { rpcError?: string; rpcPayload?: Record<string, unknown> };
+        expect(enriched.rpcError).toBe('insufficient_balance');
+        expect(enriched.rpcPayload).toMatchObject({ required_trc: 62, balance_trc: -500 });
+      }
+    });
+
+    it('throws on supabase transport error', async () => {
+      const err = { message: 'Network', code: 'PGRST000' };
+      mockRpc.mockResolvedValueOnce({ data: null, error: err });
 
       await expect(driverService.acceptRide('r-1', 'd-1')).rejects.toEqual(err);
     });
@@ -566,60 +572,53 @@ describe('driverService', () => {
 
   // ==================== acceptRideWithEligibility ====================
   describe('acceptRideWithEligibility', () => {
-    it('checks eligibility and accepts ride when eligible', async () => {
-      // Mock rpc: eligibility check, then accept_ride
+    it('runs the coarse eligibility precheck and then accept_ride_v2 when eligible', async () => {
       mockRpc
-        .mockResolvedValueOnce({ data: true, error: null })                      // check_accept_ride_eligibility
-        .mockResolvedValueOnce({ data: { success: true, ride_id: 'r-1' }, error: null }); // accept_ride
+        .mockResolvedValueOnce({ data: true, error: null })                                // check_accept_ride_eligibility (coarse)
+        .mockResolvedValueOnce({ data: { success: true, ride_id: 'r-1' }, error: null });  // accept_ride_v2
 
-      // acceptRide makes 3 from() calls for config data
-      const chain1 = createMockQueryChain();
-      chain1.single.mockResolvedValue({ data: { custom_per_km_rate_cup: null }, error: null });
-
-      const chain2 = createMockQueryChain();
-      chain2.single.mockResolvedValue({
+      const rideChain = createMockQueryChain();
+      rideChain.single.mockResolvedValue({
         data: {
-          id: 'r-1', service_type: 'triciclo', estimated_distance_m: 5000,
-          estimated_duration_s: 600, surge_multiplier: 1, discount_amount_cup: 0,
-          exchange_rate_usd_cup: 300,
+          id: 'r-1', driver_id: 'd-1', status: 'accepted', ride_mode: 'passenger',
+          pickup_lat: 4.6, pickup_lng: -74.08, dropoff_lat: 4.7, dropoff_lng: -74.09,
         },
         error: null,
       });
-
-      const chain3 = createMockQueryChain();
-      chain3.single.mockResolvedValue({
-        data: { base_fare_cup: 2000, per_km_rate_cup: 1000, per_minute_rate_cup: 200, min_fare_cup: 5000 },
-        error: null,
-      });
-
-      // After config calls: fare update chain, then fetch ride chain
-      const rideChain = createMockQueryChain();
-      rideChain.single.mockResolvedValue({
-        data: { id: 'r-1', driver_id: 'd-1', status: 'accepted', ride_mode: 'passenger' },
-        error: null,
-      });
-
-      mockFrom
-        .mockReturnValueOnce(chain1)
-        .mockReturnValueOnce(chain2)
-        .mockReturnValueOnce(chain3)
-        .mockReturnValueOnce(createMockQueryChain()) // rides.update (fare)
-        .mockReturnValueOnce(rideChain);             // rides.select (fetch)
+      mockFrom.mockReturnValueOnce(rideChain);
 
       const result = await driverService.acceptRideWithEligibility('r-1', 'd-1');
 
-      expect(mockRpc).toHaveBeenCalledWith('check_accept_ride_eligibility', {
-        p_driver_id: 'd-1',
-      });
+      expect(mockRpc).toHaveBeenNthCalledWith(1, 'check_accept_ride_eligibility', { p_driver_id: 'd-1' });
+      expect(mockRpc).toHaveBeenNthCalledWith(2, 'accept_ride_v2', { p_ride_id: 'r-1', p_driver_id: 'd-1' });
       expect(result).toBeDefined();
     });
 
-    it('throws when driver is not eligible', async () => {
+    it('throws when the coarse precheck reports ineligible', async () => {
       mockRpc.mockResolvedValueOnce({ data: false, error: null });
 
       await expect(
         driverService.acceptRideWithEligibility('r-1', 'd-1'),
       ).rejects.toThrow('No puedes aceptar viajes: tu cuenta tiene un saldo negativo pendiente.');
+    });
+
+    it('falls through to accept_ride_v2 if the precheck RPC errors (real gate is inside the RPC)', async () => {
+      mockRpc
+        .mockResolvedValueOnce({ data: null, error: { message: 'precheck transient', code: 'X' } })
+        .mockResolvedValueOnce({ data: { success: true, ride_id: 'r-1' }, error: null });
+
+      const rideChain = createMockQueryChain();
+      rideChain.single.mockResolvedValue({
+        data: {
+          id: 'r-1', driver_id: 'd-1', status: 'accepted', ride_mode: 'passenger',
+          pickup_lat: 0, pickup_lng: 0, dropoff_lat: 0, dropoff_lng: 0,
+        },
+        error: null,
+      });
+      mockFrom.mockReturnValueOnce(rideChain);
+
+      const result = await driverService.acceptRideWithEligibility('r-1', 'd-1');
+      expect(result.status).toBe('accepted');
     });
   });
 
