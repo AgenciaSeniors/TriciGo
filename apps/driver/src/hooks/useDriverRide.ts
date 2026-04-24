@@ -347,8 +347,33 @@ export function useDriverRideActions() {
           title: i18next.t('driver:common.unauthorized', { defaultValue: 'Sesión inválida' }),
           type: 'error',
         },
+        insufficient_balance: {
+          title: i18next.t('driver:common.insufficient_balance', {
+            defaultValue: 'Saldo insuficiente para aceptar',
+          }),
+          subtitle: i18next.t('driver:common.insufficient_balance_sub', {
+            defaultValue: 'Recargá tu billetera antes de aceptar este viaje.',
+          }),
+          type: 'error',
+        },
       };
       const entry = errorMessages[rawMsg];
+      // Enrich insufficient_balance subtitle with the actual numbers so the
+      // driver sees exactly how much they need. We read the payload the
+      // service stashed on the Error instance (driver.service.ts).
+      if (entry && rawMsg === 'insufficient_balance') {
+        const payload = (err as { rpcPayload?: { balance_trc?: number; required_trc?: number } })
+          ?.rpcPayload;
+        const bal = payload?.balance_trc;
+        const req = payload?.required_trc;
+        if (typeof bal === 'number' && typeof req === 'number') {
+          entry.subtitle = i18next.t('driver:common.insufficient_balance_detail', {
+            defaultValue: 'Necesitás {{req}} TRC. Tu saldo actual: {{bal}} TRC.',
+            req,
+            bal,
+          });
+        }
+      }
       if (entry) {
         Toast.show({ type: entry.type, text1: entry.title, text2: entry.subtitle });
       } else {
@@ -360,7 +385,7 @@ export function useDriverRideActions() {
           text1: i18next.t('driver:common.accept_failed', { defaultValue: 'No se pudo aceptar el viaje' }),
           text2: rawMsg ? String(rawMsg).slice(0, 120) : undefined,
         });
-        logger.error('[Accept] unknown failure', { ride_id: rideId, raw: rawMsg, err });
+        logger.error('[Accept] unknown failure', { ride_id: rideId, raw: rawMsg, err: String(err) });
       }
       removeRequest(rideId);
     } finally {

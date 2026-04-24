@@ -333,8 +333,17 @@ export const driverService = {
     });
 
     if (result?.error) {
-      // Idempotent path is reported as success: true with idempotent: true
-      throw new Error(result.error);
+      // Idempotent path is reported as success: true with idempotent: true.
+      // Surface the raw RPC payload on the Error object so callers can
+      // distinguish 'insufficient_balance' (and pull balance_trc /
+      // required_trc) from generic failures without re-parsing strings.
+      const err = new Error(String(result.error)) as Error & {
+        rpcError?: string;
+        rpcPayload?: Record<string, unknown>;
+      };
+      err.rpcError = String(result.error);
+      err.rpcPayload = result as Record<string, unknown>;
+      throw err;
     }
 
     // Fetch the updated ride to return (RLS now passes because driver_id = self)
@@ -664,19 +673,33 @@ export const driverService = {
 
   /**
    * Accept a ride with eligibility check.
+   *
+   * Historically this made a pre-RPC `check_accept_ride_eligibility` call
+   * based on the is_financially_eligible flag (24h-grace, -50 CUP threshold).
+   * Migration 00153 moves the authoritative balance gate inside
+   * `accept_ride_v2` itself — the RPC now rejects with error
+   * 'insufficient_balance' when driver_cash < estimated commission.
+   *
+   * We keep the flag check as a coarse pre-filter (cheaper round-trip for
+   * drivers already flagged ineligible for other admin reasons) and let
+   * the RPC's per-ride gate be the source of truth.
    */
   async acceptRideWithEligibility(rideId: string, driverId: string): Promise<Ride> {
     const supabase = getSupabaseClient();
 
-    // Check eligibility first
-    const { data: eligible } = await supabase.rpc('check_accept_ride_eligibility', {
-      p_driver_id: driverId,
-    });
+    // Fast coarse pre-filter — only catches drivers admins have flagged
+    // as financially ineligible via the 24h-grace mechanism. Missing or
+    // transient failures fall through to the RPC (which has the real gate).
+    const { data: eligible, error: eligErr } = await supabase.rpc(
+      'check_accept_ride_eligibility',
+      { p_driver_id: driverId },
+    );
 
-    if (!eligible) {
+    if (!eligErr && eligible === false) {
       throw new Error('No puedes aceptar viajes: tu cuenta tiene un saldo negativo pendiente.');
     }
 
+    // Real per-ride balance gate happens inside accept_ride_v2 (00153).
     return this.acceptRide(rideId, driverId);
   },
 
@@ -862,7 +885,11 @@ export const driverService = {
     const totalCompleted = profile.total_rides_completed ?? 0;
 
     return {
-      acceptanceRate: profile.acceptance_rate ?? 0,
+      // BUG-084 fix: driver_profiles.acceptance_rate is stored as a
+      // percentage (0-100, default 100.0). Other rate fields below are
+      // computed as decimals (0-1). Normalize everything to decimal here
+      // so the UI can uniformly multiply by 100 once for display.
+      acceptanceRate: (profile.acceptance_rate ?? 0) / 100,
       cancellationRate: totalOffered > 0 ? totalCanceled / totalOffered : 0,
       completionRate: totalOffered > 0 ? totalCompleted / totalOffered : 0,
       totalRidesOffered: profile.total_rides_offered ?? 0,

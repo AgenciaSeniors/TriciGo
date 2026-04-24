@@ -177,7 +177,7 @@ function NativeDriverProfileScreen() {
               <StatCard
                 icon="checkmark-circle-outline"
                 value={driverProfile.acceptance_rate != null && !isNaN(driverProfile.acceptance_rate)
-                  ? `${Math.round(driverProfile.acceptance_rate * 100)}%` : '--'}
+                  ? `${Math.round(driverProfile.acceptance_rate)}%` : '--'}
                 label={td('profile.acceptance_rate', { defaultValue: 'Aceptación' })}
                 iconColor="#10B981"
               />
