@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+# Lockfile hygiene: this repo uses pnpm-lock.yaml. npm's package-lock.json
+# leaks in if somebody runs `npm install` by mistake — keep it out of git.
+package-lock.json
 
 # Build outputs
 dist/
