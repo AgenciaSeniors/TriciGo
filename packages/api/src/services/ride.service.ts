@@ -1146,9 +1146,15 @@ export const rideService = {
       return { valid: false, discountAmount: 0, error: 'already_used' };
     }
 
-    // Calculate discount
+    // Calculate discount. `bonus_credit` is a percentage-discount sibling
+    // (same mechanics as percentage_discount, different UI label — e.g.
+    // welcome bonus or loyalty promo). Kept in sync with the DB trigger
+    // in supabase/migrations/00175_bonus_credit_is_percentage_discount.
     let discountAmount = 0;
-    if (promotion.type === 'percentage_discount' && promotion.discount_percent) {
+    if (
+      (promotion.type === 'percentage_discount' || promotion.type === 'bonus_credit') &&
+      promotion.discount_percent
+    ) {
       discountAmount = Math.min(
         Math.round(params.fareAmount * promotion.discount_percent / 100),
         params.fareAmount, // Cap at 100% of fare
@@ -1156,7 +1162,6 @@ export const rideService = {
     } else if (promotion.type === 'fixed_discount' && promotion.discount_fixed_cup) {
       discountAmount = Math.min(promotion.discount_fixed_cup, params.fareAmount);
     }
-    // bonus_credit: discount is 0, credit applied post-ride
 
     return { valid: true, promotion, discountAmount };
   },
