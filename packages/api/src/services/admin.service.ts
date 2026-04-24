@@ -1336,74 +1336,22 @@ export const adminService = {
     const supabase = getSupabaseClient();
 
     if (approved) {
-      // Fetch the request
-      const { data: req, error: reqErr } = await supabase
-        .from('wallet_recharge_requests')
-        .select('*')
-        .eq('id', rechargeId)
-        .eq('status', 'pending')
-        .single();
-      if (reqErr) throw reqErr;
-      const request = req as WalletRechargeRequest;
-
-      // Ensure wallet account
-      const { data: accountId } = await supabase.rpc('ensure_wallet_account', {
-        p_user_id: request.user_id,
-        p_type: 'customer_cash',
+      // BUG-116 fix: single atomic RPC instead of the previous 5-call
+      // client-side flow that could leave the ledger credited while
+      // the wallet balance stayed un-updated on partial failure.
+      // `approve_wallet_recharge` is idempotent via
+      // ledger_transactions.idempotency_key so retries are safe.
+      const { data: txnId, error: rpcErr } = await supabase.rpc('approve_wallet_recharge', {
+        p_request_id: rechargeId,
+        p_admin_id: adminId,
       });
+      if (rpcErr) throw rpcErr;
 
-      // Get current balance
-      const { data: acct } = await supabase
-        .from('wallet_accounts')
-        .select('balance')
-        .eq('id', accountId)
-        .single();
-      const currentBalance = acct?.balance ?? 0;
-
-      // Create ledger transaction
-      const { data: txn } = await supabase
-        .from('ledger_transactions')
-        .insert({
-          idempotency_key: `recharge:${rechargeId}`,
-          type: 'recharge',
-          status: 'posted',
-          reference_type: 'recharge_request',
-          reference_id: rechargeId,
-          description: `Recarga wallet #${rechargeId.slice(0, 8)}`,
-          created_by: adminId,
-        })
-        .select('id')
-        .single();
-
-      if (txn) {
-        // Ledger entry
-        await supabase.from('ledger_entries').insert({
-          transaction_id: txn.id,
-          account_id: accountId,
-          amount: request.amount,
-          balance_after: currentBalance + request.amount,
-        });
-
-        // Update wallet balance
-        await supabase
-          .from('wallet_accounts')
-          .update({ balance: currentBalance + request.amount })
-          .eq('id', accountId);
-
-        // Fire-and-forget business email notification
-        void this.notifyBusinessMovement(txn.id, 'recharge_approved')
+      // Fire-and-forget business email notification
+      if (txnId) {
+        void this.notifyBusinessMovement(txnId as string, 'recharge_approved')
           .catch(() => { /* silent */ });
       }
-
-      // Mark as approved
-      await supabase
-        .from('wallet_recharge_requests')
-        .update({
-          status: 'approved',
-          processed_by: adminId,
-          processed_at: new Date().toISOString(),
-        })
-        .eq('id', rechargeId);
     } else {
       // Reject
       await supabase
