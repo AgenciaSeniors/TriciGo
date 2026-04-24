@@ -12,6 +12,7 @@ import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
 import { incidentService, rideService, customerService, getSupabaseClient } from '@tricigo/api';
+import type { RideSplit } from '@tricigo/types';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
@@ -339,7 +340,20 @@ export function RideActiveView() {
     const rideId = activeRide.id;
     const refetch = () => {
       rideService.getRideWaypoints(rideId)
-        .then((wps) => setWaypoints(wps as typeof waypoints))
+        // Bugfix: the service returns `Waypoint[]` with a nested
+        // `location: GeoPoint` but the local state uses flat
+        // latitude/longitude fields — the `as typeof waypoints` cast
+        // was unsound and downstream `wp.latitude` reads were landing
+        // on `undefined` at runtime. Flatten the shape explicitly.
+        .then((wps) => setWaypoints(wps.map((wp) => ({
+          id: wp.id,
+          address: wp.address,
+          sort_order: wp.sort_order,
+          latitude: wp.location.latitude,
+          longitude: wp.location.longitude,
+          arrived_at: wp.arrived_at ?? null,
+          departed_at: wp.departed_at ?? null,
+        }))))
         .catch(() => {});
     };
     refetch();
@@ -381,8 +395,13 @@ export function RideActiveView() {
 
     splitChannelRef.current = rideService.subscribeToSplits(
       activeRide.id,
-      (newSplit) => addSplit(newSplit),
-      (updatedSplit) => updateSplit(updatedSplit),
+      // Bugfix: realtime callbacks are typed `Record<string, unknown>`
+      // (opaque payload) but the store expects `RideSplit`. Narrow via
+      // a `Partial<RideSplit>` cast; at runtime the payload is already
+      // a ride_splits row, it's just that Supabase's generic callback
+      // signature can't know that. No data change — just TS hygiene.
+      (newSplit) => addSplit(newSplit as unknown as RideSplit),
+      (updatedSplit) => updateSplit(updatedSplit as unknown as RideSplit),
     );
 
     return () => {
@@ -572,7 +591,12 @@ export function RideActiveView() {
   // UBER-2.2: Emotional cancel context based on ride status
   const cancelContext = useMemo(() => {
     if (!activeRide) return { emotion: '', fee: '' };
-    const fee = cancellationFeePreview?.fee_amount ?? 0;
+    // Bugfix: CancellationFeePreview exposes `fee_cup` and `fee_trc`;
+    // `fee_amount` never existed on the type so this used to read
+    // `undefined` → the `fee > 0` branch was unreachable and riders
+    // saw the "gratis" copy even for paid cancels. Pull the CUP figure
+    // (currency shown everywhere else on this screen) instead.
+    const fee = cancellationFeePreview?.fee_cup ?? 0;
     if (activeRide.status === 'driver_en_route') return {
       emotion: t('ride.driver_coming', { defaultValue: 'Tu conductor ya viene en camino' }),
       fee: fee > 0 ? `· ${t('ride.cancel_ride')} ($${fee})` : `· ${t('ride.cancel_ride')} ${t('cancel_fee_free', { ns: 'rider', defaultValue: 'gratis' })}`,
@@ -1155,7 +1179,10 @@ export function RideActiveView() {
                 <Text variant="caption" color="secondary">
                   {t('ride.extra_distance', { defaultValue: 'Distancia adicional' })}
                 </Text>
-                <Text variant="body" weight="600">
+                {/* Bugfix: Text doesn't support a `weight` prop. Use
+                    a className with Tailwind font-weight utilities so
+                    the bold renders instead of being silently dropped. */}
+                <Text variant="body" className="font-semibold">
                   +{pendingStop.extraDistanceKm.toFixed(1)} km
                 </Text>
               </View>
@@ -1163,7 +1190,7 @@ export function RideActiveView() {
                 <Text variant="caption" color="secondary">
                   {t('ride.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}
                 </Text>
-                <Text variant="body" weight="700" className="text-primary-600">
+                <Text variant="body" className="font-bold text-primary-600">
                   +{formatTRC(pendingStop.extraFareCup)}
                 </Text>
               </View>
@@ -1176,8 +1203,11 @@ export function RideActiveView() {
             </Text>
 
             <View className="flex-row gap-3">
+              {/* Bugfix: Button uses `title`, not `label`. The two
+                  buttons in this stop-confirm modal used to render
+                  with empty text because the prop was ignored. */}
               <Button
-                label={t('common.cancel', { defaultValue: 'Cancelar' })}
+                title={t('common.cancel', { defaultValue: 'Cancelar' })}
                 variant="outline"
                 size="md"
                 onPress={() => setPendingStop(null)}
@@ -1185,7 +1215,7 @@ export function RideActiveView() {
                 fullWidth
               />
               <Button
-                label={t('ride.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
+                title={t('ride.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
                 variant="primary"
                 size="md"
                 onPress={confirmAddStop}

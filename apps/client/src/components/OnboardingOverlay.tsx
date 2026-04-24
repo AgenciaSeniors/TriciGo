@@ -78,7 +78,11 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   // Animate dots whenever currentStep changes
   useEffect(() => {
     STEPS.forEach((_, i) => {
-      Animated.spring(dotWidths[i], {
+      // Guard for noUncheckedIndexedAccess — dotWidths is built from
+      // STEPS.map so the index is always present, but satisfy TS.
+      const dot = dotWidths[i];
+      if (!dot) return;
+      Animated.spring(dot, {
         toValue: i === currentStep ? 24 : 8,
         damping: 20,
         stiffness: 200,
@@ -151,8 +155,14 @@ export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
     }),
   ).current;
 
+  // Bugfix: `STEPS[currentStep]` is typed `Step | undefined` under
+  // noUncheckedIndexedAccess. In practice `currentStep` is clamped by
+  // the reducer to a valid index, but a quick "Next" tap past the end
+  // would otherwise render `undefined` and crash on .titleKey. Render
+  // nothing cleanly in that edge case.
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
+  if (!step) return null;
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent>

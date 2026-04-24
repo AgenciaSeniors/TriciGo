@@ -41,7 +41,8 @@ export default function BlogScreen() {
       setHasMore(data.length === PAGE_SIZE);
       setPage(pageNum);
     } catch (err) {
-      logger.warn('[Blog] Failed to load:', err);
+      // logger.warn expects a LogContext object, not a raw unknown.
+      logger.warn('[Blog] Failed to load:', { error: String(err) });
     } finally {
       setLoading(false);
       setRefreshing(false);

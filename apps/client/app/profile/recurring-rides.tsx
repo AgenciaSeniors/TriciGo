@@ -261,7 +261,9 @@ export default function RecurringRidesScreen() {
                       onPress={() => handleDelete(ride.id)}
                       className="flex-row items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-950"
                     >
-                      <Ionicons name="trash-outline" size={14} color={colors.error} />
+                      {/* Bugfix: colors.error is `{ light, DEFAULT, dark }` —
+                          Ionicons needs a concrete string, not the object. */}
+                      <Ionicons name="trash-outline" size={14} color={colors.error.DEFAULT} />
                       <Text className="text-xs font-medium text-red-600">{t('recurring.delete')}</Text>
                     </Pressable>
                   </>

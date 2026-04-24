@@ -2302,7 +2302,10 @@ const VEHICLE_ICONS: Record<string, any> = {
 
 // ── Selecting View ─────────────────────────────────────────
 
-function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | null) => void }) {
+// The `waypoint` variant is the same one added to searchingField so
+// the waypoint-search map-picker flow can be wired later. Keeps the
+// two types aligned (same setter accepts the same values).
+function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'waypoint' | null) => void }) {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -2353,7 +2356,13 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
 
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
-  const [searchingField, setSearchingField] = useState<'pickup' | 'dropoff' | null>(null);
+  // Includes 'waypoint' to match the existing UI branches that
+  // handle stop-search. The setter for 'waypoint' isn't wired yet
+  // (waypoints are added from a different entry point), but the
+  // branches are ready for when it is — keeping the type union
+  // aligned lets those code paths live without dead-comparison
+  // warnings, and keeps the search UI future-proof.
+  const [searchingField, setSearchingField] = useState<'pickup' | 'dropoff' | 'waypoint' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickupSuggestion, setPickupSuggestion] = useState<{
@@ -2654,11 +2663,19 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 <Text variant="caption" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
                   {t('delivery.details', { defaultValue: 'Datos del envío' })}
                 </Text>
-                {/* Delivery vehicle selector */}
+                {/* Delivery vehicle selector — UX: the chips used to map
+                     to ServiceTypeSlug values ('moto_standard', etc) but
+                     the store's `deliveryVehicleType` field is the
+                     short VehicleType ('moto'/'triciclo'/'auto') — the
+                     two enums never matched so `=== vt` was always
+                     false, leaving every chip visually unselected and
+                     silently saving garbage. Switched to VehicleType so
+                     selection actually sticks and `deliveryVehicleToSlug`
+                     can do its job at submit time. */}
                 <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.vehicle', { defaultValue: 'Vehículo de envío' })}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                  {(['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort'] as const).map((vt) => {
-                    const vLabel = SERVICE_META[vt]?.label ?? vt;
+                  {(['moto', 'triciclo', 'auto'] as const).map((vt) => {
+                    const vLabel = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto' } as const)[vt];
                     const isSel = draft.delivery.deliveryVehicleType === vt;
                     return (
                       <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isSel ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
@@ -2682,11 +2699,26 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.package_category', { defaultValue: 'Categoría' })}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
-                    {(['documents', 'food', 'electronics', 'clothing', 'other'] as const).map((cat) => {
-                      const catLabels: Record<string, string> = { documents: 'Documentos', food: 'Alimentos', electronics: 'Electrónica', clothing: 'Ropa', other: 'Otro' };
+                    {/* UX/bugfix: chips used English keys ('documents',
+                       'food', …) but PackageCategory is Spanish
+                       ('documentos', 'comida', 'paquete_pequeno',
+                       'paquete_grande', 'fragil'). The `=== cat` check
+                       never matched and the `as PackageCategory` cast
+                       saved invalid enum values that the backend then
+                       rejected. Switched to the real values so
+                       selection persists and survives the server
+                       insert. */}
+                    {(['documentos', 'comida', 'paquete_pequeno', 'paquete_grande', 'fragil'] as const).map((cat) => {
+                      const catLabels: Record<typeof cat, string> = {
+                        documentos: 'Documentos',
+                        comida: 'Alimentos',
+                        paquete_pequeno: 'Paquete pequeño',
+                        paquete_grande: 'Paquete grande',
+                        fragil: 'Frágil',
+                      };
                       const isCatSel = draft.delivery.packageCategory === cat;
                       return (
-                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat as PackageCategory)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isCatSel ? '#FFF5F0' : '#fff' }}>
+                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isCatSel ? '#FFF5F0' : '#fff' }}>
                           <Text variant="caption" style={{ color: isCatSel ? colors.brand.orange : colors.neutral[600], fontWeight: isCatSel ? '600' : '400' }}>{catLabels[cat]}</Text>
                         </Pressable>
                       );
@@ -2973,8 +3005,13 @@ function ReviewingView() {
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
   const reviewWaypointPoints = useMemo(
+    // Type-guarded so `w.location` narrows through the map() step —
+    // the old filter returned the same Waypoint shape and TS couldn't
+    // carry the truthy narrow across the function boundary, producing
+    // a possibly-null deref. A type predicate fixes this cleanly.
     () => draft.waypoints
-      .filter((w) => w.address && w.location)
+      .filter((w): w is typeof w & { location: NonNullable<typeof w.location> } =>
+        !!w.address && !!w.location)
       .map((w) => ({ latitude: w.location.latitude, longitude: w.location.longitude })),
     [draft.waypoints],
   );

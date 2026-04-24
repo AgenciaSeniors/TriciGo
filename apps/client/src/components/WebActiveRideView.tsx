@@ -33,16 +33,26 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const activeRideId = activeRide?.id ?? null;
 
-  // Normalize pickup/dropoff — ride from createRide may have lat/lng fields instead of GeoPoint
+  // Normalize pickup/dropoff — ride from createRide may have lat/lng
+  // fields instead of GeoPoint. Cast through the raw-row shape since
+  // the Ride type only exposes the resolved pickup_location/dropoff_location,
+  // but the Supabase RPC response right after insert may surface the
+  // underlying flat columns before the service transformer runs.
+  const rawRide = activeRide as (typeof activeRide & {
+    pickup_lat?: number | null;
+    pickup_lng?: number | null;
+    dropoff_lat?: number | null;
+    dropoff_lng?: number | null;
+  }) | null;
   const pickupLocation = activeRide?.pickup_location?.latitude
     ? activeRide.pickup_location
-    : activeRide?.pickup_lat && activeRide?.pickup_lng
-      ? { latitude: activeRide.pickup_lat as number, longitude: activeRide.pickup_lng as number }
+    : rawRide?.pickup_lat && rawRide?.pickup_lng
+      ? { latitude: rawRide.pickup_lat, longitude: rawRide.pickup_lng }
       : null;
   const dropoffLocation = activeRide?.dropoff_location?.latitude
     ? activeRide.dropoff_location
-    : activeRide?.dropoff_lat && activeRide?.dropoff_lng
-      ? { latitude: activeRide.dropoff_lat as number, longitude: activeRide.dropoff_lng as number }
+    : rawRide?.dropoff_lat && rawRide?.dropoff_lng
+      ? { latitude: rawRide.dropoff_lat, longitude: rawRide.dropoff_lng }
       : null;
 
   // Live driver position

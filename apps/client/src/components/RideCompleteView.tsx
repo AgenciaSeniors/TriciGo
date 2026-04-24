@@ -113,10 +113,15 @@ export function RideCompleteView() {
     }).catch(() => { /* use fallback tags */ });
   }, []);
 
-  // U3.1: Check if this is the user's first completed ride
+  // U3.1: Check if this is the user's first completed ride.
+  // Bugfix: the service takes positional args (userId, page, pageSize),
+  // not an object. The object form silently coerced `page` to NaN and
+  // returned no rides, so `isFirstRide` stuck at true and first-ride
+  // flourishes (big checkmark, invite-friends prompt) fired on every
+  // completed trip. Align to the real signature.
   useEffect(() => {
     if (userId) {
-      rideService.getRideHistory(userId, { page: 0, pageSize: 1 }).then((rides) => {
+      rideService.getRideHistory(userId, 0, 1).then((rides) => {
         // If only 1 ride (this one), it's their first
         setIsFirstRide(rides.length <= 1);
       }).catch(() => {});
@@ -142,8 +147,11 @@ export function RideCompleteView() {
 
     splitChannelRef.current = rideService.subscribeToSplits(
       activeRide.id,
-      (newSplit) => { if (newSplit?.id) addSplit(newSplit); },
-      (updatedSplit) => { if (updatedSplit?.id) updateSplit(updatedSplit); },
+      // Bugfix: realtime callback payload is typed Record<string, unknown>
+      // (Supabase generic). Cast to RideSplit for the store; the row shape
+      // is stable at runtime, only the callback signature is opaque.
+      (newSplit) => { if (newSplit?.id) addSplit(newSplit as unknown as RideSplit); },
+      (updatedSplit) => { if (updatedSplit?.id) updateSplit(updatedSplit as unknown as RideSplit); },
     );
 
     return () => {
@@ -158,10 +166,17 @@ export function RideCompleteView() {
   // UBER-4.1: When rating changes, pre-select first tag of the appropriate category
   const ratingCategory = selectedRating ? (selectedRating >= 4 ? 'positive' : 'negative') : null;
   useEffect(() => {
-    if (selectedRating && selectedRating >= 4 && positiveTags.length > 0) {
-      setSelectedTags([positiveTags[0]]);
-    } else if (selectedRating && selectedRating <= 3 && negativeTags.length > 0) {
-      setSelectedTags([negativeTags[0]]);
+    // Bugfix: guarded array access for noUncheckedIndexedAccess.
+    // `positiveTags[0]`/`negativeTags[0]` are `string | undefined`
+    // despite the length check above — narrow with a local var so
+    // setSelectedTags receives a concrete string[] instead of
+    // `(string | undefined)[]`.
+    if (selectedRating && selectedRating >= 4) {
+      const first = positiveTags[0];
+      setSelectedTags(first ? [first] : []);
+    } else if (selectedRating && selectedRating <= 3) {
+      const first = negativeTags[0];
+      setSelectedTags(first ? [first] : []);
     } else {
       setSelectedTags([]);
     }

@@ -23,7 +23,10 @@ export function ConfettiOverlay() {
       y: new Animated.Value(height * 0.6),
       rotate: new Animated.Value(0),
       opacity: new Animated.Value(1),
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      // Fallback to the first COLOR so the typed `string | undefined`
+      // from indexed access narrows cleanly. COLORS is non-empty so the
+      // `?? COLORS[0]!` is belt-and-suspenders.
+      color: COLORS[Math.floor(Math.random() * COLORS.length)] ?? COLORS[0]!,
       size: 4 + Math.random() * 6,
     }));
   }, []);

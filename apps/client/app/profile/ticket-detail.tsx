@@ -45,7 +45,7 @@ export default function TicketDetailScreen() {
       setTicket(ticketData);
       setMessages(messagesData);
     } catch (err) {
-      logger.warn('[TicketDetail] Failed to load:', err);
+      logger.warn('[TicketDetail] Failed to load:', { error: String(err) });
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export default function TicketDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (err) {
-      logger.warn('[TicketDetail] Failed to send message:', err);
+      logger.warn('[TicketDetail] Failed to send message:', { error: String(err) });
     } finally {
       setSending(false);
     }

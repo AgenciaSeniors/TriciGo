@@ -240,7 +240,13 @@ export default function CorporateProfileScreen() {
       doc.setFontSize(10);
       doc.text(`Total: ${data.total_trc.toFixed(2)} TRC (${data.total_rides} viajes)`, 14, y);
 
-      const base64 = doc.output('datauristring').split(',')[1];
+      // Bugfix: `.split(',')[1]` can be `undefined` under
+      // noUncheckedIndexedAccess; writeAsStringAsync requires a string.
+      // jspdf's datauristring always looks like "data:...,BASE64" so in
+      // practice the index exists, but we fall back to the raw output
+      // to avoid writing `undefined` as a string literal if the format
+      // ever changes.
+      const base64 = doc.output('datauristring').split(',')[1] ?? doc.output('datauristring');
       const filename = `factura-${data.period.replace(/\s/g, '_')}.pdf`;
       const filePath = `${FileSystem.cacheDirectory}${filename}`;
       await FileSystem.writeAsStringAsync(filePath, base64, { encoding: FileSystem.EncodingType.Base64 });
@@ -375,7 +381,11 @@ export default function CorporateProfileScreen() {
             <Text variant="h4">{acc.name}</Text>
             <StatusBadge
               label={acc.status}
-              variant={acc.status === 'active' ? 'success' : acc.status === 'suspended' ? 'error' : 'warning'}
+              /* Bugfix: compared against 'active' but CorporateAccountStatus
+                 is 'pending' | 'approved' | 'suspended' | 'rejected' —
+                 so the success variant never triggered and approved
+                 accounts silently rendered as yellow "warning". */
+              variant={acc.status === 'approved' ? 'success' : acc.status === 'suspended' || acc.status === 'rejected' ? 'error' : 'warning'}
             />
           </View>
 

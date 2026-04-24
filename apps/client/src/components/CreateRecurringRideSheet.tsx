@@ -104,7 +104,10 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
         payment_method: paymentMethod,
         days_of_week: selectedDays,
         time_of_day: `${hours}:${minutes}`,
-        timezone: 'America/Havana',
+        // Bugfix: CreateRecurringRideParams doesn't accept timezone —
+        // the backend RPC derives it from the Cuban deployment default
+        // (America/Havana). The extra key was silently dropped by
+        // Supabase but tsc rightly flagged it as a misaligned contract.
       });
       Toast.show({ type: 'success', text1: t('recurring.created_success', { defaultValue: 'Viaje recurrente creado' }) });
       triggerHaptic('success');

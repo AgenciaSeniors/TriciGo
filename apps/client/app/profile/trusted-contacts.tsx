@@ -187,12 +187,15 @@ export default function TrustedContactsScreen() {
         {/* Add button */}
         {contacts.length < MAX_CONTACTS && (
           <Button
-            title={t('trusted_contacts.add_contact')}
+            // Bugfix: ButtonProps doesn't accept `icon` — the prop was
+            // silently dropped at runtime. Prepended a glyph to the
+            // title instead so the affordance survives without widening
+            // the shared component API.
+            title={`＋ ${t('trusted_contacts.add_contact')}`}
             variant="outline"
             size="lg"
             fullWidth
             onPress={() => setAddSheetVisible(true)}
-            icon="add-outline"
           />
         )}
 

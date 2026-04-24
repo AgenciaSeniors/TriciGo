@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
 import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase } from '@tricigo/utils';
-import type { GeoPoint, AddressSearchResult } from '@tricigo/utils';
+import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -187,9 +187,27 @@ function AddressSearchInputInner({
           searchPoisSupabase(text, userLocation, 5),
           searchStreetsSupabase(text, userLocation, 5),
         ]);
-        // Merge: streets first (more relevant for Cuban addresses), then POIs, then Mapbox fallback
-        const merged = [...streetResults, ...poiResults];
-        const searchResults = merged.length > 0 ? merged : await searchAddress(text, 5, userLocation);
+        // Merge: streets first (more relevant for Cuban addresses),
+        // then POIs, then Mapbox fallback.
+        //
+        // Bugfix: both Supabase helpers return SearchBoxResult (with
+        // `place_name`) while the component state is typed
+        // AddressSearchResult (with `displayName`). Normalize every
+        // branch to the AddressSearchResult shape so the dropdown has
+        // a consistent label and setResults stops complaining.
+        const normalize = (r: SearchBoxResult): AddressSearchResult => ({
+          address: r.address,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          displayName: r.place_name || r.address,
+        });
+        const merged: AddressSearchResult[] = [
+          ...streetResults.map(normalize),
+          ...poiResults.map(normalize),
+        ];
+        const searchResults: AddressSearchResult[] = merged.length > 0
+          ? merged
+          : (await searchAddress(text, 5, userLocation)).map(normalize);
         setResults(searchResults);
         setIsOffline(false);
         // Cache successful results
@@ -334,8 +352,20 @@ function AddressSearchInputInner({
     onSelect(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
   };
 
-  // UBER-1.3: Unified select handler for merged results
-  const handleSelectMerged = (item: { address: string; latitude: number; longitude: number }) => {
+  // UBER-1.3: Unified select handler for merged results.
+  // Callers pass extra metadata (priority, source, icon, distanceKm)
+  // used for UI badging upstream; the handler itself only needs the
+  // coordinates, so accept the enrichment fields as optional so both
+  // shapes type-check without an unsafe cast at each call site.
+  const handleSelectMerged = (item: {
+    address: string;
+    latitude: number;
+    longitude: number;
+    priority?: number;
+    source?: string;
+    icon?: string;
+    distanceKm?: number | null;
+  }) => {
     triggerSelection();
     trackEvent('address_searched', { query: query.trim() });
     setQuery('');
