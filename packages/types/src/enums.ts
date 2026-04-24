@@ -104,7 +104,12 @@ export type ReferralStatus = 'pending' | 'rewarded' | 'invalidated';
 
 export type ZoneType = 'operational' | 'surge' | 'restricted';
 
-export type Language = 'es' | 'en';
+// Bugfix: 'pt' was missing even though packages/i18n ships Portuguese
+// translations and edit.tsx/settings.tsx already surface the option to
+// users. The downstream `edit.tsx` LANGUAGES array and `toggleLanguage`
+// cycle in settings.tsx both include 'pt', so the type had a real
+// mismatch with the UI.
+export type Language = 'es' | 'en' | 'pt';
 
 export type UserLevel = 'bronce' | 'plata' | 'oro';
 

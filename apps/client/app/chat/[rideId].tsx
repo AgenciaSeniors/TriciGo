@@ -130,9 +130,11 @@ export default function ChatScreen() {
              right person. Falls back to the generic label pre-match. */}
         <View className="px-4 py-3 border-b border-neutral-100">
           <ScreenHeader
-            title={rideWithDriver?.driver_name
-              ? rideWithDriver.driver_name.split(' ')[0]
-              : t('chat.chat_driver')}
+            // `string.split()[0]` is typed `string | undefined` under
+            // noUncheckedIndexedAccess. It's unreachable in practice
+            // (a non-empty source string always yields at least one
+            // segment) but we still have to satisfy the prop type.
+            title={(rideWithDriver?.driver_name?.split(' ')[0]) || t('chat.chat_driver')}
             subtitle={
               rideWithDriver?.vehicle_plate || rideWithDriver?.vehicle_make
                 ? [

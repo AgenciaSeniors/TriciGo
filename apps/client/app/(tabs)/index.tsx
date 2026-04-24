@@ -759,7 +759,11 @@ function WebHomeScreen() {
       );
       const estimates: Record<string, any> = {};
       serviceTypes.forEach((st, i) => {
+        // Guard: `results[i]` is typed as possibly undefined under
+        // noUncheckedIndexedAccess. Also narrow `r.value` access to the
+        // fulfilled branch so TS sees `PromiseFulfilledResult<FareEstimate>`.
         const r = results[i];
+        if (!r) { estimates[st] = null; return; }
         estimates[st] = r.status === 'fulfilled' ? r.value : null;
       });
       setAllEstimates(estimates);
@@ -806,7 +810,13 @@ function WebHomeScreen() {
     // Validate TriciCoin balance
     if (paymentMethod === 'tricicoin') {
       const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
-      if (walletBalance < requiredAmount) {
+      // UX/bugfix: this used to reference `walletBalance`, which only
+      // exists inside NativeHomeScreen / IdleView. In WebHomeScreen
+      // the balance state is called `balance` (line 581). The mismatch
+      // was a runtime ReferenceError hidden behind the TriciCoin
+      // payment branch — any rider picking TriciCoin on web would crash
+      // the Solicitar flow silently. Align to the real state.
+      if (balance < requiredAmount) {
         router.push('/(tabs)/wallet');
         return;
       }
@@ -3264,9 +3274,13 @@ function ReviewingView() {
           </View>
 
           {/* U1.4: Fare range context */}
+          {/* Bugfix: `paymentMethod` is a local state of WebHomeScreen; in
+               ReviewingView (native) the equivalent lives on the ride
+               draft. Reference the store value so this branch runs
+               without a ReferenceError on native. */}
           {fareEstimate.estimated_fare_cup > 0 && (
             <Text variant="caption" color="tertiary" className="text-center mt-2 mb-4" style={{ color: colors.neutral[500] }}>
-              {paymentMethod === 'tricicoin'
+              {draft.paymentMethod === 'tricicoin'
                 ? `Este viaje suele costar ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 0.85) - discount))} – ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 1.15) - discount))}`
                 : t('home.usual_fare_range', {
                     low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString(),

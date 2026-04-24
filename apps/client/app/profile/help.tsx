@@ -49,12 +49,18 @@ export default function HelpScreen() {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [faqSearch, setFaqSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  // Bugfix: `NodeJS.Timeout` isn't available in React-Native's global
+  // type surface, which made tsc fail here. `setTimeout`'s return type
+  // portably covers both RN and Node, and `clearTimeout` needs an arg
+  // when called — passing `undefined` is a no-op under the spec and the
+  // real runtime, so wrap the call so the ref's first-render `null`
+  // doesn't throw in strict mode.
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearchChange = (text: string) => {
     setFaqSearch(text);
     setExpandedIdx(null);
-    clearTimeout(searchTimeoutRef.current);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => setDebouncedSearch(text), 300);
   };
 

@@ -17,7 +17,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
 import * as Linking from 'expo-linking';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+// Bugfix: same as rides.tsx — cacheDirectory + EncodingType live in the
+// /legacy entrypoint post-SDK migration, otherwise the CSV export path
+// throws at runtime.
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import type { CorporateAccount, CorporateEmployeeWithUser, CorporateEmployeeRole, CorporateBillingSummary, CorporateRide, EmployeeReport } from '@tricigo/types';

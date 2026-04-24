@@ -21,7 +21,12 @@ import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
 import { colors, darkColors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+// Bugfix: the new expo-file-system SDK moved legacy helpers like
+// `cacheDirectory` and `EncodingType` behind /legacy. The driver app
+// already uses the legacy import for the same CSV-export pattern — sync
+// the client so `FileSystem.cacheDirectory` resolves at runtime instead
+// of hitting a TypeError when a rider exports their ride history.
+import * as FileSystem from 'expo-file-system/legacy';
 import Toast from 'react-native-toast-message';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 
