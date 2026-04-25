@@ -39,7 +39,8 @@ RETURNS TABLE (
   vehicle_model text,
   vehicle_color text,
   vehicle_plate text,
-  share_token_expires_at timestamptz
+  vehicle_photo_url text,
+  vehicle_type text
 )
 LANGUAGE sql
 STABLE
@@ -48,7 +49,7 @@ SET search_path TO 'public', 'pg_catalog'
 AS $$
   SELECT
     r.id,
-    r.status,
+    r.status::text,
     r.service_type,
     r.pickup_lat,
     r.pickup_lng,
@@ -69,7 +70,8 @@ AS $$
     v.model AS vehicle_model,
     v.color AS vehicle_color,
     v.license_plate AS vehicle_plate,
-    r.share_token_expires_at
+    v.photo_url AS vehicle_photo_url,
+    v.type::text AS vehicle_type
   FROM rides r
   LEFT JOIN users u ON u.id = r.driver_id
   LEFT JOIN driver_profiles dp ON dp.user_id = r.driver_id
