@@ -1254,22 +1254,19 @@ export const rideService = {
   async getPublicRideByShareToken(token: string): Promise<SharedRideView | null> {
     const supabase = getSupabaseClient();
 
-    // Single query — no redundant re-fetch
-    const { data: ride, error } = await supabase
-      .from('rides')
-      .select('id, status, service_type, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, estimated_duration_s, accepted_at, pickup_at, arrived_at_destination_at, completed_at, canceled_at, driver_id, share_token_expires_at')
-      .eq('share_token', token)
-      .maybeSingle();
+    // BUG-118 fix: rides + driver_profiles + users + vehicles all have
+    // RLS scoped to ride participants, so anonymous viewers (trusted
+    // contacts opening the SMS link, web visitors not signed in) used
+    // to receive empty rows from each direct table query. Now we go
+    // through a single SECURITY DEFINER RPC that bundles the
+    // privacy-safe fields and enforces share_token expiry inline.
+    const { data, error } = await supabase
+      .rpc('get_shared_ride_by_token', { p_token: token });
     if (error) throw error;
-    if (!ride) return null;
+    const row = (data && data[0]) as Record<string, unknown> | undefined;
+    if (!row) return null;
 
-    // Enforce token expiration
-    if (ride.share_token_expires_at && new Date(ride.share_token_expires_at) < new Date()) {
-      return null;
-    }
-
-    // Fetch waypoints for this ride via a public-token RPC so the
-    // shared-tracking map can draw the full route through each stop.
+    // Waypoints come from a sibling SECURITY DEFINER RPC.
     const { data: waypointsData } = await supabase
       .rpc('get_ride_waypoints_by_share_token', { p_token: token });
     const waypoints = (waypointsData ?? []).map(
@@ -1284,70 +1281,32 @@ export const rideService = {
     );
 
     const result: SharedRideView = {
-      id: ride.id,
-      status: ride.status as SharedRideView['status'],
-      service_type: ride.service_type as SharedRideView['service_type'],
-      pickup_location: { latitude: ride.pickup_lat ?? 0, longitude: ride.pickup_lng ?? 0 },
-      dropoff_location: { latitude: ride.dropoff_lat ?? 0, longitude: ride.dropoff_lng ?? 0 },
-      estimated_duration_s: ride.estimated_duration_s ?? 0,
-      accepted_at: ride.accepted_at ?? null,
-      pickup_at: ride.pickup_at ?? null,
-      arrived_at_destination_at: ride.arrived_at_destination_at ?? null,
-      completed_at: ride.completed_at ?? null,
-      canceled_at: ride.canceled_at ?? null,
-      driver_first_name: null,
-      driver_avatar_url: null,
-      driver_rating: null,
-      vehicle_make: null,
-      vehicle_model: null,
-      vehicle_color: null,
-      vehicle_plate: null,
-      vehicle_photo_url: null,
-      vehicle_type: null,
+      id: row.id as string,
+      status: row.status as SharedRideView['status'],
+      service_type: row.service_type as SharedRideView['service_type'],
+      pickup_location: { latitude: (row.pickup_lat as number) ?? 0, longitude: (row.pickup_lng as number) ?? 0 },
+      dropoff_location: { latitude: (row.dropoff_lat as number) ?? 0, longitude: (row.dropoff_lng as number) ?? 0 },
+      estimated_duration_s: (row.estimated_duration_s as number) ?? 0,
+      accepted_at: (row.accepted_at as string | null) ?? null,
+      pickup_at: (row.pickup_at as string | null) ?? null,
+      arrived_at_destination_at: (row.arrived_at_destination_at as string | null) ?? null,
+      completed_at: (row.completed_at as string | null) ?? null,
+      canceled_at: (row.canceled_at as string | null) ?? null,
+      driver_first_name: (row.driver_first_name as string | null) ?? null,
+      driver_avatar_url: (row.driver_avatar_url as string | null) ?? null,
+      driver_rating: (row.driver_rating as number | null) ?? null,
+      vehicle_make: (row.vehicle_make as string | null) ?? null,
+      vehicle_model: (row.vehicle_model as string | null) ?? null,
+      vehicle_color: (row.vehicle_color as string | null) ?? null,
+      vehicle_plate: (row.vehicle_plate as string | null) ?? null,
+      vehicle_photo_url: (row.vehicle_photo_url as string | null) ?? null,
+      vehicle_type: (row.vehicle_type as string | null) ?? null,
       waypoints,
     };
 
-    // Fetch driver safe fields (first name only — no phone)
-    if (ride.driver_id) {
-      const { data: driverProfile } = await supabase
-        .from('driver_profiles')
-        .select('user_id, rating_avg')
-        .eq('id', ride.driver_id)
-        .single();
-
-      if (driverProfile) {
-        result.driver_rating = driverProfile.rating_avg;
-
-        const { data: driverUser } = await supabase
-          .from('users')
-          .select('full_name, avatar_url')
-          .eq('id', driverProfile.user_id)
-          .single();
-
-        if (driverUser) {
-          // Only expose first name for privacy
-          result.driver_first_name = driverUser.full_name?.split(' ')[0] ?? null;
-          result.driver_avatar_url = driverUser.avatar_url;
-        }
-
-        const { data: vehicle } = await supabase
-          .from('vehicles')
-          .select('make, model, color, plate_number, photo_url, vehicle_type')
-          .eq('driver_id', ride.driver_id)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-
-        if (vehicle) {
-          result.vehicle_make = vehicle.make;
-          result.vehicle_model = vehicle.model;
-          result.vehicle_color = vehicle.color;
-          result.vehicle_plate = vehicle.plate_number;
-          result.vehicle_photo_url = vehicle.photo_url ?? null;
-          result.vehicle_type = vehicle.vehicle_type ?? null;
-        }
-      }
-    }
+    // Driver + vehicle fields come straight from get_shared_ride_by_token's
+    // joined SELECT — no follow-up fetches needed. Saves the previous
+    // N+1 round-trip pattern.
 
     return result;
   },
