@@ -62,20 +62,29 @@ Cada servicio incluye: tier free actual, qué precisás en producción, business
 
 **Estado actual:** Free tier (visible "FREE" en el dashboard).
 
+**🟢 DECISIÓN: upgradear a Pro ($25/mes)** — confirmado por usuario 2026-04-25.
+
 **Lo que necesitás en producción:**
 | Tier | Precio | Qué incluye | Suficiente para TriciGo? |
 |---|---|---|---|
 | Free | $0 | 500 MB DB, 1 GB file storage, 50K MAU, 7-day backups | NO — sin PITR, MAU bajo, riesgo de pausa por inactividad |
-| **Pro** ⭐ | **$25/mes** | 8 GB DB, 100 GB storage, 100K MAU, **PITR**, custom SMTP, no auto-pause | **Sí, el ideal para arrancar producción** |
+| **Pro** ⭐ | **$25/mes** | 8 GB DB, 100 GB storage, 100K MAU, **PITR**, custom SMTP, no auto-pause | **Sí — tier elegido** |
 | Team | $599/mes | SLA, SOC2, audit logs avanzados | Solo cuando escales mucho |
 
 **Pasos:**
 1. Settings → Billing → Upgrade to Pro
 2. Pago con tarjeta de crédito a nombre de TriciGo (o de tu LLC)
 3. Confirmar PITR habilitado post-upgrade
+4. **Cuándo hacerlo**: antes del primer usuario real. Pro también desactiva el auto-pause por inactividad — si en Free dejás el proyecto sin tráfico 7 días, se pausa y los crones dejan de correr.
 
 **Email business para soporte/billing:**
 - Crear `billing@tricigo.com` (o equivalente) y usar para la cuenta. Evitá emails personales.
+
+**Por qué Pro es no-negociable**:
+- **PITR**: si alguien borra production data por error o un attacker la corrompe, podés restaurar a cualquier punto de los últimos 7 días, no solo a snapshots diarios. Free tier no tiene esto.
+- **MAU 100K**: Free es 50K. Si TriciGo pega bien rápido, te bloquea hasta que upgradees.
+- **Custom SMTP**: en Free, los emails de auth (password reset, magic link) salen vía Supabase con el domain `mail.app.supabase.io`. En Pro, podés conectar Resend para que salgan desde `noreply@tricigo.com`.
+- **No auto-pause**: producción no se puede pausar.
 
 ---
 
@@ -83,14 +92,49 @@ Cada servicio incluye: tier free actual, qué precisás en producción, business
 
 **Estado actual:** Tier Free (3000 emails/mes), `RESEND_API_KEY` configurada en EFs.
 
+**🟢 DECISIÓN: quedarse en Free** — confirmado por usuario 2026-04-25.
+
 **Lo que necesitás en producción:**
 | Tier | Precio | Qué incluye |
 |---|---|---|
-| Free | $0 | 3,000 emails/mes, 100 emails/día, marca Resend en footer |
-| **Pro** ⭐ | **$20/mes** | 50,000 emails/mes, sin marca, 7 dominios verificados |
+| **Free** ⭐ | **$0** | 3,000 emails/mes, 100 emails/día, 1 dominio verificado |
+| Pro | $20/mes | 50,000 emails/mes, sin marca, 7 dominios verificados |
 | Business | $90/mes | 100K emails/mes, 5 IPs dedicadas, prioritario |
 
-**Pasos críticos:**
+**⚠️ Limitaciones del Free tier — TriciGo las va a tocar rápido:**
+
+Volumen estimado de emails por flujo:
+| Flujo | Trigger | Volumen / 1000 usuarios activos |
+|---|---|---|
+| Ride receipt (`send-email` via trigger en `00134`) | Cada ride completado | ~30/día (asume ~30 rides/día) |
+| Driver under review notification (`00138`) | Onboarding | ~3/día |
+| Behavioral campaigns: welcome (`behavioral-emails`) | Cron 8 AM, nuevos del día | ~5/día |
+| Behavioral campaigns: win-back (`behavioral-emails`) | Cron 8 AM, inactivos 7+ días | **~50-200/día** ⚠️ |
+| Admin notify (`notify-business-movement`) | Recargas + ajustes | ~5/día |
+| Bulk campaigns (`send-bulk-email`) | Manual desde admin /campaigns | **0-N/día** según uso |
+| Password reset (Supabase auth) | User-initiated | ~2/día |
+
+**Total estimado ~95-265/día** → **excede el cap de 100/día** del free tier en cuanto cualquier campaign manual o win-back agresivo se dispare.
+
+**Mitigaciones para mantenerse en Free**:
+
+1. **Desactivá `behavioral-emails-daily` cron** o pasalo a semanal hasta que upgradees:
+   ```sql
+   UPDATE cron.job SET active = false WHERE jobname = 'behavioral-emails-daily';
+   -- O cambiar schedule a '0 8 * * 1' (solo lunes)
+   ```
+
+2. **Dentro de `behavioral-emails` EF, agregar cap diario** — solo enviar a los primeros 30-50 usuarios calificados, deferir el resto al día siguiente.
+
+3. **`send-bulk-email`** (admin /campaigns): usar con criterio. Una campaign a 500 usuarios consume todo el cap del día. Considerá:
+   - Splittear campaigns en chunks de 50-80, enviadas en días distintos.
+   - Priorizar canales free (in-app notifications via `send-push`) sobre email.
+
+4. **Configurar alertas en Resend Dashboard** → Settings → Email Limits → notification cuando llegues al 80% del mensual.
+
+5. **Plan de upgrade automático**: cuando el throughput natural de la plataforma supere los 80 emails/día sostenido por 7 días, **upgradear a Pro inmediatamente**. Si no, los emails empezarán a ser rechazados con `429 Too Many Requests` y los usuarios no recibirán recibos/notifs críticas.
+
+**Pasos críticos (válidos para Free + Pro):**
 1. **Verificar el dominio `tricigo.com`** en Resend dashboard. Esto requiere agregar DNS records:
    - **MX** records (si querés recibir email también)
    - **SPF**: `v=spf1 include:_spf.resend.com ~all` (TXT en root)
