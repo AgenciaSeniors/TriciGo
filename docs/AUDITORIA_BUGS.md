@@ -1,7 +1,7 @@
 # TriciGo — Auditoría de Seguridad e Integridad
 
 **Última actualización:** 2026-04-25
-**Estado del sprint:** 14 tiers cerrados, ~80 bugs fixed (BUG-086..203). 1 P0 + 4 P1-P3 documentados pendientes (acción manual del usuario).
+**Estado del sprint:** 14 tiers cerrados, ~80 bugs fixed (BUG-086..203). **BUG-199 P0 RESUELTO** post-doc. 4 P1-P3 documentados pendientes (acción manual del usuario).
 
 Este documento consolida todos los bugs encontrados y arreglados durante el sprint de auditoría 2026-04. Está organizado por **tier** (orden cronológico de descubrimiento) para que sea fácil de navegar. Cada bug entra como una fila con: severidad, vector explotable, fix (migración/archivo), estado.
 
@@ -167,7 +167,7 @@ Este documento consolida todos los bugs encontrados y arreglados durante el spri
 
 | Bug | Sev | Vector | Fix |
 |---|---|---|---|
-| BUG-199 | 🔥 P0 | service_role JWT hardcoded en 11 migraciones de un repo público GitHub. Bypasea TODA la RLS, no expira hasta 2036. **Asumir que un atacante ya lo tiene** | 🚧 **Pendiente acción usuario**: rotar JWT + apply `00217_crons_use_vault_jwt.sql`. Procedimiento detallado en `docs/JWT_ROTATION.md` |
+| BUG-199 | 🔥 P0 | service_role JWT hardcoded en 11 migraciones de un repo público GitHub. **VERIFICACIÓN EMPÍRICA 2026-04-25**: PostgREST ya rechazaba (Supabase auto-revocó legacy JWT secret 19 días antes), PERO 4 EFs (auto-admin, sync-weather, sync-exchange-rate, send-sms) seguían aceptando vía BUG-201 decoder no-verifier | ✅ **RESOLVED** (commit `e6c00a5`): migración 00219 actualizó cron commands para enviar `apikey: <vault.service_role_key>`; los 4 EFs se redeployaron con `apikey === env.SUPABASE_SERVICE_ROLE_KEY` (sb_secret_*) — leaked JWT ahora retorna 401 en los 4. Crones siguen funcionando 200 |
 | BUG-200 | 🟡 | Default privileges en `public` schema otorgaban `EXECUTE` automático a anon en cada nueva function — causa raíz de la mayoría de bugs SECDEF de Tiers 6+ | `00218_revoke_default_execute_anon.sql` |
 | BUG-201 | 🔴 | EFs `sync-exchange-rate`, `sync-weather`, `send-sms` chequeaban `apikey === serviceRoleKey` — pero crones envían JWT solo en `Authorization`. Crones fallaban 401 silenciosamente por una semana | EFs redeployed con JWT role-claim check (decode payload, validate `role=service_role`) |
 
@@ -191,15 +191,17 @@ Este documento consolida todos los bugs encontrados y arreglados durante el spri
 
 ## Pendiente (acción manual)
 
-### 🔥 P0 — BUG-199: rotar service_role JWT
+### ✅ BUG-199 P0 — RESUELTO 2026-04-25
 
-**No esperar más.** Procedimiento en `docs/JWT_ROTATION.md`:
-
-1. Reset key en https://supabase.com/dashboard/project/lqaufszburqvlslpcuac/settings/api
-2. `INSERT INTO vault.secrets (name, secret) VALUES ('service_role_jwt', '<new>')`
-3. Update env var `SUPABASE_SERVICE_ROLE_KEY` en 12 EFs vía dashboard
-4. Apply `supabase/migrations/00217_crons_use_vault_jwt.sql`
-5. Verify crones respondan 200 OK; auditar `auth.audit_log_entries` por usos sospechosos del JWT viejo.
+Estado al cierre del sprint:
+- Supabase ya había auto-revocado el legacy JWT secret 19 días antes (HS256 → ECC P-256). PostgREST y la mayoría de EFs ya rechazaban el JWT leakeado.
+- 4 EFs (auto-admin, sync-weather, sync-exchange-rate, send-sms) seguían siendo explotables vía BUG-201 decoder. Verificación empírica con curl confirmó la vulnerabilidad.
+- Fix aplicado en commit `e6c00a5`:
+  - Migración 00219 — cron commands envían `apikey: <vault.service_role_key>` (sb_secret_*)
+  - 4 EFs redeployadas — revert a `apikey === env.SUPABASE_SERVICE_ROLE_KEY` (post-rotation Supabase auto-mantiene env var con sb_secret_*)
+  - Verificación: leaked JWT → 401 en los 4, cron-style → 200, wallet invariant 0
+- `docs/JWT_ROTATION.md` queda como referencia histórica del procedimiento.
+- **Recomendación remanente**: cuando convenga, en algún momento ejecutar `git filter-branch` o BFG Repo-Cleaner para purgar el JWT del git history (no urgente ya que el secret está revocado y el JWT ya no autentica, pero es hygiene).
 
 ### 🟠 P1 — BUG-196: MFA admins
 
@@ -233,8 +235,8 @@ Limpieza es decisión del usuario. SQL para borrar test data disponible bajo dem
 
 ## Stats agregadas del sprint
 
-- **78 bugs cerrados** desde BUG-086 hasta BUG-203 (con gaps numéricos en bugs descartados o duplicados).
-- **31 nuevas migraciones** aplicadas (00141..00218) — todas con commit en master, todas idempotentes-friendly.
+- **78+ bugs cerrados** desde BUG-086 hasta BUG-203 (con gaps numéricos en bugs descartados o duplicados). **BUG-199 P0 cerrado post-doc** con verificación empírica.
+- **32 nuevas migraciones** aplicadas (00141..00219) — todas con commit en master, todas idempotentes-friendly.
 - **12 Edge Functions** redeployed con caller-gates + auth checks: `auto-admin`, `send-sms`, `send-sms-otp`, `verify-otp`, `send-push`, `send-email`, `send-bulk-sms`, `send-bulk-email`, `notify-business-movement`, `sync-exchange-rate`, `sync-weather`, `create-stripe-payment-intent`, `create-tropipay-link`, `create-ride-payment-link` (más). 
 - **Wallet ledger invariant** (≡ `balance = SUM(entries.amount)`): mantenido en 0 mismatches durante todo el sprint.
 - **0 regresiones funcionales** detectadas post-deploy (excepto BUG-201 que se detectó y arregló dentro del mismo sprint).
