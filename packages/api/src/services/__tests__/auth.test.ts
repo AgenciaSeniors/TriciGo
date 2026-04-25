@@ -354,8 +354,8 @@ describe('authService', () => {
       expect(mockStorage.from).toHaveBeenCalledWith('avatars');
       expect(mockStorageUpload).toHaveBeenCalledWith(
         'user-1/avatar.jpg',
-        expect.any(Blob),
-        { contentType: 'image/jpeg', upsert: true },
+        expect.any(FormData),
+        { contentType: 'multipart/form-data', upsert: true },
       );
       expect(result).toContain('https://storage.supabase.co/avatars/user-1/avatar.jpg');
     });

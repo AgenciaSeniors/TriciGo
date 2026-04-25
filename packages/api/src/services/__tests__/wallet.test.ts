@@ -208,7 +208,7 @@ describe('walletService', () => {
       const summary = await walletService.getSummary('user-1');
       expect(summary.available_balance).toBe(45000);
       expect(summary.held_balance).toBe(5000);
-      expect(mockRpc).toHaveBeenCalledWith('get_wallet_summary', { p_user_id: 'user-1' });
+      expect(mockRpc).toHaveBeenCalledWith('get_wallet_summary', { p_user_id: 'user-1', p_account_type: 'customer_cash' });
     });
 
     it('returns defaults when RPC returns null', async () => {

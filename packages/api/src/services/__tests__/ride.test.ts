@@ -426,28 +426,18 @@ describe('rideService.getRideWaypoints', () => {
       { id: 'wp-2', ride_id: 'r-1', sort_order: 2, address: 'B', latitude: 23.2, longitude: -82.4 },
     ];
 
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
-        }),
-      }),
-    });
+    // Service now uses RPC get_ride_waypoints_with_coords (returns numeric lat/lng).
+    mockRpc.mockResolvedValueOnce({ data: mockData, error: null });
 
     const result = await rideService.getRideWaypoints('r-1');
     expect(result).toHaveLength(2);
     expect(result[0].sort_order).toBe(1);
     expect(result[1].sort_order).toBe(2);
+    expect(mockRpc).toHaveBeenCalledWith('get_ride_waypoints_with_coords', { p_ride_id: 'r-1' });
   });
 
   it('returns empty array when no waypoints', async () => {
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        }),
-      }),
-    });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
 
     const result = await rideService.getRideWaypoints('r-1');
     expect(result).toEqual([]);
@@ -789,53 +779,55 @@ describe('rideService.createRide', () => {
 describe('rideService.cancelRide', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFrom.mockImplementation(() => createMockQueryChain());
   });
 
   it('cancels a ride and applies penalty', async () => {
-    // The service does: select ride, then update ride. Default chain handles both.
-    const chain = createMockQueryChain({ data: null, error: null });
-    chain.single.mockResolvedValue({ data: { customer_id: 'user-1', driver_id: null }, error: null });
-    mockFrom.mockImplementation(() => chain);
-
-    mockRpc.mockResolvedValue({
-      data: { penalty_amount: 200, is_blocked: false },
+    // Service now wraps everything in a single SECDEF RPC `cancel_ride`
+    // which handles ride lookup, status transition, fee + penalty calc.
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        success: true,
+        penalty_amount: 200,
+        is_blocked: false,
+        fee_cup: 0,
+        fee_trc: 0,
+        fee_reason: 'free_cancel',
+      },
       error: null,
     });
 
     const result = await rideService.cancelRide('ride-1', 'user-1', 'changed_mind');
     expect(result).toEqual(expect.objectContaining({ penaltyAmount: 200, isBlocked: false }));
-    expect(mockRpc).toHaveBeenCalledWith('apply_cancellation_penalty', {
-      p_user_id: 'user-1',
+    expect(mockRpc).toHaveBeenCalledWith('cancel_ride', {
       p_ride_id: 'ride-1',
+      p_reason: 'changed_mind',
     });
   });
 
-  it('cancels without penalty when no userId', async () => {
-    const chain = createMockQueryChain({ data: null, error: null });
-    mockFrom.mockImplementation(() => chain);
+  it('cancels without reason when not provided', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { success: true, penalty_amount: 0, is_blocked: false, fee_cup: 0, fee_trc: 0, fee_reason: 'free_cancel' },
+      error: null,
+    });
 
     const result = await rideService.cancelRide('ride-1');
-    expect(result).toBeNull();
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ penaltyAmount: 0 }));
+    expect(mockRpc).toHaveBeenCalledWith('cancel_ride', { p_ride_id: 'ride-1', p_reason: null });
   });
 
-  it('throws when ride update fails', async () => {
-    const chain = createMockQueryChain({ data: null, error: { message: 'RLS denied' } });
-    mockFrom.mockImplementation(() => chain);
+  it('throws when RPC errors out', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'RLS denied' } });
 
     await expect(rideService.cancelRide('ride-1')).rejects.toBeDefined();
   });
 
-  it('returns null when penalty RPC fails gracefully', async () => {
-    const chain = createMockQueryChain({ data: null, error: null });
-    chain.single.mockResolvedValue({ data: { customer_id: 'user-1', driver_id: null }, error: null });
-    mockFrom.mockImplementation(() => chain);
+  it('throws when RPC returns error code', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { error: 'unauthorized' },
+      error: null,
+    });
 
-    mockRpc.mockRejectedValue(new Error('RPC timeout'));
-
-    const result = await rideService.cancelRide('ride-1', 'user-1');
-    expect(result).toBeNull();
+    await expect(rideService.cancelRide('ride-1', 'user-1')).rejects.toThrow();
   });
 });
 

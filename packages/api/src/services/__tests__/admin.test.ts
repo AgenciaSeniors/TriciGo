@@ -769,69 +769,24 @@ describe('adminService', () => {
   });
 
   describe('processRecharge', () => {
-    it('processes an approved recharge with all ledger steps', async () => {
-      const rechargeReq = { id: 'rr-1', user_id: 'u-1', amount: 10000, status: 'pending' };
+    it('processes an approved recharge via approve_wallet_recharge RPC', async () => {
+      // BUG-116 + BUG-175: single atomic RPC call (idempotent via
+      // ledger_transactions.idempotency_key). Replaces the old 5-call
+      // client-side flow.
+      mockRpc.mockResolvedValueOnce({ data: 'txn-1', error: null });
 
-      // Step 1: wallet_recharge_requests.select -> eq -> eq -> single
-      const chain1 = createMockQueryChain();
-      chain1.single.mockResolvedValue({ data: rechargeReq, error: null });
-
-      // Step 2: rpc('ensure_wallet_account')
-      mockRpc.mockResolvedValueOnce({ data: 'acct-1', error: null });
-
-      // Step 3: wallet_accounts.select('balance') -> eq -> single
-      const chain3 = createMockQueryChain();
-      chain3.single.mockResolvedValue({ data: { balance: 5000 }, error: null });
-
-      // Step 4: ledger_transactions.insert -> select -> single
-      const chain4 = createMockQueryChain();
-      chain4.single.mockResolvedValue({ data: { id: 'txn-1' }, error: null });
-
-      // Step 5: ledger_entries.insert
-      const chain5 = createMockQueryChain({ data: null, error: null });
-
-      // Step 6: wallet_accounts.update -> eq
-      const chain6 = createMockQueryChain({ data: null, error: null });
-
-      // Step 7: wallet_recharge_requests.update -> eq
-      const chain7 = createMockQueryChain({ data: null, error: null });
-
-      // Step 8: admin_actions.insert
-      const chain8 = createMockQueryChain({ data: null, error: null });
-
-      mockFrom
-        .mockReturnValueOnce(chain1)   // wallet_recharge_requests.select
-        .mockReturnValueOnce(chain3)   // wallet_accounts.select
-        .mockReturnValueOnce(chain4)   // ledger_transactions.insert
-        .mockReturnValueOnce(chain5)   // ledger_entries.insert
-        .mockReturnValueOnce(chain6)   // wallet_accounts.update
-        .mockReturnValueOnce(chain7)   // wallet_recharge_requests.update
-        .mockReturnValueOnce(chain8);  // admin_actions.insert
+      // After RPC, service inserts admin_actions row
+      const adminActionsChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(adminActionsChain);
 
       await adminService.processRecharge('rr-1', 'admin-1', true);
 
-      expect(mockRpc).toHaveBeenCalledWith('ensure_wallet_account', {
-        p_user_id: 'u-1',
-        p_type: 'customer_cash',
+      expect(mockRpc).toHaveBeenCalledWith('approve_wallet_recharge', {
+        p_request_id: 'rr-1',
+        p_admin_id: 'admin-1',
       });
-      expect(chain4.insert).toHaveBeenCalledWith(expect.objectContaining({
-        idempotency_key: 'recharge:rr-1',
-        type: 'recharge',
-        status: 'posted',
-      }));
-      expect(chain5.insert).toHaveBeenCalledWith(expect.objectContaining({
-        transaction_id: 'txn-1',
-        account_id: 'acct-1',
-        amount: 10000,
-        balance_after: 15000,
-      }));
-      expect(chain6.update).toHaveBeenCalledWith({ balance: 15000 });
-      expect(chain6.eq).toHaveBeenCalledWith('id', 'acct-1');
-      expect(chain7.update).toHaveBeenCalledWith(expect.objectContaining({
-        status: 'approved',
-        processed_by: 'admin-1',
-      }));
-      expect(chain8.insert).toHaveBeenCalledWith(expect.objectContaining({
+      expect(adminActionsChain.insert).toHaveBeenCalledWith(expect.objectContaining({
+        admin_id: 'admin-1',
         action: 'approve_recharge',
         target_id: 'rr-1',
       }));

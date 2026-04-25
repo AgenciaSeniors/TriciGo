@@ -257,13 +257,8 @@ describe('Ride Service Integration', () => {
         { id: 'wp-2', ride_id: 'ride-001', sort_order: 2, address: 'Stop 2' },
       ];
 
-      const chain = chainable({ data: mockWaypoints, error: null });
-      // Override order to resolve directly (it's the terminal call here)
-      (chain.order as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        data: mockWaypoints,
-        error: null,
-      });
-      tableChains['ride_waypoints'] = chain;
+      // Service now uses RPC get_ride_waypoints_with_coords (returns numeric lat/lng).
+      mockRpc.mockResolvedValueOnce({ data: mockWaypoints, error: null });
 
       const result = await rideService.getRideWaypoints('ride-001');
 
