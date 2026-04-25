@@ -1867,12 +1867,14 @@ function IdleView() {
   useEffect(() => {
     const fetchDriverCount = async () => {
       try {
-        const { count } = await getSupabaseClient()
-          .from('driver_profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_online', true)
-          .gt('last_heartbeat_at', new Date(Date.now() - 5 * 60 * 1000).toISOString());
-        setDriverCount(count ?? 0);
+        // BUG-123: switched from .from('driver_profiles').select('*', count) to
+        // a SECURITY DEFINER RPC. The previous direct table query relied on
+        // dp_select_own's public clause that exposed identity_number, address
+        // and criminal_record_details to every authenticated user; that clause
+        // is now gone, and this RPC returns just an integer.
+        const { data } = await getSupabaseClient()
+          .rpc('count_online_drivers', { p_within_minutes: 5 });
+        setDriverCount(typeof data === 'number' ? data : 0);
       } catch {
         setDriverCount(0);
       }

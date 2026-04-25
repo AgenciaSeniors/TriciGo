@@ -713,11 +713,16 @@ export const rideService = {
 
     // If driver assigned, fetch details
     if (rideData.driver_id) {
-      const { data: driverProfile } = await supabase
-        .from('driver_profiles')
-        .select('user_id, rating_avg, total_rides_completed')
-        .eq('id', rideData.driver_id)
-        .single();
+      // BUG-123: dp_select_own no longer has the public "approved + online"
+      // clause, so the rider can't read driver_profiles directly anymore.
+      // get_assigned_driver_info() is a SECURITY DEFINER RPC that returns
+      // only the safe fields (rating + ride count) and gates access to the
+      // rider on an active/recent ride with this driver.
+      const { data: assignedRows } = await supabase
+        .rpc('get_assigned_driver_info', { p_driver_profile_id: rideData.driver_id });
+      const driverProfile = (assignedRows && assignedRows[0]) as
+        { user_id: string; rating_avg: number | null; total_rides_completed: number | null }
+        | undefined;
 
       if (driverProfile) {
         result.driver_user_id = driverProfile.user_id;
