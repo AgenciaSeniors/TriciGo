@@ -42,6 +42,12 @@ Deno.serve(async (req) => {
 
     const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
 
+    // BUG-186: per-phone rate limit (in addition to per-IP). Caps OTP
+    // brute force at 10 verify attempts per phone per 10 minutes,
+    // independent of how many IPs the attacker rotates through.
+    const rlPhone = await rateLimit(`verify-otp:phone:${normalizedPhone}`, 10, 10 * 60 * 1000);
+    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs);
+
     // Supabase client (needed for both Cuba and user creation)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -50,47 +56,34 @@ Deno.serve(async (req) => {
 
     // ── Route by country: Cuba → otp_codes table, rest → Twilio Verify ──
     if (normalizedPhone.startsWith('+53')) {
-      // ── Cuba → verify against otp_codes table ──
-      const { data: otpRecord } = await supabase
-        .from('otp_codes')
-        .select('*')
-        .eq('phone', normalizedPhone)
-        .is('verified_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      // BUG-184 fix: atomic verify_cuba_otp RPC (lock row + check + increment
+      // inside one transaction). The previous code path had a race condition
+      // and an off-by-one that allowed OTP brute force.
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('verify_cuba_otp', {
+        p_phone: normalizedPhone,
+        p_code: code,
+      });
 
-      if (!otpRecord) {
+      if (rpcError) {
+        console.error('verify_cuba_otp RPC failed:', rpcError);
         return new Response(
-          JSON.stringify({ error: 'Invalid or expired code' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+          JSON.stringify({ error: 'Verification service unavailable' }),
+          { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
 
-      // Increment attempts
-      await supabase.from('otp_codes')
-        .update({ attempts: otpRecord.attempts + 1 })
-        .eq('id', otpRecord.id);
-
-      if (otpRecord.attempts >= 5) {
+      const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
+      if (!result?.ok) {
+        const errCode = result?.error;
+        const userMsg =
+          errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
+          : errCode === 'no_active_code'  ? 'Invalid or expired code'
+          :                                 'Invalid or expired code';
         return new Response(
-          JSON.stringify({ error: 'Too many attempts. Request a new code.' }),
+          JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
           { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
-
-      if (otpRecord.code !== code) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid or expired code' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Mark as verified
-      await supabase.from('otp_codes')
-        .update({ verified_at: new Date().toISOString() })
-        .eq('id', otpRecord.id);
 
       console.log('Cuba OTP verified for:', normalizedPhone);
 

@@ -46,6 +46,13 @@ Deno.serve(async (req) => {
       );
     }
 
+    // BUG-186: per-phone rate limit. Caps OTP-spam abuse where an
+    // attacker rotates IPs to hammer Twilio/Meta with OTP requests
+    // for a victim's phone (annoyance + quota drain). 3 OTPs per
+    // phone per 5 minutes is generous for legit retries.
+    const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, 3, 5 * 60 * 1000);
+    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs);
+
     // ── Route by country: Cuba → Meta Cloud API, rest → Twilio Verify ──
     if (normalizedPhone.startsWith('+53')) {
       // ── Cuba → Meta Cloud API WhatsApp ──
