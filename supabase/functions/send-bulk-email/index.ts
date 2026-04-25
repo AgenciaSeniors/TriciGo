@@ -7,6 +7,12 @@
 // one bad address doesn't tank the whole batch.
 //
 // Rate-limited to ~20 emails/sec to respect Resend limits.
+//
+// BUG-180 fix: this EF previously had NO authentication. Any
+// authenticated user could call it with arbitrary user_ids,
+// subject, and HTML body, sending phishing emails from our
+// noreply@tricigo.com address and burning the Resend quota.
+// Now requires admin role (or service_role for cron/automation).
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -42,6 +48,36 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // ── Auth gate: service_role OR authenticated admin ──
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const apiKey = req.headers.get('apikey') ?? '';
+    const isInternalCall = apiKey === serviceRoleKey;
+
+    if (!isInternalCall) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAuth = createClient(supabaseUrl, serviceRoleKey);
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+        authHeader.replace('Bearer ', ''),
+      );
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: roleRow } = await supabaseAuth.from('users').select('role').eq('id', user.id).single();
+      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+        return new Response(JSON.stringify({ error: 'Forbidden: admin role required' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const body: BulkEmailRequest = await req.json();
     const { user_ids, subject, body_html, promo_code_id } = body;
 

@@ -1,4 +1,17 @@
+// ============================================================
 // supabase/functions/send-push/index.ts
+//
+// Sends Expo push notifications to users. Called from auto-admin
+// (cron) and other server-side flows. Not invoked from any client
+// app directly — all client-driven push notifications go through
+// SECDEF RPCs that emit DB triggers, which then fire pg_net to
+// this EF.
+//
+// BUG-182 fix: previously accepted any authenticated user's JWT
+// and would happily send pushes to any `user_ids` array. A regular
+// rider could call it to phish drivers or admins via the inbox
+// (notifications table). Now requires service_role OR admin role.
+// ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
@@ -36,8 +49,9 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`send-push:${clientIP}`, 30, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
-    // ── Auth: allow internal service-role calls or valid JWT ──
+    // ── Auth gate: service_role OR authenticated admin ──
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const apiKey = req.headers.get('apikey') ?? '';
     const isInternalCall = apiKey === serviceRoleKey;
 
@@ -50,18 +64,27 @@ Deno.serve(async (req) => {
         );
       }
 
-      const supabaseAuth = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        serviceRoleKey,
-      );
+      const supabaseAuth = createClient(supabaseUrl, serviceRoleKey);
       const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
         authHeader.replace('Bearer ', ''),
       );
-
       if (authError || !user) {
         return new Response(
           JSON.stringify({ error: 'Invalid or expired token' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      // Only admins can craft pushes for arbitrary user_ids.
+      // Regular users have no legitimate path to call send-push.
+      const { data: roleRow } = await supabaseAuth
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: admin role required' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
     }

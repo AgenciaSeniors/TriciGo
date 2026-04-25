@@ -8,6 +8,12 @@
 // Throttled to ~10 SMS/sec to respect Twilio defaults.
 // Twilio credentials are read from platform_config (same flow as the
 // SMS OTP function — see docs/BLOQUEANTES.md for setup).
+//
+// BUG-179 fix: this EF previously had NO authentication. Any
+// authenticated user could call it with arbitrary user_ids and
+// custom body, draining our Twilio quota and using us as a phishing
+// channel against any user in the DB. Now requires admin role
+// (or service_role for cron/automation).
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -37,6 +43,36 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // ── Auth gate: service_role OR authenticated admin ──
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const apiKey = req.headers.get('apikey') ?? '';
+    const isInternalCall = apiKey === serviceRoleKey;
+
+    if (!isInternalCall) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAuth = createClient(supabaseUrl, serviceRoleKey);
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+        authHeader.replace('Bearer ', ''),
+      );
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: roleRow } = await supabaseAuth.from('users').select('role').eq('id', user.id).single();
+      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+        return new Response(JSON.stringify({ error: 'Forbidden: admin role required' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const body: BulkSmsRequest = await req.json();
     const { user_ids, body: smsBody } = body;
 
@@ -46,7 +82,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // 1. Fetch phones
     const { data: users, error } = await supabase

@@ -9,6 +9,11 @@
 // Business email is read from platform_config.business_notification_email
 // (set via admin /settings/platform-config). If not configured, no-op.
 // Uses Resend (same as send-email function).
+//
+// BUG-181 fix: this EF previously had NO authentication. Any
+// authenticated user could spam the business email by calling
+// it with arbitrary transaction IDs. Now requires admin role
+// (or service_role for cron/automation).
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -53,6 +58,36 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // ── Auth gate: service_role OR authenticated admin ──
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const apiKey = req.headers.get('apikey') ?? '';
+    const isInternalCall = apiKey === serviceRoleKey;
+
+    if (!isInternalCall) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const supabaseAuth = createClient(supabaseUrl, serviceRoleKey);
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+        authHeader.replace('Bearer ', ''),
+      );
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: roleRow } = await supabaseAuth.from('users').select('role').eq('id', user.id).single();
+      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+        return new Response(JSON.stringify({ error: 'Forbidden: admin role required' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const body: NotifyRequest = await req.json();
     const { transaction_id, event_type } = body;
 
@@ -62,8 +97,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // 1. Fetch business email from platform_config
