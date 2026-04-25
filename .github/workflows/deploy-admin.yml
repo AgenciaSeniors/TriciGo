@@ -125,12 +125,20 @@ jobs:
             pm2 start $APP_DIR/ecosystem.config.js
             pm2 save
 
-            # Wait briefly + verify the process is actually listening
-            sleep 5
-            if ss -tlnp | grep -q ":${ADMIN_PORT}.*LISTEN"; then
-              echo "✓ tricigo-admin listening on :${ADMIN_PORT}"
-            else
-              echo "✗ tricigo-admin NOT listening on :${ADMIN_PORT}"
+            # Poll until Next.js binds the port. Cold start of the
+            # standalone server.js can take 10-30s on this VPS, so a
+            # fixed sleep is fragile. Try up to 12 × 5s = 60s.
+            BOUND=0
+            for i in $(seq 1 12); do
+              if ss -tlnp | grep -q ":${ADMIN_PORT}.*LISTEN"; then
+                BOUND=1
+                echo "✓ tricigo-admin listening on :${ADMIN_PORT} (after ${i}×5s)"
+                break
+              fi
+              sleep 5
+            done
+            if [ "$BOUND" != "1" ]; then
+              echo "✗ tricigo-admin NOT listening on :${ADMIN_PORT} after 60s"
               pm2 logs tricigo-admin --lines 30 --nostream || true
               exit 1
             fi
