@@ -82,18 +82,27 @@ jobs:
             fi
 
             # Restart with PM2 — use ecosystem.config.js for reliable env
-            # passing (the previous `PORT=... pm2 start` inline-env approach
-            # silently dropped HOSTNAME under PM2 9, leading to admin
-            # listening on 127.0.0.1 only and nginx getting 502 from
-            # 0.0.0.0:3000 → connection refused).
+            # passing.
+            #
+            # Port allocation on this VPS (per nginx + comments in
+            # deploy-web.yml):
+            #   3001  →  gst (unrelated 3rd-party app, 25d uptime)
+            #   3002  →  tricigo-admin  (THIS workflow)
+            #   3003  →  tricigo-web
+            # nginx server_name admin.tricigo.com proxies to 127.0.0.1:3002.
+            # Until 2026-04-25 this workflow was hardcoded to PORT=3000,
+            # which collided with gst and produced silent EADDRINUSE in
+            # pm2 logs while pm2 list still showed "online" — admin had
+            # been 502 in prod for an undetermined window.
+            ADMIN_PORT=3002
             pm2 delete tricigo-admin 2>/dev/null || true
-            # Kill any process still holding port 3000
-            fuser -k 3000/tcp 2>/dev/null || true
+            # Kill any process still holding our port
+            fuser -k ${ADMIN_PORT}/tcp 2>/dev/null || true
             sleep 1
 
             # Write .env so server.js inherits PORT/HOSTNAME even outside PM2
             cat > $APP_DIR/.env << ENVEOF
-            PORT=3000
+            PORT=${ADMIN_PORT}
             HOSTNAME=0.0.0.0
             ENVEOF
 
@@ -105,7 +114,7 @@ jobs:
                 script: '${ENTRY}',
                 cwd: '${APP_DIR}',
                 env: {
-                  PORT: 3000,
+                  PORT: ${ADMIN_PORT},
                   HOSTNAME: '0.0.0.0',
                   NODE_ENV: 'production'
                 }
@@ -118,10 +127,10 @@ jobs:
 
             # Wait briefly + verify the process is actually listening
             sleep 5
-            if ss -tlnp | grep -q ':3000.*LISTEN'; then
-              echo "✓ tricigo-admin listening on :3000"
+            if ss -tlnp | grep -q ":${ADMIN_PORT}.*LISTEN"; then
+              echo "✓ tricigo-admin listening on :${ADMIN_PORT}"
             else
-              echo "✗ tricigo-admin NOT listening on :3000"
+              echo "✗ tricigo-admin NOT listening on :${ADMIN_PORT}"
               pm2 logs tricigo-admin --lines 30 --nostream || true
               exit 1
             fi
