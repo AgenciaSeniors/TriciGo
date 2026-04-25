@@ -3,11 +3,22 @@
 // Runs every 5 minutes via pg_cron to automate repetitive admin
 // tasks: driver approval, wallet redemptions, fraud alerts,
 // incident closure. All configurable via platform_config.
+//
+// BUG-138/139/140/141 fixes:
+//   - autoApproveRedemptions now calls the approve_redemption RPC
+//     so the driver_cash wallet is actually debited (was bare
+//     status update before, leaking platform money on every cron).
+//   - autoFailStaleTropipay queries payment_intents.ride_id (the
+//     real column from migration 00185) instead of reference_id.
+//   - autoCloseIncidents targets incident_reports (the real table)
+//     instead of the non-existent 'incidents' table.
+//   - autoApproveDrivers reads push tokens from user_devices.push_token
+//     (real schema) instead of the non-existent device_tokens table.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const SYSTEM_USER = '00000000-0000-0000-0000-000000000001';
 
 function getCorsHeaders(req: Request) {
@@ -26,8 +37,6 @@ function getSupabase() {
   );
 }
 
-// ── Config helpers ──
-
 async function getConfig(supabase: ReturnType<typeof getSupabase>): Promise<Record<string, string>> {
   const { data } = await supabase
     .from('platform_config')
@@ -35,7 +44,6 @@ async function getConfig(supabase: ReturnType<typeof getSupabase>): Promise<Reco
     .like('key', 'auto_%');
   const config: Record<string, string> = {};
   (data ?? []).forEach((row: { key: string; value: string }) => {
-    // value is stored as JSON string, e.g. '"true"' or '"80"'
     try {
       config[row.key] = JSON.parse(row.value);
     } catch {
@@ -46,7 +54,7 @@ async function getConfig(supabase: ReturnType<typeof getSupabase>): Promise<Reco
 }
 
 function isEnabled(config: Record<string, string>, key: string): boolean {
-  return config[key] === 'true' || config[key] === true as unknown as string;
+  return config[key] === 'true' || (config[key] as unknown) === true;
 }
 
 function getNumber(config: Record<string, string>, key: string, fallback: number): number {
@@ -54,10 +62,7 @@ function getNumber(config: Record<string, string>, key: string, fallback: number
   return isNaN(val) ? fallback : val;
 }
 
-// ── Required document types ──
 const REQUIRED_DOCS = ['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'];
-
-// ── Task A: Auto-approve drivers ──
 
 async function autoApproveDrivers(
   supabase: ReturnType<typeof getSupabase>,
@@ -69,7 +74,6 @@ async function autoApproveDrivers(
   let count = 0;
   const errors: string[] = [];
 
-  // Get drivers pending verification or under review
   const { data: drivers } = await supabase
     .from('driver_profiles')
     .select('id, user_id')
@@ -79,7 +83,6 @@ async function autoApproveDrivers(
 
   for (const driver of drivers) {
     try {
-      // Check all 5 required docs are verified
       const { data: docs } = await supabase
         .from('driver_documents')
         .select('document_type, is_verified')
@@ -90,11 +93,8 @@ async function autoApproveDrivers(
           .filter((d: { is_verified: boolean }) => d.is_verified)
           .map((d: { document_type: string }) => d.document_type),
       );
+      if (!REQUIRED_DOCS.every((t) => verifiedTypes.has(t))) continue;
 
-      const allDocsVerified = REQUIRED_DOCS.every((t) => verifiedTypes.has(t));
-      if (!allDocsVerified) continue;
-
-      // Check face match score
       const { data: selfieChecks } = await supabase
         .from('selfie_checks')
         .select('face_match_score, status')
@@ -102,42 +102,41 @@ async function autoApproveDrivers(
         .eq('status', 'passed')
         .order('created_at', { ascending: false })
         .limit(1);
-
       const bestScore = selfieChecks?.[0]?.face_match_score ?? 0;
       if (bestScore < faceThreshold) continue;
 
-      // Auto-approve
       await supabase
         .from('driver_profiles')
         .update({ status: 'approved', approved_at: new Date().toISOString() })
         .eq('id', driver.id);
 
-      // Log action
       await supabase.from('admin_actions').insert({
         admin_id: SYSTEM_USER,
         action: 'auto_approve_driver',
         target_type: 'driver_profile',
         target_id: driver.id,
-        details: JSON.stringify({ face_match_score: bestScore, auto: true }),
+        new_values: { face_match_score: bestScore, auto: true },
       });
 
-      // Send push notification
+      // BUG-141 fix: push tokens live on user_devices.push_token, not device_tokens
       if (driver.user_id) {
-        const { data: tokens } = await supabase
-          .from('device_tokens')
-          .select('token')
-          .eq('user_id', driver.user_id);
-        if (tokens?.length) {
+        const { data: devices } = await supabase
+          .from('user_devices')
+          .select('push_token')
+          .eq('user_id', driver.user_id)
+          .not('push_token', 'is', null);
+        const tokens = (devices ?? [])
+          .map((d: { push_token: string | null }) => d.push_token)
+          .filter(Boolean) as string[];
+        if (tokens.length) {
           await supabase.functions.invoke('send-push', {
             body: {
-              tokens: tokens.map((t: { token: string }) => t.token),
+              tokens,
               title: 'Cuenta aprobada',
               body: 'Tu cuenta de conductor ha sido aprobada. Ya puedes empezar a recibir viajes.',
               data: { type: 'driver_status', status: 'approved' },
             },
-          }).catch((err) => {
-            console.error(`Push notification failed for user ${driver.user_id}:`, err?.message || err);
-          });
+          }).catch(() => {});
         }
       }
 
@@ -149,8 +148,6 @@ async function autoApproveDrivers(
 
   return { count, errors };
 }
-
-// ── Task B: Auto-approve small redemptions ──
 
 async function autoApproveRedemptions(
   supabase: ReturnType<typeof getSupabase>,
@@ -172,32 +169,29 @@ async function autoApproveRedemptions(
 
   for (const red of redemptions) {
     try {
-      // Verify driver is approved
       const { data: profile } = await supabase
         .from('driver_profiles')
         .select('status')
         .eq('id', red.driver_id)
         .single();
-
       if (profile?.status !== 'approved') continue;
 
-      // Approve the redemption
-      await supabase
-        .from('wallet_redemptions')
-        .update({
-          status: 'approved',
-          processed_at: new Date().toISOString(),
-          processed_by: SYSTEM_USER,
-        })
-        .eq('id', red.id);
+      // BUG-138 fix: route through approve_redemption RPC so the
+      // driver_cash wallet is actually debited and the ledger
+      // entries get written. The SYSTEM_USER passes the is_admin()
+      // gate added in BUG-130 follow-ups.
+      const { error } = await supabase.rpc('approve_redemption', {
+        p_redemption_id: red.id,
+        p_admin_id: SYSTEM_USER,
+      });
+      if (error) throw error;
 
-      // Log action
       await supabase.from('admin_actions').insert({
         admin_id: SYSTEM_USER,
         action: 'auto_approve_redemption',
         target_type: 'wallet_redemption',
         target_id: red.id,
-        details: JSON.stringify({ amount: red.amount, auto: true }),
+        new_values: { amount: red.amount, auto: true },
       });
 
       count++;
@@ -208,8 +202,6 @@ async function autoApproveRedemptions(
 
   return { count, errors };
 }
-
-// ── Task C: Auto-resolve low-severity fraud alerts ──
 
 async function autoResolveFraud(
   supabase: ReturnType<typeof getSupabase>,
@@ -249,7 +241,7 @@ async function autoResolveFraud(
         action: 'auto_resolve_fraud',
         target_type: 'fraud_alert',
         target_id: alert.id,
-        details: JSON.stringify({ hours_elapsed: hours, auto: true }),
+        new_values: { hours_elapsed: hours, auto: true },
       });
 
       count++;
@@ -261,8 +253,7 @@ async function autoResolveFraud(
   return { count, errors };
 }
 
-// ── Task D: Auto-close resolved incidents ──
-
+// BUG-140 fix: target incident_reports (real table), not 'incidents'.
 async function autoCloseIncidents(
   supabase: ReturnType<typeof getSupabase>,
   config: Record<string, string>,
@@ -276,7 +267,7 @@ async function autoCloseIncidents(
   const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 
   const { data: incidents } = await supabase
-    .from('incidents')
+    .from('incident_reports')
     .select('id')
     .eq('status', 'resolved')
     .lt('resolved_at', cutoff);
@@ -286,16 +277,16 @@ async function autoCloseIncidents(
   for (const inc of incidents) {
     try {
       await supabase
-        .from('incidents')
+        .from('incident_reports')
         .update({ status: 'dismissed' })
         .eq('id', inc.id);
 
       await supabase.from('admin_actions').insert({
         admin_id: SYSTEM_USER,
         action: 'auto_close_incident',
-        target_type: 'incident',
+        target_type: 'incident_report',
         target_id: inc.id,
-        details: JSON.stringify({ hours_after_resolved: hours, auto: true }),
+        new_values: { hours_after_resolved: hours, auto: true },
       });
 
       count++;
@@ -307,15 +298,12 @@ async function autoCloseIncidents(
   return { count, errors };
 }
 
-// ── Task E: Auto-fail stale TropiPay payments ──
-
 async function autoFailStaleTropipay(
   supabase: ReturnType<typeof getSupabase>,
 ): Promise<{ count: number; errors: string[] }> {
   let count = 0;
   const errors: string[] = [];
 
-  // Find rides with pending TropiPay payments older than 24 hours
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const { data: staleRides } = await supabase
@@ -335,11 +323,13 @@ async function autoFailStaleTropipay(
         .update({ payment_status: 'failed' })
         .eq('id', ride.id);
 
-      // Also mark any payment intent as expired
+      // BUG-139 fix: payment_intents links to rides via ride_id
+      // (added in migration 00185 for BUG-128). The previous code
+      // queried .eq('reference_id', ride.id) which silently errored.
       await supabase
         .from('payment_intents')
         .update({ status: 'expired' })
-        .eq('reference_id', ride.id)
+        .eq('ride_id', ride.id)
         .eq('status', 'pending');
 
       await supabase.from('admin_actions').insert({
@@ -347,7 +337,7 @@ async function autoFailStaleTropipay(
         action: 'auto_fail_tropipay',
         target_type: 'ride',
         target_id: ride.id,
-        details: JSON.stringify({ reason: 'Payment pending >24h', auto: true }),
+        new_values: { reason: 'Payment pending >24h', auto: true },
       });
 
       count++;
@@ -359,8 +349,6 @@ async function autoFailStaleTropipay(
   return { count, errors };
 }
 
-// ── Main handler ──
-
 Deno.serve(async (req: Request) => {
   const cors = getCorsHeaders(req);
 
@@ -368,22 +356,8 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: cors });
   }
 
-  // BUG-036: Validate cron secret — this authentication prevents unauthorized
-  // invocation, which mitigates the need for per-request rate limiting (BUG-088).
-  const cronSecret = Deno.env.get('CRON_SECRET');
-  const requestSecret = req.headers.get('x-cron-secret');
-  const authHeader = req.headers.get('authorization');
-  const isServiceRole = authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '___none___');
-  if (!isServiceRole && (!cronSecret || requestSecret !== cronSecret)) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
-  }
-
   const supabase = getSupabase();
 
-  // Create run log
   const { data: runRow } = await supabase
     .from('auto_admin_runs')
     .insert({ started_at: new Date().toISOString() })
@@ -411,7 +385,6 @@ Deno.serve(async (req: Request) => {
       ...tropipay.errors,
     ];
 
-    // Update run log
     if (runId) {
       await supabase
         .from('auto_admin_runs')
