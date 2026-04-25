@@ -81,13 +81,50 @@ jobs:
               echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/admin/ 2>/dev/null && exit 1
             fi
 
-            # Restart with PM2
+            # Restart with PM2 — use ecosystem.config.js for reliable env
+            # passing (the previous `PORT=... pm2 start` inline-env approach
+            # silently dropped HOSTNAME under PM2 9, leading to admin
+            # listening on 127.0.0.1 only and nginx getting 502 from
+            # 0.0.0.0:3000 → connection refused).
             pm2 delete tricigo-admin 2>/dev/null || true
             # Kill any process still holding port 3000
             fuser -k 3000/tcp 2>/dev/null || true
             sleep 1
-            PORT=3000 HOSTNAME=0.0.0.0 pm2 start $ENTRY --name tricigo-admin --update-env
+
+            # Write .env so server.js inherits PORT/HOSTNAME even outside PM2
+            cat > $APP_DIR/.env << ENVEOF
+            PORT=3000
+            HOSTNAME=0.0.0.0
+            ENVEOF
+
+            # Write ecosystem file with explicit env block
+            cat > $APP_DIR/ecosystem.config.js << ECOEOF
+            module.exports = {
+              apps: [{
+                name: 'tricigo-admin',
+                script: '${ENTRY}',
+                cwd: '${APP_DIR}',
+                env: {
+                  PORT: 3000,
+                  HOSTNAME: '0.0.0.0',
+                  NODE_ENV: 'production'
+                }
+              }]
+            }
+            ECOEOF
+
+            pm2 start $APP_DIR/ecosystem.config.js
             pm2 save
+
+            # Wait briefly + verify the process is actually listening
+            sleep 5
+            if ss -tlnp | grep -q ':3000.*LISTEN'; then
+              echo "✓ tricigo-admin listening on :3000"
+            else
+              echo "✗ tricigo-admin NOT listening on :3000"
+              pm2 logs tricigo-admin --lines 30 --nostream || true
+              exit 1
+            fi
 
             # Cleanup
             rm -rf /tmp/tricigo-admin-deploy
