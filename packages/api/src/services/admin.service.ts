@@ -1280,16 +1280,33 @@ export const adminService = {
   ): Promise<void> {
     const supabase = getSupabaseClient();
 
-    // TODO: implement full ledger debit when wallet_redemptions table is ready
-    await supabase
-      .from('wallet_redemptions')
-      .update({
-        status: action,
-        processed_by: adminId,
-        processed_at: new Date().toISOString(),
-        ...(action === 'rejected' ? { rejection_reason: reason ?? null } : {}),
-      })
-      .eq('id', redemptionId);
+    if (action === 'approved') {
+      // BUG-132 fix: approval now goes through approve_redemption RPC,
+      // which is_admin()-gated, locks the redemption + driver_cash row,
+      // posts a balanced ledger transaction (driver_cash -amount /
+      // platform_revenue +amount), and is idempotent via the
+      // redemption_approve:<id> key. The previous bare status update
+      // left driver wallets uncharged, letting drivers redeem the
+      // same balance repeatedly.
+      const { error } = await supabase.rpc('approve_redemption', {
+        p_redemption_id: redemptionId,
+        p_admin_id: adminId,
+      });
+      if (error) throw error;
+    } else {
+      // Rejection still goes through the simple status update path —
+      // no ledger movement is needed.
+      const { error } = await supabase
+        .from('wallet_redemptions')
+        .update({
+          status: action,
+          processed_by: adminId,
+          processed_at: new Date().toISOString(),
+          rejection_reason: reason ?? null,
+        })
+        .eq('id', redemptionId);
+      if (error) throw error;
+    }
 
     await supabase.from('admin_actions').insert({
       admin_id: adminId,
