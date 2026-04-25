@@ -3,6 +3,10 @@
 // Fetches current weather for Havana and creates/updates
 // surge_zones entries when bad weather is detected.
 //
+// BUG-160 fix: this EF is service_role-only. Any authenticated user
+// could previously call it to spam OpenWeatherMap (depleting per-key
+// quota) and to nudge surge_zones every call.
+//
 // Strategy:
 //   1. OpenWeatherMap API (if API key configured)
 //   2. wttr.in fallback (no API key needed)
@@ -148,10 +152,22 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-160: service_role-only gate. The pg_cron job calls this EF
+  // with the service_role JWT in the apikey header. Other callers
+  // are rejected to prevent quota exhaustion + surge manipulation.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const presented = req.headers.get('apikey') ?? '';
+  if (!serviceRoleKey || presented !== serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden: sync-weather is internal-only' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
     );
 
     // Check if weather surge is enabled

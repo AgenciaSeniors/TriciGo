@@ -3,6 +3,12 @@
 // Fetches the current USD/CUP rate from ElToque and stores it
 // in the exchange_rates table.
 //
+// BUG-160 fix: this EF is service_role-only. Any authenticated user
+// could previously call it to spam the ElToque API (potentially
+// getting our IP banned) or burn the per-token API quota. The
+// pg_cron job calls with the service_role JWT, which is the only
+// allowed caller.
+//
 // Strategy (in order):
 //   1. ElToque official API (if token configured)
 //   2. Scraping eltoque.com (__NEXT_DATA__ JSON)
@@ -161,9 +167,20 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-160: service_role-only gate. The pg_cron job calls this EF
+  // with the service_role JWT in the apikey header. Any other caller
+  // is rejected to prevent ElToque IP-ban / quota exhaustion attacks.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const presented = req.headers.get('apikey') ?? '';
+  if (!serviceRoleKey || presented !== serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden: sync-exchange-rate is internal-only' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // 1. Read config
