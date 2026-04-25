@@ -5,6 +5,33 @@ import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 
+// BUG-198: admin password policy. NIST SP 800-63B leans away from
+// strict character-class rules, but for a high-privilege admin panel
+// we keep them as a low-cost guard against trivial brute-force/lookup.
+// Length is the highest-leverage knob — bumped from 8 to 12.
+const PASSWORD_POLICY = {
+  minLength: 12,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireDigit: true,
+  requireSpecial: true,
+};
+
+interface PasswordCheck {
+  ok: boolean;
+  label: string;
+}
+
+function evaluatePassword(pw: string): PasswordCheck[] {
+  return [
+    { ok: pw.length >= PASSWORD_POLICY.minLength, label: `Mínimo ${PASSWORD_POLICY.minLength} caracteres` },
+    { ok: /[A-Z]/.test(pw), label: 'Una mayúscula (A-Z)' },
+    { ok: /[a-z]/.test(pw), label: 'Una minúscula (a-z)' },
+    { ok: /\d/.test(pw), label: 'Un número (0-9)' },
+    { ok: /[^A-Za-z0-9]/.test(pw), label: 'Un carácter especial (!@#$...)' },
+  ];
+}
+
 export default function ResetPasswordPage() {
   const { t } = useTranslation('admin');
   const [newPassword, setNewPassword] = useState('');
@@ -14,6 +41,9 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const supabaseRef = useRef(createBrowserClient());
+
+  const checks = evaluatePassword(newPassword);
+  const allChecksPass = checks.every((c) => c.ok);
 
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -42,8 +72,9 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError(t('reset_password.error_too_short'));
+    if (!allChecksPass) {
+      const failed = checks.filter((c) => !c.ok).map((c) => c.label).join(', ');
+      setError(`La contraseña no cumple la política: ${failed}`);
       return;
     }
 
@@ -120,7 +151,7 @@ export default function ResetPasswordPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={PASSWORD_POLICY.minLength}
                 className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500 text-sm"
                 placeholder={t('reset_password.new_password_placeholder')}
               />
@@ -136,11 +167,21 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={PASSWORD_POLICY.minLength}
                 className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-primary-500 text-sm"
                 placeholder={t('reset_password.confirm_password_placeholder')}
               />
             </div>
+
+            {newPassword.length > 0 && (
+              <ul className="space-y-1 text-xs">
+                {checks.map((c) => (
+                  <li key={c.label} className={c.ok ? 'text-emerald-400' : 'text-neutral-500'}>
+                    {c.ok ? '✓' : '○'} {c.label}
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {error && (
               <p role="alert" className="text-red-400 text-sm">{error}</p>
