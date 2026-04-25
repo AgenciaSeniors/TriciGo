@@ -64,22 +64,37 @@ jobs:
             # Copy standalone build
             rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
 
-            # Copy static assets (not included in standalone)
-            mkdir -p $APP_DIR/.next/static
-            cp -r $DEPLOY_DIR/.next/static/* $APP_DIR/.next/static/
-
-            # Copy public folder
-            cp -r $DEPLOY_DIR/public $APP_DIR/public 2>/dev/null || true
-
-            # Find the server.js entry point (monorepo standalone nests it)
+            # Find the server.js entry point.  Next.js monorepo
+            # standalone output preserves the workspace path, so
+            # server.js lives at apps/admin/server.js and resolves
+            # static assets relative to that — meaning .next/static
+            # must be at apps/admin/.next/static, not $APP_DIR/.next/static.
+            # Until 2026-04-25 this script always copied static to
+            # $APP_DIR/.next/static, which 404'd in production for the
+            # entire monorepo lifetime (resulted in blank-screen admin).
             cd $APP_DIR
             if [ -f server.js ]; then
               ENTRY=server.js
+              STATIC_DIR=$APP_DIR/.next/static
+              PUBLIC_DIR=$APP_DIR/public
             elif [ -f apps/admin/server.js ]; then
               ENTRY=apps/admin/server.js
+              STATIC_DIR=$APP_DIR/apps/admin/.next/static
+              PUBLIC_DIR=$APP_DIR/apps/admin/public
             else
               echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/admin/ 2>/dev/null && exit 1
             fi
+
+            # Copy static assets and public folder to the correct nested path
+            mkdir -p $STATIC_DIR
+            cp -r $DEPLOY_DIR/.next/static/* $STATIC_DIR/
+            echo "Static files copied to: $STATIC_DIR"
+            ls $STATIC_DIR/ | head -5
+
+            # Use rsync (NOT `cp -r .../public/*`) so dotfiles like
+            # .well-known/* are not silently dropped by shell glob.
+            mkdir -p $PUBLIC_DIR
+            rsync -a $DEPLOY_DIR/public/ $PUBLIC_DIR/ 2>/dev/null || true
 
             # Restart with PM2 — use ecosystem.config.js for reliable env
             # passing.
