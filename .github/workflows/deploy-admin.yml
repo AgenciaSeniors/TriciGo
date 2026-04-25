@@ -143,9 +143,18 @@ jobs:
             # Poll until Next.js binds the port. Cold start of the
             # standalone server.js can take 10-30s on this VPS, so a
             # fixed sleep is fragile. Try up to 12 × 5s = 60s.
+            #
+            # NOTE on the regex: `ss -tlnp` prints LISTEN first, then
+            # the local address — e.g.
+            #   LISTEN 0 511 0.0.0.0:3002 0.0.0.0:* users:(("node",pid=...))
+            # so we just grep for the port; the -l flag of ss already
+            # restricts output to listening sockets. The earlier
+            # `:${PORT}.*LISTEN` regex never matched because LISTEN
+            # appears BEFORE the address, producing false "NOT
+            # listening" failures even when the bind succeeded.
             BOUND=0
             for i in $(seq 1 12); do
-              if ss -tlnp | grep -q ":${ADMIN_PORT}.*LISTEN"; then
+              if ss -tlnp | grep -qE "[: .]${ADMIN_PORT}\b"; then
                 BOUND=1
                 echo "✓ tricigo-admin listening on :${ADMIN_PORT} (after ${i}×5s)"
                 break
