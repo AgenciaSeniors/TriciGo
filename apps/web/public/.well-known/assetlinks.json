@@ -4,7 +4,7 @@
     "target": {
       "namespace": "android_app",
       "package_name": "app.tricigo.client",
-      "sha256_cert_fingerprints": ["46:C4:AF:04:B4:85:E0:F6:89:46:6F:16:22:FB:BE:64:B2:79:76:DC:34:1D:A3:06:BA:9E:50:99:92:70:DB:88"]
+      "sha256_cert_fingerprints": ["FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C"]
     }
   },
   {
@@ -12,7 +12,7 @@
     "target": {
       "namespace": "android_app",
       "package_name": "app.tricigo.driver",
-      "sha256_cert_fingerprints": ["95:8D:D5:A7:26:84:21:34:D8:77:70:C2:45:49:14:67:7F:95:56:8A:61:6C:D2:DF:DA:53:71:64:8B:E0:B1:7D"]
+      "sha256_cert_fingerprints": ["FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C"]
     }
   }
 ]
