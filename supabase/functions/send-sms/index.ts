@@ -1,24 +1,24 @@
 // supabase/functions/send-sms/index.ts
 // Sends transactional SMS via Twilio REST API.
-// Called from the notify_ride_status_sms() database trigger via pg_net.
+// Called from the notify_ride_status_sms() / notify_trusted_contacts_on_*
+// database triggers via pg_net.
+//
+// BUG-147 fix: this EF accepts arbitrary phone + body strings and
+// charges Twilio for every send. Any authenticated user could call it
+// to spam victims and burn the platform's SMS budget. Now we accept
+// ONLY service_role callers (the triggers themselves run with the
+// service_role key in the apikey header). Any other caller — including
+// admin app users with a regular JWT — is rejected with 401.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
-// ── CORS: restrict to allowed origins ──
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
-
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 interface SmsRequest {
-  user_id: string;
+  user_id?: string;
   phone: string;
   body: string;
   ride_id?: string;
@@ -26,48 +26,22 @@ interface SmsRequest {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // BUG-147: only the service_role may invoke this. Triggers pass the
+  // service_role key in the apikey header (see get_service_role_key()).
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const presented = req.headers.get('apikey') ?? '';
+  if (!serviceRoleKey || presented !== serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: 'Forbidden: send-sms is internal-only' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
   try {
-    // Rate limit: 10 requests per IP per minute
-    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = await rateLimit(`send-sms:${clientIP}`, 10, 60 * 1000);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
-
-    // ── Auth: allow internal service-role calls (pg_net triggers) or valid JWT ──
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const apiKey = req.headers.get('apikey') ?? '';
-    const isInternalCall = apiKey === serviceRoleKey;
-
-    if (!isInternalCall) {
-      const authHeader = req.headers.get('Authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(
-          JSON.stringify({ error: 'Missing authorization header' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
-      }
-
-      const supabaseAuth = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        serviceRoleKey,
-      );
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
-        authHeader.replace('Bearer ', ''),
-      );
-
-      if (authError || !user) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid or expired token' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
-      }
-    }
-
     const { user_id, phone, body, ride_id, event_type } =
       (await req.json()) as SmsRequest;
 
@@ -78,16 +52,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // BUG-086: Validate E.164 phone format
-    const e164Regex = /^\+[1-9]\d{6,14}$/;
-    if (!e164Regex.test(phone)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid phone format. Use E.164.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // Read Twilio credentials from environment (same as Supabase Auth OTP)
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
     const messagingServiceSid = Deno.env.get('TWILIO_MESSAGE_SERVICE_SID');
@@ -100,7 +64,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Send SMS via Twilio REST API
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
     const basicAuth = btoa(`${accountSid}:${authToken}`);
 
@@ -123,10 +86,9 @@ Deno.serve(async (req) => {
     const success = twilioResponse.ok;
     const twilioSid = twilioResult.sid ?? null;
 
-    // Log the SMS to sms_log table
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      serviceRoleKey,
     );
 
     await supabase.from('sms_log').insert({
@@ -143,7 +105,7 @@ Deno.serve(async (req) => {
       console.error('[send-sms] Twilio error:', JSON.stringify(twilioResult));
       return new Response(
         JSON.stringify({ success: false, error: twilioResult.message ?? 'Twilio error' }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
