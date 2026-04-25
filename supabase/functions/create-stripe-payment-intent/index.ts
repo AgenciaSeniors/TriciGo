@@ -1,19 +1,16 @@
 // ============================================================
 // TriciGo — Create Stripe PaymentIntent Edge Function
 //
-// Creates a Stripe PaymentIntent for wallet recharges (customer
-// or driver quota). Returns the client_secret so the frontend
-// can confirm the payment via Stripe Elements.
-//
-// IMPORTANT: Description sent to Stripe is GENERIC ("Wallet
-// recharge") — never mentions Cuba, transport, or ride-hailing.
+// BUG-187 fix: requires authenticated JWT and asserts
+// auth.uid() = p_user_id. Previously anonymous users could
+// create unlimited Stripe PIs for arbitrary user_ids, causing
+// DoS / Stripe billing impact.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@14?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
-// ── CORS ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 function getCorsHeaders(req: Request) {
@@ -28,9 +25,7 @@ function getCorsHeaders(req: Request) {
 interface CreateIntentRequest {
   user_id: string;
   amount_cup: number;
-  /** 'customer' (default) or 'driver_quota' */
   recharge_type?: 'customer' | 'driver_quota';
-  /** Optional corporate account ID */
   corporate_account_id?: string;
 }
 
@@ -41,23 +36,38 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Reject oversized payloads
   const contentLength = parseInt(req.headers.get('content-length') ?? '0', 10);
   if (contentLength > 1_048_576) {
     return new Response(JSON.stringify({ error: 'Payload too large' }), { status: 413 });
   }
 
   try {
-    // Rate limit: 5 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
     const rl = await rateLimit(`create-stripe-pi:${clientIP}`, 5, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // BUG-187: require JWT and assert auth.uid() = user_id (or admin).
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const supabaseAuth = createClient(supabaseUrl, serviceRoleKey);
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(
+      authHeader.replace('Bearer ', ''),
+    );
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // 1. Parse request
     const body: CreateIntentRequest = await req.json();
     const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id } = body;
 
@@ -68,26 +78,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Read Stripe config from platform_config
+    // Verify the caller is the target user (or admin).
+    const { data: roleRow } = await supabase.from('users').select('role').eq('id', user.id).single();
+    const isAdmin = roleRow && ['admin', 'super_admin'].includes(roleRow.role as string);
+    if (!isAdmin && user.id !== user_id) {
+      return new Response(JSON.stringify({ error: 'Forbidden: can only create PI for your own account' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { data: configs } = await supabase
       .from('platform_config')
       .select('key, value')
       .in('key', [
-        'stripe_enabled',
-        'stripe_secret_key',
-        'stripe_publishable_key',
-        'stripe_min_recharge_cup',
-        'stripe_max_recharge_cup',
-        'stripe_fee_usd',
-        'stripe_fee_type',
+        'stripe_enabled', 'stripe_secret_key', 'stripe_publishable_key',
+        'stripe_min_recharge_cup', 'stripe_max_recharge_cup',
+        'stripe_fee_usd', 'stripe_fee_type',
       ]);
 
     const configMap: Record<string, string> = {};
     (configs ?? []).forEach((c: { key: string; value: string }) => {
       const raw = c.value;
-      configMap[c.key] = typeof raw === 'string' && raw.startsWith('"')
-        ? JSON.parse(raw)
-        : String(raw);
+      configMap[c.key] = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : String(raw);
     });
 
     const stripeEnabled = configMap['stripe_enabled'] !== 'false';
@@ -111,7 +123,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate amount range
     if (amount_cup < minRecharge) {
       return new Response(
         JSON.stringify({ ok: false, error: 'amount_too_low', min: minRecharge }),
@@ -125,17 +136,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 3. Get exchange rate
     const { data: rateRow } = await supabase
-      .from('exchange_rates')
-      .select('usd_cup_rate')
-      .eq('is_current', true)
-      .single();
+      .from('exchange_rates').select('usd_cup_rate').eq('is_current', true).single();
 
     const exchangeRate = rateRow?.usd_cup_rate ?? 520;
     const amountUsd = Number((amount_cup / exchangeRate).toFixed(2));
-
-    // Total charge in USD = amount + fee
     const totalChargeUsd = Number((amountUsd + feeUsd).toFixed(2));
     const totalChargeCents = Math.round(totalChargeUsd * 100);
 
@@ -146,7 +151,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 4. Create payment intent record in DB first
     const intentRow: Record<string, unknown> = {
       user_id,
       amount_cup,
@@ -162,10 +166,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: intent, error: insertError } = await supabase
-      .from('payment_intents')
-      .insert(intentRow)
-      .select()
-      .single();
+      .from('payment_intents').insert(intentRow).select().single();
 
     if (insertError) {
       console.error('Error creating payment intent:', insertError);
@@ -175,8 +176,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Create Stripe PaymentIntent
-    // IMPORTANT: Description is GENERIC — never mention Cuba/transport
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-04-10' });
 
     let stripePaymentIntent;
@@ -192,34 +191,19 @@ Deno.serve(async (req) => {
           recharge_type,
           fee_usd: String(feeUsd),
         },
-        automatic_payment_methods: {
-          enabled: true,
-        },
+        automatic_payment_methods: { enabled: true },
       });
     } catch (stripeErr) {
-      console.error(JSON.stringify({
-        event: 'stripe_create_failed',
-        intent_id: intent.id,
-        user_id,
-        amount_cup,
-        error: String(stripeErr),
-        timestamp: new Date().toISOString(),
-      }));
-
-      await supabase
-        .from('payment_intents')
+      await supabase.from('payment_intents')
         .update({ status: 'failed', error_message: String(stripeErr), updated_at: new Date().toISOString() })
         .eq('id', intent.id);
-
       return new Response(
         JSON.stringify({ ok: false, error: 'stripe_error', detail: String(stripeErr) }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    // 6. Update payment intent with Stripe PI ID
-    await supabase
-      .from('payment_intents')
+    await supabase.from('payment_intents')
       .update({
         stripe_payment_intent_id: stripePaymentIntent.id,
         status: 'pending',
@@ -227,9 +211,6 @@ Deno.serve(async (req) => {
       })
       .eq('id', intent.id);
 
-    console.log(`Stripe PI created: ${stripePaymentIntent.id} for intent ${intent.id} ($${totalChargeUsd} USD)`);
-
-    // 7. Return client_secret to frontend
     return new Response(
       JSON.stringify({
         ok: true,
