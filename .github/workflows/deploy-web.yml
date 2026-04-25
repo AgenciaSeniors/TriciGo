@@ -110,9 +110,14 @@ jobs:
             echo "Static files copied to: $STATIC_DIR"
             ls $STATIC_DIR/ | head -5
 
-            # Copy public folder to the correct path
+            # Copy public folder to the correct path.
+            # Use rsync (not `cp -r .../public/*`) so dotfiles like
+            # .well-known/assetlinks.json (Android Digital Asset Links,
+            # BUG-202) are not silently dropped by shell glob expansion.
             mkdir -p $PUBLIC_DIR
-            cp -r $DEPLOY_DIR/public/* $PUBLIC_DIR/ 2>/dev/null || true
+            rsync -a $DEPLOY_DIR/public/ $PUBLIC_DIR/ 2>/dev/null || true
+            # Sanity check — log if .well-known is present.
+            ls -la $PUBLIC_DIR/.well-known/ 2>/dev/null || echo "WARN: $PUBLIC_DIR/.well-known/ missing"
 
             # Find a free port (3001 is used by gst, 3002 by admin)
             WEBPORT=3003
