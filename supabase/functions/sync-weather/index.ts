@@ -1,4 +1,6 @@
-// BUG-160 + BUG-201: service_role-only via JWT role claim.
+// BUG-160 + BUG-201 + BUG-199: apikey === env.SUPABASE_SERVICE_ROLE_KEY
+// (now sb_secret_*, post legacy revocation). Leaked legacy JWT
+// would not match this string-equality check.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -8,31 +10,18 @@ function getCorsHeaders(req: Request) {
   return { 'Access-Control-Allow-Origin': allowedOrigin, 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 }
 
-function isServiceRoleJwt(authHeader: string): boolean {
-  if (!authHeader.startsWith('Bearer ')) return false;
-  const token = authHeader.slice(7);
-  const parts = token.split('.');
-  if (parts.length !== 3) return false;
-  try {
-    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-    const payload = JSON.parse(atob(padded));
-    return payload?.role === 'service_role';
-  } catch { return false; }
-}
-
 const HAVANA_LAT = 23.13;
 const HAVANA_LNG = -82.38;
 
-function getWeatherMultiplier(conditionCode: number): { multiplier: number; reason: string; condition: string } {
-  if (conditionCode >= 200 && conditionCode <= 232) return { multiplier: 1.6, reason: 'weather_storm', condition: 'storm' };
-  if (conditionCode >= 300 && conditionCode <= 302) return { multiplier: 1.2, reason: 'weather_drizzle', condition: 'drizzle' };
-  if (conditionCode >= 310 && conditionCode <= 321) return { multiplier: 1.3, reason: 'weather_rain', condition: 'rain' };
-  if (conditionCode >= 500 && conditionCode <= 501) return { multiplier: 1.3, reason: 'weather_rain', condition: 'rain' };
-  if (conditionCode >= 502 && conditionCode <= 504) return { multiplier: 1.5, reason: 'weather_heavy_rain', condition: 'heavy_rain' };
-  if (conditionCode === 511) return { multiplier: 1.8, reason: 'weather_extreme', condition: 'extreme' };
-  if (conditionCode >= 520 && conditionCode <= 531) return { multiplier: 1.4, reason: 'weather_rain', condition: 'rain' };
-  if (conditionCode === 771 || conditionCode === 781) return { multiplier: 1.8, reason: 'weather_extreme', condition: 'extreme' };
+function getWeatherMultiplier(c: number) {
+  if (c >= 200 && c <= 232) return { multiplier: 1.6, reason: 'weather_storm', condition: 'storm' };
+  if (c >= 300 && c <= 302) return { multiplier: 1.2, reason: 'weather_drizzle', condition: 'drizzle' };
+  if (c >= 310 && c <= 321) return { multiplier: 1.3, reason: 'weather_rain', condition: 'rain' };
+  if (c >= 500 && c <= 501) return { multiplier: 1.3, reason: 'weather_rain', condition: 'rain' };
+  if (c >= 502 && c <= 504) return { multiplier: 1.5, reason: 'weather_heavy_rain', condition: 'heavy_rain' };
+  if (c === 511) return { multiplier: 1.8, reason: 'weather_extreme', condition: 'extreme' };
+  if (c >= 520 && c <= 531) return { multiplier: 1.4, reason: 'weather_rain', condition: 'rain' };
+  if (c === 771 || c === 781) return { multiplier: 1.8, reason: 'weather_extreme', condition: 'extreme' };
   return { multiplier: 1.0, reason: 'weather_clear', condition: 'clear' };
 }
 
@@ -59,15 +48,15 @@ async function fetchWttrIn() {
   } catch { return null; }
 }
 
-function mapWwoToOwm(wwoCode: number): number {
-  if (wwoCode === 113) return 800;
-  if (wwoCode === 116) return 802;
-  if (wwoCode === 119 || wwoCode === 122) return 804;
-  if (wwoCode === 143 || wwoCode === 248 || wwoCode === 260) return 741;
-  if ([176,263,266,293,296].includes(wwoCode)) return 500;
-  if ([299,302].includes(wwoCode)) return 501;
-  if ([305,308,356,359].includes(wwoCode)) return 502;
-  if ([200,386,389,392,395].includes(wwoCode)) return 211;
+function mapWwoToOwm(w: number): number {
+  if (w === 113) return 800;
+  if (w === 116) return 802;
+  if (w === 119 || w === 122) return 804;
+  if (w === 143 || w === 248 || w === 260) return 741;
+  if ([176,263,266,293,296].includes(w)) return 500;
+  if ([299,302].includes(w)) return 501;
+  if ([305,308,356,359].includes(w)) return 502;
+  if ([200,386,389,392,395].includes(w)) return 211;
   return 800;
 }
 
@@ -75,12 +64,16 @@ Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  if (!isServiceRoleJwt(req.headers.get('Authorization') ?? '')) {
-    return new Response(JSON.stringify({ error: 'Forbidden: sync-weather is internal-only' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  // BUG-199: apikey string-equality vs env var (which is sb_secret_*).
+  // Leaked legacy JWT cannot match.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const presented = req.headers.get('apikey') ?? '';
+  if (!serviceRoleKey || presented !== serviceRoleKey) {
+    return new Response(JSON.stringify({ error: 'Forbidden: sync-weather is internal-only' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   try {
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceRoleKey);
     const { data: configs } = await supabase.from('platform_config').select('key, value').in('key', ['openweather_api_key', 'weather_surge_enabled']);
     const configMap = new Map((configs ?? []).map((c: { key: string; value: string }) => [c.key, c.value]));
