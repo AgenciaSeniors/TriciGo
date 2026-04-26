@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -234,9 +235,12 @@ export default function LoginScreen() {
                       ? window.location.origin
                       : 'tricigo://auth/callback';
                     const data = await authService.signInWithGoogle(redirectTo);
-                    // On native, signInWithOAuth returns { url } — must open browser manually
+                    // BUG-201/202 (1+2): use openAuthSessionAsync (in-app
+                    // ASWebAuthenticationSession / Custom Tabs) so the OAuth
+                    // sheet auto-closes when the redirect fires and doesn't
+                    // expose the raw Supabase URL as the browser title.
                     if (Platform.OS !== 'web' && data?.url) {
-                      await Linking.openURL(data.url);
+                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
                     }
                   } catch {
                     setSocialLoading(false);
@@ -258,8 +262,9 @@ export default function LoginScreen() {
                       ? window.location.origin
                       : 'tricigo://auth/callback';
                     const data = await authService.signInWithApple(redirectTo);
+                    // BUG-201/202 (1+2): same fix as Google — see comment above.
                     if (Platform.OS !== 'web' && data?.url) {
-                      await Linking.openURL(data.url);
+                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
                     }
                   } catch {
                     setSocialLoading(false);

@@ -2617,11 +2617,15 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         </ScrollView>
       )}
 
-      {/* Route distance/duration badge (floating above bottom panel) */}
+      {/* Route distance/duration badge (floating above bottom panel)
+          BUG-208 (8a): "min por ruta" was confusing — users read it as a
+          per-route surcharge. The duration shown here is the estimated
+          driving time for the auto/triciclo OSRM speed profile (the same
+          duration that gets refined per vehicle in the cards below). */}
       {!searchingField && routeDistanceM && routeDurationS && (
         <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
-            {(routeDistanceM / 1000).toFixed(1)} km · {Math.ceil(routeDurationS / 60)} min por ruta
+            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil(routeDurationS / 60)} min
           </Text>
         </View>
       )}

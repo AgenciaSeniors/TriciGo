@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Pressable, Switch, Platform, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -121,7 +121,22 @@ export default function PersonalInfoScreen() {
   // Form state
   const [fullName, setFullName] = useState(personalInfo.full_name || user?.full_name || '');
   const [phone, setPhone] = useState(personalInfo.phone || rawPhone || '');
-  const [email, setEmail] = useState(personalInfo.email || user?.email || '');
+  // BUG-205 (3b): pre-fill email lazily. The user object can hydrate after the
+  // first render (e.g. after Supabase Auth resolves a Google OAuth session),
+  // so a one-shot useState initializer leaves the field blank. We use a ref to
+  // remember whether the user typed manually so we don't clobber their input
+  // when `user.email` arrives later.
+  const [email, setEmailState] = useState(personalInfo.email || user?.email || '');
+  const userEditedEmailRef = useRef(!!personalInfo.email);
+  const setEmail = (val: string) => {
+    userEditedEmailRef.current = true;
+    setEmailState(val);
+  };
+  useEffect(() => {
+    if (!userEditedEmailRef.current && !email && user?.email) {
+      setEmailState(user.email);
+    }
+  }, [user?.email, email]);
   const [identityNumber, setIdentityNumber] = useState(personalInfo.identity_number || '');
   const [province, setProvince] = useState(personalInfo.province || '');
   const [municipality, setMunicipality] = useState(personalInfo.municipality || '');
@@ -296,7 +311,11 @@ export default function PersonalInfoScreen() {
                   )}
                 </View>
                 <Input
-                  label={`${t('onboarding.email')} ${t('common.optional_suffix', { defaultValue: '(opcional)' })}`}
+                  // BUG-205 (3a): the i18n value for `onboarding.email` already
+                  // includes "(opcional)" / "(optional)" / "(opcional)" in
+                  // every locale. Concatenating an extra
+                  // t('common.optional_suffix') produced "Correo (opcional) (opcional)".
+                  label={t('onboarding.email')}
                   placeholder="email@ejemplo.com"
                   keyboardType="email-address"
                   autoCapitalize="none"

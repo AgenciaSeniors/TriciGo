@@ -58,7 +58,10 @@ const VEHICLE_CONFIGS = [
     descKey: 'onboarding.vehicle_auto_desc',
     defaultCapacity: 4,
     maxCapacity: 16,
-    image: require('../../assets/vehicles/selection/auto.png'),
+    // BUG-204: use the almendr\u00f3n (Cuban classic car) image instead of the
+    // generic sedan. The markers/ folder has the @1x/@2x/@3x variants;
+    // selection/ only had a generic sedan that didn't match the service.
+    image: require('../../assets/vehicles/markers/auto_clasico.png'),
     accent: '#22C55E',
   },
   {

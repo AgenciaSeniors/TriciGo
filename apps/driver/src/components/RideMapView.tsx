@@ -22,10 +22,14 @@ try {
 // and the first MapView mount — calling it here guarantees the token is
 // in place before React returns the MapView element to the native bridge.
 let _mapboxTokenApplied = false;
+function isMapboxTokenApplied() {
+  return _mapboxTokenApplied;
+}
 function ensureMapboxToken() {
   if (_mapboxTokenApplied || Platform.OS === 'web' || !MapboxGL) return;
   try {
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+    if (!token) return; // can't apply without a token; caller will retry
     MapboxGL.setAccessToken(token);
     if (typeof MapboxGL.setWellKnownTileServer === 'function') {
       MapboxGL.setWellKnownTileServer('Mapbox');
@@ -831,6 +835,38 @@ function RideMapViewInner(
   }
 
   // ── Native: Use @rnmapbox/maps ──────────────────────────────────────────────
+  // BUG-209 (6): on cold start (especially the very first launch after
+  // install), the Mapbox token can fail to apply if the JS module loaded
+  // before EXPO_PUBLIC_MAPBOX_TOKEN was hydrated. The MapView then
+  // instantiates with no token, the style fetch fails, and the user
+  // sees a blank gray rectangle. Detect that state and fall back to the
+  // stylized grid placeholder (same one used on web/offline) until the
+  // token can be applied. The `ensureMapboxToken()` call above is
+  // idempotent and will succeed on a subsequent render once the env
+  // var is in place.
+  if (!isMapboxTokenApplied()) {
+    return (
+      <View style={[webFallbackStyles.container, { height }]}>
+        <View style={webFallbackStyles.gradientBase} />
+        <View style={webFallbackStyles.gradientOverlay} />
+        <View style={webFallbackStyles.gridContainer} pointerEvents="none">
+          {[0.15, 0.3, 0.45, 0.6, 0.75, 0.9].map((pos, i) => (
+            <View key={`h${i}`} style={[webFallbackStyles.gridLineH, { top: `${pos * 100}%` as any }]} />
+          ))}
+          {[0.12, 0.28, 0.42, 0.58, 0.72, 0.88].map((pos, i) => (
+            <View key={`v${i}`} style={[webFallbackStyles.gridLineV, { left: `${pos * 100}%` as any }]} />
+          ))}
+          <View style={webFallbackStyles.diagonalLine} />
+        </View>
+        <View style={webFallbackStyles.cityWatermark} pointerEvents="none">
+          <Text style={webFallbackStyles.cityText}>LA HABANA</Text>
+        </View>
+        <View style={webFallbackStyles.glowOrange} pointerEvents="none" />
+        <View style={webFallbackStyles.glowOrange2} pointerEvents="none" />
+      </View>
+    );
+  }
+
   const mapStyle = darkStyle ? STYLE_DARK_NAV : STYLE_STREETS;
 
   return (

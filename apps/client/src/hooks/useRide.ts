@@ -36,10 +36,36 @@ export function useRideInit() {
         const active = await rideService.getActiveRide(user!.id);
         if (!active || !mounted) return;
 
-        setActiveRide(active);
+        // BUG-212 (9): the previous version set flowStep='searching'
+        // whenever the DB read returned status='searching', and
+        // overwrote the local activeRide unconditionally. This
+        // produced a visible "looking for drivers" revert when the
+        // hook re-ran AFTER a driver had already accepted — e.g. on
+        // auth refresh or app foregrounded. The stale fetch
+        // overwrote the realtime-updated state.
+        //
+        // Two guards:
+        //   1. If the ride has a driver_id assigned, force
+        //      flowStep='active' regardless of status (status may
+        //      still be 'searching' for a moment between the realtime
+        //      hop and the read replica catching up).
+        //   2. Use updateRideFromRealtime when an activeRide is
+        //      already in the store — its forward-only validation
+        //      prevents a 'searching' from clobbering 'accepted'.
+        const existing = useRideStore.getState().activeRide;
+        if (existing && existing.id === active.id) {
+          useRideStore.getState().updateRideFromRealtime(active);
+        } else {
+          setActiveRide(active);
+        }
 
-        if (active.status === 'searching') {
+        const hasDriver = !!active.driver_id;
+        if (active.status === 'searching' && !hasDriver) {
           setFlowStep('searching');
+        } else if (active.status === 'completed') {
+          setFlowStep('completed');
+        } else if (active.status === 'canceled') {
+          setFlowStep('idle');
         } else {
           setFlowStep('active');
         }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated, Linking, Modal } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -245,7 +246,17 @@ export default function LoginScreen() {
                     const redirectTo = Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback';
                     const data = await authService.signInWithGoogle(redirectTo);
                     if (Platform.OS !== 'web' && data?.url) {
-                      await Linking.openURL(data.url);
+                      // BUG-201/202 (1+2): use openAuthSessionAsync instead of
+                      // Linking.openURL. The latter opened the system browser
+                      // (whose title was the raw Supabase project URL) and
+                      // never auto-closed when the deeplink fired. The
+                      // ASWebAuthenticationSession / Custom Tabs flow shown by
+                      // expo-web-browser stays in-app, hides the URL bar
+                      // until first navigation, and dismisses itself when the
+                      // OAuth callback hits `redirectTo`. Tokens are then
+                      // picked up by useAuthDeepLink (still subscribed) so
+                      // there's no extra session-management code here.
+                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
                     }
                   } catch {
                     setSocialLoading(false);
@@ -267,7 +278,8 @@ export default function LoginScreen() {
                     const redirectTo = Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback';
                     const data = await authService.signInWithApple(redirectTo);
                     if (Platform.OS !== 'web' && data?.url) {
-                      await Linking.openURL(data.url);
+                      // BUG-201/202 (1+2): same fix as Google — see comment above.
+                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
                     }
                   } catch {
                     setSocialLoading(false);

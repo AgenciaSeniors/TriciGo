@@ -131,29 +131,45 @@ function RootNavigator() {
     const inAuthGroup = segments[0] === '(auth)';
     // Allow public deep link routes (referrals, promos) without auth
     const inPublicDeepLink = segments[0] === 'refer' || segments[0] === 'promo';
+    const currentRoute = segments.join('/');
 
     if (!isAuthenticated && !inAuthGroup && !inPublicDeepLink) {
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
-      // Check if profile is incomplete (new user needs to complete profile)
+      return;
+    }
+
+    // BUG-207 (7): the previous version guarded `!user?.full_name` and
+    // `!user?.phone` ONLY inside the `inAuthGroup` branch. If a user
+    // signed in with Google but exited the app before completing the
+    // verify-phone step, the next launch restored the session straight
+    // into `/(tabs)` (segments[0] === '(tabs)'), so `inAuthGroup` was
+    // false and the onboarding guards were skipped — they entered the
+    // app with a partial profile.
+    //
+    // Now we run the completeness checks for ANY authenticated user
+    // regardless of route. Public deep links still pass through (they
+    // exit the function early above when unauthenticated; if the user is
+    // authenticated and on /refer or /promo we let them stay there
+    // since those screens handle missing-profile state themselves).
+    if (isAuthenticated && !inPublicDeepLink) {
       if (!user?.full_name) {
-        const currentRoute = segments.join('/');
         if (!currentRoute.includes('complete-profile') && !currentRoute.includes('verify-phone')) {
           router.replace('/(auth)/complete-profile');
-          return;
         }
         return;
       }
-      // Check if phone is missing (social login user)
       if (!user?.phone) {
-        const currentRoute = segments.join('/');
         if (!currentRoute.includes('verify-phone')) {
           router.replace('/(auth)/verify-phone');
-          return;
         }
         return;
       }
-      router.replace('/(tabs)');
+      // Profile complete — if user is stuck inside the auth group (e.g.
+      // they finished verify-phone and the navigator hasn't moved them
+      // out yet), kick them to the main app.
+      if (inAuthGroup) {
+        router.replace('/(tabs)');
+      }
     }
   }, [isAuthenticated, isLoading, segments, user?.full_name, user?.phone]);
 
