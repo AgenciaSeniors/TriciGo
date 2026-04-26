@@ -283,7 +283,16 @@ export function useRideActions() {
       return;
     }
 
-    const { draft: d, fareEstimate, promoResult } = useRideStore.getState();
+    const { draft: d, fareEstimate, allFareEstimates, promoResult } = useRideStore.getState();
+    // BUG-213 (Issue A post-v1.1.14): defense-in-depth. The store action
+    // setServiceType already syncs fareEstimate from allFareEstimates,
+    // but if the user selected a vehicle whose background-fetched
+    // estimate hadn't arrived yet, fareEstimate may still be from the
+    // previous service_type. Read from the per-slug map first; fall
+    // back to the singular estimate only if the slug-specific one is
+    // missing. This guarantees the persisted ride row matches the
+    // service_type the user actually selected.
+    const selectedFare = allFareEstimates?.[d.serviceType] ?? fareEstimate;
     if (!d.pickup || !d.dropoff) {
       isSubmittingRef.current = false;
       pendingRequestIdRef.current = null;
@@ -439,9 +448,9 @@ export function useRideActions() {
         dropoff_latitude: d.dropoff.location.latitude,
         dropoff_longitude: d.dropoff.location.longitude,
         dropoff_address: d.dropoff.address,
-        estimated_fare_cup: fareEstimate?.estimated_fare_cup,
-        estimated_distance_m: fareEstimate?.estimated_distance_m,
-        estimated_duration_s: fareEstimate?.estimated_duration_s,
+        estimated_fare_cup: selectedFare?.estimated_fare_cup,
+        estimated_distance_m: selectedFare?.estimated_distance_m,
+        estimated_duration_s: selectedFare?.estimated_duration_s,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         // BUG-068: Validate discount is non-negative before sending
         discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discountAmount ?? 0) : undefined,
@@ -459,7 +468,7 @@ export function useRideActions() {
         })(),
         corporate_account_id: d.corporateAccountId ?? undefined,
         insurance_selected: d.insuranceSelected,
-        insurance_premium_cup: d.insuranceSelected ? (fareEstimate?.insurance_premium_cup ?? 0) : 0,
+        insurance_premium_cup: d.insuranceSelected ? (selectedFare?.insurance_premium_cup ?? 0) : 0,
         rider_preferences: Object.keys(d.ridePreferences).length > 0 ? d.ridePreferences : undefined,
       });
 

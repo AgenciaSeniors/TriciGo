@@ -219,7 +219,31 @@ export const useRideStore = create<RideState>((set, get) => ({
     set((s) => ({ draft: { ...s.draft, dropoff: { address, location } } })),
 
   setServiceType: (serviceType) =>
-    set((s) => ({ draft: { ...s.draft, serviceType } })),
+    set((s) => {
+      // BUG-213 (Issue A post-v1.1.14): when the user picks a different
+      // vehicle, also swap `fareEstimate` (singular) to the matching
+      // entry in `allFareEstimates`. Without this, requestRide read a
+      // stale `fareEstimate` (from the previous service_type, usually
+      // the default Triciclo) and persisted Triciclo's
+      // estimated_fare_cup / estimated_duration_s on a ride whose
+      // service_type was Auto. The driver app then re-rendered using
+      // the Triciclo-shaped duration with Auto rates, producing a third
+      // value that matched neither client card.
+      //
+      // Only swap if `allFareEstimates[serviceType]` is populated. If
+      // the background fetch hasn't filled that slot yet, we leave
+      // `fareEstimate` alone — the next `requestEstimate` call will
+      // populate it normally for the now-current service_type.
+      const candidate = s.allFareEstimates?.[serviceType] ?? null;
+      if (candidate) {
+        return {
+          draft: { ...s.draft, serviceType },
+          fareEstimate: candidate,
+          fareEstimatedAt: Date.now(),
+        };
+      }
+      return { draft: { ...s.draft, serviceType } };
+    }),
 
   setPaymentMethod: (paymentMethod) =>
     set((s) => ({ draft: { ...s.draft, paymentMethod } })),
