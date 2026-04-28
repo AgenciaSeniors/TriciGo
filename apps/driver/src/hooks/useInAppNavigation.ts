@@ -8,8 +8,28 @@ import {
   type GeoPoint,
 } from '@tricigo/utils';
 
-/** Minimum distance (meters) to advance to the next step */
-const STEP_ADVANCE_THRESHOLD_M = 30;
+/**
+ * BUG-278: voice-timing constants for two-tier turn-by-turn announcements.
+ *
+ *   PRE_ANNOUNCE_DISTANCE_M (200 m) — say "In 200 metros, gira a la
+ *     derecha por Calle X". Only fires if the *current* step is at least
+ *     this long; otherwise the previous turn just happened and announcing
+ *     a new one would overlap. (User's "siempre cuando no haya otra
+ *     intersección" rule.)
+ *
+ *   IMMINENT_ANNOUNCE_DISTANCE_M (50 m) — say "Gira a la derecha". Final
+ *     confirmation right before the maneuver, always fires regardless of
+ *     pre-announce state.
+ *
+ *   STEP_ADVANCE_THRESHOLD_M (20 m) — mark the step as completed and
+ *     advance currentStepIndex. No voice fires here; voice was handled
+ *     by the imminent announce a few seconds earlier. Lower than the
+ *     previous 30 m to ensure the imminent announce fully plays before
+ *     the next step's pre-announce starts.
+ */
+const PRE_ANNOUNCE_DISTANCE_M = 200;
+const IMMINENT_ANNOUNCE_DISTANCE_M = 50;
+const STEP_ADVANCE_THRESHOLD_M = 20;
 /** Re-route when driver deviates more than this distance from route */
 const REROUTE_THRESHOLD_M = 50;
 /** Minimum interval between re-route attempts */
@@ -64,8 +84,18 @@ export function useInAppNavigation(
 
   const destinationRef = useRef<GeoPoint | null>(null);
   const lastRerouteRef = useRef(0);
-  /** Index of the last step we spoke out loud — avoids re-announcing on re-render. */
-  const spokenStepIndexRef = useRef<number>(-1);
+  /**
+   * BUG-278: separate refs for the three announce phases per step so
+   * each fires once and only once.
+   *   - departAnnouncedRef: did we say "Inicia el recorrido por X" yet?
+   *   - preAnnouncedStepRef: which upcoming step (currentStepIndex+1)
+   *       did we already pre-announce (200m before)?
+   *   - imminentAnnouncedStepRef: which upcoming step did we already
+   *       imminent-announce (50m before)?
+   */
+  const departAnnouncedRef = useRef<boolean>(false);
+  const preAnnouncedStepRef = useRef<number>(-1);
+  const imminentAnnouncedStepRef = useRef<number>(-1);
   /** Keep voiceEnabled fresh without re-running the step-advance effect. */
   const voiceEnabledRef = useRef(voiceEnabled);
   useEffect(() => {
@@ -128,34 +158,41 @@ export function useInAppNavigation(
     setRoute(null);
     setCurrentStepIndex(0);
     destinationRef.current = null;
-    spokenStepIndexRef.current = -1;
+    departAnnouncedRef.current = false;
+    preAnnouncedStepRef.current = -1;
+    imminentAnnouncedStepRef.current = -1;
     // Cancel any pending utterance when navigation ends.
     Speech.stop().catch(() => {});
   }, []);
 
   /**
-   * Speak the current step instruction whenever the index changes (and
-   * voice is enabled). Uses a ref so repeated renders with the same
-   * index don't re-announce the same turn.
+   * BUG-278: Depart announcement on navigation start.
+   * Fires once when the driver starts navigating (currentStepIndex=0).
+   * The other transitions are handled inside the step-advance effect
+   * below where we have access to the live distance to the next maneuver.
    */
   useEffect(() => {
-    if (!isNavigating) return;
+    if (!isNavigating) {
+      departAnnouncedRef.current = false;
+      preAnnouncedStepRef.current = -1;
+      imminentAnnouncedStepRef.current = -1;
+      return;
+    }
     if (!voiceEnabledRef.current) return;
-    if (currentStepIndex === spokenStepIndexRef.current) return;
-    const step = steps[currentStepIndex];
+    if (departAnnouncedRef.current) return;
+    const step = steps[0];
     if (!step) return;
 
-    spokenStepIndexRef.current = currentStepIndex;
+    departAnnouncedRef.current = true;
     const text = buildSpokenInstruction(step);
     if (!text) return;
 
-    // Cancel anything previous so we don't stack utterances.
     Speech.stop()
       .catch(() => {})
       .finally(() => {
         Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
       });
-  }, [isNavigating, currentStepIndex, steps]);
+  }, [isNavigating, steps]);
 
   // Cleanup: stop TTS if the hook unmounts mid-utterance.
   useEffect(() => {
@@ -164,18 +201,72 @@ export function useInAppNavigation(
     };
   }, []);
 
-  // Auto-advance steps based on driver location
+  /**
+   * BUG-278: distance-aware voice + step advance.
+   *
+   * Three triggers per step transition:
+   *   1. PRE-ANNOUNCE at 200 m before step[i+1].maneuver_location:
+   *      "En 200 metros, gira a la derecha por Calle X". Skipped if
+   *      step[i].distance_m < PRE_ANNOUNCE_DISTANCE_M (the previous
+   *      maneuver was less than 200 m back, so a pre-announce would
+   *      stack on top of the previous imminent).
+   *   2. IMMINENT at 50 m: "Gira a la derecha". Always fires.
+   *   3. ADVANCE at 20 m: increment currentStepIndex silently. The
+   *      voice has already played, the visual overlay updates to show
+   *      the next instruction.
+   *
+   * We compute the distance to the NEXT step's maneuver every render
+   * (cheap haversine) and gate each trigger by an idempotency ref so
+   * the same step never speaks twice.
+   */
   useEffect(() => {
     if (!isNavigating || !driverLocation || !route || steps.length === 0) return;
 
-    // Check if we should advance to next step
+    // Mid-route: pre-announce + imminent + advance to next step
     if (currentStepIndex < steps.length - 1) {
-      const nextStepManeuver = steps[currentStepIndex + 1]?.maneuver_location;
-      if (nextStepManeuver) {
+      const nextStep = steps[currentStepIndex + 1];
+      const nextStepManeuver = nextStep?.maneuver_location;
+      if (nextStep && nextStepManeuver) {
         const distToNext = haversineDistance(driverLocation, {
           latitude: nextStepManeuver[0],
           longitude: nextStepManeuver[1],
         });
+        const targetIdx = currentStepIndex + 1;
+
+        // Pre-announce — only if there's enough room before the turn
+        const currentStepLen = steps[currentStepIndex]?.distance_m ?? 0;
+        if (
+          voiceEnabledRef.current &&
+          preAnnouncedStepRef.current !== targetIdx &&
+          distToNext <= PRE_ANNOUNCE_DISTANCE_M &&
+          distToNext > IMMINENT_ANNOUNCE_DISTANCE_M &&
+          currentStepLen >= PRE_ANNOUNCE_DISTANCE_M
+        ) {
+          preAnnouncedStepRef.current = targetIdx;
+          const text = buildSpokenInstructionWithDistance(nextStep, Math.round(distToNext));
+          Speech.stop()
+            .catch(() => {})
+            .finally(() => {
+              Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+            });
+        }
+
+        // Imminent — always fires at 50 m
+        if (
+          voiceEnabledRef.current &&
+          imminentAnnouncedStepRef.current !== targetIdx &&
+          distToNext <= IMMINENT_ANNOUNCE_DISTANCE_M
+        ) {
+          imminentAnnouncedStepRef.current = targetIdx;
+          const text = buildSpokenInstruction(nextStep);
+          Speech.stop()
+            .catch(() => {})
+            .finally(() => {
+              Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+            });
+        }
+
+        // Advance step
         if (distToNext < STEP_ADVANCE_THRESHOLD_M) {
           setCurrentStepIndex((prev) => prev + 1);
           return;
@@ -183,7 +274,7 @@ export function useInAppNavigation(
       }
     }
 
-    // Check if arrived at destination (last step)
+    // Last step → arrival
     if (currentStepIndex === steps.length - 1) {
       const lastStep = steps[steps.length - 1]!;
       const distToEnd = haversineDistance(driverLocation, {
@@ -191,6 +282,14 @@ export function useInAppNavigation(
         longitude: lastStep.maneuver_location[1]!,
       });
       if (distToEnd < STEP_ADVANCE_THRESHOLD_M) {
+        if (voiceEnabledRef.current && imminentAnnouncedStepRef.current !== currentStepIndex) {
+          imminentAnnouncedStepRef.current = currentStepIndex;
+          Speech.stop()
+            .catch(() => {})
+            .finally(() => {
+              Speech.speak('Llegaste a tu destino', { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+            });
+        }
         stopNavigation();
         return;
       }
@@ -243,6 +342,39 @@ export function useInAppNavigation(
     startNavigation,
     stopNavigation,
   };
+}
+
+/**
+ * BUG-278: pre-announce variant — speak the maneuver with a distance
+ * prefix ("En 200 metros, gira a la derecha por Calle X"). Used when
+ * the driver is approaching but not yet at the turn. The plain
+ * `buildSpokenInstruction` is reserved for the imminent (50 m) call.
+ */
+export function buildSpokenInstructionWithDistance(
+  step: NavigationStep,
+  distance_m: number,
+): string {
+  const { maneuver_type, maneuver_modifier, name } = step;
+  const street = name?.trim();
+  const distText = `En ${distance_m} metros`;
+
+  if (maneuver_type === 'arrive') return `${distText} llegarás a tu destino`;
+
+  const direction = (() => {
+    switch (maneuver_modifier) {
+      case 'left': return 'gira a la izquierda';
+      case 'sharp left': return 'gira cerrado a la izquierda';
+      case 'slight left': return 'gira ligeramente a la izquierda';
+      case 'right': return 'gira a la derecha';
+      case 'sharp right': return 'gira cerrado a la derecha';
+      case 'slight right': return 'gira ligeramente a la derecha';
+      case 'uturn': return 'haz un giro en U';
+      case 'straight':
+      default: return 'continúa recto';
+    }
+  })();
+
+  return street ? `${distText}, ${direction} por ${street}` : `${distText}, ${direction}`;
 }
 
 /**
