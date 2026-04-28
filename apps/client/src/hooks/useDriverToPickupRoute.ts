@@ -84,20 +84,37 @@ export function useLiveDriverRoute(
     //   - Driver deviated > DEVIATION_M from current polyline: yes (unless we just fetched < MIN_INTERVAL_MS ago)
     //   - Otherwise: no (the existing route is still valid)
     let shouldFetch = false;
+    let reason: 'first' | 'deviation' | 'stale-no-cache' | 'skip' = 'skip';
+    let offRouteM = 0;
 
     if (isFirstFetch) {
       shouldFetch = true;
+      reason = 'first';
     } else if (currentRoute && currentRoute.length >= 2) {
-      const offRouteM = distanceToPolyline(driverPosition, currentRoute);
+      offRouteM = distanceToPolyline(driverPosition, currentRoute);
       if (offRouteM > DEVIATION_M && sinceLastFetch >= MIN_INTERVAL_MS) {
         shouldFetch = true;
+        reason = 'deviation';
       }
     } else if (sinceLastFetch >= MIN_INTERVAL_MS) {
       // No current polyline cached but it's been a while — try again
       shouldFetch = true;
+      reason = 'stale-no-cache';
     }
 
     if (!shouldFetch) return;
+
+    // BUG-279 — diagnostic log so the user (and Metro) can see when a
+    // refetch fires. Useful while testing: open the client app, watch
+    // Metro logs, drive a parallel street with Lockito and confirm a
+    // `[useLiveDriverRoute] refetch reason=deviation off=78m` line.
+    // eslint-disable-next-line no-console
+    console.log('[useLiveDriverRoute] refetch', {
+      reason,
+      off_m: Math.round(offRouteM),
+      since_last_ms: sinceLastFetch,
+      target: { lat: target.latitude.toFixed(5), lng: target.longitude.toFixed(5) },
+    });
 
     let cancelled = false;
     inFlightRef.current = true;
@@ -120,6 +137,11 @@ export function useLiveDriverRoute(
         const coords = result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
         currentRouteRef.current = coords;
         setCoordinates(coords);
+        // eslint-disable-next-line no-console
+        console.log('[useLiveDriverRoute] route updated', {
+          points: coords.length,
+          distance_m: result.distance_m,
+        });
       }
     })();
 

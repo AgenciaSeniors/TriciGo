@@ -99,6 +99,13 @@ interface RideMapViewProps {
   onCameraChanged?: (bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number }, zoom: number) => void;
   /** When true, map fills all available space via flex:1 instead of fixed height */
   fullscreen?: boolean;
+  /**
+   * BUG-282 — initial map center as [longitude, latitude]. Pass the user's
+   * GPS (cached or live) so the map opens centered on the user, not the
+   * Havana / demo-city fallback. Only consulted when no pickup/dropoff/
+   * driver bounds are active.
+   */
+  initialUserCenter?: [number, number] | null;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -194,6 +201,7 @@ function RideMapViewInner({
   pois,
   onCameraChanged,
   fullscreen,
+  initialUserCenter,
 }: RideMapViewProps) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -473,10 +481,19 @@ function RideMapViewInner({
         rotateEnabled={true}
         onMapIdle={handleCameraChanged}
       >
-        {/* Camera — fit to bounds, or flyTo accepted driver, or default to Havana */}
+        {/* Camera — fit to bounds, or flyTo accepted driver, or default to
+            initialUserCenter (BUG-282) / Havana fallback.
+            `defaultSettings` only applies on first mount. AsyncStorage
+            cache reads asynchronously, so the first render is null →
+            camera defaults to HAVANA_CENTER (São Paulo). Once the cache
+            resolves, `initialUserCenter` becomes non-null and the `key`
+            changes, forcing the Camera to remount with the user's actual
+            position. After that, activeBounds takes over once pickup/
+            dropoff/driver are known and bounds are computed. */}
         <MapboxGL.Camera
+          key={`cam-${initialUserCenter ? `${initialUserCenter[0].toFixed(4)},${initialUserCenter[1].toFixed(4)}` : 'fallback'}`}
           defaultSettings={{
-            centerCoordinate: HAVANA_CENTER,
+            centerCoordinate: initialUserCenter ?? HAVANA_CENTER,
             zoomLevel: 14,
           }}
           {...(isAcceptAnimating && acceptedDriverLocation

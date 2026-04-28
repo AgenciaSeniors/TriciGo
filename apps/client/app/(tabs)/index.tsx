@@ -1615,12 +1615,17 @@ function NativeHomeScreen() {
     // instances fighting for gestures on Android (caused frozen pan/zoom).
     if (mapPickerMode) {
       const lastWaypoint = draft.waypoints.length > 0 ? draft.waypoints[draft.waypoints.length - 1] : null;
+      // BUG-282 — fallback chain so the picker doesn't open at HAVANA_CENTER
+      // (= São Paulo in demo mode) when the slot is empty for the first time:
+      //   pickup picker  → draft.pickup ?? draft.dropoff (no useful fallback otherwise)
+      //   dropoff picker → draft.dropoff ?? draft.pickup (start near the user)
+      //   waypoint picker → last waypoint ?? draft.pickup
       const pickerInitialLoc =
         mapPickerMode === 'pickup'
           ? draft.pickup?.location ?? null
           : mapPickerMode === 'waypoint'
-            ? lastWaypoint?.location ?? null
-            : draft.dropoff?.location ?? null;
+            ? lastWaypoint?.location ?? draft.pickup?.location ?? null
+            : draft.dropoff?.location ?? draft.pickup?.location ?? null;
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
@@ -2300,6 +2305,24 @@ const VEHICLE_ICONS: Record<string, any> = {
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
 function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'waypoint' | null) => void }) {
+  // BUG-282 — initial map center. Read the cached last-known position from
+  // AsyncStorage (written by IdleView's GPS effect) so the map opens at
+  // "where you are" instead of the demo-city fallback (São Paulo). Stays
+  // null on first launch ever — RideMapView falls back to HAVANA_CENTER
+  // / demo city in that case. Once draft.pickup is set (post-IdleView)
+  // the camera fits bounds anyway and this initial value is discarded.
+  const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem('last_known_location').then((cached) => {
+      if (!cached) return;
+      try {
+        const { latitude, longitude } = JSON.parse(cached);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setUserCenter([longitude, latitude]);
+        }
+      } catch { /* malformed */ }
+    }).catch(() => {});
+  }, []);
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -2537,6 +2560,10 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         waypointLocations={draft.waypoints.filter((wp) => wp.location !== null).map((wp) => wp.location!)}
         pois={pois}
         onCameraChanged={onPoiCameraChanged}
+        // BUG-282 — open map at the user's actual location instead of the
+        // demo-city fallback (São Paulo). userCenter resolves from cached
+        // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
+        initialUserCenter={userCenter}
       />
 
       {/* Floating top bar: [X] + compact address summary */}
