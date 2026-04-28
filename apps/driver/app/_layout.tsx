@@ -65,6 +65,38 @@ function initMapbox() {
 }
 initMapbox();
 
+/**
+ * BUG-006 (cold-start gray map definitive fix): pre-warm Android's
+ * DNS resolver so Mapbox can fetch its config_service on first launch.
+ *
+ * Forensic evidence (logcat after `pm clear` cold start):
+ *   10:09:13.751  MapboxInitializer create()
+ *   10:09:15.944  tile_store: Creating new database (cache empty)
+ *   10:09:16.072  W Mapbox config_service: Unable to fetch configuration
+ *                  HTTP error: net::ERR_NAME_NOT_RESOLVED, attempt 0 of 2
+ *
+ * Mapbox retries only 2 times then gives up — the map renders gray
+ * because no style/glyphs/tiles can be downloaded. After the user
+ * closes and reopens the app, Android's DNS cache still holds the
+ * api.mapbox.com → IP mapping, so the second launch works.
+ *
+ * Fix: kick off two no-op fetches as soon as the JS bundle loads.
+ * They're fire-and-forget — we only need the side effect of populating
+ * the OS DNS resolver cache. By the time React mounts and a MapView
+ * tries to fetch its style, api.mapbox.com is resolved.
+ *
+ * setTimeout(0) instead of immediate so we don't block module init on
+ * non-essential network. Two hosts: api.mapbox.com (config + tiles)
+ * and events.mapbox.com (telemetry — even though we disable it, RN
+ * Mapbox still pings it on first launch).
+ */
+if (Platform.OS !== 'web') {
+  setTimeout(() => {
+    fetch('https://api.mapbox.com/').catch(() => { /* DNS warm only */ });
+    fetch('https://events.mapbox.com/').catch(() => { /* DNS warm only */ });
+  }, 0);
+}
+
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
