@@ -453,10 +453,23 @@ export default function TrackingMap({
     });
   }, [waypointsKey, mapReady]);
 
-  /* ── Fit bounds to show all markers ── */
+  /* ── Fit bounds to show all markers ──
+     BUG-286-web: previous deps included `driverLat, driverLng`, so every
+     driver position update (~1 Hz from the polling) re-ran fitBounds and
+     the user saw the camera snap out repeatedly during the ride. The
+     mobile equivalent of this bug was BUG-286 — same fix here: only
+     fit on first mount (or on a NEW ride identity), driver position
+     never triggers a refit. The driver marker still moves in real time
+     because of the separate marker effect; the camera just stays where
+     the user (or the previous fit) left it. */
+  const hasFittedRef = useRef(false);
+  const lastFitRideKeyRef = useRef('');
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
+    const rideKey = `${pickupLat},${pickupLng}|${dropoffLat},${dropoffLng}`;
+    if (hasFittedRef.current && rideKey === lastFitRideKeyRef.current) return;
 
     try {
       const bounds = new mapboxgl.LngLatBounds();
@@ -471,10 +484,13 @@ export default function TrackingMap({
         }
       }
       map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
+      hasFittedRef.current = true;
+      lastFitRideKeyRef.current = rideKey;
     } catch (err) {
       console.error('[TrackingMap] fitBounds failed:', err);
     }
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, driverLat, driverLng, mapReady, waypointsKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady, waypointsKey]);
 
   if (!hasValidCoords) {
     return (
