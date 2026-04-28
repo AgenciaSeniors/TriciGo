@@ -191,9 +191,36 @@ export function useRideInit() {
           useRideStore.getState().setActiveRide(null);
           useRideStore.getState().setRideWithDriver(null);
         } else if (fresh.id === pinned.id) {
-          if (fresh.status !== pinned.status || fresh.driver_id !== pinned.driver_id) {
+          // BUG-287 fix B — detect mid-trip column changes that don't touch
+          // status/driver_id but DO drive UI (gps_override_requested_at
+          // surfaces the rider confirmation modal; gps_override_confirmed_at
+          // dismisses it). Without these checks the modal could lag up to 3 s
+          // OR sit open indefinitely until status changed.
+          const gpsReqChanged =
+            (fresh as { gps_override_requested_at?: string | null }).gps_override_requested_at !==
+            (pinned as { gps_override_requested_at?: string | null }).gps_override_requested_at;
+          const gpsConfChanged =
+            (fresh as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at !==
+            (pinned as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at;
+          const driverGpsStatusChanged =
+            (fresh as { driver_gps_status?: string | null }).driver_gps_status !==
+            (pinned as { driver_gps_status?: string | null }).driver_gps_status;
+
+          if (
+            fresh.status !== pinned.status
+            || fresh.driver_id !== pinned.driver_id
+            || gpsReqChanged
+            || gpsConfChanged
+            || driverGpsStatusChanged
+          ) {
             // eslint-disable-next-line no-console
-            console.log('[Watcher] ride changed', { from: pinned.status, to: fresh.status });
+            console.log('[Watcher] ride changed', {
+              from: pinned.status,
+              to: fresh.status,
+              gps_req_changed: gpsReqChanged,
+              gps_conf_changed: gpsConfChanged,
+              driver_gps_status_changed: driverGpsStatusChanged,
+            });
             useRideStore.getState().updateRideFromRealtime(fresh);
           }
         } else {
