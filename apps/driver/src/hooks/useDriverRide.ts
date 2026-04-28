@@ -157,11 +157,68 @@ export function useDriverRideInit() {
       if (state === 'active' && mounted) checkActive();
     });
 
+    // BUG-287 fix C — periodic reconcile while a trip is active so the
+    // driver can react to server-side changes that don't go through
+    // realtime (which is disabled per BUG-277). The most important
+    // change to surface: gps_override_confirmed_at flipping from null
+    // to a timestamp means the rider just tapped "Sí, lo veo" — we
+    // toast the driver so they know to retry "Llegué". Without this
+    // poll the driver would sit on the stale status and the rider's
+    // confirmation was effectively invisible to them.
+    let lastOverrideConfirmed: string | null = null;
+    const pollInterval = setInterval(async () => {
+      if (!mounted) return;
+      const localTrip = useDriverRideStore.getState().activeTrip;
+      if (!localTrip || !profile) return;
+      // Only poll for trips that could be waiting on rider confirmation
+      // (status pre-pickup or pre-dropoff). Skip when nothing to gate.
+      const gateableStatus =
+        localTrip.status === 'driver_en_route'
+        || localTrip.status === 'in_progress';
+      if (!gateableStatus) return;
+      try {
+        const fresh = await driverService.getActiveTrip(profile.id);
+        if (!fresh || !mounted) return;
+        const freshConfirmedAt =
+          (fresh as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at ?? null;
+        const localConfirmedAt =
+          (localTrip as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at ?? null;
+        // Update local store so the UI reflects the override fields
+        if (freshConfirmedAt !== localConfirmedAt
+          || (fresh as { gps_override_requested_at?: string | null }).gps_override_requested_at
+              !== (localTrip as { gps_override_requested_at?: string | null }).gps_override_requested_at) {
+          useDriverRideStore.getState().updateActiveTrip(fresh);
+        }
+        // Notify the driver exactly once when the rider confirms
+        if (freshConfirmedAt && freshConfirmedAt !== lastOverrideConfirmed) {
+          lastOverrideConfirmed = freshConfirmedAt;
+          if (localConfirmedAt !== freshConfirmedAt) {
+            triggerHaptic('success');
+            const target = localTrip.status === 'driver_en_route' ? 'pickup' : 'destination';
+            Toast.show({
+              type: 'success',
+              text1: i18next.t('driver:trip.rider_confirmed_arrival_title', {
+                defaultValue: 'Pasajero confirmó',
+              }),
+              text2: i18next.t('driver:trip.rider_confirmed_arrival_sub', {
+                defaultValue: target === 'pickup'
+                  ? 'Tocá "Llegué" de nuevo para avanzar'
+                  : 'Tocá "Llegué al destino" para completar',
+                target,
+              }),
+              visibilityTime: 6000,
+            });
+          }
+        }
+      } catch { /* best-effort, retry next tick */ }
+    }, 5_000);
+
     return () => {
       mounted = false;
       channelRef.current?.unsubscribe();
       activeChannelIdRef.current = null;
       appStateSub.remove();
+      clearInterval(pollInterval);
     };
   }, [isInitialized, profile, setActiveTrip]);
 }

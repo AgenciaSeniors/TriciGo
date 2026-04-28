@@ -875,6 +875,17 @@ export function RideActiveView() {
                 try {
                   await rideService.riderConfirmDriverArrival(activeRide.id);
                   Toast.show({ type: 'success', text1: t('ride.gps_check_thanks', { defaultValue: 'Gracias, confirmado' }) });
+                  // BUG-287 fix A — the RPC just flips a column; without a
+                  // local refresh the modal stays open until the next 3 s
+                  // poll catches the change. Refetch immediately and write
+                  // to the store so the modal closes the instant the user
+                  // taps the button.
+                  if (userId) {
+                    try {
+                      const fresh = await rideService.getActiveRide(userId);
+                      if (fresh) useRideStore.getState().updateRideFromRealtime(fresh);
+                    } catch { /* polling will catch up within 3 s */ }
+                  }
                 } catch (err) {
                   Toast.show({ type: 'error', text1: t('ride.gps_check_failed', { defaultValue: 'No se pudo confirmar' }) });
                 }
