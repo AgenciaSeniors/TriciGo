@@ -38,7 +38,25 @@ if (Platform.OS !== 'web') {
   }
 }
 
-type TxnFilter = 'all' | 'recharge' | 'ride_payment' | 'transfer_in' | 'transfer_out' | 'commission';
+/**
+ * BUG-280 — wallet filter set realigned with actual customer-side
+ * LedgerEntryType values:
+ *   - 'commission' removed (driver-only, never matches customer rows)
+ *   - 'adjustment' added (covers admin corrections + cancellation penalties
+ *     that previously showed only under "Todos" with no chip)
+ *   - 'promo_credit' added as 'bonus' (covers referral + promo bonuses)
+ *
+ *   ride_payment also matches ride_hold/ride_hold_release/redemption — the
+ *   filter logic in `filteredTransactions` widens accordingly.
+ */
+type TxnFilter =
+  | 'all'
+  | 'recharge'
+  | 'ride_payment'
+  | 'transfer_in'
+  | 'transfer_out'
+  | 'bonus'
+  | 'adjustment';
 
 /** Map raw ledger entry_type + credit/debit to a human-readable i18n key */
 function getTransactionLabel(
@@ -198,18 +216,31 @@ function WebWalletScreen() {
     }
   }, [accountId, page, loadingMore, hasMore]);
 
-  // Filtered transactions
+  // Filtered transactions — same widening rules as native (BUG-280).
   const filteredTransactions = useMemo(() => {
     if (activeFilter === 'all') return transactions;
-    return transactions.filter((tx) => tx.type === activeFilter);
+    return transactions.filter((tx) => {
+      if (activeFilter === 'ride_payment') {
+        return tx.type === 'ride_payment'
+          || tx.type === 'ride_hold'
+          || tx.type === 'ride_hold_release'
+          || tx.type === 'redemption';
+      }
+      if (activeFilter === 'bonus') {
+        return tx.type === 'promo_credit';
+      }
+      return tx.type === activeFilter;
+    });
   }, [transactions, activeFilter]);
 
   const filterOptions: { key: TxnFilter; label: string }[] = [
     { key: 'all', label: t('wallet.filter_all', { defaultValue: 'Todos' }) },
     { key: 'recharge', label: t('wallet.filter_recharge', { defaultValue: 'Recargas' }) },
     { key: 'ride_payment', label: t('wallet.filter_rides', { defaultValue: 'Viajes' }) },
-    { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Transferencias' }) },
+    { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Recibidas' }) },
     { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
+    { key: 'bonus', label: t('wallet.filter_bonus', { defaultValue: 'Bonos' }) },
+    { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
 
   // Stripe recharge for web (Expo web uses redirect flow — native uses payment sheet below)
@@ -849,31 +880,43 @@ function NativeWalletScreen() {
   }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData, isProcessing]);
   const debouncedSubmitTransfer = useDebouncePress(submitTransfer);
 
-  // Monthly spending insights (8.4)
+  // BUG-280 — Monthly spending insights, fixed.
+  //
+  // Old calculation summed every debit as "totalSpent" and counted every
+  // debit type as a ride. That produced confusing numbers like
+  // "70,000 TC gastado / 0 viajes" when the only debits were admin
+  // adjustments and ride_holds (which get released when the trip is
+  // canceled, so they aren't real spending).
+  //
+  // New rules:
+  //   - totalSpent counts ONLY settled ride payments (`ride_payment` and
+  //     `redemption` debits). `ride_hold` is excluded — it's transient
+  //     and gets released. `adjustment` debits are excluded — those are
+  //     admin corrections, not user spending.
+  //   - ridesCount and totalSpent share the same set of transactions, so
+  //     the "Promedio" stays consistent (totalSpent / ridesCount).
+  //   - The card hides itself when there are no rides this month so we
+  //     never show "70k spent / 0 trips".
   const monthlyInsights = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    const monthTxns = transactions.filter((tx) => {
-      const txDate = new Date(tx.created_at);
-      return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
-    });
+    const ridePaymentTypes = new Set<string>(['ride_payment', 'redemption']);
 
-    const debitTxns = monthTxns.filter((tx) => {
+    const monthRideDebits = transactions.filter((tx) => {
+      const txDate = new Date(tx.created_at);
+      if (txDate.getMonth() !== currentMonth || txDate.getFullYear() !== currentYear) return false;
+      if (!ridePaymentTypes.has(tx.type)) return false;
       const amount = tx.ledger_entries?.[0]?.amount ?? 0;
       return amount < 0;
     });
 
-    const totalSpent = debitTxns.reduce((sum, tx) => {
+    const totalSpent = monthRideDebits.reduce((sum, tx) => {
       const amount = tx.ledger_entries?.[0]?.amount ?? 0;
       return sum + Math.abs(amount);
     }, 0);
-
-    const ridePayments = debitTxns.filter((tx) =>
-      tx.type === 'ride_payment' || tx.type === 'ride_hold' || tx.type === 'redemption',
-    );
-    const ridesCount = ridePayments.length;
+    const ridesCount = monthRideDebits.length;
     const avgRide = ridesCount > 0 ? Math.round(totalSpent / ridesCount) : 0;
 
     return { totalSpent, ridesCount, avgRide };
@@ -881,7 +924,21 @@ function NativeWalletScreen() {
 
   const filteredTransactions = useMemo(() => {
     if (activeFilter === 'all') return transactions;
-    return transactions.filter((tx) => tx.type === activeFilter);
+    return transactions.filter((tx) => {
+      // BUG-280 — widen ride_payment filter to catch the equivalent settled-
+      // payment types so "Viajes" doesn't hide redemptions / hold releases.
+      if (activeFilter === 'ride_payment') {
+        return tx.type === 'ride_payment'
+          || tx.type === 'ride_hold'
+          || tx.type === 'ride_hold_release'
+          || tx.type === 'redemption';
+      }
+      // 'bonus' chip captures promo + referral credits.
+      if (activeFilter === 'bonus') {
+        return tx.type === 'promo_credit';
+      }
+      return tx.type === activeFilter;
+    });
   }, [transactions, activeFilter]);
 
   const filterOptions: { key: TxnFilter; label: string }[] = [
@@ -890,7 +947,8 @@ function NativeWalletScreen() {
     { key: 'ride_payment', label: t('wallet.filter_rides', { defaultValue: 'Viajes' }) },
     { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Recibidas' }) },
     { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
-    { key: 'commission', label: t('wallet.filter_commission', { defaultValue: 'Comisiones' }) },
+    { key: 'bonus', label: t('wallet.filter_bonus', { defaultValue: 'Bonos' }) },
+    { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
 
   const renderTransaction = ({ item, index }: { item: TransactionWithAmount; index: number }) => {
@@ -930,9 +988,12 @@ function NativeWalletScreen() {
 
   return (
     <Screen bg="white" padded>
-      <View className="pt-4 flex-1">
-        <View className="flex-row items-center gap-2.5 mb-4">
-          <Image source={tricoinLogo} style={{ width: 48, height: 48 }} resizeMode="contain" />
+      {/* BUG-280 — header now uses pt-6 (was pt-4) so the page title clears
+          the demo banner overlay shown in production-debug builds. The h3
+          was previously cut off when the banner is on. */}
+      <View className="pt-6 flex-1">
+        <View className="flex-row items-center gap-2.5 mb-5">
+          <Image source={tricoinLogo} style={{ width: 40, height: 40 }} resizeMode="contain" />
           <Text variant="h3">
             {t('wallet.title')}
           </Text>
@@ -948,11 +1009,11 @@ function NativeWalletScreen() {
             coinIcon={tricoinSmall}
             GradientComponent={LinearGradient}
             gradientColors={['#FF4D00', '#FF8A5C']}
-            className="mb-6"
+            className="mb-5"
           />
         </AnimatedCard>
 
-        <View className="flex-row gap-3 mb-3">
+        <View className="flex-row gap-3 mb-6">
           <Button
             title={t('wallet.recharge')}
             variant="primary"
@@ -968,34 +1029,38 @@ function NativeWalletScreen() {
             onPress={handleTransfer}
           />
         </View>
-        {/* Monthly spending insights (8.4) */}
-        {transactions.length > 0 && (
+
+        {/* BUG-280 — "Este mes" now hides when there are no rides this month
+            (previously showed "70,000 TC gastado / 0 viajes" because admin
+            adjustments and ride_holds counted as spending). Always-on stats
+            cards are visually noisy when there's nothing to show. */}
+        {monthlyInsights.ridesCount > 0 && (
           <View className="mb-6">
             <Text variant="h4" className="mb-3">
               {t('wallet.this_month', { defaultValue: 'Este mes' })}
             </Text>
             <View className="flex-row gap-3">
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-xl px-3 py-3 items-center">
-                <Text variant="caption" color="secondary" className="mb-1">
+              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
+                <Text variant="caption" color="secondary" className="mb-1.5">
                   {t('wallet.total_spent', { defaultValue: 'Total gastado' })}
                 </Text>
-                <Text variant="body" className="font-bold text-primary-600">
+                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
                   {formatTriciCoin(monthlyInsights.totalSpent)}
                 </Text>
               </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-xl px-3 py-3 items-center">
-                <Text variant="caption" color="secondary" className="mb-1">
+              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
+                <Text variant="caption" color="secondary" className="mb-1.5">
                   {t('wallet.rides_count', { defaultValue: 'Viajes' })}
                 </Text>
-                <Text variant="body" className="font-bold text-primary-600">
+                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
                   {monthlyInsights.ridesCount}
                 </Text>
               </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-xl px-3 py-3 items-center">
-                <Text variant="caption" color="secondary" className="mb-1">
+              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
+                <Text variant="caption" color="secondary" className="mb-1.5">
                   {t('wallet.avg_ride', { defaultValue: 'Promedio' })}
                 </Text>
-                <Text variant="body" className="font-bold text-primary-600">
+                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
                   {formatTriciCoin(monthlyInsights.avgRide)}
                 </Text>
               </View>
@@ -1003,18 +1068,33 @@ function NativeWalletScreen() {
           </View>
         )}
 
-        <Text variant="h4" className="mb-2">
+        <Text variant="h4" className="mb-3">
           {t('wallet.history')}
         </Text>
 
-        {/* Filter chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-          <View className="flex-row gap-2">
+        {/* BUG-280 — filter chips height fix v2.
+            Bug: when the FlatList below had few items (e.g. filter "Recargas"
+            showing 2 rows), the parent flex-1 column gave extra vertical space
+            to the chip ScrollView, and `flex-row` (default align-items: stretch)
+            stretched every chip to fill that height — chips became huge ovals.
+            Fix:
+              1. ScrollView: style flexGrow:0 + maxHeight so it stops expanding.
+              2. Wrapper: items-start (align-items: flex-start) so each chip
+                 sizes to its content height regardless of the row height. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="mb-3"
+          style={{ flexGrow: 0, maxHeight: 48 }}
+          contentContainerStyle={{ paddingRight: 16, alignItems: 'flex-start' }}
+        >
+          <View className="flex-row gap-2 items-start">
             {filterOptions.map((opt) => (
               <Pressable
                 key={opt.key}
                 onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
-                className={`px-3 py-1.5 rounded-full border ${
+                hitSlop={{ top: 8, bottom: 8 }}
+                className={`px-4 py-2 rounded-full border self-start ${
                   activeFilter === opt.key
                     ? 'bg-primary-500 border-primary-500'
                     : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'

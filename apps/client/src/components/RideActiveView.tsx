@@ -20,7 +20,7 @@ import { RideMapView } from '@/components/RideMapView';
 import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
 import { formatTimeAgo } from '@tricigo/utils/offlineLabels';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
-import { useDriverToPickupRoute } from '@/hooks/useDriverToPickupRoute';
+import { useDriverToPickupRoute, useLiveDriverRoute } from '@/hooks/useDriverToPickupRoute';
 import { useETA } from '@/hooks/useETA';
 import { useTripProgress } from '@/hooks/useTripProgress';
 import { TripProgressBar } from '@tricigo/ui/TripProgressBar';
@@ -99,7 +99,40 @@ export function RideActiveView() {
     activeRide?.dropoff_location ?? null,
     waypointPoints,
   );
-  const routeCoordinates = routeData.coordinates;
+
+  /**
+   * BUG-279 — live driver→dropoff polyline that follows the driver's
+   * actual path during the trip. Replaces the static pickup→dropoff
+   * polyline once the trip starts (`in_progress` / `arrived_at_destination`).
+   *
+   * Why this hook exists:
+   *   - useRoutePolyline returns a STATIC route from pickup to dropoff.
+   *     It never updates while the driver moves — if the driver takes a
+   *     parallel street or a shortcut, the line stays glued to the
+   *     original path while the marker drifts off it. User reported:
+   *     "si el driver cambia la ruta, el client no actualiza la nueva
+   *     ruta del driver, es como si mantuviese su ruta fija".
+   *   - useLiveDriverRoute (new in BUG-279) refetches OSRM whenever the
+   *     driver deviates >50m from the polyline, so the line tracks the
+   *     real path.
+   *
+   * UX choice (Option A): during in_progress we REPLACE the static line
+   * with the live driver→dropoff line. We do not show both — keeps the
+   * map clean and matches Uber/Lyft behavior. If we ever want to show
+   * the "originally planned" route faded behind, swap to Option B.
+   */
+  const isInProgress = activeRide?.status === 'in_progress'
+    || activeRide?.status === 'arrived_at_destination';
+  const liveDriverToDropoffRoute = useLiveDriverRoute(
+    driverPosition,
+    activeRide?.dropoff_location ?? null,
+    isInProgress,
+  );
+
+  // The polyline we hand to the map: live during the trip, static otherwise.
+  const routeCoordinates = isInProgress
+    ? (liveDriverToDropoffRoute ?? routeData.coordinates)
+    : routeData.coordinates;
 
   const driverToPickupRoute = useDriverToPickupRoute(
     driverPosition,

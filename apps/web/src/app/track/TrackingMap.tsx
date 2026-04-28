@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { fetchRoute, fetchMultiStopRoute, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import {
+  fetchRoute,
+  fetchMultiStopRoute,
+  distanceToPolyline,
+  haversineDistance,
+  MAP_STYLE_LIGHT,
+  MAP_COLORS,
+  MARKER,
+  ROUTE,
+} from '@tricigo/utils';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
@@ -19,6 +28,14 @@ export interface TrackingMapProps {
   nearbyVehicles?: Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>;
   /** Intermediate stops in visit order (pickup → waypoints → dropoff). */
   waypoints?: Array<{ latitude: number; longitude: number; sort_order?: number }>;
+  /**
+   * BUG-279-web: ride status. When 'in_progress' or 'arrived_at_destination'
+   * the polyline is fetched LIVE from the driver's current position to the
+   * dropoff (refetched when the driver deviates >50 m from the previous
+   * polyline). Without this prop, the route stays glued to the original
+   * pickup→dropoff path even if the driver takes a different street.
+   */
+  rideStatus?: string | null;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -105,6 +122,7 @@ export default function TrackingMap({
   vehicleType,
   nearbyVehicles,
   waypoints,
+  rideStatus,
   className,
   style: styleProp,
 }: TrackingMapProps) {
@@ -116,6 +134,12 @@ export default function TrackingMap({
   const vehicleMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const waypointMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
+
+  // BUG-279-web: cache the current polyline so the live-route effect can
+  // measure how far the driver has deviated from it.
+  const currentRouteRef = useRef<Array<{ latitude: number; longitude: number }> | null>(null);
+  const lastLiveFetchAtRef = useRef(0);
+  const liveFetchInFlightRef = useRef(false);
 
   // Validate coordinates to prevent Mapbox NaN crash
   // Must be real numbers, not NaN, not 0, and within plausible lat/lng ranges
@@ -247,13 +271,20 @@ export default function TrackingMap({
     }
   }, [driverLat, driverLng, driverHeading, mapReady]);
 
-  /* ── Fetch and draw route (through waypoints if any) ── */
+  /* ── Fetch and draw STATIC route (pickup → dropoff, used pre-trip) ── */
   // Stable dep key for waypoints so reference changes don't re-fetch.
   const waypointsKey = waypoints
     ?.map((w) => `${w.latitude},${w.longitude}`)
     .join('|') ?? '';
+
+  // BUG-279-web: only the static route runs in the pre-trip phases. Once
+  // the trip starts (in_progress / arrived_at_destination) the LIVE route
+  // effect below takes over and the static effect is a no-op.
+  const isLivePhase = rideStatus === 'in_progress' || rideStatus === 'arrived_at_destination';
+
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
+    if (isLivePhase) return; // live effect handles the polyline now
 
     let cancelled = false;
 
@@ -289,6 +320,7 @@ export default function TrackingMap({
       if (result && result.coordinates.length > 1) {
         // coordinates are [lat, lng] — convert to [lng, lat] for Mapbox GL
         const coords = result.coordinates.map(([lat, lng]) => [lng, lat] as [number, number]);
+        currentRouteRef.current = result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
         source.setData({
           type: 'Feature',
           properties: {},
@@ -301,6 +333,7 @@ export default function TrackingMap({
           ...sortedStops.map((w) => [w.longitude, w.latitude] as [number, number]),
           [dropoffLng, dropoffLat],
         ];
+        currentRouteRef.current = null;
         source.setData({
           type: 'Feature',
           properties: {},
@@ -310,7 +343,79 @@ export default function TrackingMap({
     })();
 
     return () => { cancelled = true; };
-  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady, waypointsKey]);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady, waypointsKey, isLivePhase]);
+
+  /* ── BUG-279-web: LIVE route during in_progress/arrived_at_destination ──
+     Refetches OSRM whenever the driver deviates >50 m from the cached
+     polyline OR every 5 s minimum. Mirrors the mobile useLiveDriverRoute
+     hook. The polyline now follows the driver's real path instead of
+     staying glued to the original pickup→dropoff line. */
+  useEffect(() => {
+    if (!mapRef.current || !mapReady || !isLivePhase) return;
+    if (typeof driverLat !== 'number' || typeof driverLng !== 'number') return;
+    if (typeof dropoffLat !== 'number' || typeof dropoffLng !== 'number') return;
+
+    // Skip when driver is essentially at the dropoff
+    const distToDropoff = haversineDistance(
+      { latitude: driverLat, longitude: driverLng },
+      { latitude: dropoffLat, longitude: dropoffLng },
+    );
+    if (distToDropoff < 50) return;
+
+    // In-flight guard
+    if (liveFetchInFlightRef.current) return;
+
+    const now = Date.now();
+    const sinceLastFetch = now - lastLiveFetchAtRef.current;
+    const isFirstLiveFetch = lastLiveFetchAtRef.current === 0;
+    const cached = currentRouteRef.current;
+
+    // Decide whether to fetch
+    let shouldFetch = false;
+    if (isFirstLiveFetch) {
+      shouldFetch = true;
+    } else if (cached && cached.length >= 2) {
+      const offRouteM = distanceToPolyline({ latitude: driverLat, longitude: driverLng }, cached);
+      if (offRouteM > 50 && sinceLastFetch >= 5_000) shouldFetch = true;
+    } else if (sinceLastFetch >= 5_000) {
+      shouldFetch = true;
+    }
+    if (!shouldFetch) return;
+
+    let cancelled = false;
+    liveFetchInFlightRef.current = true;
+
+    (async () => {
+      const result = await fetchRoute(
+        { lat: driverLat, lng: driverLng },
+        { lat: dropoffLat, lng: dropoffLng },
+      );
+
+      if (cancelled) {
+        liveFetchInFlightRef.current = false;
+        return;
+      }
+      lastLiveFetchAtRef.current = Date.now();
+      liveFetchInFlightRef.current = false;
+
+      const map = mapRef.current;
+      if (!map) return;
+      const source = map.getSource('route') as mapboxgl.GeoJSONSource | undefined;
+      if (!source) return;
+
+      if (result && result.coordinates.length > 1) {
+        const coords = result.coordinates.map(([lat, lng]) => [lng, lat] as [number, number]);
+        currentRouteRef.current = result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
+        source.setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords },
+        });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [driverLat, driverLng, dropoffLat, dropoffLng, mapReady, isLivePhase]);
 
   /* ── Waypoint markers (orange rings with number) ── */
   useEffect(() => {
