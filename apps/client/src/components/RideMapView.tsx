@@ -416,32 +416,43 @@ function RideMapViewInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, routeKey, isAcceptAnimating]);
 
-  // BUG-229: only push bounds to Mapbox Camera when something MEANINGFUL
-  // changes (new ride, new route). Once bounds are applied, hold them
-  // stable so Camera doesn't snap on every re-render. The user can then
-  // pan freely; tap "recenter" to refit.
+  // BUG-229 + BUG-286: only push bounds to Mapbox Camera when something
+  // MEANINGFUL changes — i.e. the RIDE itself (pickup/dropoff) changed.
+  //
+  // The previous implementation compared `boundsKey`, the bbox of the
+  // current bounds set. But `bounds` is computed from `routeCoordinates`
+  // when available — and `useLiveDriverRoute` refetches the polyline
+  // every time the driver deviates >50 m. Each refetch produces a
+  // slightly different bbox, so `boundsKey` changed, `activeBounds`
+  // re-applied the new bounds, and the camera snapped to fit them.
+  // User reported: "cada vez que se actualiza la ruta, el client aleja
+  // el mapa". This was the cause.
+  //
+  // New rule: track a `rideKey` derived only from pickup + dropoff
+  // (the immutable identity of the ride). The polyline can update
+  // freely during in_progress without triggering a camera refit. The
+  // camera only re-snaps when the user is on a brand-new ride.
   const [hasFitInitially, setHasFitInitially] = useState(false);
-  const lastBoundsKey = useRef('');
-  const boundsKey = bounds ? `${bounds.ne[0]},${bounds.ne[1]}|${bounds.sw[0]},${bounds.sw[1]}` : '';
-  // Only consider bounds "active" the FIRST time they're available, OR if
-  // the bounding box changes by more than ~10% (e.g. user picked a brand
-  // new ride with very different coordinates).
+  const lastFitRideKey = useRef('');
+  const rideKey = `${pickupLat ?? ''},${pickupLng ?? ''}|${dropoffLat ?? ''},${dropoffLng ?? ''}`;
+
   const activeBounds = useMemo(() => {
     if (!bounds) return null;
     if (!hasFitInitially) return bounds;
-    // After initial fit, only re-apply if bounds shifted significantly.
-    // Compare normalized key — if the same, return null (don't snap).
-    if (boundsKey === lastBoundsKey.current) return null;
+    if (rideKey === lastFitRideKey.current) return null;
     return bounds;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundsKey, hasFitInitially]);
+  }, [rideKey, hasFitInitially]);
 
   useEffect(() => {
     if (bounds && !hasFitInitially) {
       setHasFitInitially(true);
-      lastBoundsKey.current = boundsKey;
+      lastFitRideKey.current = rideKey;
+    } else if (bounds && hasFitInitially && rideKey !== lastFitRideKey.current) {
+      // A brand-new ride started — record its key so we don't keep snapping.
+      lastFitRideKey.current = rideKey;
     }
-  }, [bounds, hasFitInitially, boundsKey]);
+  }, [bounds, hasFitInitially, rideKey]);
 
   if (!MapboxGL) {
     // On web, use WebMapView with mapbox-gl instead of native @rnmapbox/maps
