@@ -114,16 +114,20 @@ export function RideCompleteView() {
   }, []);
 
   // U3.1: Check if this is the user's first completed ride.
-  // Bugfix: the service takes positional args (userId, page, pageSize),
-  // not an object. The object form silently coerced `page` to NaN and
-  // returned no rides, so `isFirstRide` stuck at true and first-ride
-  // flourishes (big checkmark, invite-friends prompt) fired on every
-  // completed trip. Align to the real signature.
+  // BUG-288: the previous fetch asked for pageSize=1 and then checked
+  // `rides.length <= 1`. That predicate was ALWAYS true: the API can
+  // never return more rows than pageSize, so `length` was at most 1
+  // and `<= 1` matched even users with 100+ trips. Result: every
+  // completed ride showed "Tu primer viaje con TriciGo!" with the
+  // first-ride flourish. Fetch pageSize=2 so we can distinguish "user
+  // has 0 or 1 ride total" (first ride) from "user has 2+" (not first).
   useEffect(() => {
     if (userId) {
-      rideService.getRideHistory(userId, 0, 1).then((rides) => {
-        // If only 1 ride (this one), it's their first
-        setIsFirstRide(rides.length <= 1);
+      rideService.getRideHistory(userId, 0, 2).then((rides) => {
+        // < 2 means the API returned fewer than the page size, i.e. the
+        // user truly has fewer than 2 completed rides — this one is
+        // the first.
+        setIsFirstRide(rides.length < 2);
       }).catch(() => {});
     }
   }, [userId]);
