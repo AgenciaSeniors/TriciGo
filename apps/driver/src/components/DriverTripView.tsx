@@ -17,6 +17,7 @@ import type { DeliveryDetails } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
+import { useLiveDriverRoute } from '@/hooks/useLiveDriverRoute';
 import { useRiderLocation } from '@/hooks/useRiderLocation';
 import { useDriverStore } from '@/stores/driver.store';
 import { openNavigation } from '@/utils/navigation';
@@ -114,26 +115,31 @@ export function useActiveTripMapData() {
     ? { latitude: driverLatMap, longitude: driverLngMap }
     : null;
 
-  // BUG-218 (route): the displayed route depends on the trip phase.
-  //  - During driver_en_route / accepted: driver → pickup
-  //  - During in_progress / arrived_at_destination: driver → dropoff
-  // Two fetches with smart fallback: if the active leg is too short for
-  // OSRM (e.g. driver already at pickup, distance < 50m), we keep showing
-  // the pickup → dropoff polyline so the user still has visual context.
-  const legFrom = driverLocationMap;
+  // BUG-283 — live route from driver to current target (pickup during
+  // pickup phase, dropoff during the trip). Refetches on >50 m deviation
+  // with a 5 s min interval, so when the driver takes a parallel street
+  // the polyline catches up within seconds. Replaces the old combo of
+  // `useRoutePolyline(driverLocation, target)` + `useRoutePolyline(pickup,
+  // dropoff)` fallback + a never-started `useInAppNavigation` instance —
+  // that combo refetched on every GPS sample (cache-busting itself) or
+  // stayed glued to the original line, depending on OSRM rate-limit.
+  //
+  // Fallback to the static pickup→dropoff polyline only used to fill the
+  // initial frame before the first live fetch returns, so the user
+  // always has SOME context to see.
   const legTo = isPickupPhase
     ? (activeTrip?.pickup_location ?? null)
     : (activeTrip?.dropoff_location ?? null);
-  const legRoute = useRoutePolyline(legFrom, legTo);
+  const liveLegRoute = useLiveDriverRoute(driverLocationMap, legTo, !!legTo);
   const fullRoute = useRoutePolyline(
     activeTrip?.pickup_location ?? null,
     activeTrip?.dropoff_location ?? null,
   );
-  // BUG-218: OSRM returns a 2-point straight line for very short legs
-  // (e.g. driver already at pickup), which is invisible at normal zoom.
-  // Require a real polyline (>= 4 points = at least one road segment) to
-  // use the leg; otherwise fall back to the full pickup→dropoff route.
-  const routeCoordinates = (legRoute && legRoute.length >= 4) ? legRoute : fullRoute;
+  // Prefer the live driver→leg polyline once it has at least one road
+  // segment (≥ 4 points). Until OSRM responds the first time, fall back
+  // to the full pickup→dropoff line so the map isn't blank.
+  const routeCoordinates =
+    liveLegRoute && liveLegRoute.length >= 4 ? liveLegRoute : fullRoute;
   const inAppNavMap = useInAppNavigation(driverLocationMap);
 
   // BUG-218 (UX): markers visible at all phases EXCEPT when driver is so
