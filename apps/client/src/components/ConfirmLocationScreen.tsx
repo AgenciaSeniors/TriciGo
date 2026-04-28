@@ -27,7 +27,7 @@ function ensureMapboxToken() {
   try {
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
     M.setAccessToken(token);
-    if (typeof M.setWellKnownTileServer === 'function') M.setWellKnownTileServer('Mapbox');
+    // BUG-216: setWellKnownTileServer removed (deprecated, was log noise)
     if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
     _mapboxTokenApplied = true;
   } catch { /* retry via _layout */ }

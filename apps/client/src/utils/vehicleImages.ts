@@ -18,12 +18,14 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
 };
 
 /** Small images for map markers */
+// BUG-218: auto_standard now uses the almendrón (Cuban classic) marker so
+// it visually distinguishes from the modern auto_confort marker.
 export const vehicleMarkerImages: Record<ServiceTypeSlug, ImageSourcePropType> = {
   triciclo_basico: require('../../assets/vehicles/markers/triciclo.png'),
   triciclo_premium: require('../../assets/vehicles/markers/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/markers/triciclo.png'),
   moto_standard: require('../../assets/vehicles/markers/moto.png'),
-  auto_standard: require('../../assets/vehicles/markers/auto.png'),
+  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/markers/confort.png'),
   mensajeria: require('../../assets/vehicles/markers/moto.png'),
 };

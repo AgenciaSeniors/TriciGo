@@ -54,6 +54,57 @@ import type { Ride } from '@tricigo/types';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// BUG-218: dedicated wrapper for the active-trip map render.
+// `useActiveTripMapData()` is a hook (calls `useDriverRideStore`,
+// `useRoutePolyline`, etc.) so it must live at component top level.
+// Splitting it into a separate component keeps the parent screen
+// from running these hooks during the idle/online phase.
+function ActiveTripMap({
+  mapRef,
+  driverLocation,
+  onRecenter,
+  screenHeight,
+}: {
+  mapRef: React.RefObject<RideMapViewRef | null>;
+  driverLocation: { latitude: number; longitude: number } | null;
+  onRecenter: () => void;
+  screenHeight: number;
+}) {
+  const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates } = useActiveTripMapData();
+  const activeTrip = useDriverRideStore((s) => s.activeTrip);
+  // BUG-258: driver marker wasn't rotating during turns because this
+  // component never passed `driverHeading` to <RideMapView>. The store
+  // already has the latest heading from useDriverLocation; we just need
+  // to read it and forward it. Without this, RideMapView line 991 was
+  // always rotating to 0deg (the `??` fallback).
+  const driverHeading = useLocationStore((s) => s.heading);
+  // BUG-218 (b): vehicleType for driver marker derived from ride.service_type.
+  // The previous hardcoded "triciclo" was wrong for drivers with auto/moto/confort.
+  const vehicleType = useMemo(() => {
+    const slug = activeTrip?.service_type ?? '';
+    if (slug.startsWith('auto_confort')) return 'confort';
+    if (slug.startsWith('auto_')) return 'auto';
+    if (slug.startsWith('moto_')) return 'moto';
+    if (slug.startsWith('triciclo_')) return 'triciclo';
+    return 'auto'; // safe default for unknown service types
+  }, [activeTrip?.service_type]);
+  return (
+    <RideMapView
+      ref={mapRef}
+      driverLocation={driverLocation}
+      driverHeading={driverHeading}
+      pickupLocation={pickupLocation}
+      dropoffLocation={dropoffLocation}
+      riderLocation={riderLocation}
+      routeCoordinates={routeCoordinates}
+      height={screenHeight}
+      darkStyle
+      onRecenter={onRecenter}
+      vehicleType={vehicleType}
+    />
+  );
+}
+
 // ─── Home screen ─────────────────────────────────────────────────────────────
 function NativeDriverHomeScreen() {
   const { t } = useTranslation('driver');
@@ -88,12 +139,23 @@ function NativeDriverHomeScreen() {
   const [idleMinutes, setIdleMinutes] = useState(0);
   const [nearestHotZone, setNearestHotZone] = useState<{ lat: number; lng: number; distance: number } | null>(null);
 
-  // DE-1.2: Preferred navigation memory
-  const [preferredNav, setPreferredNav] = useState<'inapp' | 'external'>('external');
+  // DE-1.2: Preferred navigation memory (default: in-app map)
+  const [preferredNav, setPreferredNav] = useState<'inapp' | 'external'>('inapp');
 
   useEffect(() => {
     AsyncStorage.getItem('preferred_nav').then((val) => {
       if (val === 'inapp' || val === 'external') setPreferredNav(val);
+    }).catch(() => {});
+  }, []);
+
+  // BUG-216: One-time migration — clear stale 'external' default from earlier installs
+  useEffect(() => {
+    AsyncStorage.getItem('preferred_nav_migrated_v2').then((flag) => {
+      if (flag !== '1') {
+        AsyncStorage.setItem('preferred_nav', 'inapp').catch(() => {});
+        AsyncStorage.setItem('preferred_nav_migrated_v2', '1').catch(() => {});
+        setPreferredNav('inapp');
+      }
     }).catch(() => {});
   }, []);
 
@@ -116,6 +178,21 @@ function NativeDriverHomeScreen() {
 
   // Map ref for imperative camera control
   const mapRef = useRef<RideMapViewRef>(null);
+
+  // BUG-218: own vehicle type for the IDLE map marker (was hardcoded
+  // "triciclo"). Maps DriverProfile vehicle.type → marker icon slug.
+  const [ownVehicleType, setOwnVehicleType] = useState<'auto' | 'moto' | 'triciclo' | 'confort'>('auto');
+  useEffect(() => {
+    if (!profile?.id) return;
+    driverService.getVehicle(profile.id).then((vehicle) => {
+      if (!vehicle?.type) return;
+      const t = String(vehicle.type).toLowerCase();
+      if (t.startsWith('auto_confort') || t === 'confort') setOwnVehicleType('confort');
+      else if (t.startsWith('auto')) setOwnVehicleType('auto');
+      else if (t.startsWith('moto')) setOwnVehicleType('moto');
+      else if (t.startsWith('triciclo')) setOwnVehicleType('triciclo');
+    }).catch(() => { /* keep default 'auto' */ });
+  }, [profile?.id]);
 
   // Fetch service type configs once for fare calculation
   useEffect(() => {
@@ -161,29 +238,80 @@ function NativeDriverHomeScreen() {
     return () => clearInterval(interval);
   }, [isOnline, profile?.id]);
 
-  // DT-2: Fetch today's earnings when online
+  // BUG-249: Fetch today's earnings + ride count from rides table.
+  // Previous query against ledger_entries used columns that don't exist
+  // (entry_type, user_id) and silently returned empty results — always 0.
+  // Re-runs every 60s + whenever a trip ends so the home reflects the
+  // most recent completion without manual reload.
+  //
+  // BUG-249v2: simplified the "today" boundary computation — earlier
+  // approach round-tripped through toLocaleString which is fragile when
+  // the device clock is not on Havana TZ. Instead we compute "midnight
+  // Havana, today" using only UTC arithmetic: take now, subtract the
+  // Havana offset (UTC-4 during DST, UTC-5 otherwise), strip time, and
+  // re-add. This is robust regardless of device timezone.
   useEffect(() => {
-    if (!isOnline) return;
+    if (!profile?.id) return;
+    const COMMISSION_RATE = 0.15;
     const fetchEarnings = async () => {
       try {
         const supabase = getSupabaseClient();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const { data } = await supabase
-          .from('ledger_entries')
-          .select('amount, entry_type')
-          .eq('user_id', profile?.user_id)
-          .gte('created_at', today.toISOString())
-          .in('entry_type', ['ride_payment_credit', 'tip_credit', 'bonus_credit']);
-        if (data) {
-          const amount = data.reduce((sum: number, e: { amount: number }) => sum + Math.abs(e.amount), 0);
-          const trips = data.filter((e: { entry_type: string }) => e.entry_type === 'ride_payment_credit').length;
-          setTodayEarnings({ amount, trips });
+        // Havana is UTC-4 during DST (Mar→Nov), UTC-5 otherwise. Use
+        // Intl to get the actual current offset robustly.
+        const havanaOffsetHrs = (() => {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Havana',
+            timeZoneName: 'shortOffset',
+          });
+          const parts = fmt.formatToParts(new Date());
+          const tzn = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT-5';
+          const m = tzn.match(/GMT([+-]?\d+)/);
+          return m && m[1] ? parseInt(m[1], 10) : -5;
+        })();
+        // Now in Havana wall-clock time as ms-since-epoch:
+        const nowUtcMs = Date.now();
+        const havanaNowMs = nowUtcMs + havanaOffsetHrs * 3600_000;
+        // Strip to midnight in Havana wall-clock:
+        const havanaMidnightWall = new Date(havanaNowMs);
+        havanaMidnightWall.setUTCHours(0, 0, 0, 0);
+        // Convert that wall-clock midnight back to UTC:
+        const havanaMidnightUtc = new Date(
+          havanaMidnightWall.getTime() - havanaOffsetHrs * 3600_000,
+        );
+        const { data, error } = await supabase
+          .from('rides')
+          .select('final_fare_cup, completed_at')
+          .eq('driver_id', profile.id)
+          .eq('status', 'completed')
+          .gte('completed_at', havanaMidnightUtc.toISOString());
+        if (error) {
+          console.warn('[home/earnings] query error', error.message);
+          return;
         }
-      } catch {}
+        const rows = data ?? [];
+        const trips = rows.length;
+        const gross = rows.reduce(
+          (sum: number, r: { final_fare_cup: number | null }) => sum + (r.final_fare_cup ?? 0),
+          0,
+        );
+        const amount = Math.round(gross * (1 - COMMISSION_RATE));
+        console.log('[home/earnings] fetched', {
+          driver_id: profile.id,
+          since_utc: havanaMidnightUtc.toISOString(),
+          trips,
+          gross,
+          amount,
+        });
+        setTodayEarnings({ amount, trips });
+      } catch (err) {
+        console.warn('[home/earnings] exception', String(err));
+      }
     };
     fetchEarnings();
-  }, [isOnline, profile?.user_id]);
+    // Refresh every 60s; cheap and keeps the badge fresh.
+    const interval = setInterval(fetchEarnings, 60_000);
+    return () => clearInterval(interval);
+  }, [profile?.id, activeTrip?.id]);
 
   // DT-2: Crossfade animation when activeTrip changes
   useEffect(() => {
@@ -317,6 +445,10 @@ function NativeDriverHomeScreen() {
   // Driver's current GPS location
   const driverLat = useLocationStore((s) => s.latitude);
   const driverLng = useLocationStore((s) => s.longitude);
+  // BUG-258: heading consumed by RideMapView idle render to rotate the
+  // own-vehicle marker (so the driver sees their own car turning while
+  // moving even when not in an active trip).
+  const idleHeading = useLocationStore((s) => s.heading);
 
   const driverLocation = useMemo(
     () => (driverLat && driverLng ? { latitude: driverLat, longitude: driverLng } : null),
@@ -574,16 +706,16 @@ function NativeDriverHomeScreen() {
   if (activeTrip) {
     return (
       <Animated.View style={[styles.container, { opacity: tripFadeAnim }]}>
-        {/* Layer 1: Full-screen map */}
+        {/* Layer 1: Full-screen map
+            BUG-218: previously passed only `driverLocation` to RideMapView,
+            so during an active trip the map showed neither pickup/dropoff
+            markers nor the route polyline. The user reported "mapa sin
+            marcadores ni linea de ruta". `useActiveTripMapData()` already
+            existed and returns the correctly-shaped trip data (it's
+            imported at the top of this file) — it was just never wired
+            into the RideMapView props for the active-trip render path. */}
         <View style={StyleSheet.absoluteFillObject}>
-          <RideMapView
-            ref={mapRef}
-            driverLocation={driverLocation}
-            height={SCREEN_HEIGHT}
-            darkStyle
-            onRecenter={handleRecenter}
-            vehicleType="triciclo"
-          />
+          <ActiveTripMap mapRef={mapRef} driverLocation={driverLocation} onRecenter={handleRecenter} screenHeight={SCREEN_HEIGHT} />
         </View>
 
         {/* Layer 2: Floating header */}
@@ -607,13 +739,14 @@ function NativeDriverHomeScreen() {
         <RideMapView
           ref={mapRef}
           driverLocation={driverLocation}
+          driverHeading={idleHeading}
           surgeZones={surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))}
           nearbyDrivers={nearbyDrivers}
           demandHotspots={demandHotspots}
           height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
-          vehicleType="triciclo"
+          vehicleType={ownVehicleType}
         />
         {/* Subtle dim when offline */}
         {!isOnline && (

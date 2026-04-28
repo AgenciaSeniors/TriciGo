@@ -246,7 +246,13 @@ export function RideCompleteView() {
       }
       // F009: User must tap "Listo" manually — no auto-reset
     } catch (err) {
-      logger.error('Error submitting review', { error: String(err) });
+      // BUG-264: serialize the error properly so logs don't show
+      // "[object Object]". String(err) returns "[object Object]" for
+      // non-Error values (e.g. Supabase error responses).
+      const errMsg = err instanceof Error
+        ? err.message
+        : (() => { try { return JSON.stringify(err); } catch { return String(err); } })();
+      logger.error('Error submitting review', { error: errMsg });
       Toast.show({ type: 'error', text1: t('errors.review_submit_failed', { ns: 'common' }) });
       // BUG-069: Clear rating reminder on review submission error to avoid stale notifications
       const reminderId = useRideStore.getState().ratingReminderId;

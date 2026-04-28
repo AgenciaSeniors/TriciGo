@@ -54,9 +54,8 @@ function initMapbox() {
     const MapboxGL = require('@rnmapbox/maps').default;
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
     MapboxGL.setAccessToken(token);
-    if (typeof MapboxGL.setWellKnownTileServer === 'function') {
-      MapboxGL.setWellKnownTileServer('Mapbox');
-    }
+    // BUG-216: setWellKnownTileServer removed (deprecated in newer
+    // @rnmapbox/maps; tile server auto-detected from access token).
     if (typeof MapboxGL.setTelemetryEnabled === 'function') {
       MapboxGL.setTelemetryEnabled(false);
     }

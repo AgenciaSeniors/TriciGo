@@ -11,13 +11,19 @@ export function useNearbyVehicles(
   const channelRef = useRef<any>(null);
 
   const fetchNearby = useCallback(async () => {
-    if (lat == null || lng == null) return;
+    if (lat == null || lng == null) {
+      console.log('[useNearbyVehicles] skip — no pickup lat/lng');
+      return;
+    }
     try {
       const result = await nearbyService.findNearbyVehicles({
         lat, lng, radiusM: 5000, limit: 30,
       });
+      console.log('[useNearbyVehicles] fetched', { count: result.length, first: result[0] });
       setVehicles(result);
-    } catch { /* non-critical */ }
+    } catch (err) {
+      console.warn('[useNearbyVehicles] failed', String(err));
+    }
   }, [lat, lng]);
 
   useEffect(() => {

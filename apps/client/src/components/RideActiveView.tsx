@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -734,6 +734,136 @@ export function RideActiveView() {
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>SOS</Text>
       </Pressable>
 
+      {/* BUG-246: driver-GPS-unavailable consent modal. Driver reported
+          their GPS as broken; rider decides whether to continue without
+          GPS validation OR cancel the ride without penalty. */}
+      {(activeRide as any).driver_gps_status === 'unavailable' && (
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          marginBottom: 8,
+          padding: 16,
+          borderRadius: 16,
+          backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#FEF2F2',
+          borderWidth: 1,
+          borderColor: '#EF4444',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="warning" size={20} color="#EF4444" />
+            <Text variant="body" style={{ fontWeight: '700', marginLeft: 8 }}>
+              {t('ride.driver_no_gps_title', { defaultValue: 'Conductor sin GPS' })}
+            </Text>
+          </View>
+          <Text variant="caption" color="secondary" className="mb-3">
+            {t('ride.driver_no_gps_body', {
+              defaultValue: `${rideWithDriver?.driver_name ?? 'Tu conductor'} nos avisó que su GPS no funciona. No podrás ver su ubicación en tiempo real ni el sistema validará automáticamente cuándo llega.`,
+              driverName: rideWithDriver?.driver_name ?? 'Tu conductor',
+            })}
+          </Text>
+          <Text variant="caption" color="tertiary" className="mb-3">
+            {t('ride.driver_no_gps_options', {
+              defaultValue: 'Podés continuar igual y coordinar por chat/llamada, o cancelar el viaje sin cargo.',
+            })}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button
+              title={t('ride.driver_no_gps_continue', { defaultValue: 'Continuar igual' })}
+              size="md"
+              onPress={async () => {
+                if (!activeRide.id) return;
+                try {
+                  await rideService.riderRespondToGpsUnavailable(activeRide.id, true);
+                  Toast.show({
+                    type: 'success',
+                    text1: t('ride.driver_no_gps_continued', { defaultValue: 'Confirmado' }),
+                    text2: t('ride.driver_no_gps_continued_hint', { defaultValue: 'Coordiná con el conductor por chat' }),
+                  });
+                } catch (err) {
+                  Toast.show({ type: 'error', text1: t('ride.driver_no_gps_failed', { defaultValue: 'No se pudo confirmar' }) });
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title={t('ride.driver_no_gps_cancel', { defaultValue: 'Cancelar viaje' })}
+              variant="outline"
+              size="md"
+              onPress={async () => {
+                if (!activeRide.id) return;
+                try {
+                  await rideService.riderRespondToGpsUnavailable(activeRide.id, false);
+                  Toast.show({
+                    type: 'info',
+                    text1: t('ride.driver_no_gps_canceled', { defaultValue: 'Viaje cancelado sin cargo' }),
+                  });
+                } catch (err) {
+                  Toast.show({ type: 'error', text1: t('ride.driver_no_gps_failed', { defaultValue: 'No se pudo cancelar' }) });
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* BUG-244: rider confirmation modal. Driver tried to advance ride
+          but GPS placed them >100m from pickup/dropoff. We let the rider
+          visually confirm "yes I see them" to bypass the GPS gate. */}
+      {(activeRide as any).gps_override_requested_at && !(activeRide as any).gps_override_confirmed_at && (activeRide as any).driver_gps_status !== 'unavailable' && (
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          marginBottom: 8,
+          padding: 16,
+          borderRadius: 16,
+          backgroundColor: isDark ? 'rgba(255,77,0,0.12)' : '#FFF5F0',
+          borderWidth: 1,
+          borderColor: '#FF4D00',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="navigate-circle" size={20} color="#FF4D00" />
+            <Text variant="body" style={{ fontWeight: '700', marginLeft: 8 }}>
+              {t('ride.gps_check_title', { defaultValue: '¿Tu conductor está acá?' })}
+            </Text>
+          </View>
+          <Text variant="caption" color="secondary" className="mb-3">
+            {t('ride.gps_check_body', {
+              defaultValue: `${rideWithDriver?.driver_name ?? 'Tu conductor'} dice que llegó (${(activeRide as any).gps_check_distance_m ?? '?'}m según su GPS). Confirmá si lo ves cerca.`,
+              driverName: rideWithDriver?.driver_name ?? 'Tu conductor',
+              distance: (activeRide as any).gps_check_distance_m ?? '?',
+            })}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button
+              title={t('ride.gps_check_yes', { defaultValue: 'Sí, lo veo' })}
+              size="md"
+              onPress={async () => {
+                if (!activeRide.id) return;
+                try {
+                  await rideService.riderConfirmDriverArrival(activeRide.id);
+                  Toast.show({ type: 'success', text1: t('ride.gps_check_thanks', { defaultValue: 'Gracias, confirmado' }) });
+                } catch (err) {
+                  Toast.show({ type: 'error', text1: t('ride.gps_check_failed', { defaultValue: 'No se pudo confirmar' }) });
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title={t('ride.gps_check_no', { defaultValue: 'No lo veo' })}
+              variant="outline"
+              size="md"
+              onPress={() => {
+                Toast.show({
+                  type: 'info',
+                  text1: t('ride.gps_check_dismissed', { defaultValue: 'Le pedimos que se acerque más' }),
+                });
+              }}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      )}
+
       {/* Proximity banners */}
       {proximityAlert.showPickupBanner && (
         <ProximityBanner
@@ -762,6 +892,17 @@ export function RideActiveView() {
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}
           waypointStatuses={waypointStatuses}
+          // BUG-232: derive vehicleType from the ride's service_type so the
+          // driver marker renders the correct vehicle icon (almendrón for
+          // auto, triciclo, etc.) instead of the generic blue dot fallback.
+          vehicleType={(() => {
+            const slug = activeRide.service_type ?? '';
+            if (slug.startsWith('auto_confort')) return 'confort';
+            if (slug.startsWith('auto_')) return 'auto';
+            if (slug.startsWith('moto_')) return 'moto';
+            if (slug.startsWith('triciclo_')) return 'triciclo';
+            return 'auto';
+          })()}
           height={mapHeight}
         />
         {!driverPosition && (
@@ -784,6 +925,14 @@ export function RideActiveView() {
           </View>
         )}
       </View>
+      {/* BUG-230: from here down, content scrolls inside its own
+           ScrollView so the map above keeps full pan/zoom gestures.
+           Outer Screen has scroll disabled for the 'active' flow. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
+      >
       {/* Live-tracking state — UX: three overlapping banners (stale,
            last-seen, not-moving) used to cluster vertically with mixed
            messaging. Riders couldn't tell if any one of them was the
@@ -836,14 +985,48 @@ export function RideActiveView() {
         return null;
       })()}
 
-      <View className="h-4" />
+      <View className="h-3" />
 
-      {/* Status stepper */}
-      <StatusStepper
-        steps={RIDE_STEPS}
-        currentStep={activeRide.status}
-        className="mb-6"
-      />
+      {/* BUG-236 (client): compact status stepper. Same redesign as the
+          driver app. 5 small dots + only the CURRENT step label below. */}
+      <View style={{
+        backgroundColor: isDark ? 'rgba(255,77,0,0.08)' : 'rgba(255,77,0,0.06)',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginBottom: 16,
+      }}>
+        <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 6 }}>
+          {RIDE_STEPS.map((step, idx) => {
+            const currentIdx = RIDE_STEPS.findIndex((s) => s.key === activeRide.status);
+            const isPast = idx < currentIdx;
+            const isCurrent = idx === currentIdx;
+            return (
+              <View
+                key={step.key}
+                style={{
+                  width: isCurrent ? 24 : 8,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: isCurrent
+                    ? '#FF4D00'
+                    : isPast
+                      ? (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')
+                      : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'),
+                }}
+              />
+            );
+          })}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
+          <Text variant="bodySmall" style={{ fontWeight: '600' }}>
+            {RIDE_STEPS.find((s) => s.key === activeRide.status)?.label ?? activeRide.status}
+          </Text>
+          <Text variant="caption" color="tertiary">
+            · {RIDE_STEPS.findIndex((s) => s.key === activeRide.status) + 1}/{RIDE_STEPS.length}
+          </Text>
+        </View>
+      </View>
 
       {/* Enhanced arrival animation (Phase 6) */}
       {activeRide.status === 'arrived_at_pickup' && !arrivalCardDismissed && (
@@ -1143,6 +1326,9 @@ export function RideActiveView() {
           </Text>
         </View>
       )}
+      </ScrollView>
+      {/* End of BUG-230 ScrollView. BottomSheets below render as overlays
+           outside the scroll container. */}
 
       {/* Add stop bottom sheet */}
       <BottomSheet visible={addStopVisible} onClose={() => setAddStopVisible(false)}>

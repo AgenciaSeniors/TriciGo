@@ -21,7 +21,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useThemeStore } from '@/stores/theme.store';
-import { useRideInit, useRideActions } from '@/hooks/useRide';
+import { useRideActions } from '@/hooks/useRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
@@ -1561,8 +1561,9 @@ function NativeHomeScreen() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
 
-  // Init ride state from DB
-  useRideInit();
+  // BUG-253 (Capa 3.1): useRideInit moved up to app/_layout.tsx so the
+  // watcher stays alive across tab navigations. Removed from here to
+  // avoid running it twice and creating duplicate channels.
 
   // Share rider location during pickup phase (G1)
   useRiderLocationSharing();
@@ -1573,6 +1574,16 @@ function NativeHomeScreen() {
   const setDropoff = useRideStore((s) => s.setDropoff);
   const updateWaypoint = useRideStore((s) => s.updateWaypoint);
   const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'waypoint' | null>(null);
+
+  // BUG-253 (Capa 3.5): if the flow transitions away from 'idle'/'selecting'
+  // while a picker overlay is open, force-close it. Without this, the
+  // local picker state can outlive its valid lifecycle and re-render
+  // on top of a pinned activeRide ("phantom" symptom).
+  useEffect(() => {
+    if (flowStep !== 'idle' && flowStep !== 'selecting' && mapPickerMode !== null) {
+      setMapPickerMode(null);
+    }
+  }, [flowStep, mapPickerMode]);
 
   // Crossfade animation between flow steps
   const flowFadeAnim = useRef(new Animated.Value(1)).current;
@@ -1636,10 +1647,16 @@ function NativeHomeScreen() {
   }
 
   // Other non-idle flow steps use Screen with scroll
+  // BUG-230: in 'active' state the page contains a Mapbox MapView. A
+  // parent ScrollView intercepts vertical drag gestures, leaving the user
+  // only horizontal pan on the map. RideActiveView already handles its
+  // own scrolling internally for the post-map content, so we disable
+  // the outer Screen scroll for that flow only.
   if (flowStep !== 'idle') {
+    const enableScroll = flowStep !== 'active';
     return (
       <>
-        <Screen bg="white" padded scroll>
+        <Screen bg="white" padded scroll={enableScroll}>
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
@@ -1655,39 +1672,14 @@ function NativeHomeScreen() {
             />
           )}
         </Screen>
-        {mapPickerMode && (() => {
-          const lastWaypoint = draft.waypoints.length > 0 ? draft.waypoints[draft.waypoints.length - 1] : null;
-          const pickerInitialLoc =
-            mapPickerMode === 'pickup'
-              ? draft.pickup?.location ?? null
-              : mapPickerMode === 'waypoint'
-                ? lastWaypoint?.location ?? null
-                : draft.dropoff?.location ?? null;
-          return (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
-              <ConfirmLocationScreen
-                mode={mapPickerMode === 'waypoint' ? 'dropoff' : mapPickerMode}
-                initialLocation={pickerInitialLoc}
-                onConfirm={(address, location) => {
-                  if (!isValidCoordinate(location.latitude, location.longitude)) {
-                    setMapPickerMode(null);
-                    return;
-                  }
-                  if (mapPickerMode === 'pickup') {
-                    setPickup(address, location);
-                  } else if (mapPickerMode === 'waypoint') {
-                    const wpIdx = draft.waypoints.length - 1;
-                    if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
-                  } else {
-                    setDropoff(address, location);
-                  }
-                  setMapPickerMode(null);
-                }}
-                onClose={() => setMapPickerMode(null)}
-              />
-            </View>
-          );
-        })()}
+        {/* BUG-253 (Capa 3.3): the location-picker overlay was previously
+            rendered HERE while flowStep was 'searching'/'active'/etc. That
+            allowed the user to mutate pickup/dropoff while a ride was
+            already pinned, producing the "phantom ride" symptom (draft
+            diverged from DB row). The picker now only renders inside the
+            'selecting' branch (above) and is force-closed when flowStep
+            transitions away from 'idle'/'selecting' (see useEffect on
+            mapPickerMode + flowStep). No overlay here. */}
       </>
     );
   }
@@ -2502,6 +2494,26 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude, draft.dropoff?.location?.latitude, draft.dropoff?.location?.longitude, waypointLocationKey]);
 
+  // BUG-223: auto-refresh fare estimate every 60s while the user is still
+  // selecting a service. Surge multiplier and time-of-day rules can change
+  // while the user is staring at the cards, so a stale estimate could
+  // mismatch the actual fare charged. SelectingView only mounts during
+  // flowStep='selecting', so unmount on confirm/cancel naturally clears
+  // the interval.
+  useEffect(() => {
+    if (!draft.pickup?.location || !draft.dropoff?.location) return;
+    const intervalId = setInterval(() => {
+      const { fareEstimatedAt } = useRideStore.getState();
+      // Skip if a recent estimate (<55s ago) just landed — avoids hammering
+      // the API on each render of this hook re-entry.
+      if (fareEstimatedAt && Date.now() - fareEstimatedAt < 55_000) return;
+      // eslint-disable-next-line no-console
+      console.log('[FareRefresh] auto-refreshing estimate (60s TTL)');
+      requestEstimate();
+    }, 60_000);
+    return () => clearInterval(intervalId);
+  }, [draft.pickup?.location?.latitude, draft.pickup?.location?.longitude, draft.dropoff?.location?.latitude, draft.dropoff?.location?.longitude, requestEstimate]);
+
   const isDelivery = draft.serviceType === 'mensajeria';
   const deliveryValid = !isDelivery || (
     draft.delivery.packageDescription.trim() &&
@@ -2619,13 +2631,15 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
       {/* Route distance/duration badge (floating above bottom panel)
           BUG-208 (8a): "min por ruta" was confusing — users read it as a
-          per-route surcharge. The duration shown here is the estimated
-          driving time for the auto/triciclo OSRM speed profile (the same
-          duration that gets refined per vehicle in the cards below). */}
-      {!searchingField && routeDistanceM && routeDurationS && (
+          per-route surcharge. BUG-221: also was using routeDurationS (OSRM
+          default ~40 km/h ≈ 15 min for 9.9 km) which never matched any
+          card below (triciclo 64, moto 25, auto 30, confort 28). Now uses
+          the SELECTED service's estimated_duration_s, falling back to
+          routeDurationS only if no estimate is available yet. */}
+      {!searchingField && routeDistanceM && (selectedEstimate?.estimated_duration_s || routeDurationS) && (
         <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
-            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil(routeDurationS / 60)} min
+            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil((selectedEstimate?.estimated_duration_s ?? routeDurationS) / 60)} min
           </Text>
         </View>
       )}
@@ -3802,6 +3816,10 @@ function SearchingView() {
             acceptedDriverId={acceptedDriver?.driverId ?? null}
             isAcceptAnimating={isAcceptAnimating}
             acceptedDriverLocation={acceptedDriver?.location ?? null}
+            // BUG-218: pass driver vehicle type so the map shows the
+            // correct vehicle icon (almendrón / moto / triciclo / confort)
+            // instead of the generic blue dot fallback.
+            vehicleType={acceptedDriver?.vehicleType ?? undefined}
             height={isTablet ? 300 : 220}
           />
           <View className="h-3" />

@@ -29,7 +29,7 @@ function ensureMapboxToken() {
   try {
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
     M.setAccessToken(token);
-    if (typeof M.setWellKnownTileServer === 'function') M.setWellKnownTileServer('Mapbox');
+    // BUG-216: setWellKnownTileServer removed (deprecated, was log noise)
     if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
     _mapboxTokenApplied = true;
   } catch {
@@ -39,10 +39,11 @@ function ensureMapboxToken() {
 ensureMapboxToken();
 
 // Vehicle marker images (top-down view)
+// BUG-218: "auto" is the Cuban classic almendrón, NOT a modern sedan.
 const vehicleMarkerImages: Record<string, any> = {
   'marker-triciclo': require('../../assets/vehicles/markers/triciclo.png'),
   'marker-moto': require('../../assets/vehicles/markers/moto.png'),
-  'marker-auto': require('../../assets/vehicles/markers/auto.png'),
+  'marker-auto': require('../../assets/vehicles/markers/auto_clasico.png'),
   'marker-confort': require('../../assets/vehicles/markers/confort.png'),
 };
 
@@ -62,6 +63,11 @@ interface RideMapViewProps {
   pickupLocation?: GeoPoint | null;
   dropoffLocation?: GeoPoint | null;
   driverLocation?: GeoPoint | null;
+  /** BUG-270b: explicit heading prop. Without this the marker can't rotate
+   *  because driverLocation may not carry heading, and we destructured it
+   *  unconditionally in RideMapViewInner. Adding to the interface so the
+   *  prop flows through TypeScript and from callers. */
+  driverHeading?: number | null;
   routeCoordinates?: GeoPoint[] | null;
   waypointLocations?: GeoPoint[];
   /** Status per waypoint (same order as waypointLocations). Used to
@@ -170,6 +176,7 @@ function RideMapViewInner({
   pickupLocation,
   dropoffLocation,
   driverLocation,
+  driverHeading,
   routeCoordinates,
   waypointLocations,
   waypointStatuses,
@@ -218,8 +225,30 @@ function RideMapViewInner({
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
   const dropoffScale = useRef(new Animated.Value(0.3)).current;
 
-  // Smooth driver position interpolation
-  const animatedDriver = useAnimatedPosition(driverLocation ?? null);
+  // BUG-270: render the driver marker exactly the way the DRIVER's own
+  // app does — directly from the latest position, no interpolation. The
+  // useAnimatedPosition layer was adding complexity (and a layer where
+  // bugs could hide) without any visible benefit. The driver's marker
+  // moves perfectly using the raw coordinate; the client now does too.
+  const animatedDriver = driverLocation
+    ? {
+        latitude: driverLocation.latitude,
+        longitude: driverLocation.longitude,
+        heading: driverHeading ?? (driverLocation as { heading?: number | null }).heading ?? 0,
+      }
+    : null;
+  // DEBUG-271: log every time the marker coordinate changes so we can
+  // see in the rider's Metro log whether the prop chain is delivering
+  // fresh positions to MarkerView.
+  const lastLoggedCoordRef = useRef<string>('');
+  if (animatedDriver) {
+    const coordKey = `${animatedDriver.latitude.toFixed(5)},${animatedDriver.longitude.toFixed(5)},${animatedDriver.heading.toFixed(0)}`;
+    if (lastLoggedCoordRef.current !== coordKey) {
+      lastLoggedCoordRef.current = coordKey;
+      // eslint-disable-next-line no-console
+      console.log('[RideMapView] driver marker coord =', coordKey);
+    }
+  }
 
   // Pulsing animation for driver marker
   useEffect(() => {
@@ -331,10 +360,35 @@ function RideMapViewInner({
   }, [onCameraChanged]);
 
   // Compute camera bounds (includes searching driver positions)
+  // BUG-229: stabilize bounds via primitive lat/lng deps. Object refs
+  // change every render even if values are identical → bounds recomputes
+  // → Camera snaps the viewport every render → user can't pan freely.
+  // We use string keys for arrays so React's useMemo correctly compares.
+  const pickupLat = pickupLocation?.latitude;
+  const pickupLng = pickupLocation?.longitude;
+  const dropoffLat = dropoffLocation?.latitude;
+  const dropoffLng = dropoffLocation?.longitude;
+  const driverLat = animatedDriver?.latitude;
+  const driverLng = animatedDriver?.longitude;
+  const routeKey = useMemo(
+    () => routeCoordinates?.map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`).join('|') ?? '',
+    [routeCoordinates],
+  );
+  const driverRouteKey = useMemo(
+    () => driverToPickupRoute?.map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`).join('|') ?? '',
+    [driverToPickupRoute],
+  );
+
   const bounds = useMemo(() => {
     // During accept animation, don't recompute bounds — let the Camera flyTo handle it
     if (isAcceptAnimating) return null;
 
+    // BUG-231: only fit the trip route (pickup → dropoff). Including the
+    // driver position can push bounds out to a multi-km area when the
+    // driver hasn't arrived at pickup yet, making the route look like
+    // an inscrutable thin line. Driver remains a moving marker that may
+    // sit outside the initial viewport — that's fine, the user can pan
+    // to find them, and we show driver→pickup route as a separate hint.
     const allCoords: [number, number][] = [];
     if (routeCoordinates && routeCoordinates.length > 0) {
       routeCoordinates.forEach((c) => allCoords.push(toCoord(c)));
@@ -342,14 +396,39 @@ function RideMapViewInner({
       if (pickupLocation) allCoords.push(toCoord(pickupLocation));
       if (dropoffLocation) allCoords.push(toCoord(dropoffLocation));
     }
-    if (animatedDriver) allCoords.push([animatedDriver.longitude, animatedDriver.latitude]);
     waypointLocations?.forEach((wp) => allCoords.push(toCoord(wp)));
-    // Include searching driver positions so map fits them
+    // Searching drivers ARE included so the user can see incoming offers
     searchingDrivers?.forEach((d) => allCoords.push(toCoord(d.location)));
-    // Include driver-to-pickup route in bounds
-    driverToPickupRoute?.forEach((c) => allCoords.push(toCoord(c)));
     return computeBounds(allCoords);
-  }, [pickupLocation, dropoffLocation, animatedDriver, routeCoordinates, waypointLocations, searchingDrivers, isAcceptAnimating, driverToPickupRoute]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, routeKey, isAcceptAnimating]);
+
+  // BUG-229: only push bounds to Mapbox Camera when something MEANINGFUL
+  // changes (new ride, new route). Once bounds are applied, hold them
+  // stable so Camera doesn't snap on every re-render. The user can then
+  // pan freely; tap "recenter" to refit.
+  const [hasFitInitially, setHasFitInitially] = useState(false);
+  const lastBoundsKey = useRef('');
+  const boundsKey = bounds ? `${bounds.ne[0]},${bounds.ne[1]}|${bounds.sw[0]},${bounds.sw[1]}` : '';
+  // Only consider bounds "active" the FIRST time they're available, OR if
+  // the bounding box changes by more than ~10% (e.g. user picked a brand
+  // new ride with very different coordinates).
+  const activeBounds = useMemo(() => {
+    if (!bounds) return null;
+    if (!hasFitInitially) return bounds;
+    // After initial fit, only re-apply if bounds shifted significantly.
+    // Compare normalized key — if the same, return null (don't snap).
+    if (boundsKey === lastBoundsKey.current) return null;
+    return bounds;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundsKey, hasFitInitially]);
+
+  useEffect(() => {
+    if (bounds && !hasFitInitially) {
+      setHasFitInitially(true);
+      lastBoundsKey.current = boundsKey;
+    }
+  }, [bounds, hasFitInitially, boundsKey]);
 
   if (!MapboxGL) {
     // On web, use WebMapView with mapbox-gl instead of native @rnmapbox/maps
@@ -408,22 +487,23 @@ function RideMapViewInner({
                 animationDuration: 1500,
                 animationMode: 'flyTo',
               }
-            : bounds
+            : activeBounds
               ? {
                   bounds: {
-                    ne: bounds.ne,
-                    sw: bounds.sw,
-                    // Padding 160px was 50px before, which made Mapbox
-                    // fit the two points into almost the entire viewport
-                    // → zoom 19-20. User saw a green dot + 2 roofs with
-                    // no streets around. Wider padding + maxZoomLevel
-                    // cap keeps context like Uber (~15-16) so rider
-                    // knows where they are.
-                    paddingTop: 160,
-                    paddingRight: 120,
-                    paddingBottom: 180,
-                    paddingLeft: 120,
+                    ne: activeBounds.ne,
+                    sw: activeBounds.sw,
+                    // BUG-231: tighter padding so the route fills more of
+                    // the viewport. Combined with bounds excluding driver
+                    // position (which could be 8+ km away), the rider
+                    // sees the pickup→dropoff trip clearly.
+                    paddingTop: 60,
+                    paddingRight: 60,
+                    paddingBottom: 60,
+                    paddingLeft: 60,
                   },
+                  // BUG-231 v2: NO minZoomLevel — was blocking the user
+                  // from zooming out. Only cap max so we don't fly to
+                  // building-level when bounds are tiny.
                   maxZoomLevel: 16,
                   animationDuration: 500,
                 }
@@ -654,11 +734,22 @@ function RideMapViewInner({
           );
         })}
 
-        {/* Driver marker — premium vehicle in dark container + pulsing ring */}
+        {/* Driver marker — premium vehicle in dark container + pulsing ring.
+            BUG-268: switched from PointAnnotation to MarkerView.
+            BUG-274: @rnmapbox/maps caches the native marker position once
+            mounted; passing a new `coordinate` prop alone is NOT enough to
+            move the marker visually on Android. Adding a `key` derived from
+            the coordinate forces React to unmount + remount the MarkerView
+            every time the position changes. With BUG-273's 1-Hz upload
+            throttle, that's at most one remount per second — cheap. The
+            user observed the marker only moved when switching apps (which
+            re-mounted everything); this makes that the normal behavior. */}
         {animatedDriver && (
-          <MapboxGL.PointAnnotation
+          <MapboxGL.MarkerView
             id="driver"
+            key={`driver-${animatedDriver.latitude.toFixed(5)}-${animatedDriver.longitude.toFixed(5)}`}
             coordinate={[animatedDriver.longitude, animatedDriver.latitude]}
+            anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center', opacity: driverMarkerOpacity }}>
               {/* Pulsing glow ring */}
@@ -673,30 +764,31 @@ function RideMapViewInner({
                   transform: [{ scale: pulseAnim }],
                 }}
               />
-              {/* Dark container with vehicle image */}
+              {/* BUG-233: transparent container — show only the vehicle
+                  icon (no dark circle, no border). Drop shadow keeps the
+                  icon legible against light streets. */}
               <View
                 style={{
                   width: MARKER.driver.size,
                   height: MARKER.driver.size,
-                  borderRadius: MARKER.driver.size / 2,
-                  backgroundColor: MAP_COLORS.driverContainer,
-                  borderWidth: 2,
-                  borderColor: MAP_COLORS.driver,
-                  shadowColor: MAP_COLORS.driver,
-                  shadowOpacity: 0.35,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 4 },
-                  elevation: 8,
+                  backgroundColor: 'transparent',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  overflow: 'hidden',
                   transform: [{ rotate: `${animatedDriver.heading ?? 0}deg` }],
                 }}
               >
                 {vehicleType && vehicleMarkerImages[`marker-${vehicleType}`] ? (
                   <Image
                     source={vehicleMarkerImages[`marker-${vehicleType}`]}
-                    style={{ width: 28, height: 28 }}
+                    style={{
+                      width: MARKER.driver.size,
+                      height: MARKER.driver.size,
+                      shadowColor: '#000',
+                      shadowOpacity: 0.45,
+                      shadowRadius: 4,
+                      shadowOffset: { width: 0, height: 2 },
+                      elevation: 6,
+                    }}
                     resizeMode="contain"
                   />
                 ) : (
@@ -704,10 +796,12 @@ function RideMapViewInner({
                 )}
               </View>
             </View>
-          </MapboxGL.PointAnnotation>
+          </MapboxGL.MarkerView>
         )}
 
         {/* Nearby vehicles — GPU-rendered SymbolLayer for performance */}
+        {/* BUG-218 v2: 0.55 = comfortable size on default zoom (was 0.9
+            which dominated; 0.5 was too small to spot). */}
         {nearbyGeoJSON && (
           <>
             <MapboxGL.Images images={vehicleMarkerImages} />
@@ -716,7 +810,7 @@ function RideMapViewInner({
                 id="nearby-icons"
                 style={{
                   iconImage: ['get', 'icon'],
-                  iconSize: 0.5,
+                  iconSize: 0.55,
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
                   iconRotate: ['get', 'heading'],

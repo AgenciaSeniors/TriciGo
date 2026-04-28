@@ -22,6 +22,9 @@
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },

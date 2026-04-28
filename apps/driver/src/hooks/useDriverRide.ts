@@ -30,7 +30,13 @@ const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
 export function useDriverRideInit() {
   const profile = useDriverStore((s) => s.profile);
   const isInitialized = useAuthStore((s) => s.isInitialized);
-  const { setActiveTrip } = useDriverRideStore();
+  // BUG-219: select setActiveTrip via selector — without it, the destructure
+  // re-subscribes to the entire store, so every state change rebuilds
+  // setActiveTrip's reference, retriggers the useEffect below, calls
+  // checkActive() again, and updates the store, looping infinitely. The
+  // visible symptom was activeTrip flickering between truthy/null which
+  // unmounted/remounted RideMapView (idle/active variants) repeatedly.
+  const setActiveTrip = useDriverRideStore((s) => s.setActiveTrip);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
 
@@ -96,7 +102,19 @@ export function useDriverRideInit() {
           });
         }
       } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        // BUG-234: Supabase errors aren't Error instances — they're plain
+        // objects with `.message`/`.code`/`.details`. Previously we got
+        // "[object Object]" in logs which hid the real cause.
+        let errorMsg: string;
+        if (err instanceof Error) {
+          errorMsg = err.message;
+        } else if (err && typeof err === 'object') {
+          const e = err as Record<string, unknown>;
+          errorMsg = String(e.message ?? e.code ?? e.details ?? JSON.stringify(err));
+        } else {
+          errorMsg = String(err);
+        }
+        console.warn('[Reconcile] caught error:', errorMsg, err);
 
         const isNetworkError = errorMsg.includes('network') ||
           errorMsg.includes('timeout') ||
@@ -152,7 +170,13 @@ export function useDriverRideInit() {
  * Manage incoming ride requests subscription.
  */
 export function useIncomingRequests(isOnline: boolean) {
-  const { addRequest, removeRequest, removeStaleRequests, clearRequests } = useDriverRideStore();
+  // BUG-219: same fix as useDriverRideInit — destructure via selectors so
+  // these refs stay stable across store updates and don't retrigger the
+  // useEffects below.
+  const addRequest = useDriverRideStore((s) => s.addRequest);
+  const removeRequest = useDriverRideStore((s) => s.removeRequest);
+  const removeStaleRequests = useDriverRideStore((s) => s.removeStaleRequests);
+  const clearRequests = useDriverRideStore((s) => s.clearRequests);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   // Periodically remove stale requests (>30s old) and notify driver
@@ -225,7 +249,10 @@ export function useIncomingRequests(isOnline: boolean) {
 export function useDriverRideActions() {
   const profile = useDriverStore((s) => s.profile);
   const user = useAuthStore((s) => s.user);
-  const { setActiveTrip, removeRequest, reset } = useDriverRideStore();
+  // BUG-219: stable refs via per-key selectors (see useDriverRideInit).
+  const setActiveTrip = useDriverRideStore((s) => s.setActiveTrip);
+  const removeRequest = useDriverRideStore((s) => s.removeRequest);
+  const reset = useDriverRideStore((s) => s.reset);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
 
@@ -443,7 +470,12 @@ export function useDriverRideActions() {
           });
         }
 
-        // Retry logic — trip completion is critical and must survive transient failures
+        // Retry logic — trip completion is critical and must survive transient failures.
+        // BUG-263: idempotency — if a previous attempt actually succeeded server-side
+        // but the response was lost in the network, the next retry will hit the
+        // "Ride cannot be completed (current: completed)" guard. That's not a real
+        // failure — the trip is already paid. Recover by fetching the completed
+        // row and treating it as success.
         let result: Awaited<ReturnType<typeof driverService.completeRide>> | undefined;
         let lastErr: unknown;
         for (let attempt = 1; attempt <= 3; attempt++) {
@@ -457,6 +489,27 @@ export function useDriverRideActions() {
             break;
           } catch (err) {
             lastErr = err;
+            const msg = String((err as { message?: string })?.message ?? err);
+            // BUG-263: idempotent recovery from "already completed"
+            if (/cannot be completed.*current.*completed/i.test(msg)) {
+              try {
+                const fresh = await rideService.getRideWithDriver(activeTrip.id);
+                if (fresh?.status === 'completed' && fresh.final_fare_cup) {
+                  result = {
+                    final_fare_cup: fresh.final_fare_cup,
+                    final_fare_trc: fresh.final_fare_trc ?? 0,
+                    exchange_rate_usd_cup: fresh.exchange_rate_usd_cup ?? 1,
+                    commission_amount: 0,
+                    driver_earnings: 0,
+                    payment_method: fresh.payment_method ?? 'cash',
+                    share_token: fresh.share_token ?? '',
+                    surge_multiplier: 1,
+                    payment_status: fresh.payment_status ?? 'not_applicable',
+                  } as Awaited<ReturnType<typeof driverService.completeRide>>;
+                  break;
+                }
+              } catch { /* fall through to retry */ }
+            }
             if (attempt < 3) {
               await new Promise<void>((r) => setTimeout(r, attempt * 2000));
             }
@@ -477,11 +530,52 @@ export function useDriverRideActions() {
           final_fare_cup: result.final_fare_cup,
           actual_distance_m: actualDistanceM,
           actual_duration_s: actualDurationS,
+          // BUG-222: surface excess meters so TripCompleteView can show
+          // the justification modal when the driver exceeded 1.3× estimate.
+          excess_distance_uncharged_m: result.excess_distance_uncharged_m ?? 0,
           share_token: result.share_token,
           completed_at: new Date().toISOString(),
         });
       } else {
-        await driverService.updateRideStatus(activeTrip.id, nextStatus);
+        // BUG-244: send driver GPS coords for proximity gate when transitioning
+        // to arrived_at_pickup or arrived_at_destination. Other transitions
+        // (driver_en_route, in_progress) pass without geo check.
+        const needsGeoCheck = nextStatus === 'arrived_at_pickup' || nextStatus === 'arrived_at_destination';
+        const driverLat = useLocationStore.getState().latitude;
+        const driverLng = useLocationStore.getState().longitude;
+        const result = await driverService.updateRideStatus(activeTrip.id, nextStatus, {
+          driverLat: needsGeoCheck ? driverLat ?? undefined : undefined,
+          driverLng: needsGeoCheck ? driverLng ?? undefined : undefined,
+        });
+        // If gated by proximity, the backend stored gps_override_requested_at
+        // and is awaiting rider confirmation. Show driver a waiting state.
+        if (result?.gated && result.reason === 'pending_rider_confirmation') {
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.awaiting_rider_confirm', { defaultValue: 'Esperando al pasajero' }),
+            text2: i18next.t('driver:trip.awaiting_rider_confirm_sub', {
+              defaultValue: `Estás a ${result.distance_m}m. Le pedimos al pasajero que confirme.`,
+              distance: result.distance_m ?? 0,
+            }),
+            visibilityTime: 4000,
+          });
+          // Don't update local trip status — wait for rider confirmation
+          completingRef.current = false;
+          useDriverRideStore.getState().setIsAdvancing(false);
+          return;
+        }
+        // Surface no_gps_validation usage to driver
+        if (result?.no_gps_validation) {
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.no_gps_used', { defaultValue: 'Avance sin GPS registrado' }),
+            text2: i18next.t('driver:trip.no_gps_remaining', {
+              defaultValue: `Te quedan ${result.no_gps_remaining ?? 0} usos esta semana.`,
+              remaining: result.no_gps_remaining ?? 0,
+            }),
+            visibilityTime: 4000,
+          });
+        }
         useDriverRideStore.getState().updateActiveTrip({
           ...activeTrip,
           status: nextStatus,

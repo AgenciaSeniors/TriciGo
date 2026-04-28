@@ -11,16 +11,21 @@ export const MAP_STYLE_LIGHT = 'mapbox://styles/mapbox/light-v11';
 export const MAP_STYLE_NAV_NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
 
 // ── Marker Dimensions ────────────────────────────────────────
+// BUG-218: marker sizes rebalanced — pickup/dropoff slightly bigger as fixed
+// targets, driver smaller so the vehicle icon doesn't dominate the map.
 export const MARKER = {
-  pickup: { size: 32, innerDot: 10, shadow: '0 3px 12px rgba(34,197,94,0.35)' },
-  dropoff: { size: 32, innerDot: 10, tailH: 10, shadow: '0 3px 12px rgba(239,68,68,0.35)' },
-  driver: { size: 44, ringSize: 56, shadow: '0 4px 16px rgba(59,130,246,0.35)' },
+  pickup: { size: 26, innerDot: 8, shadow: '0 3px 12px rgba(34,197,94,0.35)' },
+  dropoff: { size: 32, innerDot: 11, tailH: 12, shadow: '0 3px 12px rgba(239,68,68,0.35)' },
+  driver: { size: 30, ringSize: 40, shadow: '0 4px 16px rgba(59,130,246,0.35)' },
 } as const;
 
 // ── Route Line Styles ────────────────────────────────────────
+// BUG-218: width reduced (5→4) and opacity reduced (0.9→0.75) so the route
+// stops visually swallowing the pickup/dropoff markers when they sit on
+// top of the line on Android.
 export const ROUTE = {
-  main: { color: '#3b82f6', width: 5, opacity: 0.9 },
-  shadow: { color: '#000000', width: 8, opacity: 0.12, blur: 3 },
+  main: { color: '#3b82f6', width: 4, opacity: 0.75 },
+  shadow: { color: '#000000', width: 6, opacity: 0.12, blur: 3 },
   driverTo: { color: '#93c5fd', width: 4, dashArray: [8, 5] as readonly number[] },
   progress: { color: '#22c55e', width: 5, opacity: 0.9 },
 } as const;

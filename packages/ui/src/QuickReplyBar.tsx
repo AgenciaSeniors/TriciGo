@@ -22,18 +22,31 @@ export function QuickReplyBar({ replies, onPress, variant = 'light' }: QuickRepl
   const pillBg = variant === 'dark' ? 'bg-neutral-800' : 'bg-neutral-100';
   const iconColor = variant === 'dark' ? '#f97316' : '#f97316'; // brand orange
 
+  // BUG-240: explicit height and alignSelf to prevent parent flex
+  // containers from vertically stretching the pills (was producing
+  // ~500pt-tall capsule shapes in the chat empty state).
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6 }}
-    >
-      <View className="flex-row gap-2">
+    <View style={{ height: 44, justifyContent: 'center' }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 8 }}
+      >
         {replies.map((reply) => (
           <Pressable
             key={reply.key}
-            className={`flex-row items-center ${pillBg} rounded-full px-3 py-1.5`}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              alignSelf: 'flex-start',
+              height: 32,
+              paddingHorizontal: 12,
+              borderRadius: 16,
+              backgroundColor: variant === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+              borderWidth: 1,
+              borderColor: variant === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+            }}
             onPress={() => onPress(reply.label)}
             accessibilityRole="button"
             accessibilityLabel={reply.label}
@@ -52,7 +65,7 @@ export function QuickReplyBar({ replies, onPress, variant = 'light' }: QuickRepl
             </Text>
           </Pressable>
         ))}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

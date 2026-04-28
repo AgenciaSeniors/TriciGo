@@ -6,6 +6,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { useThemeStore } from '@/stores/theme.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useRideStore } from '@/stores/ride.store';
 import { triggerSelection } from '@tricigo/utils';
 
 export default function TabLayout() {
@@ -14,6 +15,10 @@ export default function TabLayout() {
   const isDark = resolvedScheme === 'dark';
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const insets = useSafeAreaInsets();
+  // BUG-235: hide tabs during active ride so the customer focuses on the
+  // map + driver tracking. Tabs aren't useful mid-trip.
+  const flowStep = useRideStore((s) => s.flowStep);
+  const inActiveRide = flowStep === 'active' || flowStep === 'searching' || flowStep === 'reviewing';
 
   return (
     <Tabs
@@ -21,13 +26,15 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brand.orange,
         tabBarInactiveTintColor: isDark ? darkColors.text.secondary : colors.neutral[500],
-        tabBarStyle: {
-          backgroundColor: isDark ? darkColors.background.primary : colors.background.primary,
-          borderTopColor: isDark ? darkColors.border.default : colors.neutral[200],
-          paddingBottom: 8 + insets.bottom,
-          paddingTop: 8,
-          height: 60 + insets.bottom,
-        },
+        tabBarStyle: inActiveRide
+          ? { display: 'none' }
+          : {
+              backgroundColor: isDark ? darkColors.background.primary : colors.background.primary,
+              borderTopColor: isDark ? darkColors.border.default : colors.neutral[200],
+              paddingBottom: 8 + insets.bottom,
+              paddingTop: 8,
+              height: 60 + insets.bottom,
+            },
         tabBarLabelStyle: {
           fontFamily: 'Montserrat',
           fontSize: 11,

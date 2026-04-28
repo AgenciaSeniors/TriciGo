@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { AppState } from 'react-native';
 
 import i18next from 'i18next';
 import * as Notifications from 'expo-notifications';
@@ -12,8 +13,6 @@ import { invalidatePredictionCache } from '@/services/predictionCache';
 import { scheduleLocalNotification } from '@/services/push.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
 const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
 
 /**
@@ -23,8 +22,16 @@ const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
 export function useRideInit() {
   const user = useAuthStore((s) => s.user);
   const isInitialized = useAuthStore((s) => s.isInitialized);
-  const { setActiveRide, setRideWithDriver, setFlowStep } = useRideStore();
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  // BUG-219 (mirror of driver fix): destructure via per-key selectors so the
+  // refs stay stable across store updates and don't retrigger checkActive
+  // unnecessarily, which was causing activeRide to oscillate between values.
+  const setActiveRide = useRideStore((s) => s.setActiveRide);
+  const setRideWithDriver = useRideStore((s) => s.setRideWithDriver);
+  const setFlowStep = useRideStore((s) => s.setFlowStep);
+  // BUG-277: subscribeToRide is now a no-op that returns { unsubscribe }.
+  // Use a minimal interface so the type stays correct without depending on
+  // the full RealtimeChannel surface.
+  const channelRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   useEffect(() => {
     if (!isInitialized || !user) return;
@@ -34,6 +41,35 @@ export function useRideInit() {
     async function checkActive() {
       try {
         const active = await rideService.getActiveRide(user!.id);
+        // BUG-220: clear stale local activeRide if server says no active ride.
+        // This handles the case where the ride was canceled/completed
+        // server-side but the realtime channel never delivered the UPDATE
+        // event (CHANNEL_ERROR loop), leaving the customer stuck on the
+        // "in-progress" UI with all pickup/dropoff inputs blocked.
+        // BUG-257: but FIRST check if the pinned ride just completed —
+        // we need to route the user to the rating screen, not just clear.
+        if (!active && mounted) {
+          const existing = useRideStore.getState().activeRide;
+          if (existing) {
+            const final = await rideService.getRideWithDriver(existing.id).catch(() => null);
+            if (final?.status === 'completed' && mounted) {
+              // eslint-disable-next-line no-console
+              console.log('[useRideInit] ride completed since last check — routing to rating', { ride_id: existing.id });
+              useRideStore.getState().updateRideFromRealtime(final);
+              useRideStore.getState().setRideWithDriver(final);
+              return;
+            }
+            // eslint-disable-next-line no-console
+            console.log('[useRideInit] clearing stale local ride', {
+              ride_id: existing.id,
+              final_status: final?.status ?? 'not_found',
+            });
+            useRideStore.getState().setFlowStep('idle');
+            useRideStore.getState().setActiveRide(null);
+            useRideStore.getState().setRideWithDriver(null);
+          }
+          return;
+        }
         if (!active || !mounted) return;
 
         // BUG-212 (9): the previous version set flowStep='searching'
@@ -111,8 +147,84 @@ export function useRideInit() {
 
     checkActive();
 
+    // BUG-226 + BUG-247 (definitive fix for phantom rides):
+    // Triple-layer freshness guarantee so the user is NEVER stuck in a
+    // "locked input" state after a ride is canceled/completed.
+    //
+    //   Layer 1 — Aggressive polling: every 3s while pinned ride exists
+    //             (was 10s — too slow when realtime channel is dead).
+    //   Layer 2 — AppState foreground listener: re-check immediately when
+    //             user brings the app to foreground (covers the case
+    //             where ride got canceled while phone was in background).
+    //   Layer 3 — Pre-render check on store mutation: any time the store
+    //             mutation function runs and activeRide age > 30s without
+    //             a recent DB confirmation, force a re-fetch.
+    const checkAndClearStale = async (): Promise<void> => {
+      if (!mounted || !user?.id) return;
+      const { activeRide: pinned, flowStep: fs } = useRideStore.getState();
+      if (!pinned || fs === 'idle' || fs === 'completed') return;
+      try {
+        const fresh = await rideService.getActiveRide(user.id);
+        if (!fresh) {
+          // BUG-257: getActiveRide filters by ACTIVE statuses only
+          // (searching/accepted/.../in_progress/arrived_at_destination).
+          // If our pinned ride is no longer in that list, it might have
+          // just completed — in which case we MUST route the user to the
+          // completion + rating screen, not just clear to idle. Fetch the
+          // ride directly by id (no status filter) to find out.
+          const final = await rideService.getRideWithDriver(pinned.id).catch(() => null);
+          if (final?.status === 'completed') {
+            // eslint-disable-next-line no-console
+            console.log('[Watcher] ride completed — routing to rating', { ride_id: pinned.id });
+            useRideStore.getState().updateRideFromRealtime(final);
+            useRideStore.getState().setRideWithDriver(final);
+            return;
+          }
+          // Canceled (by driver, dispatcher, or auto-cleanup) or
+          // genuinely gone — clear local state.
+          // eslint-disable-next-line no-console
+          console.log('[Watcher] DB has no active ride — clearing stale local', {
+            ride_id: pinned.id,
+            final_status: final?.status ?? 'not_found',
+          });
+          useRideStore.getState().setFlowStep('idle');
+          useRideStore.getState().setActiveRide(null);
+          useRideStore.getState().setRideWithDriver(null);
+        } else if (fresh.id === pinned.id) {
+          if (fresh.status !== pinned.status || fresh.driver_id !== pinned.driver_id) {
+            // eslint-disable-next-line no-console
+            console.log('[Watcher] ride changed', { from: pinned.status, to: fresh.status });
+            useRideStore.getState().updateRideFromRealtime(fresh);
+          }
+        } else {
+          // The pinned id no longer matches the active ride — clear
+          // eslint-disable-next-line no-console
+          console.log('[Watcher] pinned ride id mismatch — clearing', { pinned_id: pinned.id, fresh_id: fresh.id });
+          useRideStore.getState().setFlowStep('idle');
+          useRideStore.getState().setActiveRide(null);
+          useRideStore.getState().setRideWithDriver(null);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[Watcher] check failed', String(err));
+      }
+    };
+
+    // Layer 1: aggressive 3s polling
+    const watcherInterval = setInterval(checkAndClearStale, 3_000);
+
+    // Layer 2: re-check on app foreground
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && mounted) {
+        // Fire immediately when user returns to the app
+        void checkAndClearStale();
+      }
+    });
+
     return () => {
       mounted = false;
+      clearInterval(watcherInterval);
+      appStateSub.remove();
       channelRef.current?.unsubscribe();
     };
   }, [isInitialized, user, setActiveRide, setRideWithDriver, setFlowStep]);
@@ -123,8 +235,13 @@ export function useRideInit() {
  */
 export function useRideActions() {
   const user = useAuthStore((s) => s.user);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  // BUG-277: subscribeToRide is now a no-op that returns { unsubscribe }.
+  // Use a minimal interface so the type stays correct without depending on
+  // the full RealtimeChannel surface.
+  const channelRef = useRef<{ unsubscribe: () => void } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // BUG-217: polling fallback timer (every 5s while flowStep='searching')
+  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchRetryCountRef = useRef(0);
   const searchStartTimeRef = useRef(0);
 
@@ -149,6 +266,7 @@ export function useRideActions() {
     return () => {
       channelRef.current?.unsubscribe();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
   }, []);
 
@@ -530,6 +648,165 @@ export function useRideActions() {
         has_promo: !!promoResult?.valid,
       });
 
+      // BUG-217 / BUG-220 / BUG-277: polling fallback. With realtime DISABLED
+      // (BUG-277), polling is now the ONLY mechanism that delivers ride
+      // status updates to the customer. We poll every 3s while ANY local
+      // ride is pinned in store — covers searching→accepted, the entire
+      // accepted→completed lifecycle, and canceled-by-driver / completed-by-
+      // driver transitions that would otherwise leave the client stuck on
+      // a phantom active ride.
+      //
+      // Side effects that the old realtime callback fired (haptics, sounds,
+      // toasts, push notifications, analytics) are now triggered here on
+      // status transitions detected via prevStatusRef.
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      let prevPolledStatus: string | null = null;
+      let prevPolledPaymentStatus: string | null = null;
+      pollingTimerRef.current = setInterval(async () => {
+        try {
+          const { flowStep, activeRide: pinnedRide } = useRideStore.getState();
+          if (!pinnedRide || flowStep === 'idle' || flowStep === 'completed') return;
+          const fresh = await rideService.getActiveRide(user!.id);
+          if (!fresh) {
+            // getActiveRide filters out canceled/completed. If it returns
+            // null while we have a pinned ride, that ride is no longer
+            // active server-side. Clear the stale local state so the
+            // customer can request a new ride.
+            // eslint-disable-next-line no-console
+            console.log('[Polling] no active ride server-side — clearing stale', { ride_id: pinnedRide.id });
+            useRideStore.getState().setFlowStep('idle');
+            useRideStore.getState().setActiveRide(null);
+            useRideStore.getState().setRideWithDriver(null);
+            return;
+          }
+          if (fresh.id !== pinnedRide.id) return;
+
+          const newStatus = fresh.status;
+          const newPaymentStatus = (fresh as { payment_status?: string }).payment_status ?? null;
+          const transitioned = prevPolledStatus !== null && prevPolledStatus !== newStatus;
+          const paymentJustConfirmed =
+            prevPolledPaymentStatus === 'pending' && newPaymentStatus === 'paid';
+
+          // eslint-disable-next-line no-console
+          console.log('[Polling] ride state', {
+            ride_id: fresh.id,
+            status: newStatus,
+            prev: prevPolledStatus,
+            driver_id: fresh.driver_id,
+          });
+          useRideStore.getState().updateRideFromRealtime(fresh);
+
+          // Fire side effects on status transitions (was in subscribeToRide
+          // callback before BUG-277). Only fire when prev is non-null and
+          // different — first poll establishes baseline.
+          if (transitioned) {
+            if (newStatus === 'accepted') {
+              triggerHaptic('success');
+              playSound('ride_accepted');
+              Toast.show({ type: 'success', text1: i18next.t('ride.driver_assigned', { ns: 'rider' }) });
+              scheduleLocalNotification(
+                i18next.t('ride.driver_assigned', { ns: 'rider' }),
+                i18next.t('ride.driver_assigned_body', { ns: 'rider' }),
+              );
+              // Load driver info on accept
+              if (fresh.driver_id) {
+                rideService.getRideWithDriver(fresh.id).then((rwd) => {
+                  if (rwd) useRideStore.getState().setRideWithDriver(rwd);
+                }).catch(() => {});
+              }
+            }
+            if (newStatus === 'driver_en_route' && prevPolledStatus === 'accepted') {
+              triggerHaptic('light');
+            }
+            if (newStatus === 'arrived_at_pickup') {
+              triggerHaptic('success');
+              setTimeout(() => triggerHaptic('medium'), 300);
+              setTimeout(() => triggerHaptic('light'), 600);
+              playSound('driver_arrived');
+              scheduleLocalNotification(
+                i18next.t('ride.driver_arrived_banner', { ns: 'rider' }),
+                '',
+              );
+            }
+            if (newStatus === 'in_progress' && prevPolledStatus === 'arrived_at_pickup') {
+              triggerHaptic('medium');
+              playSound('ride_accepted');
+              scheduleLocalNotification(
+                i18next.t('ride.trip_started_notif', { ns: 'rider' }),
+                i18next.t('ride.trip_started_body', { ns: 'rider' }),
+              );
+            }
+            if (newStatus === 'arrived_at_destination') {
+              triggerHaptic('success');
+              playSound('destination_arrived');
+              scheduleLocalNotification(
+                i18next.t('ride.arrived_at_destination_title', { ns: 'rider' }),
+                i18next.t('ride.arrived_at_destination_body', { ns: 'rider' }),
+              );
+            }
+            if (newStatus === 'completed') {
+              triggerHaptic('success');
+              playSound('trip_completed');
+              trackEvent('ride_completed', { ride_id: fresh.id, service_type: fresh.service_type });
+              scheduleLocalNotification(
+                i18next.t('ride.trip_completed_notif', { ns: 'rider' }),
+                '',
+              );
+              invalidatePredictionCache().catch(() => {});
+
+              const fare = fresh.final_fare_cup ?? fresh.final_fare_trc;
+              if (fare && fare > 0) {
+                const methodKey = `ride.payment_method_${fresh.payment_method ?? 'cash'}`;
+                Toast.show({
+                  type: 'success',
+                  text1: i18next.t('ride.payment_confirmed_title', { ns: 'rider' }),
+                  text2: i18next.t('ride.payment_confirmed_body', {
+                    ns: 'rider',
+                    amount: fare,
+                    method: i18next.t(methodKey, { ns: 'rider', defaultValue: fresh.payment_method ?? 'cash' }),
+                  }),
+                  visibilityTime: 5000,
+                });
+              }
+            }
+            if (newStatus === 'canceled') {
+              triggerHaptic('error');
+              if (prevPolledStatus === 'in_progress') {
+                Toast.show({
+                  type: 'error',
+                  text1: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
+                  text2: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
+                });
+              } else {
+                Toast.show({
+                  type: 'error',
+                  text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
+                  text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
+                });
+              }
+              scheduleLocalNotification(
+                i18next.t('ride.driver_canceled_notif', { ns: 'rider' }),
+                '',
+              );
+            }
+          }
+          if (paymentJustConfirmed) {
+            triggerHaptic('success');
+            Toast.show({
+              type: 'success',
+              text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
+            });
+            trackEvent('ride_payment_confirmed', { ride_id: fresh.id });
+          }
+
+          prevPolledStatus = newStatus;
+          prevPolledPaymentStatus = newPaymentStatus;
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[Polling] failed', String(e));
+        }
+      }, 3000);
+
       // Subscribe to ride updates
       channelRef.current?.unsubscribe();
       // BUG-075: Wrap subscription in try-catch to prevent leaked null reference on error
@@ -759,19 +1036,61 @@ export function useRideActions() {
         name: (err as Error)?.name,
       });
       const errMsg = getErrorMessage(err);
-      setError(errMsg);
-      setFlowStep('selecting');
-      Toast.show({
-        type: 'error',
-        text1: i18next.t('rider:ride.request_failed_title', { defaultValue: 'No se pudo solicitar el viaje' }),
-        text2: errMsg,
-      });
+
+      // BUG-253 (Capa 4.3): the DB-level trigger
+      // `enforce_one_active_ride_per_customer` raises with this exact
+      // string when the customer already has an active ride. Recover by
+      // re-syncing local state from the server — the user's previous
+      // ride is real and pinned correctly. Don't drop them back to
+      // 'selecting' (that would lose context).
+      if (errMsg.includes('customer_has_active_ride')) {
+        try {
+          const existing = await rideService.getActiveRide(user?.id ?? '');
+          if (existing) {
+            useRideStore.getState().setActiveRide(existing);
+            const hasDriver = !!existing.driver_id;
+            useRideStore.getState().setFlowStep(
+              !hasDriver && existing.status === 'searching' ? 'searching' : 'active',
+            );
+            if (hasDriver) {
+              const rwd = await rideService.getRideWithDriver(existing.id);
+              if (rwd) useRideStore.getState().setRideWithDriver(rwd);
+            }
+            Toast.show({
+              type: 'info',
+              text1: i18next.t('rider:ride.has_active_ride_title', { defaultValue: 'Ya tienes un viaje activo' }),
+              text2: i18next.t('rider:ride.has_active_ride_msg', {
+                defaultValue: 'Te llevamos al viaje en curso. Cancélalo si quieres pedir uno nuevo.',
+              }),
+              visibilityTime: 5000,
+            });
+          } else {
+            // No active ride server-side — race condition, state self-healed
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:ride.request_failed_title', { defaultValue: 'No se pudo solicitar el viaje' }),
+              text2: i18next.t('rider:common.try_again', { defaultValue: 'Intenta de nuevo' }),
+            });
+            setFlowStep('selecting');
+          }
+        } catch {
+          setFlowStep('selecting');
+        }
+      } else {
+        setError(errMsg);
+        setFlowStep('selecting');
+        Toast.show({
+          type: 'error',
+          text1: i18next.t('rider:ride.request_failed_title', { defaultValue: 'No se pudo solicitar el viaje' }),
+          text2: errMsg,
+        });
+      }
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
       pendingRequestIdRef.current = null;
     }
-  }, [setActiveRide, setFlowStep, setLoading, setError]);
+  }, [setActiveRide, setFlowStep, setLoading, setError, setRideWithDriver, user?.id]);
 
   const cancelRide = useCallback(async (reason?: string) => {
     const { activeRide } = useRideStore.getState();
