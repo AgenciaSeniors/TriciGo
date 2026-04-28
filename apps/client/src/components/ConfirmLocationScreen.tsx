@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, Pressable, Animated, Platform, Image } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
 // BUG-281: branded dropoff pin asset. The image is a white silhouette on
@@ -204,11 +205,30 @@ export function ConfirmLocationScreen({
     );
   }
 
+  // BUG-282 — pull a cached last-known position as a fallback before the
+  // demo-city/Havana fallback. This catches the edge case where the user
+  // opens the picker on first launch before the GPS effect populates
+  // draft.pickup. Cache reads asynchronously, so we use it via state and
+  // remount the Camera (key prop below) when it resolves.
+  const [cachedFallback, setCachedFallback] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    if (initialLocation) return; // initialLocation is already valid, no need
+    AsyncStorage.getItem('last_known_location').then((raw) => {
+      if (!raw) return;
+      try {
+        const { latitude, longitude } = JSON.parse(raw);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setCachedFallback([longitude, latitude]);
+        }
+      } catch { /* malformed */ }
+    }).catch(() => {});
+  }, [initialLocation]);
+
   const initialCenter: [number, number] = initialLocation
     && Number.isFinite(initialLocation.longitude) && Number.isFinite(initialLocation.latitude)
     && (initialLocation.latitude !== 0 || initialLocation.longitude !== 0)
     ? [initialLocation.longitude, initialLocation.latitude]
-    : HAVANA_CENTER;
+    : (cachedFallback ?? HAVANA_CENTER);
 
   return (
     <View style={{ flex: 1 }}>
@@ -227,7 +247,12 @@ export function ConfirmLocationScreen({
         rotateEnabled={false}
         onMapIdle={(event: any) => { handleMapIdle(); handleCameraForPois(event); }}
       >
+        {/* BUG-282 — key forces Camera remount when initialCenter resolves
+            asynchronously (cachedFallback). defaultSettings only applies
+            on first mount, so without the key change the camera would
+            stay glued to HAVANA_CENTER for the entire picker session. */}
         <MapboxGL.Camera
+          key={`cam-${initialCenter[0].toFixed(4)},${initialCenter[1].toFixed(4)}`}
           defaultSettings={{
             centerCoordinate: initialCenter,
             zoomLevel: 15,
