@@ -181,16 +181,16 @@ export default function TrackRidePage() {
 
   useEffect(() => {
     fetchRide();
+    // BUG-277-web: subscribeToRide is now a no-op that returns { unsubscribe }
+    // (the realtime websocket was disabled to free OkHttp pool slots in mobile;
+    // web inherits the no-op via the shared `@tricigo/api` package). The
+    // 10-second polling interval below is the sole source of ride state
+    // updates now. We keep the call so future re-enabling is a one-line flip.
     const channel = rideService.subscribeToRide(rideId, (updated) => {
       setRide((prev) => {
         if (!prev) return null;
         return { ...prev, ...updated, pickup_location: prev.pickup_location, dropoff_location: prev.dropoff_location };
       });
-    });
-    channel.subscribe((status: string) => {
-      if (status === 'CHANNEL_ERROR') {
-        console.error('Realtime channel error for ride', rideId);
-      }
     });
     const interval = setInterval(() => {
       // Stop polling when ride reaches a terminal status (read from ref to avoid stale closure)
@@ -321,6 +321,7 @@ export default function TrackRidePage() {
             driverLng={driverLocation?.lng}
             vehicleType={ride.vehicle_type ?? undefined}
             nearbyVehicles={nearbyVehicles}
+            rideStatus={ride.status}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 

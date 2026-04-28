@@ -11,13 +11,27 @@ import { WebEmptyState } from '@/components/WebEmptyState';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-type FilterTab = 'all' | 'recharge' | 'rides' | 'transfers';
+// BUG-280-web: filter parity with mobile wallet (apps/client).
+// Splits transfers in/out, adds Bonos (promo_credit) and Ajustes (adjustment)
+// so admin corrections + referral/promo bonuses get their own chip instead of
+// being only visible under "Todos".
+type FilterTab =
+  | 'all'
+  | 'recharge'
+  | 'rides'
+  | 'received'
+  | 'sent'
+  | 'bonus'
+  | 'adjustment';
 
 const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'Todos' },
   { key: 'recharge', label: 'Recargas' },
   { key: 'rides', label: 'Viajes' },
-  { key: 'transfers', label: 'Transferencias' },
+  { key: 'received', label: 'Recibidas' },
+  { key: 'sent', label: 'Enviadas' },
+  { key: 'bonus', label: 'Bonos' },
+  { key: 'adjustment', label: 'Ajustes' },
 ];
 
 const TYPE_LABELS: Record<string, string> = {
@@ -38,8 +52,11 @@ const CREDIT_TYPES = new Set(['recharge', 'transfer_in', 'promo_credit', 'ride_h
 function getFilterTypes(filter: FilterTab): string[] | null {
   switch (filter) {
     case 'recharge': return ['recharge'];
-    case 'rides': return ['ride_payment', 'ride_hold', 'ride_hold_release'];
-    case 'transfers': return ['transfer_in', 'transfer_out'];
+    case 'rides': return ['ride_payment', 'ride_hold', 'ride_hold_release', 'redemption'];
+    case 'received': return ['transfer_in'];
+    case 'sent': return ['transfer_out'];
+    case 'bonus': return ['promo_credit'];
+    case 'adjustment': return ['adjustment'];
     default: return null;
   }
 }

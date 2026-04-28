@@ -131,6 +131,21 @@ export function estimateRoadDistance(straightLineM: number): number {
 }
 
 /**
+ * Perpendicular distance from a point to a polyline (meters).
+ * Returns the shortest distance from the point to any segment of the line.
+ * Used for "is the driver still on the planned route?" checks (BUG-279):
+ * if the result exceeds a threshold (~50 m), the driver has deviated and
+ * the polyline should be re-fetched from the new origin.
+ *
+ * Returns Infinity if the polyline has fewer than 2 points.
+ */
+export function distanceToPolyline(point: GeoPoint, polyline: GeoPoint[]): number {
+  if (polyline.length < 2) return Infinity;
+  const projection = projectPointOnPolyline(point, polyline);
+  return haversineDistance(point, projection.projectedPoint);
+}
+
+/**
  * Project a point onto a polyline and return the position along the route.
  * Used for trip progress calculation (Uber-style progress bar).
  *
