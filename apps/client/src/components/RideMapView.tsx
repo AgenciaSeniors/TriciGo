@@ -699,9 +699,17 @@ function RideMapViewInner({
               }
             }}
           >
+            {/* BUG-285 — wrapper needs an explicit width/height. Without
+                them PointAnnotation snapshotted a 0×0 View on mount and
+                the user saw "se marca la ruta pero no sale el dropoff".
+                The wrapper now matches the asset size so the snapshot
+                contains the full pin pixels. */}
             <Animated.View
               style={{
+                width: 44,
+                height: 44,
                 alignItems: 'center',
+                justifyContent: 'center',
                 transform: [{ scale: dropoffScale }],
                 shadowColor: '#000',
                 shadowOpacity: 0.3,
@@ -712,7 +720,6 @@ function RideMapViewInner({
             >
               <Image
                 source={require('../../assets/markers/dropoff-pin.png')}
-                // Shadow on wrapper (Animated.View) — ImageStyle doesn't accept elevation.
                 style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
                 resizeMode="contain"
                 accessibilityLabel="Destino"

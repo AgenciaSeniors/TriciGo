@@ -970,8 +970,16 @@ function RideMapViewInner(
           // BUG-281: branded TriciGo pin (transparent silhouette tinted to
           // brand orange) replaces the previous red circle + tail combo.
           <MapboxGL.MarkerView id="dropoff" coordinate={toCoord(dropoffLocation)} anchor={{ x: 0.5, y: 1 }}>
+            {/* BUG-285 — wrapper needs explicit width/height so MarkerView
+                doesn't lay it out as 0×0 (which made the dropoff pin
+                disappear during the trip even though the route polyline
+                rendered correctly). */}
             <View
               style={{
+                width: 44,
+                height: 44,
+                alignItems: 'center',
+                justifyContent: 'center',
                 shadowColor: '#000',
                 shadowOpacity: 0.3,
                 shadowRadius: 4,
@@ -981,7 +989,6 @@ function RideMapViewInner(
             >
               <Image
                 source={require('../../assets/markers/dropoff-pin.png')}
-                // Shadow on wrapper View — ImageStyle doesn't accept elevation.
                 style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
                 resizeMode="contain"
                 accessibilityLabel="Destino"
