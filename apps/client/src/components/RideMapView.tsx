@@ -405,8 +405,13 @@ function RideMapViewInner({
       if (dropoffLocation) allCoords.push(toCoord(dropoffLocation));
     }
     waypointLocations?.forEach((wp) => allCoords.push(toCoord(wp)));
-    // Searching drivers ARE included so the user can see incoming offers
-    searchingDrivers?.forEach((d) => allCoords.push(toCoord(d.location)));
+    // BUG-284 — searching drivers used to be added to bounds so the rider
+    // could see incoming offers, but when a matched driver lived 500 m+
+    // away the camera zoomed all the way out to fit them ("el client se
+    // aleja en el mapa"). The driver marker itself is still rendered at
+    // its real coordinate and visible if the rider pans the map. The
+    // initial fit now stays tight to pickup→dropoff (or the static
+    // route polyline before in_progress).
     return computeBounds(allCoords);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, routeKey, isAcceptAnimating]);
