@@ -58,21 +58,21 @@ function createPickupMarkerEl(): HTMLDivElement {
 }
 
 function createDropoffMarkerEl(): HTMLDivElement {
+  // BUG-281 — branded TriciGo dropoff pin (parity with TrackingMap).
+  // /markers/dropoff-pin.png is the white silhouette foreground of the
+  // adaptive icon — tinted to brand orange via CSS filter so we keep a
+  // single asset for both the dropoff confirmation flow and the live ride
+  // tracking screen.
   const el = document.createElement('div');
   el.innerHTML = `
-    <div style="position:relative;width:28px;height:40px;">
-      <div style="
-        width:28px;height:28px;border-radius:50%;
-        background:#FF4D00;border:3px solid white;
-        box-shadow:0 3px 10px rgba(255,77,0,0.4);
-        position:relative;z-index:1;
-      "></div>
-      <div style="
-        position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-        width:0;height:0;
-        border-left:8px solid transparent;border-right:8px solid transparent;
-        border-top:12px solid #FF4D00;
-      "></div>
+    <div style="width:44px;height:44px;">
+      <img
+        src="/markers/dropoff-pin.png"
+        alt="Destino"
+        style="display:block;width:44px;height:44px;object-fit:contain;
+          /* white → brand orange #FF4D00 (codepen.io/sosuke/pen/Pjoqqp generator) */
+          filter: brightness(0) saturate(100%) invert(46%) sepia(89%) saturate(2613%) hue-rotate(2deg) brightness(102%) contrast(105%) drop-shadow(0 2px 4px rgba(0,0,0,0.3));"
+      />
     </div>`;
   return el;
 }

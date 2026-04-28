@@ -1,6 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { View, Pressable, Animated, Platform } from 'react-native';
+import { View, Pressable, Animated, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// BUG-281: branded dropoff pin asset. The image is a white silhouette on
+// a transparent background — RN tints it via the Image `tintColor` style
+// so we can apply the brand orange consistently across light/dark themes.
+const DROPOFF_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { reverseGeocode, MAP_STYLE_LIGHT } from '@tricigo/utils';
@@ -257,7 +262,12 @@ export function ConfirmLocationScreen({
         )}
       </MapboxGL.MapView>
 
-      {/* Static center pin — overlaid on map center */}
+      {/* BUG-281 — Static center pin overlaid on map center.
+         Pickup: small green disc (universal "you are here" semantic).
+         Dropoff: branded TriciGo pin in brand-orange — the asset is the
+         app's adaptive-icon foreground (white pin silhouette on transparent
+         background) tinted via Image.tintColor so the brand color stays
+         consistent without shipping a second PNG. */}
       <View
         pointerEvents="none"
         style={{
@@ -270,7 +280,7 @@ export function ConfirmLocationScreen({
           alignItems: 'center',
         }}
       >
-        {/* Pin shadow */}
+        {/* Drop shadow under the pin tip — anchors the pin to the map */}
         <View
           style={{
             width: 8,
@@ -278,43 +288,65 @@ export function ConfirmLocationScreen({
             borderRadius: 4,
             backgroundColor: 'rgba(0,0,0,0.2)',
             marginBottom: -2,
-            transform: [{ translateY: 20 }],
+            transform: [{ translateY: isPickup ? 20 : 22 }],
           }}
         />
-        {/* Pin */}
-        <View style={{ alignItems: 'center' }}>
-          <View
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: pinColor,
-              justifyContent: 'center',
-              alignItems: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.25,
-              shadowRadius: 4,
-              elevation: 4,
-            }}
-          >
-            <Ionicons
-              name={isPickup ? 'radio-button-on' : 'flag'}
-              size={14}
-              color="#fff"
+        {isPickup ? (
+          /* Pickup — kept simple/green for "you" semantic */
+          <View style={{ alignItems: 'center' }}>
+            <View
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: pinColor,
+                justifyContent: 'center',
+                alignItems: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+                elevation: 4,
+              }}
+            >
+              <Ionicons name="radio-button-on" size={14} color="#fff" />
+            </View>
+            <View
+              style={{
+                width: 3,
+                height: 12,
+                backgroundColor: pinColor,
+                borderBottomLeftRadius: 2,
+                borderBottomRightRadius: 2,
+              }}
             />
           </View>
-          {/* Pin stem */}
+        ) : (
+          /* Dropoff — branded TriciGo pin */
           <View
             style={{
-              width: 3,
-              height: 12,
-              backgroundColor: pinColor,
-              borderBottomLeftRadius: 2,
-              borderBottomRightRadius: 2,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 5,
             }}
-          />
-        </View>
+          >
+            <Image
+              source={DROPOFF_PIN_ASSET}
+              // tintColor recolors the white silhouette to brand orange.
+              // Shadow lives on the wrapper View because RN's ImageStyle
+              // doesn't accept `elevation` (Android-only shadow prop).
+              style={{
+                width: 44,
+                height: 44,
+                tintColor: colors.brand.orange,
+              }}
+              resizeMode="contain"
+              accessibilityLabel="Pin de destino TriciGo"
+            />
+          </View>
+        )}
       </View>
 
       {/* Top address bar */}
