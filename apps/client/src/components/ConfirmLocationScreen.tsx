@@ -347,9 +347,17 @@ export function ConfirmLocationScreen({
             />
           </View>
         ) : (
-          /* Dropoff — branded TriciGo pin */
+          /* Dropoff — branded TriciGo pin.
+             BUG-285 — wrapper needs explicit width/height to render. The
+             ConfirmLocationScreen overlay is `position: absolute` with
+             centered alignment, so a 0×0 wrapper still renders nothing.
+             Same fix as the in-trip dropoff markers. */
           <View
             style={{
+              width: 44,
+              height: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.3,
@@ -359,9 +367,6 @@ export function ConfirmLocationScreen({
           >
             <Image
               source={DROPOFF_PIN_ASSET}
-              // tintColor recolors the white silhouette to brand orange.
-              // Shadow lives on the wrapper View because RN's ImageStyle
-              // doesn't accept `elevation` (Android-only shadow prop).
               style={{
                 width: 44,
                 height: 44,
