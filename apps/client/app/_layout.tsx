@@ -35,6 +35,7 @@ import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
+import { useRideInit } from '@/hooks/useRide';
 import '../global.css';
 
 // Initialize Sentry as early as possible (safe for web)
@@ -78,9 +79,8 @@ function initMapbox() {
     const MapboxGL = require('@rnmapbox/maps').default;
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
     MapboxGL.setAccessToken(token);
-    if (typeof MapboxGL.setWellKnownTileServer === 'function') {
-      MapboxGL.setWellKnownTileServer('Mapbox');
-    }
+    // BUG-216: setWellKnownTileServer removed (deprecated in newer
+    // @rnmapbox/maps; tile server auto-detected from access token).
     if (typeof MapboxGL.setTelemetryEnabled === 'function') {
       MapboxGL.setTelemetryEnabled(false);
     }
@@ -120,6 +120,14 @@ function RootNavigator() {
   useEffect(() => {
     registerForPushNotifications();
   }, []);
+
+  // BUG-253 (Capa 3.1): mount the ride watcher at the root layout so
+  // the 3-second polling + AppState foreground listener stay alive even
+  // when the user navigates away from the home tab. Previously the
+  // watcher was inside NativeHomeScreen and died on tab change, leaving
+  // stale local state that the watcher would have cleared.
+  useRideInit();
+
   const router = useRouter();
   const navRef = useNavigationContainerRef();
 

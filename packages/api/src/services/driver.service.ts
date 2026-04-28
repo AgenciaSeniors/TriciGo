@@ -297,6 +297,33 @@ export const driverService = {
   },
 
   /**
+   * BUG-275: atomic driver position update — one RPC call instead of two
+   * separate POSTs (driver_profiles UPDATE + ride_location_events INSERT).
+   * Cuts the per-second request rate in half, which on Cloudflare-fronted
+   * Supabase eliminates the random POST failures observed during active
+   * trips at high GPS sample rates.
+   */
+  async updateDriverPosition(params: {
+    driverId: string;
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    speed?: number;
+    rideId?: string;
+  }): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('update_driver_position', {
+      p_driver_id: params.driverId,
+      p_latitude: params.latitude,
+      p_longitude: params.longitude,
+      p_heading: params.heading ?? null,
+      p_speed: params.speed ?? null,
+      p_ride_id: params.rideId ?? null,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  },
+
+  /**
    * Send heartbeat to keep driver marked as online.
    * Called every 60s by the driver app. Stale drivers (no heartbeat for 3min)
    * are marked offline by the mark_stale_drivers_offline() pg_cron function.
@@ -382,31 +409,54 @@ export const driverService = {
   async updateRideStatus(
     rideId: string,
     status: RideStatus,
-  ): Promise<void> {
+    opts?: { driverLat?: number; driverLng?: number; noGpsMode?: boolean },
+  ): Promise<{
+    success: boolean;
+    gated?: boolean;
+    reason?: string;
+    distance_m?: number;
+    target?: string;
+    threshold_m?: number;
+    no_gps_validation?: boolean;
+    no_gps_remaining?: number;
+    rider_bypass_used?: boolean;
+  }> {
     if (status === 'completed') {
       throw new Error('Use completeRide() for ride completion');
     }
 
     const supabase = getSupabaseClient();
-    const updates: Record<string, unknown> = { status };
 
-    switch (status) {
-      case 'arrived_at_pickup':
-        updates.driver_arrived_at = new Date().toISOString();
-        break;
-      case 'in_progress':
-        updates.pickup_at = new Date().toISOString();
-        break;
-      case 'arrived_at_destination':
-        updates.arrived_at_destination_at = new Date().toISOString();
-        break;
+    // BUG-244: route through update_ride_status_v2 RPC for proximity gate
+    // on arrived_at_pickup / arrived_at_destination. Other transitions
+    // pass through unchanged.
+    const { data, error } = await supabase.rpc('update_ride_status_v2', {
+      p_ride_id: rideId,
+      p_new_status: status,
+      p_driver_lat: opts?.driverLat ?? null,
+      p_driver_lng: opts?.driverLng ?? null,
+      p_no_gps_mode: opts?.noGpsMode ?? false,
+    });
+    if (error) {
+      // Surface SQL EXCEPTION messages to the caller (e.g. too_far_for_bypass)
+      throw new Error(error.message || JSON.stringify(error));
     }
-
-    const { error } = await supabase
-      .from('rides')
-      .update(updates)
-      .eq('id', rideId);
-    if (error) throw new Error(error.message || JSON.stringify(error));
+    const result = data as {
+      success: boolean;
+      gated?: boolean;
+      reason?: string;
+      distance_m?: number;
+      target?: string;
+      threshold_m?: number;
+      no_gps_validation?: boolean;
+      no_gps_remaining?: number;
+      rider_bypass_used?: boolean;
+      new_status?: string;
+    };
+    // If gated, the caller decides what to do (show "rider confirm?" prompt)
+    if (result?.gated) {
+      return result;
+    }
 
     // Delivery-specific notifications
     const { data: rideData } = await supabase
@@ -429,6 +479,44 @@ export const driverService = {
         ).catch(() => { /* non-blocking */ });
       }
     }
+    return result;
+  },
+
+  /**
+   * BUG-244: rider confirms driver arrived (used when GPS gate is between
+   * 100m and 500m and the rider can visually confirm).
+   */
+  async riderConfirmDriverArrival(rideId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('rider_confirm_driver_arrival', {
+      p_ride_id: rideId,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  },
+
+  /**
+   * BUG-246: driver reports their GPS as unavailable for this ride.
+   * Backend flips ride.driver_gps_status to 'unavailable' which triggers
+   * a rider-side modal asking for consent to continue.
+   */
+  async reportGpsUnavailable(rideId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('report_driver_gps_unavailable', {
+      p_ride_id: rideId,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  },
+
+  /**
+   * BUG-246: driver reports GPS recovered. Best-effort: only flips back
+   * to 'healthy' if rider hasn't already consented (preserves audit trail).
+   */
+  async reportGpsRecovered(rideId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('report_driver_gps_recovered', {
+      p_ride_id: rideId,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
   },
 
   /**
@@ -450,6 +538,19 @@ export const driverService = {
     });
     if (error) throw new Error(error.message || JSON.stringify(error));
     return data as CompleteRideResult;
+  },
+
+  /**
+   * BUG-222: driver justifies why their route exceeded 1.3× the estimate.
+   * Called from the post-completion modal when excess_distance_uncharged_m > 0.
+   */
+  async setExcessDistanceReason(rideId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('set_excess_distance_reason', {
+      p_ride_id: rideId,
+      p_reason: reason,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
   },
 
   /**

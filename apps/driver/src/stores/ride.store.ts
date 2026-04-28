@@ -76,13 +76,38 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   updateActiveTrip: (trip) => {
     const { activeTrip } = get();
     if (!activeTrip || activeTrip.id !== trip.id) return;
-    // V2: Ignore stale realtime updates
+    // BUG-262: stale-update guard with status forward-progress override.
+    //
+    // Original guard: ignore any realtime payload whose `updated_at` is
+    // older than the local one. Problem: realtime delivery can arrive
+    // out-of-order (replication lag, retry, multi-tab) and a *legitimate*
+    // status change (e.g. arrived → in_progress) might carry an
+    // updated_at slightly older than the local row that received an
+    // unrelated touch from a trigger. NTP drift between server and
+    // device adds up to ~2 s of false negatives.
+    //
+    // New rule: keep the timestamp guard but ALWAYS accept the payload
+    // when (a) it's a status forward transition or (b) the timestamp
+    // delta is within a 2-second tolerance window (NTP drift).
     if (activeTrip && trip.updated_at && activeTrip.updated_at) {
-      if (new Date(trip.updated_at) < new Date(activeTrip.updated_at)) {
+      const localTime = new Date(activeTrip.updated_at).getTime();
+      const recvTime  = new Date(trip.updated_at).getTime();
+      const driftMs   = localTime - recvTime;
+      // Forward status transitions always win (immune to clock skew).
+      const STATUS_ORDER = [
+        'searching','accepted','driver_en_route','arrived_at_pickup',
+        'in_progress','arrived_at_destination','completed',
+      ];
+      const localIdx = STATUS_ORDER.indexOf(activeTrip.status);
+      const recvIdx  = STATUS_ORDER.indexOf(trip.status);
+      const isForward = recvIdx > localIdx || trip.status === 'canceled';
+      const NTP_TOLERANCE_MS = 2_000;
+      if (driftMs > NTP_TOLERANCE_MS && !isForward) {
         logger.warn('[Realtime] Stale update ignored', {
           ride_id: trip.id,
           local_updated: activeTrip.updated_at,
           received_updated: trip.updated_at,
+          drift_ms: driftMs,
         });
         return;
       }

@@ -31,9 +31,11 @@ function ensureMapboxToken() {
     const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
     if (!token) return; // can't apply without a token; caller will retry
     MapboxGL.setAccessToken(token);
-    if (typeof MapboxGL.setWellKnownTileServer === 'function') {
-      MapboxGL.setWellKnownTileServer('Mapbox');
-    }
+    // BUG-216: removed setWellKnownTileServer call — deprecated in
+    // @rnmapbox/maps newer versions. The tile server is auto-detected
+    // from the access token (Mapbox tokens always use Mapbox tiles).
+    // The call was logging "[error] setWellKnownTileServer is deprecated"
+    // on every dev-client open — pure noise, no functional impact.
     if (typeof MapboxGL.setTelemetryEnabled === 'function') {
       MapboxGL.setTelemetryEnabled(false);
     }
@@ -103,7 +105,11 @@ interface RideMapViewProps {
 const vehicleMarkerImages: Record<string, any> = {
   triciclo: require('../../assets/vehicles/markers/triciclo.png'),
   moto: require('../../assets/vehicles/markers/moto.png'),
-  auto: require('../../assets/vehicles/markers/auto.png'),
+  // BUG-218: "auto" service is the Cuban classic almendrón, NOT the modern
+  // comfort sedan. The previous auto.png was a generic modern car which
+  // looked identical to confort.png on the map. auto_clasico.png is the
+  // 1950s vintage car that visually identifies the standard auto service.
+  auto: require('../../assets/vehicles/markers/auto_clasico.png'),
   confort: require('../../assets/vehicles/markers/confort.png'),
 };
 
@@ -651,20 +657,21 @@ function RideMapViewInner(
     return () => anim.stop();
   }, [driverLocation, ringAnim, ringOpacity]);
 
-  // Pickup pulse ring animation (native only)
+  // Pickup pulse ring animation (native only) — BUG-218: reduced peak scale
+  // from 2.5 (80px halo) to 1.5 (48px) so the pickup doesn't dominate the map.
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
-  const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
+  const pickupPulseOpacity = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     if (!pickupLocation) return;
     const anim = Animated.loop(
       Animated.parallel([
         Animated.sequence([
-          Animated.timing(pickupPulseAnim, { toValue: 2.5, duration: 2000, useNativeDriver: true }),
+          Animated.timing(pickupPulseAnim, { toValue: 1.5, duration: 1800, useNativeDriver: true }),
           Animated.timing(pickupPulseAnim, { toValue: 1, duration: 0, useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(pickupPulseOpacity, { toValue: 0, duration: 2000, useNativeDriver: true }),
-          Animated.timing(pickupPulseOpacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+          Animated.timing(pickupPulseOpacity, { toValue: 0, duration: 1800, useNativeDriver: true }),
+          Animated.timing(pickupPulseOpacity, { toValue: 0.4, duration: 0, useNativeDriver: true }),
         ]),
       ]),
     );
@@ -758,6 +765,20 @@ function RideMapViewInner(
     if (allCoords.length < 2) return null;
     return computeBounds(allCoords);
   }, [pickupLocation, dropoffLocation, driverLocation, routeCoordinates]);
+
+  // BUG-218: force imperative fitBounds whenever bounds change. Mapbox's
+  // declarative <Camera bounds=...> prop sometimes doesn't re-fit on hot
+  // reload because the underlying native MapView is already mounted.
+  useEffect(() => {
+    if (!bounds || followMode) return;
+    const camera = cameraRef.current;
+    if (!camera) return;
+    try {
+      camera.fitBounds(bounds.ne, bounds.sw, [80, 60, 360, 60], 600);
+    } catch {
+      // some Mapbox versions name the method differently — best-effort
+    }
+  }, [bounds, followMode]);
 
   // Default center: driver location > Havana
   const defaultCenter: [number, number] = driverLocation
@@ -906,9 +927,11 @@ function RideMapViewInner(
                   bounds: {
                     ne: bounds.ne,
                     sw: bounds.sw,
-                    paddingTop: 60,
+                    paddingTop: 80,
                     paddingRight: 60,
-                    paddingBottom: 120,
+                    // BUG-218: bottom sheet covers ~340px during active trip;
+                    // bounds need extra padding so pickup/dropoff stay visible.
+                    paddingBottom: 360,
                     paddingLeft: 60,
                   },
                   animationDuration: 600,
@@ -928,9 +951,82 @@ function RideMapViewInner(
             />
           </MapboxGL.ShapeSource>
         )}
+        {dropoffLocation && (
+          // BUG-218: MarkerView for the same reason as pickup. Anchor at
+          // bottom-center so the pin's tail tip is aligned exactly on the
+          // dropoff coordinate (the visual base of the pin = the GPS point).
+          <MapboxGL.MarkerView id="dropoff" coordinate={toCoord(dropoffLocation)} anchor={{ x: 0.5, y: 1 }}>
+            <View style={{ width: MARKER.dropoff.size, height: MARKER.dropoff.size + MARKER.dropoff.tailH, alignItems: 'center' }}>
+              <View style={styles.dropoffMarker}>
+                <View style={styles.dropoffInnerDot} />
+              </View>
+              <View style={styles.dropoffTail} />
+            </View>
+          </MapboxGL.MarkerView>
+        )}
+        {riderLocation && (
+          <MapboxGL.PointAnnotation id="rider" coordinate={toCoord(riderLocation)}>
+            <View style={styles.riderMarker} accessibilityLabel="Rider location" />
+          </MapboxGL.PointAnnotation>
+        )}
+        {driverLocation && (
+          // BUG-218: use MarkerView (not PointAnnotation) for the driver
+          // marker so the <Image> child renders reliably on Android.
+          // PointAnnotation snapshots its child once on mount — if the image
+          // hasn't loaded yet, the snapshot is empty and the user sees just
+          // a dark/white circle without the vehicle icon.
+          <MapboxGL.MarkerView id="driver" coordinate={toCoord(driverLocation)} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={styles.driverMarkerContainer}>
+              <Animated.View
+                style={[styles.driverRing, { transform: [{ scale: ringAnim }], opacity: ringOpacity }]}
+              />
+              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                {/* BUG-268: rotation MUST live on a non-Animated View. When
+                    Animated.View has a transform array mixing Animated.Value
+                    (scale: pulseAnim) with a raw string (rotate: '90deg'),
+                    React Native's native driver only updates the animated
+                    entries and silently ignores the raw ones — the marker
+                    stays at rotate(0deg) forever. Splitting into two nested
+                    views isolates the dynamic rotate so it actually applies. */}
+                <View
+                  style={{
+                    transform: [
+                      // 0=N, 90=E, 180=S, 270=W. The marker images are drawn
+                      // pointing up (north) so a direct deg rotation aligns
+                      // the nose with the direction of travel.
+                      { rotate: `${typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0}deg` },
+                    ],
+                  }}
+                >
+                  {vehicleType && vehicleMarkerImages[vehicleType] && !markerImageError ? (
+                    <View style={styles.vehicleIconContainer}>
+                      <Image
+                        source={vehicleMarkerImages[vehicleType]}
+                        style={styles.vehicleIcon}
+                        resizeMode="contain"
+                        accessibilityLabel={`${vehicleType} vehicle marker`}
+                        onError={(e) => {
+                          console.warn('[VehicleMarker] image failed', vehicleType, e?.nativeEvent);
+                          setMarkerImageError(true);
+                        }}
+                        onLoad={() => console.log('[VehicleMarker] image loaded', vehicleType)}
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.driverDot} />
+                  )}
+                </View>
+              </Animated.View>
+            </View>
+          </MapboxGL.MarkerView>
+        )}
+        {/* BUG-218: pickup marker rendered AFTER driver so when both
+            overlap (driver at pickup), the green pickup stays visible on
+            top instead of being hidden under the auto/triciclo icon.
+            MarkerView z-order on Android follows JSX order. */}
         {pickupLocation && (
-          <MapboxGL.PointAnnotation id="pickup" coordinate={toCoord(pickupLocation)}>
-            <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center' }}>
+          <MapboxGL.MarkerView id="pickup" coordinate={toCoord(pickupLocation)} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={{ width: MARKER.pickup.size, height: MARKER.pickup.size, alignItems: 'center', justifyContent: 'center' }}>
               <Animated.View
                 style={{
                   position: 'absolute',
@@ -945,40 +1041,7 @@ function RideMapViewInner(
                 <View style={styles.pickupInnerDot} />
               </View>
             </View>
-          </MapboxGL.PointAnnotation>
-        )}
-        {dropoffLocation && (
-          <MapboxGL.PointAnnotation id="dropoff" coordinate={toCoord(dropoffLocation)}>
-            <View style={{ alignItems: 'center' }}>
-              <View style={styles.dropoffMarker}>
-                <View style={styles.dropoffInnerDot} />
-              </View>
-              <View style={styles.dropoffTail} />
-            </View>
-          </MapboxGL.PointAnnotation>
-        )}
-        {riderLocation && (
-          <MapboxGL.PointAnnotation id="rider" coordinate={toCoord(riderLocation)}>
-            <View style={styles.riderMarker} accessibilityLabel="Rider location" />
-          </MapboxGL.PointAnnotation>
-        )}
-        {driverLocation && (
-          <MapboxGL.PointAnnotation id="driver" coordinate={toCoord(driverLocation)}>
-            <View style={styles.driverMarkerContainer}>
-              <Animated.View
-                style={[styles.driverRing, { transform: [{ scale: ringAnim }], opacity: ringOpacity }]}
-              />
-              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                {vehicleType && vehicleMarkerImages[vehicleType] ? (
-                  <View style={styles.vehicleIconContainer}>
-                    <Image source={vehicleMarkerImages[vehicleType]} style={styles.vehicleIcon} resizeMode="contain" accessibilityLabel={`${vehicleType} vehicle marker`} />
-                  </View>
-                ) : (
-                  <View style={styles.driverDot} />
-                )}
-              </Animated.View>
-            </View>
-          </MapboxGL.PointAnnotation>
+          </MapboxGL.MarkerView>
         )}
         {surgeGeoJSON && (
           <MapboxGL.ShapeSource id="surge-zones" shape={surgeGeoJSON}>
@@ -1133,13 +1196,17 @@ const styles = StyleSheet.create({
     shadowColor: MAP_COLORS.driverSelf, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
   },
   vehicleIconContainer: {
-    width: MARKER.driver.size, height: MARKER.driver.size, borderRadius: MARKER.driver.size / 2,
-    backgroundColor: MAP_COLORS.driverContainer, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: MAP_COLORS.driverSelf,
-    shadowColor: MAP_COLORS.driverSelf, shadowOpacity: 0.35, shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 }, elevation: 8,
+    // BUG-218: transparent — show only the vehicle icon (no white circle, no
+    // orange border). A drop shadow keeps the icon legible on light streets.
+    width: MARKER.driver.size, height: MARKER.driver.size,
+    backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center',
   },
-  vehicleIcon: { width: 28, height: 28 },
+  vehicleIcon: {
+    width: MARKER.driver.size, height: MARKER.driver.size,
+    // Native shadow so the icon contrasts against any tile color
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 }, elevation: 6,
+  },
   recenterBtn: {
     position: 'absolute', bottom: 16, right: 16,
     width: 40, height: 40, borderRadius: 20,

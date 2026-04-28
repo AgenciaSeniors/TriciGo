@@ -204,13 +204,14 @@ export default function WalletScreen() {
           </AnimatedCard>
         )}
 
-        {/* Earnings Balance Card.
-            UX: when balance is negative it means the driver owes commission
-            from cash rides (platform deducts it on next recharge). Without
-            context a "-85 TRC" number is alarming. Show an amber warning
-            tint + an explanation line so the driver knows WHY it's negative
-            and that it's normal. */}
-        <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
+        {/* BUG-276: Earnings Balance Card disabled. Single-wallet model:
+            Cuota de trabajo (above) is the only balance now. Admin top-ups
+            and ride earnings both flow into tricicoin. Showing a separate
+            "Saldo disponible" card was confusing drivers who thought their
+            ride earnings could pay commission, but commission only debits
+            from tricicoin. Wrapping in {false && ...} preserves the JSX
+            history for quick rollback if needed. */}
+        {false && <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
           style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
         >
           <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
@@ -222,7 +223,7 @@ export default function WalletScreen() {
             {formatTRC(balance)}
           </Text>
           <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-0.5">
-            {'\u2248'} {formatUSD(trcToUsd(balance, exchangeRate))}
+            {'≈'} {formatUSD(trcToUsd(balance, exchangeRate))}
           </Text>
           {balance < 0 && (
             <Text variant="caption" style={{ color: '#F59E0B' }} className="mt-2">
@@ -236,7 +237,7 @@ export default function WalletScreen() {
               {t('wallet.hold_balance', { defaultValue: 'En retencion' })}: {formatTRC(holdBalance)}
             </Text>
           )}
-        </AnimatedCard>
+        </AnimatedCard>}
 
         {/* Earning Goals */}
         <Text variant="label" style={{ color: lt.text.secondary }} className="mb-2 ml-1">

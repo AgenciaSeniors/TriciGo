@@ -92,19 +92,35 @@ function IncomingRideCardInner({ ride, onAccept, onReject, driverCustomRateCup, 
   }, [distanceKm]);
 
   // ── Net earnings (fare minus 15% commission) ──
+  // BUG-225: previously the driver recalculated the fare from estimated
+  // duration & distance using its own copy of the service rates, which
+  // created a mismatch with what the customer saw because:
+  //   1. ride.estimated_duration_s is now PER-VEHICLE (BUG-221), but the
+  //      backend computes fare with NEUTRAL 40 km/h time.
+  //   2. The driver's serviceConfig could be slightly stale vs what the
+  //      backend used at the moment of estimate.
+  // The fare stored on the ride row (estimated_fare_cup) is the canonical
+  // source of truth — that's exactly what the customer was quoted and
+  // what we'll bill. We only fall through to a local recalc for legacy
+  // rides that lack the stored value.
   const driverFare = useMemo(() => {
+    if (ride.estimated_fare_cup != null && ride.estimated_fare_cup > 0) {
+      return { cup: ride.estimated_fare_cup, trc: ride.estimated_fare_trc };
+    }
     if (!serviceConfig) {
       return { cup: ride.estimated_fare_cup, trc: ride.estimated_fare_trc };
     }
 
+    // Fallback recalc (legacy rides only). Use NEUTRAL 40 km/h duration to
+    // match the backend's BUG-221 model, NOT estimated_duration_s.
     const effectiveRate = driverCustomRateCup ?? serviceConfig.per_km_rate_cup;
     const distKm = (ride.estimated_distance_m ?? 0) / 1000;
-    const durMin = (ride.estimated_duration_s ?? 0) / 60;
+    const neutralDurMin = (distKm * 60) / 40;
 
     const rawFare = Math.round(
       serviceConfig.base_fare_cup +
       distKm * effectiveRate +
-      durMin * serviceConfig.per_minute_rate_cup,
+      neutralDurMin * serviceConfig.per_minute_rate_cup,
     );
     const baseFare = Math.max(rawFare, serviceConfig.min_fare_cup);
     const surgedFare = Math.round(baseFare * (ride.surge_multiplier ?? 1));

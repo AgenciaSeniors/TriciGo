@@ -12,7 +12,7 @@ import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic, haversineDistance } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { incidentService, walletService, deliveryService, trackValidationEvent } from '@tricigo/api';
+import { incidentService, walletService, deliveryService, driverService, trackValidationEvent } from '@tricigo/api';
 import type { DeliveryDetails } from '@tricigo/api';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
@@ -30,6 +30,7 @@ import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverProximityAlert } from '@/hooks/useDriverProximityAlert';
 import { RiderRatingSheet } from './RiderRatingSheet';
+import { ExcessDistanceSheet } from './ExcessDistanceSheet';
 import { DeliveryPhotoSheet } from './DeliveryPhotoSheet';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import type { RideStatus, RideWithRider } from '@tricigo/types';
@@ -105,20 +106,53 @@ function useActionLabels(): Partial<Record<RideStatus, string>> {
 export function useActiveTripMapData() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const isPickupPhase = activeTrip?.status === 'accepted' || activeTrip?.status === 'driver_en_route';
+  const isOnTripPhase = activeTrip?.status === 'in_progress' || activeTrip?.status === 'arrived_at_destination';
   const riderLocation = useRiderLocation(activeTrip?.id, isPickupPhase);
-  const routeCoordinates = useRoutePolyline(
-    activeTrip?.pickup_location ?? null,
-    activeTrip?.dropoff_location ?? null,
-  );
   const driverLatMap = useLocationStore((s) => s.latitude);
   const driverLngMap = useLocationStore((s) => s.longitude);
   const driverLocationMap = driverLatMap != null && driverLngMap != null
     ? { latitude: driverLatMap, longitude: driverLngMap }
     : null;
+
+  // BUG-218 (route): the displayed route depends on the trip phase.
+  //  - During driver_en_route / accepted: driver → pickup
+  //  - During in_progress / arrived_at_destination: driver → dropoff
+  // Two fetches with smart fallback: if the active leg is too short for
+  // OSRM (e.g. driver already at pickup, distance < 50m), we keep showing
+  // the pickup → dropoff polyline so the user still has visual context.
+  const legFrom = driverLocationMap;
+  const legTo = isPickupPhase
+    ? (activeTrip?.pickup_location ?? null)
+    : (activeTrip?.dropoff_location ?? null);
+  const legRoute = useRoutePolyline(legFrom, legTo);
+  const fullRoute = useRoutePolyline(
+    activeTrip?.pickup_location ?? null,
+    activeTrip?.dropoff_location ?? null,
+  );
+  // BUG-218: OSRM returns a 2-point straight line for very short legs
+  // (e.g. driver already at pickup), which is invisible at normal zoom.
+  // Require a real polyline (>= 4 points = at least one road segment) to
+  // use the leg; otherwise fall back to the full pickup→dropoff route.
+  const routeCoordinates = (legRoute && legRoute.length >= 4) ? legRoute : fullRoute;
   const inAppNavMap = useInAppNavigation(driverLocationMap);
 
+  // BUG-218 (UX): markers visible at all phases EXCEPT when driver is so
+  // close to pickup that they share the same pixel on screen. In that case
+  // the auto icon already conveys "I'm at the pickup", and showing the
+  // green pickup circle on top would just hide the auto.
+  void isOnTripPhase;
+  const driverNearPickup =
+    !!driverLocationMap &&
+    !!activeTrip?.pickup_location &&
+    haversineDistance(
+      driverLocationMap.latitude,
+      driverLocationMap.longitude,
+      activeTrip.pickup_location.latitude,
+      activeTrip.pickup_location.longitude,
+    ) < 30; // meters
+
   return {
-    pickupLocation: activeTrip?.pickup_location ?? null,
+    pickupLocation: driverNearPickup ? null : (activeTrip?.pickup_location ?? null),
     dropoffLocation: activeTrip?.dropoff_location ?? null,
     riderLocation: isPickupPhase ? riderLocation : null,
     routeCoordinates: inAppNavMap.isNavigating && inAppNavMap.routeCoordinates.length > 0
@@ -542,6 +576,90 @@ export function DriverTripView() {
         <View style={{ height: 180 }} aria-hidden />
       )}
 
+      {/* 0. Navigation overlay (when in-app nav active) — moved BEFORE the
+            action button. Was rendered absolute-positioned, but the
+            absolute anchored to the bottom sheet not the screen, causing
+            it to overlap the action button. Now rendered inline at top. */}
+      {inAppNav.isNavigating && (
+        <NavigationOverlay
+          currentStep={inAppNav.currentStep}
+          nextStep={inAppNav.nextStep}
+          remainingDistance_m={inAppNav.remainingDistance_m}
+          remainingDuration_s={inAppNav.remainingDuration_s}
+          isRerouting={inAppNav.isRerouting}
+          onStop={inAppNav.stopNavigation}
+          destinationLabel={
+            activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted'
+              ? `Pickup: ${activeTrip.pickup_address}`
+              : `Destino: ${nextWaypoint?.address || activeTrip.dropoff_address}`
+          }
+          voiceEnabled={voiceGuidanceEnabled}
+          onToggleVoice={() => setVoiceGuidanceEnabled(!voiceGuidanceEnabled)}
+        />
+      )}
+
+      {/* BUG-244 polish: live distance hint + GPS health detection.
+           Shows the driver in real time how far from the next target
+           they are and warns if GPS feed seems broken. */}
+      {(() => {
+        const target = (activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted')
+          ? activeTrip.pickup_location
+          : (activeTrip.status === 'in_progress' || activeTrip.status === 'arrived_at_destination')
+            ? activeTrip.dropoff_location
+            : null;
+        if (!target) return null;
+        if (!driverLocation) {
+          return (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              padding: 8, marginBottom: 8, borderRadius: 8,
+              backgroundColor: 'rgba(239,68,68,0.1)',
+              borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+            }}>
+              <Ionicons name="warning" size={14} color="#EF4444" />
+              <Text variant="caption" style={{ color: '#EF4444', marginLeft: 6, fontWeight: '600' }}>
+                {t('trip.gps_unavailable', { defaultValue: 'GPS no disponible. Reiniciá la ubicación o contactá soporte.' })}
+              </Text>
+            </View>
+          );
+        }
+        const distM = haversineDistance(driverLocation, target);
+        const targetLabel = (activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted')
+          ? t('trip.target_pickup', { defaultValue: 'pasajero' })
+          : t('trip.target_dropoff', { defaultValue: 'destino' });
+        const isClose = distM <= 100;
+        const isInBypassRange = distM > 100 && distM <= 500;
+        return (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            paddingVertical: 6, paddingHorizontal: 10, marginBottom: 8, borderRadius: 8,
+            backgroundColor: isClose
+              ? 'rgba(16,185,129,0.12)'
+              : isInBypassRange
+                ? 'rgba(245,158,11,0.12)'
+                : 'rgba(255,255,255,0.04)',
+          }}>
+            <Ionicons
+              name={isClose ? 'checkmark-circle' : 'location'}
+              size={14}
+              color={isClose ? '#10B981' : isInBypassRange ? '#F59E0B' : '#9CA3AF'}
+            />
+            <Text
+              variant="caption"
+              style={{
+                marginLeft: 6,
+                color: isClose ? '#10B981' : isInBypassRange ? '#F59E0B' : '#9CA3AF',
+                fontWeight: '600',
+              }}
+            >
+              {isClose
+                ? t('trip.distance_at_target', { defaultValue: `Llegaste al ${targetLabel}`, target: targetLabel })
+                : t('trip.distance_to_target', { defaultValue: `Estás a ${distM < 1000 ? Math.round(distM) + 'm' : (distM/1000).toFixed(1) + 'km'} del ${targetLabel}`, distance: distM < 1000 ? `${Math.round(distM)}m` : `${(distM / 1000).toFixed(1)}km`, target: targetLabel })}
+            </Text>
+          </View>
+        );
+      })()}
+
       {/* 1. Action button — color-coded by phase, always visible at top */}
       {actionLabel && !(activeTrip.status === 'in_progress' && nextWaypoint) && !needsDeliveryPhoto && !needsPickupPhoto && (
         <Animated.View style={{ transform: [{ scale: nearDropoff ? pulseAnim : 1 }], marginBottom: 8 }}>
@@ -556,6 +674,74 @@ export function DriverTripView() {
           />
         </Animated.View>
       )}
+
+      {/* BUG-246: GPS unavailable status + rider consent state. Replaces
+           the previous self-bypass cap. Now: when GPS broken, driver tells
+           the rider via the backend, rider decides via modal in their app. */}
+      {!driverLocation && activeTrip.status !== 'completed' && activeTrip.status !== 'canceled' && (
+        <View style={{
+          marginBottom: 8,
+          padding: 10,
+          borderRadius: 10,
+          backgroundColor: activeTrip.driver_gps_status === 'rider_consented'
+            ? 'rgba(16,185,129,0.1)'
+            : 'rgba(239,68,68,0.1)',
+          borderWidth: 1,
+          borderColor: activeTrip.driver_gps_status === 'rider_consented'
+            ? 'rgba(16,185,129,0.4)'
+            : 'rgba(239,68,68,0.4)',
+        }}>
+          {activeTrip.driver_gps_status === 'rider_consented' ? (
+            <Text variant="caption" style={{ color: '#10B981', fontWeight: '600', textAlign: 'center' }}>
+              {t('trip.gps_consented', { defaultValue: '✓ El pasajero aceptó continuar sin GPS' })}
+            </Text>
+          ) : activeTrip.driver_gps_status === 'unavailable' ? (
+            <Text variant="caption" style={{ color: '#F59E0B', fontWeight: '600', textAlign: 'center' }}>
+              {t('trip.gps_waiting_rider', { defaultValue: '⏳ Esperando respuesta del pasajero…' })}
+            </Text>
+          ) : (
+            <View>
+              <Text variant="caption" style={{ color: '#EF4444', fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+                {t('trip.gps_unavailable_warning', { defaultValue: '⚠️ GPS no disponible' })}
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  try {
+                    await driverService.reportGpsUnavailable(activeTrip.id);
+                    Toast.show({
+                      type: 'info',
+                      text1: t('trip.gps_notify_rider_sent', { defaultValue: 'Le avisamos al pasajero' }),
+                      text2: t('trip.gps_notify_rider_hint', { defaultValue: 'Esperá su respuesta para continuar' }),
+                    });
+                  } catch (err) {
+                    Toast.show({ type: 'error', text1: t('trip.gps_notify_rider_failed', { defaultValue: 'No se pudo notificar' }) });
+                  }
+                }}
+                style={{
+                  alignSelf: 'center',
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  backgroundColor: '#EF4444',
+                }}
+              >
+                <Text variant="caption" style={{ color: '#fff', fontWeight: '700' }}>
+                  {t('trip.gps_notify_rider', { defaultValue: 'Avisarle al pasajero' })}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* GPS recovered notice (driver had GPS broken, now restored) */}
+      {driverLocation
+        && activeTrip.driver_gps_status === 'unavailable'
+        && (() => {
+          // Auto-clear: if GPS came back, ping the recovered RPC
+          driverService.reportGpsRecovered(activeTrip.id).catch(() => {});
+          return null;
+        })()}
 
       {/* Waypoint action buttons (arrive / depart) */}
       {activeTrip.status === 'in_progress' && nextWaypoint && !isAtWaypoint && (
@@ -687,24 +873,8 @@ export function DriverTripView() {
         </Pressable>
       </View>
 
-      {/* 3. Navigation overlay (when navigating) */}
-      {inAppNav.isNavigating && (
-        <NavigationOverlay
-          currentStep={inAppNav.currentStep}
-          nextStep={inAppNav.nextStep}
-          remainingDistance_m={inAppNav.remainingDistance_m}
-          remainingDuration_s={inAppNav.remainingDuration_s}
-          isRerouting={inAppNav.isRerouting}
-          onStop={inAppNav.stopNavigation}
-          destinationLabel={
-            activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted'
-              ? `Pickup: ${activeTrip.pickup_address}`
-              : `Destino: ${nextWaypoint?.address || activeTrip.dropoff_address}`
-          }
-          voiceEnabled={voiceGuidanceEnabled}
-          onToggleVoice={() => setVoiceGuidanceEnabled(!voiceGuidanceEnabled)}
-        />
-      )}
+      {/* (was here: NavigationOverlay — moved to position 0 above the
+           action button to fix overlap on Android, see BUG-238 fix) */}
 
       {/* Chained ride banner */}
       {activeTrip.next_ride_id && (
@@ -716,13 +886,41 @@ export function DriverTripView() {
         </View>
       )}
 
-      {/* 4. Status stepper with phase-colored tint */}
-      <View style={{ backgroundColor: stepperTint, borderRadius: 16, padding: 8, marginTop: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
-        <StatusStepper
-          steps={TRIP_STEPS}
-          currentStep={activeTrip.status}
-          variant="dark"
-        />
+      {/* 4. Compact status stepper — BUG-236 redesign:
+            Was 6 truncated labels stacked horizontally (~70pt). Now: 6 small
+            dots + only the CURRENT step label prominent below. Driver
+            instantly sees "where am I" instead of reading 6 labels. */}
+      <View style={{ backgroundColor: stepperTint, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginTop: 4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+        <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 6 }}>
+          {TRIP_STEPS.map((step, idx) => {
+            const currentIdx = TRIP_STEPS.findIndex((s) => s.key === activeTrip.status);
+            const isPast = idx < currentIdx;
+            const isCurrent = idx === currentIdx;
+            return (
+              <View
+                key={step.key}
+                style={{
+                  width: isCurrent ? 24 : 8,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: isCurrent
+                    ? actionButtonColor
+                    : isPast
+                      ? 'rgba(255,255,255,0.4)'
+                      : 'rgba(255,255,255,0.12)',
+                }}
+              />
+            );
+          })}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
+          <Text variant="bodySmall" style={{ color: '#fff', fontWeight: '600' }}>
+            {TRIP_STEPS.find((s) => s.key === activeTrip.status)?.label ?? ''}
+          </Text>
+          <Text variant="caption" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            · {TRIP_STEPS.findIndex((s) => s.key === activeTrip.status) + 1}/{TRIP_STEPS.length}
+          </Text>
+        </View>
       </View>
 
       {/* 5. ETA Badge */}
@@ -850,51 +1048,42 @@ export function DriverTripView() {
           )}
         </>
       ) : (
-        <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
-          <View className="flex-row items-start mb-3">
-            <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="inverse" className="opacity-50">
+        // BUG-237: collapsed route summary truncates addresses to 1 line.
+        // Driver doesn't need to read full addresses while driving — Maps
+        // already shows turn-by-turn. Tap "Ver ruta completa" expands.
+        <Pressable onPress={() => setRouteExpanded(true)}>
+          <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
+            <View className="flex-row items-center mb-2">
+              <View className="w-2.5 h-2.5 rounded-full bg-primary-500 mr-2" />
+              <Text variant="caption" color="inverse" className="opacity-50 mr-2">
                 {t('trip.pickup_address')}
               </Text>
-              <Text variant="bodySmall" color="inverse">
+              <Text variant="bodySmall" color="inverse" numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1 }}>
                 {activeTrip.pickup_address}
               </Text>
             </View>
-          </View>
-          {waypoints.map((wp) => (
-            <View key={wp.id} className="flex-row items-start mb-3">
-              <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2">
-                  <Text variant="caption" color="accent" className="opacity-70">
-                    {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
-                  </Text>
-                  {wp.departed_at && (
-                    <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
-                  )}
-                  {wp.arrived_at && !wp.departed_at && (
-                    <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
-                  )}
-                </View>
-                <Text variant="bodySmall" color="inverse">
-                  {wp.address}
+            {waypoints.length > 0 && (
+              <View className="flex-row items-center mb-2">
+                <View className={`w-2.5 h-2.5 rounded-full mr-2 ${waypoints.find((w) => !w.departed_at) ? 'bg-warning' : 'bg-success'}`} />
+                <Text variant="caption" color="accent" className="opacity-70 mr-2">
+                  {t('trip.stops_count', { count: waypoints.length, defaultValue: `${waypoints.length} parada(s)` })}
                 </Text>
               </View>
-            </View>
-          ))}
-          <View className="flex-row items-start">
-            <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-            <View className="flex-1">
-              <Text variant="caption" color="inverse" className="opacity-50">
+            )}
+            <View className="flex-row items-center">
+              <View className="w-2.5 h-2.5 rounded-full bg-neutral-400 mr-2" />
+              <Text variant="caption" color="inverse" className="opacity-50 mr-2">
                 {t('trip.dropoff_address')}
               </Text>
-              <Text variant="bodySmall" color="inverse">
+              <Text variant="bodySmall" color="inverse" numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1 }}>
                 {activeTrip.dropoff_address}
               </Text>
             </View>
-          </View>
-        </Card>
+            <Text variant="caption" color="accent" style={{ textAlign: 'center', marginTop: 8, opacity: 0.7 }}>
+              {t('trip.tap_to_expand', { defaultValue: 'Tocá para ver direcciones completas' })}
+            </Text>
+          </Card>
+        </Pressable>
       )}
 
       {/* Scheduled ride banner */}
@@ -1125,6 +1314,11 @@ function TripCompleteView() {
   const [commissionRate, setCommissionRate] = useState(0.15);
   const [rideWithRider, setRideWithRider] = useState<RideWithRider | null>(null);
   const [showRating, setShowRating] = useState(true);
+  // BUG-222: show excess-distance justification modal first if driver
+  // exceeded 1.3× the estimated distance and hasn't yet provided a reason.
+  const excessMeters = activeTrip?.excess_distance_uncharged_m ?? 0;
+  const alreadyJustified = !!activeTrip?.excess_distance_reason;
+  const [showExcessSheet, setShowExcessSheet] = useState(excessMeters > 0 && !alreadyJustified);
 
   useEffect(() => {
     walletService.getConfigValue('commission_rate')
@@ -1310,8 +1504,21 @@ function TripCompleteView() {
           />
         )}
 
-        {/* Rider rating */}
-        {showRating && rideWithRider && driverProfile?.user_id && (
+        {/* BUG-222: excess-distance justification (shown FIRST, blocks rating) */}
+        {showExcessSheet && (
+          <View className="w-full mb-3">
+            <ExcessDistanceSheet
+              rideId={activeTrip.id}
+              excessMeters={excessMeters}
+              chargeableM={Math.max(0, (activeTrip.actual_distance_m ?? 0) - excessMeters)}
+              actualM={activeTrip.actual_distance_m ?? 0}
+              onComplete={() => setShowExcessSheet(false)}
+            />
+          </View>
+        )}
+
+        {/* Rider rating (only after excess sheet dismissed) */}
+        {!showExcessSheet && showRating && rideWithRider && driverProfile?.user_id && (
           <View className="w-full mb-3">
             <RiderRatingSheet
               rideId={activeTrip.id}

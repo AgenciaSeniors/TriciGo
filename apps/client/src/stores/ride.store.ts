@@ -212,11 +212,33 @@ export const useRideStore = create<RideState>((set, get) => ({
 
   setFlowStep: (flowStep) => set({ flowStep }),
 
+  // BUG-253 (Capa 3.4): refuse to mutate pickup/dropoff while a ride is
+  // pinned. The user must explicitly cancel the active ride first via
+  // cancelRide(). Without this guard, the local draft and the DB row
+  // diverged ("phantom ride" — vehicle picker locked, address mismatch).
   setPickup: (address, location) =>
-    set((s) => ({ draft: { ...s.draft, pickup: { address, location } } })),
+    set((s) => {
+      if (s.activeRide) {
+        logger.warn('[ride.store] setPickup ignored — activeRide is pinned', {
+          rideId: s.activeRide.id,
+          status: s.activeRide.status,
+        });
+        return s;
+      }
+      return { draft: { ...s.draft, pickup: { address, location } } };
+    }),
 
   setDropoff: (address, location) =>
-    set((s) => ({ draft: { ...s.draft, dropoff: { address, location } } })),
+    set((s) => {
+      if (s.activeRide) {
+        logger.warn('[ride.store] setDropoff ignored — activeRide is pinned', {
+          rideId: s.activeRide.id,
+          status: s.activeRide.status,
+        });
+        return s;
+      }
+      return { draft: { ...s.draft, dropoff: { address, location } } };
+    }),
 
   setServiceType: (serviceType) =>
     set((s) => {

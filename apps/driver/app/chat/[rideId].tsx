@@ -1,8 +1,9 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import {
   View,
   FlatList,
   Pressable,
+  Image,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -11,10 +12,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
+import { rideService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
-import type { ChatMessage } from '@tricigo/types';
+import type { ChatMessage, RideWithRider } from '@tricigo/types';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
@@ -110,7 +112,26 @@ export default function ChatScreen() {
     );
   };
 
-  const riderName: string | undefined = undefined; // rider name not available in chat store
+  // BUG-241: fetch rider name + avatar so the header shows the actual
+  // passenger instead of the generic "Pasajero" placeholder.
+  const [riderInfo, setRiderInfo] = useState<{ name: string; avatarUrl: string | null } | null>(null);
+  useEffect(() => {
+    if (!rideId) return;
+    let cancelled = false;
+    rideService.getRideWithRider(rideId)
+      .then((data: RideWithRider | null) => {
+        if (cancelled || !data) return;
+        setRiderInfo({
+          name: data.rider_name ?? 'Pasajero',
+          avatarUrl: data.rider_avatar_url ?? null,
+        });
+      })
+      .catch(() => { /* fallback to placeholder */ });
+    return () => { cancelled = true; };
+  }, [rideId]);
+  const riderName = riderInfo?.name;
+  const riderAvatarUrl = riderInfo?.avatarUrl;
+  const riderInitial = (riderName ?? '?').trim().charAt(0).toUpperCase();
 
   return (
     <Screen bg="lightPrimary">
@@ -124,9 +145,15 @@ export default function ChatScreen() {
           <Pressable onPress={() => router.back()} style={{ marginRight: 12, minWidth: 44, minHeight: 44, justifyContent: 'center' }}>
             <Ionicons name="chevron-back" size={24} color="#0F172A" />
           </Pressable>
-          {/* Avatar */}
-          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-            <Ionicons name="person" size={20} color="#94A3B8" />
+          {/* BUG-241: Avatar — show photo if available, fallback to initial in branded circle */}
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFE5D9', alignItems: 'center', justifyContent: 'center', marginRight: 10, overflow: 'hidden' }}>
+            {riderAvatarUrl ? (
+              <Image source={{ uri: riderAvatarUrl }} style={{ width: 40, height: 40 }} resizeMode="cover" />
+            ) : (
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#FF4D00', fontFamily: 'Inter' }}>
+                {riderInitial}
+              </Text>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: '#0F172A', fontFamily: 'Inter' }}>
@@ -152,9 +179,24 @@ export default function ChatScreen() {
           accessibilityLiveRegion="polite"
           contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center">
-              <Text variant="body" color="secondary">
-                {t('chat.no_messages')}
+            // BUG-240: same redesign as client chat empty state.
+            <View className="flex-1 items-center justify-center px-8">
+              <View style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: 'rgba(255,77,0,0.10)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color="#FF4D00" />
+              </View>
+              <Text variant="h4" color="primary" className="text-center mb-1">
+                {t('chat.no_messages_title', { defaultValue: 'Empezá la conversación' })}
+              </Text>
+              <Text variant="caption" color="tertiary" className="text-center">
+                {t('chat.no_messages_hint', { defaultValue: 'Tocá una respuesta rápida o escribí abajo' })}
               </Text>
             </View>
           }

@@ -58,7 +58,9 @@ export function useChatInit(rideId: string) {
       });
     }
 
-    // F607: Polling fallback — refetch messages every 30s in case realtime silently disconnects
+    // BUG-242: polling fallback every 8s (was 30s) to handle Cuban
+    // network instability where realtime channel silently disconnects.
+    // 8s is the same interval used in client app for parity.
     const pollInterval = setInterval(() => {
       chatService.getMessages(rideId).then((msgs) => {
         const newMsgs = msgs.filter((m) => !seenIds.has(m.id));
@@ -66,7 +68,7 @@ export function useChatInit(rideId: string) {
           newMsgs.forEach((m) => { seenIds.add(m.id); addMessage(m); });
         }
       }).catch(() => { /* best-effort polling */ });
-    }, 30_000);
+    }, 8_000);
 
     return () => {
       msgChannel?.unsubscribe();

@@ -239,33 +239,46 @@ export const rideService = {
       }
     }
 
-    // Use route result or fallback to haversine estimate
+    // BUG-221: separate two durations.
+    //   - displayDuration → shown to the user (per-vehicle SPEED_PROFILE,
+    //     e.g. triciclo 9.4 km/h ≈ 64 min for 9.9 km).
+    //   - fareDuration → fed into per-minute fare component, calculated
+    //     using OSRM's neutral car-equivalent time (~40 km/h ≈ 15 min for
+    //     9.9 km). Without this split, slow vehicles (triciclo) would be
+    //     PUNISHED by their own slowness on long trips: per_minute × 64
+    //     blows up the fare. Rates per service still differ (triciclo has
+    //     lower per_km/per_min than auto), so the relative ordering is
+    //     preserved without time penalising the slow option.
     let roadDistance: number;
-    let duration: number;
+    let displayDuration: number;
+    let fareDuration: number;
     if (routeResult) {
       roadDistance = routeResult.distance_m;
-      duration = calculateTripDuration(routeResult.distance_m, params.service_type);
+      displayDuration = calculateTripDuration(routeResult.distance_m, params.service_type);
+      fareDuration = routeResult.duration_s; // neutral OSRM duration
     } else {
       const straightLine = haversineDistance(pickup, dropoff);
       roadDistance = estimateRoadDistance(straightLine);
-      duration = estimateDuration(roadDistance, params.service_type);
+      displayDuration = estimateDuration(roadDistance, params.service_type);
+      // No OSRM result; approximate neutral duration with auto profile.
+      fareDuration = estimateDuration(roadDistance, 'auto_standard');
     }
 
     const distanceKm = roadDistance / 1000;
-    const durationMin = duration / 60;
+    const fareDurationMin = fareDuration / 60;
 
-    // Calculate fare using pure function
+    // Calculate fare using pure function — uses fareDuration (neutral)
     const isCargo = params.service_type === 'triciclo_cargo';
     const fareResult = isCargo
       ? calculateCargoFare({
-          durationMin: durationMin > 0 ? durationMin : 60, // default 1 hour
+          durationMin: fareDurationMin > 0 ? fareDurationMin : 60, // default 1 hour
           baseFare,
           perMinRate,
           minimumFare: minFare,
         })
       : calculateBaseFare({
           distanceKm,
-          durationMin,
+          durationMin: fareDurationMin,
           baseFare,
           perKmRate,
           perMinRate,
@@ -362,7 +375,13 @@ export const rideService = {
       estimated_fare_cup: surgedFare,
       estimated_fare_trc: estimatedFareTrc,
       estimated_distance_m: Math.round(roadDistance),
-      estimated_duration_s: duration,
+      // BUG-221 (final): expose PER-VEHICLE duration to the client so each
+      // card shows the realistic ETA for that specific service (moto 25,
+      // triciclo 64, auto 30, confort 28). The FARE component still uses
+      // fareDuration (neutral 40 km/h) internally so slow vehicles aren't
+      // punished — but the user-facing "min" reflects what they'll actually
+      // experience in the trip.
+      estimated_duration_s: displayDuration,
       surge_multiplier: surgeMultiplier,
       surge_type: surgeType,
       pricing_rule_id: ruleId,
@@ -729,7 +748,11 @@ export const rideService = {
         result.driver_rating = driverProfile.rating_avg;
         result.driver_total_rides = driverProfile.total_rides_completed ?? null;
 
-        // Fetch user info for driver name/phone
+        // Fetch user info for driver name/phone. RLS on public.users blocks
+        // the rider from reading the driver's row, so try the direct read
+        // first (works when caller IS the driver) and fall back to the
+        // membership-gated RPC `get_ride_party_profiles` when it returns
+        // null. Phone stays under the original RLS-aware path.
         const { data: driverUser } = await supabase
           .from('users')
           .select('full_name, phone, avatar_url')
@@ -741,6 +764,21 @@ export const rideService = {
           result.driver_avatar_url = driverUser.avatar_url;
           result.driver_phone = driverUser.phone;
           result.driver_masked_phone = maskPhone(driverUser.phone);
+        } else {
+          // BUG-250: rider hits RLS — use the membership-gated RPC for the
+          // public bits (name, avatar). Phone stays masked-only via a
+          // separate path; this only fills in display fields.
+          const { data: parties } = await supabase
+            .rpc('get_ride_party_profiles', { p_ride_id: rideId })
+            .maybeSingle<{
+              driver_name: string;
+              driver_avatar_url: string | null;
+              driver_rating: number;
+            }>();
+          if (parties) {
+            result.driver_name = parties.driver_name;
+            result.driver_avatar_url = parties.driver_avatar_url;
+          }
         }
 
         // Fetch vehicle
@@ -794,31 +832,56 @@ export const rideService = {
 
     const rideData = ride as Ride;
 
-    // Fetch rider (customer) info
-    const { data: riderUser } = await supabase
-      .from('users')
-      .select('full_name, avatar_url')
-      .eq('id', rideData.customer_id)
-      .single();
-
-    // Fetch customer profile for rating
-    const { data: customerProfile } = await supabase
-      .from('customer_profiles')
-      .select('rating_avg')
-      .eq('user_id', rideData.customer_id)
-      .maybeSingle();
+    // BUG-250: RLS on public.users blocks the driver from SELECTing the rider's
+    // row. Direct query silently returned null and the rating sheet fell back
+    // to "Pasajero". Use the SECURITY DEFINER RPC `get_ride_party_profiles`
+    // which gates by ride membership and returns the public profile fields.
+    const { data: parties } = await supabase
+      .rpc('get_ride_party_profiles', { p_ride_id: rideId })
+      .maybeSingle<{
+        rider_name: string;
+        rider_avatar_url: string | null;
+        rider_rating: number;
+      }>();
 
     return {
       ...rideData,
-      rider_name: riderUser?.full_name ?? 'Pasajero',
-      rider_avatar_url: riderUser?.avatar_url ?? null,
-      rider_rating: customerProfile?.rating_avg ?? 5.0,
+      rider_name: parties?.rider_name ?? 'Pasajero',
+      rider_avatar_url: parties?.rider_avatar_url ?? null,
+      rider_rating: parties?.rider_rating ?? 5.0,
     };
   },
 
   /**
    * Get the active ride for the current user (if any).
    */
+  /**
+   * BUG-244: rider confirms driver arrived (used when GPS gate fired).
+   * Called from the "Tu conductor llegó? [Sí]" prompt.
+   */
+  async riderConfirmDriverArrival(rideId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('rider_confirm_driver_arrival', {
+      p_ride_id: rideId,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  },
+
+  /**
+   * BUG-246: rider responds to driver's "GPS unavailable" notification.
+   * consent=true → ride continues without GPS proximity gates.
+   * consent=false → ride is canceled without penalty for either party.
+   */
+  async riderRespondToGpsUnavailable(rideId: string, consent: boolean): Promise<{ canceled?: boolean }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('rider_respond_to_gps_unavailable', {
+      p_ride_id: rideId,
+      p_consent: consent,
+    });
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    return data as { canceled?: boolean };
+  },
+
   async getActiveRide(userId: string): Promise<Ride | null> {
     const supabase = getSupabaseClient();
     // UX: `arrived_at_destination` was missing — if the driver tapped
@@ -840,7 +903,24 @@ export const rideService = {
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    return data as Ride | null;
+    if (!data) return null;
+    // BUG-228: transform PostGIS geometry into the GeoPoint shape the rest
+    // of the app expects (pickup_location: { latitude, longitude }). Without
+    // this, the raw EWKB hex string was being read as `pickup_location` and
+    // `.latitude` returned undefined → markers rendered at (0,0) or random
+    // garbage coords.
+    const ride = data as Record<string, unknown>;
+    return {
+      ...(ride as unknown as Ride),
+      pickup_location: {
+        latitude: (ride.pickup_lat as number) ?? 0,
+        longitude: (ride.pickup_lng as number) ?? 0,
+      },
+      dropoff_location: {
+        latitude: (ride.dropoff_lat as number) ?? 0,
+        longitude: (ride.dropoff_lng as number) ?? 0,
+      },
+    };
   },
 
   /**
@@ -1082,24 +1162,48 @@ export const rideService = {
 
   /**
    * Subscribe to ride status changes (Postgres Changes).
+   *
+   * BUG-214 (mapa driver vacío + cliente sigue buscando):
+   * `payload.new` from `postgres_changes` contains the raw Postgres row,
+   * including `pickup_location` / `dropoff_location` as PostGIS geometry
+   * (WKT/EWKB). The driver's `useRoutePolyline` (and any UI reading
+   * `.pickup_location.latitude`) expects `{ latitude, longitude }`. Without
+   * this transform, every realtime UPDATE clobbered the previously-fetched
+   * `transformRideCoordinates`-produced shape with raw geometry — markers
+   * and polyline disappeared from the driver map immediately after accept.
+   *
+   * We also log subscription status so we can see in the device console
+   * whether the channel actually subscribed, and whether updates fire.
+   * (Bug 5: cliente sigue buscando — silent subscription failure was the
+   * leading hypothesis; the log will confirm or rule it out at runtime.)
    */
-  subscribeToRide(rideId: string, onUpdate: (ride: Ride) => void) {
-    const supabase = getSupabaseClient();
-    return supabase
-      .channel(`ride:${rideId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'rides',
-          filter: `id=eq.${rideId}`,
-        },
-        (payload) => {
-          onUpdate(payload.new as Ride);
-        },
-      )
-      .subscribe();
+  /**
+   * BUG-277 — Realtime DISABLED. Returns a no-op subscription.
+   *
+   * Forensic evidence (Supabase logs 2026-04-28 02:38–02:39):
+   * driver upload gaps of 47.9s, 23.2s, 9.0s, 8.0s, 6.7s on a 810 Mbps
+   * fiber WiFi 6 link with 30ms ping and 0% loss. Server logs show 0
+   * 5xx and 100% success on the POSTs that arrived. The driver's
+   * fetch() POSTs were not arriving at the server during the gaps.
+   *
+   * Root cause: OkHttp `maxRequestsPerHost = 5` (RN Android default).
+   * WebSocket realtime channels (this `subscribeToRide` + the one in
+   * `useDriverPosition`) hold connection slots indefinitely. With
+   * heartbeat + update_driver_position + driver_profiles GET + rides
+   * GET + buffer flush running in parallel, the pool saturates.
+   *
+   * Fix: remove the WebSocket entirely. Polling already covers ride
+   * status updates via `useRideInit`'s 3-second watcher and the
+   * `getActiveRide` checks. Freeing a slot per ride immediately
+   * reduces concurrent request pressure on the OkHttp dispatcher.
+   *
+   * If realtime is ever re-enabled, restore from git history.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  subscribeToRide(_rideId: string, _onUpdate: (ride: Ride) => void) {
+    return {
+      unsubscribe: () => { /* no-op — realtime disabled per BUG-277 */ },
+    };
   },
 
   /**

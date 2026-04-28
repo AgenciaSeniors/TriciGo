@@ -27,35 +27,136 @@ export const reviewService = {
   }): Promise<Review> {
     const validParams = validate(submitReviewSchema, params);
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('reviews')
-      .insert({
-        ride_id: validParams.ride_id,
-        reviewer_id: validParams.reviewer_id,
-        reviewee_id: validParams.reviewee_id,
-        rating: validParams.rating,
-        comment: validParams.comment ?? null,
-        is_visible: true,
-      })
-      .select()
-      .single();
-    if (error) throw error;
 
-    // Insert tags if provided — if this fails, delete the orphaned review
-    if (validParams.tags && validParams.tags.length > 0) {
-      const { error: tagError } = await supabase
-        .from('review_tags')
-        .insert(validParams.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
-      if (tagError) {
-        // Rollback: delete the review to avoid orphaned record
-        try {
-          await supabase.from('reviews').delete().eq('id', data.id);
-        } catch { /* best effort cleanup */ }
-        throw tagError;
+    // BUG-264 v2 — robust submission with three layers of safety:
+    //
+    //   Layer 1: PRE-FLIGHT CHECK
+    //     Many "review failed" reports were false negatives — the previous
+    //     attempt actually succeeded server-side but the response was lost
+    //     in the network. Before we INSERT, look for an existing review
+    //     for (ride_id, reviewer_id). If one exists, return it as success.
+    //
+    //   Layer 2: RETRY ON TRANSIENT NETWORK ERRORS
+    //     Cuban networks drop packets intermittently. We try up to 3 times
+    //     with 500ms / 1000ms backoff. Before each retry we re-check if
+    //     the review exists (one of the earlier attempts may have made it
+    //     through).
+    //
+    //   Layer 3: DUPLICATE-KEY RECOVERY
+    //     If the INSERT lands but PostgREST hits the unique constraint
+    //     (23505 / uniq_reviews_ride_reviewer), the review is already in
+    //     the DB. Fetch it and return as success.
+    //
+    // Any "throw" path means we have exhausted all 3 layers AND there's no
+    // existing review server-side — a real failure the caller must report.
+
+    const findExistingReview = async (): Promise<Review | null> => {
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('*')
+          .eq('ride_id', validParams.ride_id)
+          .eq('reviewer_id', validParams.reviewer_id)
+          .maybeSingle();
+        if (error) return null;
+        return data as Review | null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Layer 1: pre-flight
+    const preExisting = await findExistingReview();
+    if (preExisting) {
+      // eslint-disable-next-line no-console
+      console.log('[reviewService] review already exists, treating as success', {
+        ride_id: validParams.ride_id,
+        review_id: preExisting.id,
+      });
+      return { ...preExisting, tags: validParams.tags ?? [] } as Review;
+    }
+
+    const isDuplicateError = (err: unknown): boolean => {
+      const e = err as { code?: string; message?: string } | null | undefined;
+      if (!e) return false;
+      const msg = String(e.message ?? '');
+      return e.code === '23505'
+        || /duplicate key value/i.test(msg)
+        || /uniq_reviews_ride_reviewer|reviews_ride_id_reviewer_id_key/i.test(msg);
+    };
+
+    // Layer 2 + 3: retry loop with duplicate-key recovery
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .insert({
+            ride_id: validParams.ride_id,
+            reviewer_id: validParams.reviewer_id,
+            reviewee_id: validParams.reviewee_id,
+            rating: validParams.rating,
+            comment: validParams.comment ?? null,
+            is_visible: true,
+          })
+          .select()
+          .single();
+
+        if (!error) {
+          // SUCCESS — insert tags then return
+          if (validParams.tags && validParams.tags.length > 0) {
+            const { error: tagError } = await supabase
+              .from('review_tags')
+              .insert(validParams.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
+            if (tagError) {
+              // Rollback to avoid orphaned review
+              try { await supabase.from('reviews').delete().eq('id', data.id); } catch { /* best effort */ }
+              throw tagError;
+            }
+          }
+          return { ...data, tags: validParams.tags ?? [] } as Review;
+        }
+
+        // Layer 3: duplicate-key recovery (race with another tab/retry)
+        if (isDuplicateError(error)) {
+          const existing = await findExistingReview();
+          if (existing) {
+            // eslint-disable-next-line no-console
+            console.log('[reviewService] insert hit unique constraint — fetched existing', {
+              ride_id: validParams.ride_id,
+              review_id: existing.id,
+            });
+            return { ...existing, tags: validParams.tags ?? [] } as Review;
+          }
+        }
+        lastErr = error;
+      } catch (err) {
+        lastErr = err;
+        // Network exception during INSERT. Before next retry, check if the
+        // review now exists — the failed call may have actually succeeded.
+        const recovered = await findExistingReview();
+        if (recovered) {
+          // eslint-disable-next-line no-console
+          console.log('[reviewService] network exception but review found — recovered', {
+            ride_id: validParams.ride_id,
+            review_id: recovered.id,
+            err: String((err as { message?: string })?.message ?? err),
+          });
+          return { ...recovered, tags: validParams.tags ?? [] } as Review;
+        }
+      }
+      if (attempt < 3) {
+        await new Promise<void>((r) => setTimeout(r, attempt * 500));
       }
     }
 
-    return { ...data, tags: validParams.tags ?? [] } as Review;
+    // All retries exhausted with no review found server-side. Throw a
+    // real Error (not a Supabase error object) so logger.error doesn't
+    // serialize as "[object Object]".
+    const errStr = (() => {
+      try { return JSON.stringify(lastErr); } catch { return String(lastErr); }
+    })();
+    throw new Error(`submitReview failed after 3 attempts: ${errStr}`);
   },
 
   /**

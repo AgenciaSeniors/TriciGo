@@ -1,10 +1,43 @@
 import { useEffect, useCallback, useRef } from 'react';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { chatService } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
+
+// BUG-243: outgoing chat queue persisted to AsyncStorage. When user types
+// offline (Cuban networks drop frequently), the message stays in queue
+// with a visible 'pending' or 'failed' flag. On reconnect, we drain.
+const QUEUE_KEY = '@tricigo/chat_outgoing_queue';
+type QueuedMessage = {
+  localId: string;
+  rideId: string;
+  senderId: string;
+  body: string;
+  attemptCount: number;
+  queuedAt: number;
+};
+async function readQueue(): Promise<QueuedMessage[]> {
+  try {
+    const raw = await AsyncStorage.getItem(QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+async function writeQueue(items: QueuedMessage[]): Promise<void> {
+  try { await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(items)); } catch { /* best effort */ }
+}
+async function enqueue(msg: QueuedMessage): Promise<void> {
+  const q = await readQueue();
+  q.push(msg);
+  await writeQueue(q);
+}
+async function removeFromQueue(localId: string): Promise<void> {
+  const q = await readQueue();
+  await writeQueue(q.filter((m) => m.localId !== localId));
+}
 
 const TYPING_TIMEOUT_MS = 3000;
 const TYPING_DEBOUNCE_MS = 2000;
@@ -40,9 +73,31 @@ export function useChatInit(rideId: string) {
       });
     }
 
+    // BUG-242: polling fallback for chat messages. The realtime channel
+    // is unstable in Cuban networks (CHANNEL_ERROR loop). Without this,
+    // messages from the other party never appear until reload. Every 8s
+    // we fetch fresh messages and merge any not in store.
+    const pollInterval = setInterval(async () => {
+      try {
+        const fresh = await chatService.getMessages(rideId);
+        const existing = useChatStore.getState().messages;
+        const existingIds = new Set(existing.map((m) => m.id));
+        const newMessages = fresh.filter((m) => !existingIds.has(m.id));
+        if (newMessages.length > 0) {
+          // eslint-disable-next-line no-console
+          console.log('[Chat] poll: new messages found', { count: newMessages.length });
+          newMessages.forEach((m) => addMessage(m));
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[Chat] poll failed', String(err));
+      }
+    }, 8_000);
+
     return () => {
       msgChannel?.unsubscribe();
       typingChannel?.unsubscribe();
+      clearInterval(pollInterval);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       reset();
     };
@@ -57,24 +112,81 @@ export function useChatActions(rideId: string) {
   const sendMessage = useCallback(
     async (body: string) => {
       if (!user || !body.trim()) return;
+      const trimmed = body.trim();
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      // BUG-243: Add optimistic message FIRST so user sees it immediately,
+      // then try to send. If send fails, the message is already queued
+      // for later retry with a visible "pending" indicator.
+      addMessage({
+        id: localId,
+        ride_id: rideId,
+        sender_id: user.id,
+        body: trimmed,
+        created_at: new Date().toISOString(),
+        _pending: true,
+      } as any);
+
       try {
-        const msg = await chatService.sendMessage(rideId, user.id, body.trim());
+        const msg = await chatService.sendMessage(rideId, user.id, trimmed);
+        // Replace local pending with server message
+        useChatStore.getState().messages
+          .filter((m) => m.id === localId)
+          .forEach(() => { /* will be replaced below */ });
+        // Remove the local pending entry and add the real one
+        const cur = useChatStore.getState().messages;
+        useChatStore.getState().setMessages(cur.filter((m) => m.id !== localId));
         addMessage(msg);
       } catch {
-        // Show optimistic message with error indicator
-        addMessage({
-          id: `local-${Date.now()}`,
-          ride_id: rideId,
-          sender_id: user.id,
-          body: body.trim(),
-          created_at: new Date().toISOString(),
-          _failed: true,
-        } as any);
-        Toast.show({ type: 'error', text1: i18next.t('rider:chat.send_failed', { defaultValue: 'Mensaje no enviado' }) });
+        // Mark as queued in AsyncStorage and update bubble to "pending"
+        await enqueue({
+          localId,
+          rideId,
+          senderId: user.id,
+          body: trimmed,
+          attemptCount: 1,
+          queuedAt: Date.now(),
+        });
+        // Update local store: still pending, will retry on reconnect
+        const cur = useChatStore.getState().messages;
+        useChatStore.getState().setMessages(
+          cur.map((m) => m.id === localId ? { ...m, _failed: false, _pending: true } as any : m),
+        );
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('rider:chat.queued', { defaultValue: 'Mensaje en cola' }),
+          text2: i18next.t('rider:chat.queued_hint', { defaultValue: 'Se enviará cuando vuelva la conexión' }),
+        });
       }
     },
     [rideId, user, addMessage],
   );
+
+  // BUG-243: drain queue when network comes back
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(async (state) => {
+      if (!state.isConnected) return;
+      const q = await readQueue();
+      if (q.length === 0) return;
+      // eslint-disable-next-line no-console
+      console.log('[Chat] draining queue', { count: q.length });
+      for (const item of q) {
+        try {
+          const msg = await chatService.sendMessage(item.rideId, item.senderId, item.body);
+          // Remove from queue + replace local pending entry with real msg
+          await removeFromQueue(item.localId);
+          const cur = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
+          addMessage(msg);
+        } catch {
+          // still failing; leave in queue, increment attempt count
+          const all = await readQueue();
+          await writeQueue(all.map((m) => m.localId === item.localId ? { ...m, attemptCount: m.attemptCount + 1 } : m));
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [addMessage]);
 
   /** Call on every keystroke — internally debounces broadcasts */
   const notifyTyping = useCallback(() => {

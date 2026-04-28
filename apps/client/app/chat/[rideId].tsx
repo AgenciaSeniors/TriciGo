@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -189,16 +190,27 @@ export default function ChatScreen() {
           accessibilityLiveRegion="polite"
           contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: 'flex-end' }}
           ListEmptyComponent={
-            /* UX: a lone "no_messages" line felt dead — riders who opened
-               the chat screen wondered if it was broken. Add a gentle
-               suggestion pointing at the quick-reply bar right below so
-               they can kick off the conversation with one tap. */
+            /* BUG-240: redesigned empty state. Was flat text floating in a
+               huge gap. Now: centered icon + compact text + visual hint
+               toward the quick-reply bar below. Reads warmer and gives
+               clear affordance ("tap a chip to start"). */
             <View className="flex-1 items-center justify-center px-8">
-              <Text variant="body" color="secondary" className="text-center mb-2">
-                {t('chat.no_messages')}
+              <View style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: 'rgba(255,77,0,0.10)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color="#FF4D00" />
+              </View>
+              <Text variant="h4" color="primary" className="text-center mb-1">
+                {t('chat.no_messages_title', { defaultValue: 'Empezá la conversación' })}
               </Text>
               <Text variant="caption" color="tertiary" className="text-center">
-                {t('chat.no_messages_hint', { defaultValue: 'Tocá una respuesta rápida o escribí abajo para comenzar.' })}
+                {t('chat.no_messages_hint', { defaultValue: 'Tocá una respuesta rápida o escribí abajo' })}
               </Text>
             </View>
           }

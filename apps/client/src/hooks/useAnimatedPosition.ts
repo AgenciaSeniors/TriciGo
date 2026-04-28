@@ -6,20 +6,54 @@ interface AnimatedPosition {
   heading: number;
 }
 
+interface RawPosition {
+  latitude: number;
+  longitude: number;
+  heading?: number | null;
+  // BUG-256 left these here so a future implementation can dead-reckon if
+  // we want — they are accepted but currently unused (see BUG-259 below).
+  speed?: number | null;
+  recordedAt?: number;
+}
+
 /**
- * Smoothly interpolates between GPS position updates using requestAnimationFrame.
- * Produces ~60fps coordinate updates with ease-out cubic easing.
+ * Smoothly interpolates the driver marker between GPS samples at 60fps.
  *
- * Used to animate the driver marker on the rider's map so it glides
- * between GPS positions instead of jumping.
+ * BUG-259 — KEEP THE MARKER ON THE ROAD:
+ *   The previous version (BUG-256 v2) added "dead-reckoning" — after the
+ *   interpolation finished, the marker kept moving forward in the last-known
+ *   heading at the last-known speed, indefinitely. The intent was to mask
+ *   network jitter so the marker never freezes. The reality, observed in
+ *   user testing, was that the marker would drive STRAIGHT through buildings
+ *   and empty space whenever the driver took a turn, then snap back to the
+ *   road when the next sample arrived.
+ *
+ *   Why: the projection used the heading from the previous sample, which
+ *   pre-dated the turn. With samples 1s apart, on a network drop the marker
+ *   could drift 20–80 m off the road in the wrong direction. That looks
+ *   broken.
+ *
+ *   Fix: drop dead-reckoning entirely. Use a single-phase linear interpolation
+ *   that runs for `duration` ms (defaults to 1.2 s, slightly longer than the
+ *   1 s poll interval so consecutive samples produce overlapping animations
+ *   and the marker never appears to freeze even with mild jitter). Once the
+ *   interpolation completes, the marker rests at the latest known sample
+ *   until the next one arrives. This stays ON the polyline of consecutive
+ *   GPS fixes — which is, by definition, ON the road.
+ *
+ *   Trade-off: brief perceived "pause" between samples on a long network
+ *   gap. Acceptable: pausing on the road > drifting through buildings.
+ *
+ *   Heading uses shortest-arc interpolation to avoid the 359°→1° spin.
  *
  * @param rawPosition - Discrete GPS position from useDriverPosition
- * @param duration - Animation duration in ms (default 1000ms)
- * @returns Interpolated position updated every frame, or null if no position
+ * @param duration - Interpolation window (ms). Default 1200 — slightly
+ *                   longer than the 1 s poll interval to overlap samples.
+ * @returns Interpolated position updated every animation frame
  */
 export function useAnimatedPosition(
-  rawPosition: { latitude: number; longitude: number; heading?: number | null } | null,
-  duration: number = 1000,
+  rawPosition: RawPosition | null,
+  duration: number = 1200,
 ): AnimatedPosition | null {
   const [current, setCurrent] = useState<AnimatedPosition | null>(null);
   const prevRef = useRef<AnimatedPosition | null>(null);
@@ -38,10 +72,16 @@ export function useAnimatedPosition(
       heading: rawPosition.heading ?? 0,
     };
 
-    const start = prevRef.current ?? target;
+    // First sample after a null state: snap immediately, no interpolation.
+    if (!prevRef.current) {
+      prevRef.current = target;
+      setCurrent(target);
+      return;
+    }
+
+    const start = prevRef.current;
     const startTime = Date.now();
 
-    // Cancel any running animation
     if (animFrameRef.current != null) {
       cancelAnimationFrame(animFrameRef.current);
     }
@@ -49,21 +89,30 @@ export function useAnimatedPosition(
     function animate() {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease-out cubic for natural deceleration
-      const eased = 1 - Math.pow(1 - progress, 3);
+
+      // Shortest-arc heading interpolation (handles 359°→1° wrap-around).
+      const dh = ((target.heading - start.heading + 540) % 360) - 180;
+      const heading = (start.heading + dh * progress + 360) % 360;
 
       const interpolated: AnimatedPosition = {
-        latitude: start.latitude + (target.latitude - start.latitude) * eased,
-        longitude: start.longitude + (target.longitude - start.longitude) * eased,
-        heading: start.heading + (target.heading - start.heading) * eased,
+        latitude: start.latitude + (target.latitude - start.latitude) * progress,
+        longitude: start.longitude + (target.longitude - start.longitude) * progress,
+        heading,
       };
 
+      // BUG-266: keep prevRef tracking the VISUAL position, not the target.
+      // When a new sample arrives mid-animation, the next effect run starts
+      // animating from where the marker actually is on screen instead of
+      // teleporting to the previous target.
+      prevRef.current = interpolated;
       setCurrent(interpolated);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
-        prevRef.current = target;
+        // Interpolation complete — rest at target until the next sample.
+        // BUG-259: do NOT extrapolate forward. The marker stays on the
+        // polyline of real fixes, which is the road.
         animFrameRef.current = null;
       }
     }
@@ -71,12 +120,14 @@ export function useAnimatedPosition(
     animate();
 
     return () => {
+      // BUG-266: do NOT overwrite prevRef here — animate() keeps it in sync
+      // with the actual visual position every frame. Just cancel the frame.
       if (animFrameRef.current != null) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
     };
-  }, [rawPosition?.latitude, rawPosition?.longitude, rawPosition?.heading, duration]);
+  }, [rawPosition?.latitude, rawPosition?.longitude, rawPosition?.heading, rawPosition?.recordedAt, duration]);
 
   return current;
 }

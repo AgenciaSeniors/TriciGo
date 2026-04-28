@@ -5,10 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useDriverRideStore } from '@/stores/ride.store';
 
 export default function TabLayout() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
+  // BUG-235: hide bottom tabs during an active trip so the driver focuses
+  // on the map + trip controls. Tabs (Earnings, Billetera, Mis viajes,
+  // Perfil) aren't relevant while driving and steal ~80pt of screen.
+  const activeTrip = useDriverRideStore((s) => s.activeTrip);
+  const inActiveTrip = !!activeTrip && activeTrip.status !== 'completed' && activeTrip.status !== 'canceled';
 
   return (
     <Tabs
@@ -16,17 +22,19 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brand.orange,
         tabBarInactiveTintColor: colors.neutral[500],
-        tabBarStyle: {
-          backgroundColor: '#141418',
-          borderTopColor: 'rgba(255,255,255,0.06)',
-          borderTopWidth: 1,
-          paddingBottom: 8 + insets.bottom,
-          paddingTop: 8,
-          height: 64 + insets.bottom,
-          ...(Platform.OS === 'web'
-            ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(20,20,24,0.92)' } as any
-            : {}),
-        },
+        tabBarStyle: inActiveTrip
+          ? { display: 'none' }
+          : {
+              backgroundColor: '#141418',
+              borderTopColor: 'rgba(255,255,255,0.06)',
+              borderTopWidth: 1,
+              paddingBottom: 8 + insets.bottom,
+              paddingTop: 8,
+              height: 64 + insets.bottom,
+              ...(Platform.OS === 'web'
+                ? { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', backgroundColor: 'rgba(20,20,24,0.92)' } as any
+                : {}),
+            },
         tabBarLabelStyle: {
           fontFamily: 'Inter',
           fontSize: 11,

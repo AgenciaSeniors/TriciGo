@@ -244,21 +244,39 @@ export default function LoginScreen() {
                   setSocialLoading(true);
                   try {
                     const redirectTo = Platform.OS === 'web' ? window.location.origin : 'tricigo-driver://auth/callback';
+                    console.log('[GoogleSignIn] redirectTo', redirectTo);
                     const data = await authService.signInWithGoogle(redirectTo);
+                    console.log('[GoogleSignIn] supabase data', { hasUrl: !!data?.url, urlPrefix: data?.url?.slice(0, 80) });
                     if (Platform.OS !== 'web' && data?.url) {
-                      // BUG-201/202 (1+2): use openAuthSessionAsync instead of
-                      // Linking.openURL. The latter opened the system browser
-                      // (whose title was the raw Supabase project URL) and
-                      // never auto-closed when the deeplink fired. The
-                      // ASWebAuthenticationSession / Custom Tabs flow shown by
-                      // expo-web-browser stays in-app, hides the URL bar
-                      // until first navigation, and dismisses itself when the
-                      // OAuth callback hits `redirectTo`. Tokens are then
-                      // picked up by useAuthDeepLink (still subscribed) so
-                      // there's no extra session-management code here.
-                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+                      // BUG-201/202 (1+2): openAuthSessionAsync auto-closes when
+                      // the URL matches `redirectTo`. If the user reports the
+                      // sheet not closing, the result.type/url logged below
+                      // tells us whether: (a) we never received the redirect
+                      // ('cancel'/'dismiss') — likely scheme not registered
+                      // properly, or (b) we got a different URL — Supabase or
+                      // Google sent us elsewhere.
+                      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+                      console.log('[GoogleSignIn] WebBrowser result', { type: result.type, url: 'url' in result ? result.url : null });
+                      // BUG-201 fallback: if browser returned with a callback URL
+                      // but the OS-level handler didn't fire the Linking event,
+                      // process the URL manually so the session is set anyway.
+                      if (result.type === 'success' && 'url' in result && result.url?.includes('auth/callback')) {
+                        const hashIdx = result.url.indexOf('#');
+                        if (hashIdx >= 0) {
+                          const params = new URLSearchParams(result.url.substring(hashIdx + 1));
+                          const accessToken = params.get('access_token');
+                          const refreshToken = params.get('refresh_token');
+                          if (accessToken && refreshToken) {
+                            const { getSupabaseClient } = await import('@tricigo/api');
+                            const supabase = getSupabaseClient();
+                            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                            console.log('[GoogleSignIn] Session set from openAuthSessionAsync result');
+                          }
+                        }
+                      }
                     }
-                  } catch {
+                  } catch (err) {
+                    console.warn('[GoogleSignIn] error', String(err));
                     setSocialLoading(false);
                   }
                   setTimeout(() => setSocialLoading(false), 30000);

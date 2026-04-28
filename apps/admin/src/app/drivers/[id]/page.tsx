@@ -969,12 +969,16 @@ export default function DriverDetailPage() {
         </div>
       )}
 
-      {/* Adjust Wallet Modal (quota or passenger wallet) */}
+      {/* BUG-276: Adjust Wallet Modal — single-wallet model.
+          Default to `tricicoin` (Cuota de trabajo) so admin top-ups land
+          where the driver actually needs them: the commission balance
+          checked by accept_ride. Crediting driver_cash was useless for
+          unblocking drivers from accepting rides. */}
       <AdjustWalletModal
         open={walletModalOpen}
         userName={profile.users.full_name || profile.user_id}
         isDriver={true}
-        defaultAccountType="driver_cash"
+        defaultAccountType="tricicoin"
         loading={walletAdjusting}
         onCancel={() => setWalletModalOpen(false)}
         onConfirm={handleAdjustDriverQuota}
