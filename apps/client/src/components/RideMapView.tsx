@@ -660,7 +660,10 @@ function RideMapViewInner({
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* Dropoff marker — premium pin with tail + bounce-in */}
+        {/* BUG-281 — Dropoff marker uses the branded TriciGo pin asset
+            (white silhouette tinted brand-orange). The icon is already a
+            location-pin shape, so we anchor at y:1 so the tip points to
+            the actual coordinate. The bounce-in scale animation is preserved. */}
         {dropoffLocation && (
           <MapboxGL.PointAnnotation
             id="dropoff"
@@ -674,40 +677,23 @@ function RideMapViewInner({
               }
             }}
           >
-            <Animated.View style={{ alignItems: 'center', transform: [{ scale: dropoffScale }] }}>
-              {/* Circle head */}
-              <View
-                style={{
-                  width: MARKER.dropoff.size,
-                  height: MARKER.dropoff.size,
-                  borderRadius: MARKER.dropoff.size / 2,
-                  backgroundColor: MAP_COLORS.dropoff,
-                  borderWidth: 3,
-                  borderColor: 'white',
-                  shadowColor: MAP_COLORS.dropoff,
-                  shadowOpacity: 0.35,
-                  shadowRadius: 6,
-                  shadowOffset: { width: 0, height: 3 },
-                  elevation: 6,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <View style={{ width: MARKER.dropoff.innerDot, height: MARKER.dropoff.innerDot, borderRadius: 5, backgroundColor: 'white' }} />
-              </View>
-              {/* Triangle tail */}
-              <View
-                style={{
-                  width: 0,
-                  height: 0,
-                  borderLeftWidth: 8,
-                  borderRightWidth: 8,
-                  borderTopWidth: MARKER.dropoff.tailH,
-                  borderLeftColor: 'transparent',
-                  borderRightColor: 'transparent',
-                  borderTopColor: MAP_COLORS.dropoff,
-                  marginTop: -2,
-                }}
+            <Animated.View
+              style={{
+                alignItems: 'center',
+                transform: [{ scale: dropoffScale }],
+                shadowColor: '#000',
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 6,
+              }}
+            >
+              <Image
+                source={require('../../assets/markers/dropoff-pin.png')}
+                // Shadow on wrapper (Animated.View) — ImageStyle doesn't accept elevation.
+                style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
+                resizeMode="contain"
+                accessibilityLabel="Destino"
               />
             </Animated.View>
           </MapboxGL.PointAnnotation>

@@ -354,9 +354,21 @@ function WebMapboxView({
     }
 
     if (dropoffLocation) {
+      // BUG-281: branded TriciGo pin via CSS-only teardrop in brand orange.
+      // The Expo Web variant of the driver app doesn't ship a public/ folder,
+      // so we draw the pin shape with CSS (gradient fill + white inner dot)
+      // instead of loading the PNG. The look matches the native MarkerView
+      // pin closely enough that QA from web preview is still meaningful.
       const el = document.createElement('div');
-      el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;animation:drop-in 0.4s ease-out;"><div style="width:${MARKER.dropoff.size}px;height:${MARKER.dropoff.size}px;border-radius:50%;background:${MAP_COLORS.dropoff};border:3px solid white;box-shadow:${MARKER.dropoff.shadow};display:flex;align-items:center;justify-content:center;"><div style="width:${MARKER.dropoff.innerDot}px;height:${MARKER.dropoff.innerDot}px;border-radius:50%;background:white;"></div></div><div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${MAP_COLORS.dropoff};margin-top:-1px;"></div></div>`;
-      dropoffMarkerRef.current = new (mapboxgl as any).Marker({ element: el })
+      el.style.animation = 'drop-in 0.4s ease-out';
+      el.innerHTML = `
+        <div style="position:relative;width:32px;height:42px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+          <div style="position:absolute;top:0;left:0;width:32px;height:32px;background:${MAP_COLORS.brand};border:3px solid white;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">
+            <div style="width:11px;height:11px;border-radius:50%;background:white;"></div>
+          </div>
+          <div style="position:absolute;top:25px;left:8px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:14px solid ${MAP_COLORS.brand};"></div>
+        </div>`;
+      dropoffMarkerRef.current = new (mapboxgl as any).Marker({ element: el, anchor: 'bottom' })
         .setLngLat([dropoffLocation.longitude, dropoffLocation.latitude])
         .addTo(map);
     }
@@ -952,15 +964,28 @@ function RideMapViewInner(
           </MapboxGL.ShapeSource>
         )}
         {dropoffLocation && (
-          // BUG-218: MarkerView for the same reason as pickup. Anchor at
-          // bottom-center so the pin's tail tip is aligned exactly on the
-          // dropoff coordinate (the visual base of the pin = the GPS point).
+          // BUG-218: MarkerView (not PointAnnotation) so coordinate updates
+          // are picked up. Anchor at bottom-center so the pin tip lands on
+          // the GPS point.
+          // BUG-281: branded TriciGo pin (transparent silhouette tinted to
+          // brand orange) replaces the previous red circle + tail combo.
           <MapboxGL.MarkerView id="dropoff" coordinate={toCoord(dropoffLocation)} anchor={{ x: 0.5, y: 1 }}>
-            <View style={{ width: MARKER.dropoff.size, height: MARKER.dropoff.size + MARKER.dropoff.tailH, alignItems: 'center' }}>
-              <View style={styles.dropoffMarker}>
-                <View style={styles.dropoffInnerDot} />
-              </View>
-              <View style={styles.dropoffTail} />
+            <View
+              style={{
+                shadowColor: '#000',
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 6,
+              }}
+            >
+              <Image
+                source={require('../../assets/markers/dropoff-pin.png')}
+                // Shadow on wrapper View — ImageStyle doesn't accept elevation.
+                style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
+                resizeMode="contain"
+                accessibilityLabel="Destino"
+              />
             </View>
           </MapboxGL.MarkerView>
         )}
