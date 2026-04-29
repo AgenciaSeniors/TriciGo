@@ -67,6 +67,34 @@ module.exports = {
           red: '#CF142B',
           star: '#FFFFFF',
         },
+        // Cuban Modern palette — passenger app identity. See
+        // docs/DESIGN_CLIENT_HOME.md §2 and packages/theme/src/colors.ts
+        // (cubanLight / cubanDark). Use `cuban-*` for light mode, and
+        // toggle to `cuban-dark-*` via `dark:` NativeWind variants.
+        cuban: {
+          paper: '#FFFBF5',     // Main bg — warm cream, not clinical white
+          elev1: '#FFFFFF',     // Cards, inputs, sheets
+          elev2: '#F4EEE2',     // Outer frame / subtle contrast
+          'ink-1': '#1A1414',   // Primary text — warm near-black
+          'ink-2': '#6B7F8F',   // Secondary text / dusk
+          'ink-3': '#A9B4BC',   // Placeholders, meta, disabled
+          orange: '#FF4D00',    // Brand accent
+          warm: '#FFB547',      // Secondary accent — prices, badges
+          dusk: '#6B7F8F',      // Cool accent — dividers, secondary text
+          line: 'rgba(26, 20, 20, 0.08)',
+        },
+        'cuban-dark': {
+          paper: '#0A0E1A',     // Main bg — deep navy
+          elev1: '#11172A',     // Cards, inputs
+          elev2: '#18203A',     // Outer frame / modal backdrop
+          'ink-1': '#F4F0EA',   // Primary text — warm cream, not pure white
+          'ink-2': '#B7C4CF',   // Secondary text
+          'ink-3': '#6B7F8F',   // Placeholders
+          orange: '#FF4D00',
+          warm: '#FFB547',
+          dusk: '#4A6278',      // Darker dusk for dark bg
+          line: 'rgba(244, 240, 234, 0.08)',
+        },
         // Semantic surface tokens (driven by CSS vars — see globals.css)
         surface: {
           DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
