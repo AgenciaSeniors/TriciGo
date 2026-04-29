@@ -14,6 +14,7 @@ import { DEMO_MODE, DEMO_DIAL_CODES, isValidDemoPhone, normalizeDemoPhone } from
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
+import { useTokens } from '@/hooks/useTokens';
 
 type Step = 'phone' | 'otp';
 
@@ -21,6 +22,7 @@ export default function VerifyPhoneScreen() {
   const { t } = useTranslation('common');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -186,7 +188,7 @@ export default function VerifyPhoneScreen() {
                     style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 24 }}
                     onPress={() => setDialPickerOpen(false)}
                   >
-                    <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 12 }}>
+                    <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 12 }}>
                       {DEMO_DIAL_CODES.map((d) => (
                         <Pressable
                           key={d.code}
@@ -197,7 +199,7 @@ export default function VerifyPhoneScreen() {
                             gap: 10,
                             padding: 14,
                             borderRadius: 12,
-                            backgroundColor: pressed ? '#F4EEE2' : 'transparent',
+                            backgroundColor: pressed ? tokens.bg.elev2 : 'transparent',
                           })}
                         >
                           <Text variant="body" className="font-semibold">{d.emoji} {d.code}</Text>
