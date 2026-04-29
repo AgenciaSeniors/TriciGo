@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { DemoBanner } from '@/components/DemoBanner';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
@@ -237,6 +238,16 @@ function RootLayoutInner() {
     onLayoutReady();
   }, [onLayoutReady]);
 
+  // BUG-289 — keep AnimatedSplash visible 1.2s after fonts load so the
+  // pulse + dot loader actually plays (otherwise on a hot reload the
+  // overlay would fade out instantly and feel pointless).
+  const [splashVisible, setSplashVisible] = React.useState(true);
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    const t = setTimeout(() => setSplashVisible(false), 1200);
+    return () => clearTimeout(t);
+  }, [fontsLoaded]);
+
   if (!fontsLoaded) {
     return null;
   }
@@ -257,6 +268,16 @@ function RootLayoutInner() {
           <Toast />
         </StripeBootstrap>
       </AppProviders>
+      {/* BUG-289 — animated splash overlay (orange gradient, white pin
+          + wordmark, dot loader, "Cuba" tagline). Sits above everything
+          and fades out 250ms after splashVisible flips to false. */}
+      <AnimatedSplash
+        visible={splashVisible}
+        variant="client"
+        tagline="Cuba"
+        pinSource={require('../assets/adaptive-icon.png')}
+        wordmarkSource={require('../assets/logo-wordmark-white.png')}
+      />
     </ErrorBoundary>
   );
 }
