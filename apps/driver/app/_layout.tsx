@@ -26,6 +26,7 @@ import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { Platform } from 'react-native';
 import '../global.css';
 
@@ -284,6 +285,17 @@ function RootLayoutInner() {
     onLayoutReady();
   }, [onLayoutReady]);
 
+  // BUG-289 — keep the AnimatedSplash overlay visible for at least 1.2 s
+  // after fonts load so the pulse + dot loader actually plays. On a hot
+  // reload this is barely noticeable, on a cold start it bridges the
+  // gap between the native splash hiding and the first navigator frame.
+  const [splashVisible, setSplashVisible] = React.useState(true);
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    const t = setTimeout(() => setSplashVisible(false), 1200);
+    return () => clearTimeout(t);
+  }, [fontsLoaded]);
+
   if (!fontsLoaded) {
     return null;
   }
@@ -298,6 +310,16 @@ function RootLayoutInner() {
           <Toast />
         </AppProviders>
       </ErrorBoundary>
+      {/* BUG-289 — branded animated splash overlay. Renders ABOVE the
+          AppProviders so it covers any cold-start flicker, fades out
+          once fonts are loaded + a short hold (so the pulse plays). */}
+      <AnimatedSplash
+        visible={splashVisible}
+        variant="driver"
+        tagline="Modo conductor · Cuba"
+        pinSource={require('../assets/adaptive-icon.png')}
+        wordmarkSource={require('../assets/logo-wordmark-white.png')}
+      />
     </GestureHandlerRootView>
   );
 }
