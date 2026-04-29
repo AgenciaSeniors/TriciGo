@@ -3,7 +3,6 @@ import { View, FlatList, Pressable, RefreshControl, Alert, Image } from 'react-n
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
@@ -12,6 +11,8 @@ import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
+import { useTokens } from '@/hooks/useTokens';
+import { useThemeStore } from '@/stores/theme.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { EmptyState } from '@tricigo/ui/EmptyState';
@@ -385,8 +386,9 @@ function WebRidesScreen() {
 
 function NativeRidesScreen() {
   const { t } = useTranslation('rider');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
 
   const [rides, setRides] = useState<Ride[]>([]);
@@ -539,8 +541,28 @@ function NativeRidesScreen() {
           accessibilityRole="button"
           accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
         >
-          <Card variant="outlined" padding="md" className="mb-3">
-            <View className="flex-row items-center justify-between mb-2">
+          {/* Cuban Modern card \u2014 bg.elev1 surface, subtle hairline,
+              soft shadow in light mode only. */}
+          <View
+            style={{
+              backgroundColor: tokens.bg.elev1,
+              borderColor: tokens.line,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 12,
+              ...(isDark
+                ? {}
+                : {
+                    shadowColor: '#1A1414',
+                    shadowOpacity: 0.04,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 2 },
+                    elevation: 1,
+                  }),
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-3">
               <View className="flex-row items-center gap-2">
                 {item.service_type && vehicleSelectionImages[item.service_type as ServiceTypeSlug] && (
                   <Image
@@ -549,7 +571,10 @@ function NativeRidesScreen() {
                     resizeMode="contain"
                   />
                 )}
-                <Text variant="caption" color="secondary">
+                <Text
+                  variant="captionMono"
+                  style={{ color: tokens.ink.secondary }}
+                >
                   {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
                 </Text>
               </View>
@@ -563,32 +588,67 @@ function NativeRidesScreen() {
               pickupAddress={item.pickup_address}
               dropoffAddress={item.dropoff_address}
               compact
-              className="mb-2"
+              className="mb-3"
             />
 
             <View className="flex-row justify-between items-center">
               <View>
-                <Text variant="body" className="font-semibold">{formatTRC(fare)}</Text>
-                <Text variant="caption" color="tertiary">{'\u2248'} {formatUSD(fareUsd)}</Text>
+                {/* Fare in JetBrains Mono \u2014 gives prices an honest, technical feel. */}
+                <Text
+                  variant="numberMono"
+                  style={{ color: tokens.ink.primary, fontWeight: '600' }}
+                >
+                  {formatTRC(fare)}
+                </Text>
+                <Text variant="caption" style={{ color: tokens.ink.subtle }}>
+                  {'\u2248'} {formatUSD(fareUsd)}
+                </Text>
               </View>
-              <Text variant="caption" color="tertiary">{item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}</Text>
+              <Text variant="caption" style={{ color: tokens.ink.subtle }}>
+                {item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}
+              </Text>
             </View>
-
-          </Card>
+          </View>
         </Pressable>
       </AnimatedCard>
     );
-  }, [t]);
+  }, [t, tokens, isDark]);
 
   return (
     <Screen bg="white" padded>
-      <View className="pt-4 flex-1">
-        <View className="flex-row items-center justify-between mb-2">
-          <Text variant="h3">{t('rides_history.title')}</Text>
+      <View
+        className="pt-4 flex-1"
+        style={{ backgroundColor: tokens.bg.paper }}
+      >
+        <View className="flex-row items-center justify-between mb-4">
+          <Text
+            variant="displayLg"
+            style={{ color: tokens.ink.primary }}
+          >
+            {t('rides_history.title')}
+          </Text>
           {rides.length > 0 && (
-            <Pressable onPress={handleExportCSV} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800" accessibilityRole="button" accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}>
-              <Ionicons name="download-outline" size={14} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
-              <Text variant="caption" color="secondary" className="font-medium">CSV</Text>
+            <Pressable
+              onPress={handleExportCSV}
+              style={{
+                backgroundColor: tokens.bg.elev2,
+                borderRadius: 999,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}
+            >
+              <Ionicons name="download-outline" size={14} color={tokens.ink.secondary} />
+              <Text
+                variant="caption"
+                style={{ color: tokens.ink.secondary, fontWeight: '500' }}
+              >
+                CSV
+              </Text>
             </Pressable>
           )}
         </View>
@@ -601,22 +661,55 @@ function NativeRidesScreen() {
           labels={filterLabels}
         />
 
-        {/* Scheduled rides section */}
+        {/* Scheduled rides section — Cuban Modern card with orange accent */}
         {scheduledRides.length > 0 && (
           <View className="mb-6">
-            <Text variant="h4" className="mb-3">
+            <Text
+              variant="displayMd"
+              style={{ color: tokens.ink.primary, marginBottom: 12 }}
+            >
               {t('ride.scheduled_rides', { defaultValue: 'Viajes programados' })}
             </Text>
             <StaggeredList staggerDelay={60}>
               {scheduledRides.map((ride) => (
                 <Pressable key={ride.id} onPress={() => router.push(`/ride/${ride.id}`)}>
-                  <Card variant="outlined" padding="md" className="mb-3 border-primary-500/30">
+                  <View
+                    style={{
+                      backgroundColor: tokens.bg.elev1,
+                      borderColor: tokens.accent.orange,
+                      borderWidth: 1,
+                      borderRadius: 16,
+                      padding: 16,
+                      marginBottom: 12,
+                      // subtle orange glow on light, none in dark
+                      ...(isDark ? {} : {
+                        shadowColor: tokens.accent.orange,
+                        shadowOpacity: 0.08,
+                        shadowRadius: 12,
+                        shadowOffset: { width: 0, height: 2 },
+                        elevation: 1,
+                      }),
+                    }}
+                  >
                     <View className="flex-row items-center mb-2">
-                      <View className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-950 items-center justify-center mr-3">
-                        <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />
+                      <View
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 999,
+                          backgroundColor: tokens.accent.orangeGlow,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="calendar-outline" size={16} color={tokens.accent.orange} />
                       </View>
                       <View className="flex-1">
-                        <Text variant="bodySmall" color="accent" className="font-semibold">
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: tokens.accent.orange, fontWeight: '600' }}
+                        >
                           {ride.scheduled_at
                             ? formatTimestamp(ride.scheduled_at, 'absolute')
                             : ''}
@@ -629,7 +722,7 @@ function NativeRidesScreen() {
                       dropoffAddress={ride.dropoff_address}
                       compact
                     />
-                  </Card>
+                  </View>
                 </Pressable>
               ))}
             </StaggeredList>
