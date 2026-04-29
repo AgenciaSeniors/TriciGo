@@ -20,6 +20,8 @@ import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
+import { useTokens } from '@/hooks/useTokens';
+import { useThemeStore } from '@/stores/theme.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
@@ -697,8 +699,9 @@ function WebWalletScreen() {
 
 function NativeWalletScreen() {
   const { t } = useTranslation('common');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
 
   const [balance, setBalance] = useState<{
@@ -1147,22 +1150,53 @@ function NativeWalletScreen() {
     const canDownload = !!receipt?.pdf_storage_path;
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
-        <View className="py-3 border-b border-neutral-100 dark:border-neutral-800" accessible={true}>
-          <View className="flex-row items-center">
-            <View className="flex-1">
-              <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
-              <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
+        {/* Cuban Modern visual tokens (sub-project #5) layered over wallet
+            v2 functional structure (USD caption + receipt download from
+            master). Master's outer View handles padding + border via the
+            token system; the inner row keeps amount + USD caption right-
+            aligned, and the optional receipt button hangs below the row
+            on its own line. */}
+        <View
+          style={{
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: tokens.line,
+          }}
+          accessible={true}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={{ color: tokens.ink.primary, fontWeight: '500' }}
+              >
+                {item.description || getTransactionLabel(item.type, isCredit, t)}
+              </Text>
+              <Text
+                variant="captionMono"
+                style={{ color: tokens.ink.subtle, marginTop: 2 }}
+              >
+                {getRelativeDay(item.created_at, t('today'), t('yesterday'))}
+              </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text
-                variant="body"
-                className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-                style={{ fontVariant: ['tabular-nums'] }}
+                variant="numberMono"
+                style={{
+                  fontWeight: '600',
+                  color: isCredit
+                    ? (isDark ? '#4ADE80' : '#16A34A')
+                    : (isDark ? '#F87171' : '#DC2626'),
+                }}
               >
                 {isCredit ? '+' : ''}{formatTriciCoin(amount)}
               </Text>
               {balance.availableUsdCents != null && (
-                <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
+                <Text
+                  variant="captionMono"
+                  style={{ color: tokens.ink.subtle, marginTop: 2 }}
+                >
                   ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
                 </Text>
               )}
@@ -1172,16 +1206,16 @@ function NativeWalletScreen() {
             <Pressable
               onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
               disabled={openingReceipt === receipt.receipt_no}
-              className="mt-1.5 self-start flex-row items-center"
+              style={{ marginTop: 6, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
               accessibilityRole="button"
               accessibilityLabel={t('wallet.download_receipt_aria', { defaultValue: 'Descargar comprobante {{no}}', no: receipt.receipt_no })}
             >
-              <Ionicons name="download-outline" size={13} color={colors.brand.orange} />
-              <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600', marginLeft: 4 }}>
+              <Ionicons name="download-outline" size={13} color={tokens.accent.orange} />
+              <Text variant="captionMono" style={{ color: tokens.accent.orange, fontWeight: '600', marginLeft: 4 }}>
                 {openingReceipt === receipt.receipt_no
                   ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
                   : t('wallet.download_receipt', { defaultValue: 'Comprobante' })}{' '}
-                <Text variant="caption" style={{ color: colors.brand.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
+                <Text variant="captionMono" style={{ color: tokens.accent.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
               </Text>
             </Pressable>
           )}
@@ -1206,13 +1240,18 @@ function NativeWalletScreen() {
 
   return (
     <Screen bg="white" padded>
-      {/* BUG-280 — header now uses pt-6 (was pt-4) so the page title clears
-          the demo banner overlay shown in production-debug builds. The h3
-          was previously cut off when the banner is on. */}
-      <View className="pt-6 flex-1">
+      {/* BUG-280 — header uses pt-6 so the title clears the demo banner overlay
+          shown in production-debug builds. */}
+      <View
+        className="pt-6 flex-1"
+        style={{ backgroundColor: tokens.bg.paper }}
+      >
         <View className="flex-row items-center gap-2.5 mb-5">
           <Image source={tricoinLogo} style={{ width: 40, height: 40 }} resizeMode="contain" />
-          <Text variant="h3">
+          <Text
+            variant="displayLg"
+            style={{ color: tokens.ink.primary }}
+          >
             {t('wallet.title')}
           </Text>
         </View>
@@ -1267,39 +1306,51 @@ function NativeWalletScreen() {
             cards are visually noisy when there's nothing to show. */}
         {monthlyInsights.ridesCount > 0 && (
           <View className="mb-6">
-            <Text variant="h4" className="mb-3">
+            <Text
+              variant="displayMd"
+              style={{ color: tokens.ink.primary, marginBottom: 12 }}
+            >
               {t('wallet.this_month', { defaultValue: 'Este mes' })}
             </Text>
             <View className="flex-row gap-3">
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.total_spent', { defaultValue: 'Total gastado' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {formatTriciCoin(monthlyInsights.totalSpent)}
-                </Text>
-              </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.rides_count', { defaultValue: 'Viajes' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {monthlyInsights.ridesCount}
-                </Text>
-              </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.avg_ride', { defaultValue: 'Promedio' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {formatTriciCoin(monthlyInsights.avgRide)}
-                </Text>
-              </View>
+              {[
+                { label: t('wallet.total_spent', { defaultValue: 'Total gastado' }), value: formatTriciCoin(monthlyInsights.totalSpent) },
+                { label: t('wallet.rides_count', { defaultValue: 'Viajes' }), value: String(monthlyInsights.ridesCount) },
+                { label: t('wallet.avg_ride', { defaultValue: 'Promedio' }), value: formatTriciCoin(monthlyInsights.avgRide) },
+              ].map((stat) => (
+                <View
+                  key={stat.label}
+                  style={{
+                    flex: 1,
+                    backgroundColor: tokens.bg.elev1,
+                    borderColor: tokens.accent.orangeGlow,
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    padding: 14,
+                  }}
+                >
+                  <Text
+                    variant="captionMono"
+                    style={{ color: tokens.ink.secondary, marginBottom: 6 }}
+                  >
+                    {stat.label}
+                  </Text>
+                  <Text
+                    variant="numberMono"
+                    style={{ color: tokens.accent.orange, fontWeight: '600', fontSize: 17 }}
+                  >
+                    {stat.value}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
         )}
 
-        <Text variant="h4" className="mb-3">
+        <Text
+          variant="displayMd"
+          style={{ color: tokens.ink.primary, marginBottom: 12 }}
+        >
           {t('wallet.history')}
         </Text>
 
