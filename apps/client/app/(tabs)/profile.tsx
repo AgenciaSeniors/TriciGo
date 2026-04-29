@@ -18,6 +18,7 @@ import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { Platform } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
+import { useTokens } from '@/hooks/useTokens';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // Web profile: uses real user data from auth store
@@ -146,6 +147,7 @@ function NativeProfileScreen() {
   const reset = useAuthStore((s) => s.reset);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const setUser = useAuthStore((s) => s.setUser);
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -243,14 +245,38 @@ function NativeProfileScreen() {
           />
         }
       >
-        <View className="pt-4">
-          <Text variant="h3" className="mb-6">
+        <View
+          className="pt-4"
+          style={{ backgroundColor: tokens.bg.paper, flex: 1 }}
+        >
+          <Text
+            variant="displayLg"
+            style={{ color: tokens.ink.primary, marginBottom: 24 }}
+          >
             {t('profile.title')}
           </Text>
 
-          {/* User info card */}
+          {/* User info card — Cuban surface, soft shadow on light */}
           <AnimatedCard delay={0}>
-            <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
+            <View
+              style={{
+                backgroundColor: tokens.bg.elev1,
+                borderColor: tokens.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                marginBottom: 24,
+                flexDirection: 'row',
+                alignItems: 'center',
+                ...(isDark ? {} : {
+                  shadowColor: '#1A1414',
+                  shadowOpacity: 0.04,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 1,
+                }),
+              }}
+            >
               <View className="mr-4">
                 <LinearGradient
                   colors={[colors.primary[500], colors.primary[300]]}
@@ -271,7 +297,12 @@ function NativeProfileScreen() {
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center gap-2">
-                  <Text variant="h4">{user?.full_name ?? 'Usuario'}</Text>
+                  <Text
+                    variant="displayMd"
+                    style={{ color: tokens.ink.primary }}
+                  >
+                    {user?.full_name ?? 'Usuario'}
+                  </Text>
                   {user?.level && (
                     <StatusBadge
                       label={t(`profile.level_${user.level}`)}
@@ -279,18 +310,24 @@ function NativeProfileScreen() {
                     />
                   )}
                 </View>
-                <Text variant="bodySmall" color="secondary">
+                <Text
+                  variant="bodySmall"
+                  style={{ color: tokens.ink.secondary, marginTop: 4 }}
+                >
                   {user?.phone ?? '+53 5XXXXXXX'}
                 </Text>
               </View>
-            </Card>
+            </View>
           </AnimatedCard>
 
-          {/* Menu sections */}
+          {/* Menu sections — captionMono labels for that mono-tag feel */}
           <StaggeredList staggerDelay={40}>
             {menuSections.map((section) => (
               <View key={section.title}>
-                <Text variant="caption" color="tertiary" className="mt-5 mb-2 uppercase tracking-wider font-semibold">
+                <Text
+                  variant="captionMono"
+                  style={{ color: tokens.ink.subtle, marginTop: 20, marginBottom: 8 }}
+                >
                   {section.title}
                 </Text>
                 {section.items.map((item, idx) => (
