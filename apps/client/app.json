@@ -81,7 +81,7 @@
         {
           "image": "./assets/logo-wordmark-white.png",
           "imageWidth": 220,
-          "backgroundColor": "#FF4D00",
+          "backgroundColor": "#0F0F23",
           "resizeMode": "contain"
         }
       ],
