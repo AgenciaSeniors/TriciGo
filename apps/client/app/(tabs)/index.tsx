@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -53,7 +53,7 @@ import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { SplitInviteCard } from '@/components/SplitInviteCard';
 import { FareSplitSheet } from '@/components/FareSplitSheet';
-import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory } from '@tricigo/types';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory, Promotion } from '@tricigo/types';
 import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -1731,6 +1731,11 @@ function IdleView() {
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  // Home content feed — promotions + blog posts shown on idle view
+  // (after recents, before services). See docs/superpowers/specs/
+  // 2026-04-29-home-content-cards-design.md.
+  const [activePromos, setActivePromos] = useState<Promotion[]>([]);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   // Surge is calculated in the backend but not shown to users
@@ -1832,6 +1837,41 @@ function IdleView() {
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // Fetch home content feed — active promotions + recent blog posts.
+  // Both are best-effort; failures are silent (the home stays usable
+  // without these sections). Fires once on mount, no realtime updates
+  // (idle content doesn't change often enough to justify a subscription).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const nowIso = new Date().toISOString();
+        // Active promos: is_active=true AND (no end date OR not yet expired).
+        const { data: promos } = await supabase
+          .from('promotions')
+          .select('*')
+          .eq('is_active', true)
+          .or(`valid_until.is.null,valid_until.gt.${nowIso}`)
+          .order('created_at', { ascending: false })
+          .limit(6);
+        if (!cancelled && Array.isArray(promos)) {
+          setActivePromos(promos as Promotion[]);
+        }
+      } catch (err) {
+        logger.warn('Failed to load promotions feed', { error: String(err) });
+      }
+
+      try {
+        const posts = await blogService.getPublishedPosts(0, 6);
+        if (!cancelled) setBlogPosts(posts);
+      } catch (err) {
+        logger.warn('Failed to load blog feed', { error: String(err) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fallback timeout for loading state
   useEffect(() => {
@@ -2106,6 +2146,176 @@ function IdleView() {
               onSelect={handleRecentSelect}
               mode={mode}
             />
+          </View>
+        )}
+
+        {/* ── Promos ── horizontal scroll of active promotions */}
+        {activePromos.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.promos_label', { defaultValue: 'PROMOS' })}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingRight: 16 }}
+            >
+              {activePromos.map((promo) => {
+                // Build a human-readable headline from the schema fields.
+                // Promotions have no title column — synthesize one from
+                // discount_percent / discount_fixed_cup. Centavos → CUP.
+                const headline = promo.discount_percent
+                  ? `${promo.discount_percent}% OFF`
+                  : promo.discount_fixed_cup
+                    ? `${Math.round(promo.discount_fixed_cup / 100)} CUP`
+                    : '🎁';
+                const expiry = promo.valid_until
+                  ? new Date(promo.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                  : null;
+                return (
+                  <Pressable
+                    key={promo.id}
+                    onPress={() => router.push('/profile/referral')}
+                    style={{
+                      width: 220,
+                      backgroundColor: tokens.bg.elev1,
+                      borderColor: tokens.accent.orange,
+                      borderWidth: 1,
+                      borderRadius: 16,
+                      padding: 14,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Promo ${promo.code}: ${headline}`}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <View
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 999,
+                          backgroundColor: tokens.accent.orangeGlow,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="pricetag" size={14} color={tokens.accent.orange} />
+                      </View>
+                      <Text
+                        style={{
+                          fontFamily: 'JetBrainsMono_500Medium',
+                          fontSize: 11,
+                          color: tokens.ink.subtle,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {promo.code}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: 'BricolageGrotesque_700Bold',
+                        fontSize: 22,
+                        color: tokens.accent.orange,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {headline}
+                    </Text>
+                    {expiry && (
+                      <Text
+                        style={{
+                          fontFamily: 'JetBrainsMono_400Regular',
+                          fontSize: 10,
+                          color: tokens.ink.subtle,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {t('home.promo_expires', { defaultValue: `Hasta ${expiry}`, date: expiry })}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── Novedades (blog) ── horizontal scroll of recent posts */}
+        {blogPosts.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.news_label', { defaultValue: 'NOVEDADES' })}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingRight: 16 }}
+            >
+              {blogPosts.map((post) => (
+                <Pressable
+                  key={post.id}
+                  onPress={() => router.push('/profile/blog')}
+                  style={{
+                    width: 240,
+                    backgroundColor: tokens.bg.elev1,
+                    borderColor: tokens.line,
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={post.title_es}
+                >
+                  {post.cover_image_url ? (
+                    <Image
+                      source={{ uri: post.cover_image_url }}
+                      style={{ width: '100%', height: 100 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    // Fallback gradient when no cover — uses brand orange.
+                    <View
+                      style={{
+                        width: '100%',
+                        height: 100,
+                        backgroundColor: tokens.bg.elev2,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="newspaper-outline" size={28} color={tokens.ink.subtle} />
+                    </View>
+                  )}
+                  <View style={{ padding: 12 }}>
+                    <Text
+                      numberOfLines={2}
+                      style={{
+                        fontFamily: 'BricolageGrotesque_600SemiBold',
+                        fontSize: 14,
+                        color: tokens.ink.primary,
+                        marginBottom: 4,
+                        lineHeight: 18,
+                      }}
+                    >
+                      {post.title_es}
+                    </Text>
+                    {post.excerpt_es && (
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          color: tokens.ink.subtle,
+                          lineHeight: 14,
+                        }}
+                      >
+                        {post.excerpt_es}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         )}
 
