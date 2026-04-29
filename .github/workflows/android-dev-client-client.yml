@@ -1,0 +1,158 @@
+name: Android Dev Client APK — client
+
+# Builds a debug-variant APK with expo-dev-client active.
+# JS is NOT bundled into the APK — the dev client connects to a
+# local Metro server at runtime (run `pnpm start` in apps/client).
+# This enables hot reload (HMR) of JS/TS changes without rebuilding
+# the APK. NOT for end users — only for internal dev iteration.
+#
+# Triggered by tags `client-v*-dev` (e.g. client-v1.1.17-dev) or
+# manually via "Run workflow" in the Actions tab.
+
+on:
+  push:
+    tags:
+      - 'client-v*-dev'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build client dev client APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Write google-services.json (from GH secret, else placeholder)
+        env:
+          CLIENT_GS: ${{ secrets.CLIENT_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$CLIENT_GS" ]; then
+            echo "$CLIENT_GS" > apps/client/google-services.json
+            echo "✓ Wrote real google-services.json from CLIENT_GOOGLE_SERVICES_JSON secret"
+          else
+            cat > apps/client/google-services.json <<'PLACEHOLDER'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "tricigo-placeholder",
+              "storage_bucket": "tricigo-placeholder.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "app.tricigo.client"
+                  }
+                },
+                "api_key": [{ "current_key": "PLACEHOLDER_API_KEY" }],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          PLACEHOLDER
+            echo "⚠ No GH secret — wrote placeholder. Push notifications will not work in this build."
+          fi
+
+      - name: Expo prebuild (native android project)
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
+          EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
+          EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
+          EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+        run: |
+          cd apps/client
+          pnpm exec expo prebuild --platform android --no-install --clean
+
+      - name: Bump Gradle JVM heap (prevent OOM)
+        run: |
+          cd apps/client/android
+          if grep -q "^org.gradle.jvmargs=" gradle.properties; then
+            sed -i 's|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8|' gradle.properties
+          else
+            echo "" >> gradle.properties
+            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> gradle.properties
+          fi
+          grep "^org.gradle.jvmargs" gradle.properties
+
+      - name: Build debug APK (dev client, JS served by Metro)
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+          GRADLE_OPTS: "-Xmx6g -Dfile.encoding=UTF-8"
+          JAVA_TOOL_OPTIONS: "-Xmx6g"
+        run: |
+          cd apps/client/android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Locate + rename APK
+        id: apk
+        run: |
+          cd apps/client/android/app/build/outputs/apk/debug
+          ls -la
+          SRC=$(ls app-debug.apk)
+          TAG="${{ github.ref_name }}"
+          # workflow_dispatch has ref_name=branch (e.g. master); tag has the actual tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="manual-$(date +%Y%m%d-%H%M%S)"
+          fi
+          DEST="tricigo-client-${TAG}-dev.apk"
+          mv "$SRC" "$DEST"
+          echo "dest=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tricigo-client-dev-apk
+          path: apps/client/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "### ✅ Dev Client APK built (client)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- App: **client**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag/Ref: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- File: ${{ steps.apk.outputs.dest }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Download: [Actions → this run → Artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### How to use" >> $GITHUB_STEP_SUMMARY
+          echo "1. Install APK on Android (\"Install from unknown sources\")." >> $GITHUB_STEP_SUMMARY
+          echo "2. On laptop (same WiFi as device):" >> $GITHUB_STEP_SUMMARY
+          echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "   cd apps/client" >> $GITHUB_STEP_SUMMARY
+          echo "   # Demo mode (Brazil)" >> $GITHUB_STEP_SUMMARY
+          echo "   EXPO_PUBLIC_DEMO_MODE=true EXPO_PUBLIC_DEMO_CITY=sao_paulo pnpm start" >> $GITHUB_STEP_SUMMARY
+          echo "   # Or prod mode (Cuba) — same APK" >> $GITHUB_STEP_SUMMARY
+          echo "   pnpm start" >> $GITHUB_STEP_SUMMARY
+          echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Open app on device, paste Metro URL or scan QR." >> $GITHUB_STEP_SUMMARY
+          echo "4. Edit any \`.tsx\` — HMR reflects in ~1-3s. No rebuild needed." >> $GITHUB_STEP_SUMMARY
+          echo "5. Fallback if LAN doesn't work: \`pnpm start --tunnel\`." >> $GITHUB_STEP_SUMMARY
