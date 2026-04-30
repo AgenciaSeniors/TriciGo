@@ -79,8 +79,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo-wordmark-white.png",
-          "imageWidth": 220,
+          "image": "./assets/adaptive-icon.png",
+          "imageWidth": 120,
           "backgroundColor": "#0F0F23",
           "resizeMode": "contain"
         }
