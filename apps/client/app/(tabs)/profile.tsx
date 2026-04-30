@@ -58,14 +58,12 @@ function WebProfileScreen() {
       items: [
         { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety', iconBg: 'success' as const },
         { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts', iconBg: 'info' as const },
-        { icon: 'car-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), href: '/profile/ride-preferences', iconBg: 'warning' as const },
       ],
     },
     {
       title: t('profile.section_business', { defaultValue: 'Negocios' }),
       items: [
         { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Cuentas corporativas' }), href: '/profile/corporate', iconBg: 'neutral' as const },
-        { icon: 'repeat-outline' as const, label: t('profile.recurring_rides', { defaultValue: 'Viajes recurrentes' }), href: '/profile/recurring-rides', iconBg: 'info' as const },
       ],
     },
     {
@@ -203,7 +201,6 @@ function NativeProfileScreen() {
       items: [
         { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
         { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations'), iconBg: 'info' as const },
-        { icon: 'options-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/ride-preferences'), iconBg: 'warning' as const },
       ],
     },
     {
@@ -216,7 +213,6 @@ function NativeProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        { icon: 'repeat-outline' as const, label: t('recurring_rides'), onPress: () => router.push('/profile/recurring-rides'), iconBg: 'info' as const },
         { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
       ],
     },
