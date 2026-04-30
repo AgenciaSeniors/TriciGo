@@ -53,22 +53,26 @@ Deno.serve(async (req) => {
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, 3, 5 * 60 * 1000);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs);
 
-    // ── Route by country: Cuba → Meta Cloud API, rest → Twilio Verify ──
+    // ── Route by country: Cuba → D7 SMS (with Meta WhatsApp fallback), rest → Twilio Verify ──
     if (normalizedPhone.startsWith('+53')) {
-      // ── Cuba → Meta Cloud API WhatsApp ──
+      // ── Cuba: D7 Networks SMS preferred, Meta WhatsApp fallback ──
+      const d7Token = Deno.env.get('D7_API_TOKEN');
+      const d7Sender = Deno.env.get('D7_SENDER_ID') || 'TriciGo';
       const metaToken = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
       const metaPhoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
 
-      if (!metaToken || !metaPhoneId) {
-        // BUG-089: Return 503 error instead of fake success when SMS service is not configured
-        console.error(`[send-sms-otp] Meta WhatsApp credentials not configured for Cuba OTP`);
+      const useD7 = !!d7Token;
+      const useMeta = !!(metaToken && metaPhoneId);
+
+      if (!useD7 && !useMeta) {
+        console.error(`[send-sms-otp] No Cuba OTP provider configured (need D7_API_TOKEN or META_WHATSAPP_*)`);
         return new Response(
           JSON.stringify({ error: 'SMS service not configured' }),
           { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
 
-      // Generate 6-digit OTP
+      // Generate 6-digit OTP — verify-otp reads otp_codes via verify_cuba_otp RPC
       const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
         .map(b => b % 10).join('');
 
@@ -92,7 +96,58 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Send via Meta Cloud API WhatsApp
+      // ── D7 Networks SMS (preferred when configured) ──
+      if (useD7) {
+        const d7Url = 'https://api.d7networks.com/messages/v1/send';
+        const d7Body = {
+          messages: [{
+            channel: 'sms',
+            recipients: [normalizedPhone],
+            content: `Tu código TriciGo es ${code}. Vence en 10 min. No lo compartas.`,
+            msg_type: 'text',
+            data_coding: 'text',
+          }],
+          message_globals: {
+            originator: d7Sender,
+            report_url: '',
+          },
+        };
+
+        const d7Response = await fetch(d7Url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${d7Token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(d7Body),
+        });
+
+        const d7Result = await d7Response.json().catch(() => ({}));
+        console.log('D7 Networks response:', JSON.stringify({
+          status: d7Response.status,
+          request_id: (d7Result as { request_id?: string }).request_id,
+          errors: (d7Result as { errors?: unknown }).errors,
+        }));
+
+        if (d7Response.ok) {
+          return new Response(
+            JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
+            { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+          );
+        }
+
+        // D7 failed — fall through to Meta WhatsApp if configured
+        console.error('D7 Networks failed, trying Meta fallback:', d7Result);
+        if (!useMeta) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'SMS provider failed', detail: d7Result }),
+            { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+
+      // ── Meta WhatsApp fallback / primary if D7 not set ──
       const whatsappTo = normalizedPhone.replace('+', '');
       const metaUrl = `https://graph.facebook.com/v21.0/${metaPhoneId}/messages`;
 
@@ -129,7 +184,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, message: 'Verification sent via WhatsApp' }),
+        JSON.stringify({ success: true, message: 'Verification sent via WhatsApp', provider: 'meta' }),
         { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
 
