@@ -1153,53 +1153,67 @@ function NativeWalletScreen() {
           {t('wallet.history', { defaultValue: 'HISTORIAL' })}
         </Text>
 
-        {/* BUG-280 — filter chips height fix v2.
-            Bug: when the FlatList below had few items (e.g. filter "Recargas"
-            showing 2 rows), the parent flex-1 column gave extra vertical space
-            to the chip ScrollView, and `flex-row` (default align-items: stretch)
-            stretched every chip to fill that height — chips became huge ovals.
-            Fix:
-              1. ScrollView: style flexGrow:0 + maxHeight so it stops expanding.
-              2. Wrapper: items-start (align-items: flex-start) so each chip
-                 sizes to its content height regardless of the row height. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mb-3"
-          style={{ flexGrow: 0, maxHeight: 48 }}
-          contentContainerStyle={{ paddingRight: 16, alignItems: 'flex-start' }}
-        >
-          <View className="flex-row gap-2 items-start">
-            {filterOptions.map((opt) => (
-              <Pressable
-                key={opt.key}
-                onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
-                // HIG fix — extend the tap area on all 4 sides so the
-                // ~36pt-tall chip becomes a 48pt+ effective target.
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                className={`px-4 py-2 rounded-full border self-start ${
-                  activeFilter === opt.key
-                    ? 'bg-primary-500 border-primary-500'
-                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-                }`}
-                accessibilityRole="radio"
-                // a11y fix — VoiceOver was just announcing "radio button,
-                // selected/not selected" without distinguishing chips.
-                // Now each chip says its label ("Todos", "Recargas", etc.).
-                accessibilityLabel={opt.label}
-                accessibilityState={{ selected: activeFilter === opt.key }}
-              >
-                <Text
-                  variant="caption"
-                  color={activeFilter === opt.key ? 'inverse' : 'secondary'}
-                  className="font-medium"
+        {/* Filter chips — clean implementation that doesn't fight the
+            parent layout. Wrapping the ScrollView in a fixed-height
+            container is enough to prevent the FlatList sibling from
+            stretching it; no `items-start` / `self-start` / maxHeight
+            hacks needed. Each chip gets a fixed minHeight so the row
+            looks uniform regardless of which one is active. */}
+        <View style={{ height: 40, marginBottom: 12 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingRight: 16, alignItems: 'center' }}
+          >
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              {filterOptions.map((opt) => (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
+                  // HIG fix — extend the tap area on all 4 sides so the
+                  // 36pt-tall chip becomes a 48pt+ effective target.
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  style={{
+                    height: 36,
+                    paddingHorizontal: 16,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor:
+                      activeFilter === opt.key
+                        ? tokens.accent.orange
+                        : tokens.bg.elev1,
+                    borderColor:
+                      activeFilter === opt.key
+                        ? tokens.accent.orange
+                        : tokens.line,
+                  }}
+                  accessibilityRole="radio"
+                  // a11y fix — VoiceOver was just announcing "radio button,
+                  // selected/not selected" without distinguishing chips.
+                  // Now each chip says its label ("Todos", "Recargas", etc.).
+                  accessibilityLabel={opt.label}
+                  accessibilityState={{ selected: activeFilter === opt.key }}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
+                  <Text
+                    variant="caption"
+                    style={{
+                      fontWeight: '500',
+                      color:
+                        activeFilter === opt.key
+                          ? '#FFFFFF'
+                          : tokens.ink.secondary,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
 
         <FlatList
           data={filteredTransactions}
