@@ -1736,6 +1736,15 @@ function IdleView() {
   // 2026-04-29-home-content-cards-design.md.
   const [activePromos, setActivePromos] = useState<Promotion[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  // Last completed ride — re-engagement card (¿Volver a [destino]?)
+  const [lastRide, setLastRide] = useState<{
+    id: string;
+    pickup_address: string;
+    dropoff_address: string;
+    pickup_location: { latitude: number; longitude: number } | null;
+    dropoff_location: { latitude: number; longitude: number } | null;
+    created_at: string;
+  } | null>(null);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   // Surge is calculated in the backend but not shown to users
@@ -1872,6 +1881,39 @@ function IdleView() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Last ride — fetch the most recent COMPLETED trip so we can show a
+  // "¿Volver a [destino]?" card. Re-engagement pattern from Uber Eats:
+  // most repeat trips are to the same handful of destinations, so a
+  // 1-tap shortcut to the last drop-off saves the user from typing.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await rideService.getRideHistoryFiltered({
+          userId: user.id,
+          page: 0,
+          pageSize: 1,
+          status: ['completed'],
+        });
+        if (cancelled || !data || data.length === 0) return;
+        const ride = data[0];
+        if (!ride) return;
+        setLastRide({
+          id: ride.id,
+          pickup_address: ride.pickup_address ?? '',
+          dropoff_address: ride.dropoff_address ?? '',
+          pickup_location: ride.pickup_location,
+          dropoff_location: ride.dropoff_location,
+          created_at: ride.created_at,
+        });
+      } catch (err) {
+        logger.warn('Failed to load last ride', { error: String(err) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   // Fallback timeout for loading state
   useEffect(() => {
@@ -2146,6 +2188,75 @@ function IdleView() {
               onSelect={handleRecentSelect}
               mode={mode}
             />
+          </View>
+        )}
+
+        {/* ── Tu último viaje ── 1-tap re-book of the last completed trip */}
+        {lastRide && lastRide.dropoff_address && lastRide.dropoff_location && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.last_ride_label', { defaultValue: 'TU ÚLTIMO VIAJE' })}
+            </Text>
+            <Pressable
+              onPress={() => {
+                if (!lastRide.dropoff_location) return;
+                triggerHaptic('light');
+                setDropoff(lastRide.dropoff_address, lastRide.dropoff_location);
+                setFlowStep('selecting');
+              }}
+              style={{
+                backgroundColor: tokens.bg.elev1,
+                borderColor: tokens.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.last_ride_a11y', {
+                defaultValue: `Volver a ${lastRide.dropoff_address}`,
+                address: lastRide.dropoff_address,
+              })}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  backgroundColor: tokens.accent.orangeGlow,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="repeat" size={20} color={tokens.accent.orange} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    color: tokens.ink.subtle,
+                    marginBottom: 2,
+                  }}
+                >
+                  {t('home.go_back_to', { defaultValue: '¿Volver a' })}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: '600',
+                    color: tokens.ink.primary,
+                  }}
+                >
+                  {lastRide.dropoff_address}?
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={tokens.ink.subtle} />
+            </Pressable>
           </View>
         )}
 
