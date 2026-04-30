@@ -345,7 +345,7 @@ export default function CorporateProfileScreen() {
   };
 
   return (
-    <Screen bg="white" padded scroll>
+    <Screen bg="cuban" padded scroll>
       <ScreenHeader
         title={t('corporate.title', { defaultValue: 'Cuenta Corporativa' })}
         onBack={() => router.back()}

@@ -179,7 +179,7 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
 

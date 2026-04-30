@@ -148,7 +148,7 @@ export default function ReferralScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader title={t('profile.referral_title')} onBack={() => router.back()} />
 

@@ -108,7 +108,7 @@ export default function RideDetailScreen() {
 
   if (loading) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <SkeletonCard lines={2} />
           <SkeletonCard lines={3} />
@@ -120,7 +120,7 @@ export default function RideDetailScreen() {
 
   if (!ride) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <ScreenHeader title="" onBack={() => router.back()} />
           <Text variant="body" color="tertiary">{t('ride.not_found')}</Text>
@@ -147,7 +147,7 @@ export default function RideDetailScreen() {
   };
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4 pb-8">
         {/* Header */}
         <ScreenHeader

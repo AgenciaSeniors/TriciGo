@@ -49,7 +49,7 @@ export default function DisputeFormScreen() {
 
   if (!disputesEnabled) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <ScreenHeader title="" onBack={() => router.back()} />
           <Text variant="body" color="tertiary">Feature not available</Text>
@@ -138,7 +138,7 @@ export default function DisputeFormScreen() {
 
   if (submitted) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4 flex-1 items-center justify-center px-6">
           <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mb-4">
             <Text variant="h2">✓</Text>
@@ -160,7 +160,7 @@ export default function DisputeFormScreen() {
   }
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4 pb-8">
         <ScreenHeader
           title={t('dispute.title')}

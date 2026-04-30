@@ -48,7 +48,7 @@ export default function RideShareTokenScreen() {
 
   if (error) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="flex-1 items-center justify-center">
           <Text variant="h3" className="mb-2">
             {t('deeplink.ride_not_found', { defaultValue: 'Viaje no encontrado' })}
@@ -67,7 +67,7 @@ export default function RideShareTokenScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.brand.orange} />
         <Text variant="body" color="secondary" className="mt-4">

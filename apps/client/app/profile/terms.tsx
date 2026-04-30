@@ -115,7 +115,7 @@ export default function TermsScreen() {
 
   if (Platform.OS === 'web') {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4 flex-1">
           <ScreenHeader title={headerTitle} onBack={() => router.back()} />
           {body}
@@ -125,7 +125,7 @@ export default function TermsScreen() {
   }
 
   return (
-    <Screen bg="white" padded={false}>
+    <Screen bg="cuban" padded={false}>
       <View className="pt-4 px-4">
         <ScreenHeader title={headerTitle} onBack={() => router.back()} />
       </View>

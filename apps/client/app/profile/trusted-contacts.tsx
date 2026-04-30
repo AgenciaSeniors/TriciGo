@@ -93,7 +93,7 @@ export default function TrustedContactsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadContacts(); }} />;
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}

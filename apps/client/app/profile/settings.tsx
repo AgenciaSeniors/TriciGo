@@ -143,7 +143,7 @@ export default function SettingsScreen() {
     currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Portugues' });
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.settings_title')} onBack={() => router.back()} />
 

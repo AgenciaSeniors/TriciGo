@@ -173,7 +173,7 @@ export default function SavedLocationsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadLocations(); }} />;
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader title={t('profile.saved_locations_title')} onBack={() => router.back()} />
 

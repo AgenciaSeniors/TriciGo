@@ -14,7 +14,7 @@ export default function AboutScreen() {
   const { t } = useTranslation('common');
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.about_title')} onBack={() => router.back()} />
 
