@@ -57,7 +57,16 @@ export default function BusinessesPage() {
     {
       id: 'name',
       header: t('businesses.col_company', { defaultValue: 'Empresa' }),
-      cell: (a) => <span className="font-medium text-ink">{a.name}</span>,
+      cell: (a) => (
+        <span className="font-medium text-ink inline-flex items-center gap-2">
+          {a.name}
+          {a.is_fleet_owner && (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+              Flota
+            </span>
+          )}
+        </span>
+      ),
       primary: true,
     },
     {
