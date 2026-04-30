@@ -19,6 +19,7 @@ export * from './support';
 export * from './quest';
 export * from './payment';
 export * from './corporate';
+export * from './fleet';
 export * from './dispute';
 export * from './notification';
 export * from './lost-item';

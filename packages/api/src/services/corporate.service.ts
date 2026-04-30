@@ -509,4 +509,118 @@ export const corporateService = {
     if (error) return 0;
     return data?.balance ?? 0;
   },
+
+  // ─────────────────────────── Client Request Flow (00235) ───────────────────────────
+
+  /**
+   * Public-facing request submission for a regular (non-fleet) corporate
+   * client. Creates a corporate_account in status='pending' so admins can
+   * review it from /admin/businesses. Reuses registerAccount for the core
+   * insert + employee link + wallet bootstrap, then layers the operational
+   * metadata captured by the form.
+   *
+   * The form fields (sector, employees_count, estimated_rides_per_month,
+   * preferred_payment, comments) are not first-class columns; they are
+   * stored in the per_ride / hours / notes-equivalent fields where they
+   * map naturally, plus a JSON blob in `notes` for free-form data so we
+   * don't need yet another migration just to capture the form payload.
+   */
+  async submitClientRequest(params: {
+    name: string;
+    contact_phone: string;
+    contact_email?: string;
+    tax_id?: string;
+    created_by: string;
+    sector?: string;
+    employees_count_range?: string;
+    estimated_rides_per_month?: number;
+    operating_hours_start?: string;
+    operating_hours_end?: string;
+    preferred_payment?: 'cash' | 'tricicoin' | 'mixed' | 'card';
+    requires_invoice?: boolean;
+    comments?: string;
+  }): Promise<CorporateAccount> {
+    const account = await this.registerAccount({
+      name: params.name,
+      contact_phone: params.contact_phone,
+      contact_email: params.contact_email,
+      tax_id: params.tax_id,
+      created_by: params.created_by,
+    });
+
+    const supabase = getSupabaseClient();
+    const updates: Record<string, unknown> = {};
+    if (params.operating_hours_start) updates.allowed_hours_start = params.operating_hours_start;
+    if (params.operating_hours_end) updates.allowed_hours_end = params.operating_hours_end;
+
+    const requestNotes = {
+      sector: params.sector ?? null,
+      employees_count_range: params.employees_count_range ?? null,
+      estimated_rides_per_month: params.estimated_rides_per_month ?? null,
+      preferred_payment: params.preferred_payment ?? null,
+      requires_invoice: params.requires_invoice ?? false,
+      comments: params.comments ?? null,
+    };
+    updates.suspended_reason = JSON.stringify({ request: requestNotes });
+
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase
+        .from('corporate_accounts')
+        .update(updates)
+        .eq('id', account.id);
+      if (error) throw error;
+    }
+
+    return account;
+  },
+
+  /**
+   * Returns the user's most recent corporate request (any status). Used
+   * by the client app to render the right state on /profile/corporate:
+   * form, "in review", "rejected — resubmit", or full dashboard.
+   */
+  async getRequestStatus(userId: string): Promise<CorporateAccount | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('corporate_accounts')
+      .select('*')
+      .eq('created_by', userId)
+      .eq('is_fleet_owner', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) return null;
+    return data as CorporateAccount | null;
+  },
+
+  /**
+   * Admin: set the variable commission rate for a corporate account.
+   * Decimal percent (e.g. 8.5 = 8.5%). Pass null to revert to the
+   * platform default. complete_ride_and_pay (00236) reads this column
+   * at billing time, applying the discount to the rider while keeping
+   * driver earnings whole.
+   */
+  async setCommissionPercent(
+    accountId: string,
+    percent: number | null,
+    adminId: string,
+  ): Promise<void> {
+    if (percent !== null && (percent < 0 || percent > 15)) {
+      throw new Error('COMMISSION_OUT_OF_RANGE');
+    }
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('corporate_accounts')
+      .update({ commission_percent: percent })
+      .eq('id', accountId);
+    if (error) throw error;
+
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: 'set_corporate_commission',
+      target_type: 'corporate_account',
+      target_id: accountId,
+      reason: percent === null ? 'reverted to platform default' : `${percent}%`,
+    });
+  },
 };
