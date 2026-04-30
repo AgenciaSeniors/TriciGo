@@ -2515,16 +2515,20 @@ const VEHICLE_ICONS: Record<string, any> = {
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
 function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'waypoint' | null) => void }) {
-  // BUG-282 — initial map center. Read the cached last-known position from
-  // AsyncStorage (written by IdleView's GPS effect) so the map opens at
-  // "where you are" instead of the demo-city fallback (São Paulo). Stays
-  // null on first launch ever — RideMapView falls back to HAVANA_CENTER
-  // / demo city in that case. Once draft.pickup is set (post-IdleView)
-  // the camera fits bounds anyway and this initial value is discarded.
+  // BUG-282 (revised) — initial map center.
+  // Two-stage resolution: (1) AsyncStorage cache for an instant first
+  // frame, (2) fresh GPS fix that overrides the cache once it arrives.
+  // Without (2), a first-ever install (empty cache) or a stale cache
+  // would leave the map stuck at the demo fallback (São Paulo) even
+  // when the user is somewhere else (e.g. Foz do Iguaçu). The Camera's
+  // `key` prop in RideMapView remounts cleanly on each update.
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   useEffect(() => {
+    let cancelled = false;
+
+    // Stage 1: instant read from cache (no GPS hardware wait)
     AsyncStorage.getItem('last_known_location').then((cached) => {
-      if (!cached) return;
+      if (cancelled || !cached) return;
       try {
         const { latitude, longitude } = JSON.parse(cached);
         if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
@@ -2532,6 +2536,37 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         }
       } catch { /* malformed */ }
     }).catch(() => {});
+
+    // Stage 2: fresh GPS — gives the truth even on first install or
+    // after the user moved cities. Permission was already requested
+    // in IdleView; we only call the position APIs (no permission UI
+    // re-prompt here).
+    (async () => {
+      try {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted' || cancelled) return;
+        // Cheapest first: last known native fix (instant if any app
+        // touched GPS recently). Then fall back to a fresh fix.
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
+        if (!pos || cancelled) return;
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+        setUserCenter([lng, lat]);
+        // Refresh cache so any sibling/subsequent view also benefits.
+        AsyncStorage.setItem(
+          'last_known_location',
+          JSON.stringify({ latitude: lat, longitude: lng }),
+        ).catch(() => {});
+      } catch { /* silently fall back to cache */ }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
