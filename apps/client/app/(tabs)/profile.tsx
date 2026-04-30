@@ -17,9 +17,10 @@ import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { Platform } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
-import { useThemeStore } from '@/stores/theme.store';
+import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import { useTokens } from '@/hooks/useTokens';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Switch } from 'react-native';
 
 // Web profile: uses real user data from auth store
 function WebProfileScreen() {
@@ -249,14 +250,15 @@ function NativeProfileScreen() {
           className="pt-4"
           style={{ backgroundColor: tokens.bg.paper, flex: 1 }}
         >
-          <Text
-            variant="displayLg"
-            style={{ color: tokens.ink.primary, marginBottom: 24 }}
-          >
-            {t('profile.title')}
-          </Text>
+          {/* iOS-style small title — Inter h4 (20pt) instead of Bricolage 28pt */}
+          <View className="flex-row items-center justify-between mb-4">
+            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+              {t('profile.title')}
+            </Text>
+          </View>
 
-          {/* User info card — Cuban surface, soft shadow on light */}
+          {/* User info card — compact Cuban surface with quick dark-mode
+              toggle inline (instant access from any session). */}
           <AnimatedCard delay={0}>
             <View
               style={{
@@ -264,10 +266,8 @@ function NativeProfileScreen() {
                 borderColor: tokens.line,
                 borderWidth: 1,
                 borderRadius: 16,
-                padding: 16,
-                marginBottom: 24,
-                flexDirection: 'row',
-                alignItems: 'center',
+                padding: 14,
+                marginBottom: 8,
                 ...(isDark ? {} : {
                   shadowColor: '#1A1414',
                   shadowOpacity: 0.04,
@@ -277,45 +277,78 @@ function NativeProfileScreen() {
                 }),
               }}
             >
-              <View className="mr-4">
-                <LinearGradient
-                  colors={[colors.primary[500], colors.primary[300]]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 32, padding: 3 }}
-                >
-                  <View style={{ borderRadius: 29, overflow: 'hidden' }}>
-                    <Avatar
-                      uri={user?.avatar_url}
-                      name={user?.full_name ?? 'U'}
-                      size={56}
-                      onPress={() => router.push('/profile/edit')}
-                      showEditBadge
-                    />
-                  </View>
-                </LinearGradient>
-              </View>
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2">
-                  <Text
-                    variant="displayMd"
-                    style={{ color: tokens.ink.primary }}
+              <View className="flex-row items-center">
+                <View className="mr-3">
+                  <LinearGradient
+                    colors={[colors.primary[500], colors.primary[300]]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ borderRadius: 28, padding: 2.5 }}
                   >
-                    {user?.full_name ?? 'Usuario'}
-                  </Text>
-                  {user?.level && (
-                    <StatusBadge
-                      label={t(`profile.level_${user.level}`)}
-                      variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
-                    />
-                  )}
+                    <View style={{ borderRadius: 25.5, overflow: 'hidden' }}>
+                      <Avatar
+                        uri={user?.avatar_url}
+                        name={user?.full_name ?? 'U'}
+                        size={48}
+                        onPress={() => router.push('/profile/edit')}
+                        showEditBadge
+                      />
+                    </View>
+                  </LinearGradient>
                 </View>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: tokens.ink.secondary, marginTop: 4 }}
-                >
-                  {user?.phone ?? '+53 5XXXXXXX'}
-                </Text>
+                <View className="flex-1">
+                  <View className="flex-row items-center gap-2">
+                    <Text variant="body" style={{ color: tokens.ink.primary, fontWeight: '600' }}>
+                      {user?.full_name ?? 'Usuario'}
+                    </Text>
+                    {user?.level && (
+                      <StatusBadge
+                        label={t(`profile.level_${user.level}`)}
+                        variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
+                      />
+                    )}
+                  </View>
+                  <Text
+                    variant="caption"
+                    style={{ color: tokens.ink.secondary, marginTop: 2 }}
+                  >
+                    {user?.phone ?? '+53 5XXXXXXX'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Quick dark mode toggle — iOS-native Switch, sits inside the
+                  user card so it's reachable in 1 tap from anywhere. The
+                  full Theme settings (system / light / dark) still live in
+                  Settings sub-page for power users. */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: tokens.line,
+                }}
+              >
+                <View className="flex-row items-center gap-2">
+                  <Ionicons
+                    name={isDark ? 'moon' : 'sunny-outline'}
+                    size={18}
+                    color={tokens.accent.orange}
+                  />
+                  <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>
+                    {t('profile.dark_mode', { defaultValue: 'Modo oscuro' })}
+                  </Text>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
+                  trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={tokens.line}
+                />
               </View>
             </View>
           </AnimatedCard>

@@ -621,10 +621,7 @@ function NativeRidesScreen() {
         style={{ backgroundColor: tokens.bg.paper }}
       >
         <View className="flex-row items-center justify-between mb-4">
-          <Text
-            variant="displayLg"
-            style={{ color: tokens.ink.primary }}
-          >
+          <Text variant="h4" style={{ color: tokens.ink.primary }}>
             {t('rides_history.title')}
           </Text>
           {rides.length > 0 && (
@@ -665,10 +662,10 @@ function NativeRidesScreen() {
         {scheduledRides.length > 0 && (
           <View className="mb-6">
             <Text
-              variant="displayMd"
-              style={{ color: tokens.ink.primary, marginBottom: 12 }}
+              variant="captionMono"
+              style={{ color: tokens.ink.subtle, marginBottom: 8 }}
             >
-              {t('ride.scheduled_rides', { defaultValue: 'Viajes programados' })}
+              {t('ride.scheduled_rides_label', { defaultValue: 'VIAJES PROGRAMADOS' })}
             </Text>
             <StaggeredList staggerDelay={60}>
               {scheduledRides.map((ride) => (
