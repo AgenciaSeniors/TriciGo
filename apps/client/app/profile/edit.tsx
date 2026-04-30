@@ -217,7 +217,7 @@ export default function EditProfileScreen() {
               className={`flex-1 py-3 rounded-lg items-center border ${
                 language === lang.value
                   ? 'bg-primary-500 border-primary-500'
-                  : 'bg-white border-neutral-200'
+                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
               }`}
             >
               <Text
@@ -244,7 +244,7 @@ export default function EditProfileScreen() {
               className={`flex-1 py-3 rounded-lg items-center border ${
                 paymentMethod === pm.value
                   ? 'bg-primary-500 border-primary-500'
-                  : 'bg-white border-neutral-200'
+                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
               }`}
             >
               <Text
