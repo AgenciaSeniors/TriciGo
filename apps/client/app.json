@@ -3,11 +3,15 @@
     "name": "TriciGo",
     "slug": "tricigo-client",
     "version": "1.0.0",
+    "newArchEnabled": false,
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "enabled": false
+      "enabled": true,
+      "url": "https://u.expo.dev/bb3c1a52-284b-476e-8a7d-8ef5f04b465e",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
     },
     "orientation": "portrait",
     "icon": "./assets/icon.png",

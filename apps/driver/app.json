@@ -3,6 +3,16 @@
     "name": "TriciGo Conductor",
     "slug": "tricigo-driver",
     "version": "1.0.0",
+    "newArchEnabled": false,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/4f32a103-ff3b-4222-b5f6-22da581f5fc5",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tricigo-driver",
