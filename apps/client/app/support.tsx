@@ -40,7 +40,7 @@ export default function SupportScreen() {
   ];
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="pt-4 pb-8">
           <ScreenHeader

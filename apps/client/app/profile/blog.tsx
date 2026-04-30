@@ -86,7 +86,7 @@ export default function BlogScreen() {
   );
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader
           title={t('profile.blog_title', { defaultValue: 'Blog TriciGo' })}

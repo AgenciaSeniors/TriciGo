@@ -178,7 +178,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <Screen bg="white" padded={false}>
+    <Screen bg="cuban" padded={false}>
       <ScreenHeader
         title={t('notifications.title')}
         onBack={() => router.back()}

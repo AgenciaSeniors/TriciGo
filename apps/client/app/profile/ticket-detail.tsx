@@ -108,7 +108,7 @@ export default function TicketDetailScreen() {
 
   if (loading) {
     return (
-      <Screen bg="white">
+      <Screen bg="cuban">
         <View className="px-5 pt-4">
           <ScreenHeader title="Ticket" onBack={() => router.back()} />
           <SkeletonCard lines={2} />
@@ -119,7 +119,7 @@ export default function TicketDetailScreen() {
   }
 
   return (
-    <Screen bg="white">
+    <Screen bg="cuban">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"

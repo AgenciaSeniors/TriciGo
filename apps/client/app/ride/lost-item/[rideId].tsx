@@ -42,7 +42,7 @@ export default function LostItemReportScreen() {
 
   if (!lostFoundEnabled) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <ScreenHeader title="" onBack={() => router.back()} />
           <Text variant="body" color="tertiary">Feature not available</Text>
@@ -79,7 +79,7 @@ export default function LostItemReportScreen() {
 
   if (submitted) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4 flex-1 items-center justify-center px-6">
           <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mb-4">
             <Ionicons name="checkmark" size={32} color={colors.success.DEFAULT} />
@@ -101,7 +101,7 @@ export default function LostItemReportScreen() {
   }
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4 pb-8">
         <ScreenHeader
           title={t('lost_found.report_item')}
