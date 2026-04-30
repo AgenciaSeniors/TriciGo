@@ -81,9 +81,9 @@ function WebProfileScreen() {
   ];
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
-        <Text variant="h3" className="mb-6">{t('profile.title', { defaultValue: 'Perfil' })}</Text>
+        <Text variant="h4" className="mb-6">{t('profile.title', { defaultValue: 'Perfil' })}</Text>
         <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
           <View className="mr-4">
             <View style={{
@@ -109,7 +109,7 @@ function WebProfileScreen() {
 
         {menuSections.map((section) => (
           <View key={section.title}>
-            <Text variant="caption" color="tertiary" className="mt-5 mb-2 uppercase tracking-wider font-semibold">
+            <Text variant="captionMono" color="tertiary" className="mt-5 mb-2">
               {section.title}
             </Text>
             {section.items.map((item, i) => (
@@ -164,7 +164,7 @@ function NativeProfileScreen() {
 
   if (isLoading) {
     return (
-      <Screen scroll bg="white" padded>
+      <Screen scroll bg="cuban" padded>
         <View className="pt-4">
           <SkeletonCard lines={2} />
           <SkeletonCard lines={3} />
@@ -233,7 +233,7 @@ function NativeProfileScreen() {
   ];
 
   return (
-    <Screen bg="white" padded={false}>
+    <Screen bg="cuban" padded={false}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16 }}
         showsVerticalScrollIndicator={false}

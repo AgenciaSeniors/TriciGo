@@ -3,7 +3,7 @@
 // Full driver profile: photo, rating, stats, vehicle, reviews.
 // ============================================================
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Image,
@@ -21,6 +21,7 @@ import { getInitials, logger, triggerHaptic } from '@tricigo/utils';
 import { reviewService } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { useRideStore } from '@/stores/ride.store';
+import { useTokens, type Tokens } from '@/hooks/useTokens';
 import type { ReviewSummary, ReviewWithReviewer, ReviewTagSentiment } from '@tricigo/types';
 
 interface DriverProfileScreenProps {
@@ -31,6 +32,12 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
   const { t } = useTranslation('rider');
   const router = useRouter();
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
+  // Theme-aware styles — refactored from a static StyleSheet.create
+  // because the previous version hardcoded #FFFFFF, #1F2937, etc.,
+  // which made every text invisible on a dark background. Now the
+  // sheet recomputes when the resolved theme switches.
+  const tokens = useTokens();
+  const styles = useMemo(() => makeStyles(tokens), [tokens]);
 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
@@ -270,6 +277,11 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
 
 function ReviewCard({ review }: { review: ReviewWithReviewer }) {
   const { t } = useTranslation('rider');
+  // Sub-component computes its own theme-aware styles. Same pattern as
+  // the parent — useTokens() + useMemo so the styles refresh when the
+  // user toggles dark mode.
+  const tokens = useTokens();
+  const styles = useMemo(() => makeStyles(tokens), [tokens]);
   const stars = Array.from({ length: 5 }, (_, i) => (
     <Ionicons
       key={i}
@@ -351,285 +363,301 @@ function getRelativeDate(iso: string, t: (key: string, opts?: any) => string): s
 }
 
 // ── Styles ──────────────────────────────────────────────────
+// Theme-aware factory. Receives the resolved Cuban Modern palette
+// from useTokens() and produces a StyleSheet with proper light/dark
+// values. Recomputed via useMemo when scheme switches — see the hook
+// call inside the component.
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+function makeStyles(tokens: Tokens) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: tokens.bg.paper,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 56,
+      paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: tokens.line,
+    },
+    backButton: {
+      width: 44,
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: tokens.ink.primary,
+    },
+    scrollContent: {
+      paddingBottom: 40,
+    },
 
-  // Avatar
-  avatarSection: {
-    alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 16,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  initialsText: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  driverName: {
-    marginTop: 12,
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  reviewCountText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginLeft: 2,
-  },
+    // Avatar
+    avatarSection: {
+      alignItems: 'center',
+      paddingTop: 24,
+      paddingBottom: 16,
+    },
+    avatar: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+    },
+    avatarPlaceholder: {
+      backgroundColor: tokens.accent.orangeGlow,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    initialsText: {
+      fontSize: 40,
+      fontWeight: '700',
+      color: tokens.accent.orange,
+    },
+    driverName: {
+      marginTop: 12,
+      fontSize: 22,
+      fontWeight: '700',
+      color: tokens.ink.primary,
+    },
+    ratingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 4,
+      gap: 4,
+    },
+    ratingText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: tokens.ink.primary,
+    },
+    reviewCountText: {
+      fontSize: 13,
+      color: tokens.ink.secondary,
+      marginLeft: 2,
+    },
 
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 32,
-    marginTop: 8,
-    marginBottom: 20,
-    paddingVertical: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#6B7280',
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#E5E7EB',
-  },
+    // Stats
+    statsRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginHorizontal: 32,
+      marginTop: 8,
+      marginBottom: 20,
+      paddingVertical: 16,
+      backgroundColor: tokens.bg.elev2,
+      borderRadius: 12,
+    },
+    statItem: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 4,
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: tokens.ink.primary,
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: tokens.ink.secondary,
+    },
+    statDivider: {
+      width: 1,
+      height: 32,
+      backgroundColor: tokens.line,
+    },
 
-  // Vehicle
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  vehicleCard: {
-    flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-  },
-  vehiclePhoto: {
-    width: 80,
-    height: 60,
-    borderRadius: 8,
-  },
-  vehiclePhotoPlaceholder: {
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vehicleInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  vehicleTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  vehicleSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  vehiclePlate: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginTop: 4,
-    letterSpacing: 1,
-  },
+    // Vehicle
+    section: {
+      paddingHorizontal: 20,
+      marginTop: 8,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: tokens.ink.primary,
+      marginBottom: 12,
+    },
+    vehicleCard: {
+      flexDirection: 'row',
+      backgroundColor: tokens.bg.elev1,
+      borderRadius: 12,
+      padding: 12,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: tokens.line,
+    },
+    vehiclePhoto: {
+      width: 80,
+      height: 60,
+      borderRadius: 8,
+    },
+    vehiclePhotoPlaceholder: {
+      backgroundColor: tokens.bg.elev2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    vehicleInfo: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    vehicleTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: tokens.ink.primary,
+    },
+    vehicleSubtitle: {
+      fontSize: 13,
+      color: tokens.ink.secondary,
+      marginTop: 2,
+    },
+    vehiclePlate: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: tokens.ink.primary,
+      marginTop: 4,
+      letterSpacing: 1,
+    },
 
-  // Contact
-  contactRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  contactButton: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  contactButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0EA5E9',
-  },
-  reportButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    marginHorizontal: 20,
-    marginTop: 4,
-  },
-  reportButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#9CA3AF',
-  },
+    // Contact
+    contactRow: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingHorizontal: 20,
+      marginTop: 20,
+      marginBottom: 8,
+    },
+    contactButton: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: tokens.line,
+      backgroundColor: tokens.bg.elev1,
+      minHeight: 44, // HIG touch target
+    },
+    contactButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: tokens.accent.orange,
+    },
+    reportButton: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      marginHorizontal: 20,
+      marginTop: 4,
+      minHeight: 44,
+    },
+    reportButtonText: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: tokens.ink.subtle,
+    },
 
-  // Reviews
-  noReviews: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  reviewCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reviewerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  reviewerAvatarPlaceholder: {
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reviewerInitial: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  reviewerInfo: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  reviewerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 1,
-    marginTop: 2,
-  },
-  reviewDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  reviewComment: {
-    fontSize: 13,
-    color: '#374151',
-    lineHeight: 19,
-    marginTop: 8,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  tagChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  tagPositive: {
-    backgroundColor: '#DCFCE7',
-  },
-  tagNegative: {
-    backgroundColor: '#FEE2E2',
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  tagTextPositive: {
-    color: '#16A34A',
-  },
-  tagTextNegative: {
-    color: '#DC2626',
-  },
-});
+    // Reviews
+    noReviews: {
+      fontSize: 14,
+      color: tokens.ink.subtle,
+      textAlign: 'center',
+      marginTop: 16,
+    },
+    reviewCard: {
+      backgroundColor: tokens.bg.elev1,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: tokens.line,
+    },
+    reviewHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    reviewerAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+    },
+    reviewerAvatarPlaceholder: {
+      backgroundColor: tokens.accent.orangeGlow,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    reviewerInitial: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: tokens.accent.orange,
+    },
+    reviewerInfo: {
+      flex: 1,
+      marginLeft: 10,
+    },
+    reviewerName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: tokens.ink.primary,
+    },
+    starsRow: {
+      flexDirection: 'row',
+      gap: 1,
+      marginTop: 2,
+    },
+    reviewDate: {
+      fontSize: 12,
+      color: tokens.ink.subtle,
+    },
+    reviewComment: {
+      fontSize: 13,
+      color: tokens.ink.secondary,
+      lineHeight: 19,
+      marginTop: 8,
+    },
+    tagsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 8,
+    },
+    tagChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    // Semantic positive/negative — kept as fixed hex pairs because
+    // they need consistent meaning across themes (green = good,
+    // red = bad). Light + dark variants below preserve the meaning
+    // at appropriate contrast.
+    tagPositive: {
+      backgroundColor: 'rgba(22, 163, 74, 0.15)',
+    },
+    tagNegative: {
+      backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    },
+    tagText: {
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    tagTextPositive: {
+      color: '#16A34A',
+    },
+    tagTextNegative: {
+      color: '#DC2626',
+    },
+  });
+}

@@ -1661,7 +1661,7 @@ function NativeHomeScreen() {
     const enableScroll = flowStep !== 'active';
     return (
       <>
-        <Screen bg="white" padded scroll={enableScroll}>
+        <Screen bg="cuban" padded scroll={enableScroll}>
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}

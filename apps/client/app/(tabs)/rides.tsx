@@ -615,7 +615,7 @@ function NativeRidesScreen() {
   }, [t, tokens, isDark]);
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View
         className="pt-4 flex-1"
         style={{ backgroundColor: tokens.bg.paper }}
