@@ -1240,20 +1240,23 @@ function NativeWalletScreen() {
 
   return (
     <Screen bg="white" padded>
-      {/* BUG-280 — header uses pt-6 so the title clears the demo banner overlay
-          shown in production-debug builds. */}
+      {/* Home-style layout: compact iOS-native header (h4 instead of
+          large display), no big icon hero. The demo banner (~46px in
+          demo builds) is non-blocking via SafeAreaView; no extra
+          padding hack needed. */}
       <View
-        className="pt-6 flex-1"
+        className="pt-4 flex-1"
         style={{ backgroundColor: tokens.bg.paper }}
       >
-        <View className="flex-row items-center gap-2.5 mb-5">
-          <Image source={tricoinLogo} style={{ width: 40, height: 40 }} resizeMode="contain" />
-          <Text
-            variant="displayLg"
-            style={{ color: tokens.ink.primary }}
-          >
-            {t('wallet.title')}
-          </Text>
+        {/* iOS-style small title row — Inter h4 (20pt), aligned with the
+            "RECIENTES" / "SERVICIOS" mono labels of the home. */}
+        <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center gap-2">
+            <Image source={tricoinLogo} style={{ width: 22, height: 22 }} resizeMode="contain" />
+            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+              {t('wallet.title')}
+            </Text>
+          </View>
         </View>
 
         {/* Wallet v2 phase 2: one-time migration announcement (dismissible). */}
@@ -1265,36 +1268,66 @@ function NativeWalletScreen() {
           />
         )}
 
+        {/* Mono label above balance, mirrors home's section header style. */}
+        <Text
+          variant="captionMono"
+          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
+        >
+          {t('wallet.balance_label', { defaultValue: 'SALDO DISPONIBLE' })}
+        </Text>
+
+        {/* Compact balance card — bg.elev1 surface with line border instead
+            of the heavy orange hero gradient (redesign V2). Numbers in
+            BalanceBadge stay big (it's the primary metric of this screen)
+            but the surface is calmer and matches the home's card aesthetic.
+            BalanceBadge keeps wallet v2 USD-mode props so the badge auto-
+            switches to "$X.XX" when migration data is available. */}
         <AnimatedCard delay={0}>
-          {/* U3.4: Use displayBalance for count-up animation */}
-          {/* Wallet v2 phase 2: switch to USD mode when migration data is loaded. */}
-          <BalanceBadge
-            balance={displayBalance}
-            held={balance.held}
-            balanceUsdCents={balance.availableUsdCents}
-            heldUsdCents={balance.heldUsdCents}
-            exchangeRate={balance.migrationRate ?? exchangeRate}
-            size="lg"
-            showHeld
-            coinIcon={tricoinSmall}
-            GradientComponent={LinearGradient}
-            gradientColors={['#FF4D00', '#FF8A5C']}
-            className="mb-5"
-          />
+          <View
+            style={{
+              backgroundColor: tokens.bg.elev1,
+              borderColor: tokens.line,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 16,
+              ...(isDark ? {} : {
+                shadowColor: '#1A1414',
+                shadowOpacity: 0.04,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 1,
+              }),
+            }}
+          >
+            <BalanceBadge
+              balance={displayBalance}
+              held={balance.held}
+              balanceUsdCents={balance.availableUsdCents}
+              heldUsdCents={balance.heldUsdCents}
+              exchangeRate={balance.migrationRate ?? exchangeRate}
+              size="md"
+              showHeld
+              coinIcon={tricoinSmall}
+              GradientComponent={LinearGradient}
+              gradientColors={['#FF4D00', '#FF8A5C']}
+            />
+          </View>
         </AnimatedCard>
 
-        <View className="flex-row gap-3 mb-6">
+        {/* Compact action buttons — smaller than before, iOS native size */}
+        <View className="flex-row gap-2 mb-6">
           <Button
             title={t('wallet.recharge')}
             variant="primary"
-            size="md"
+            size="sm"
             className="flex-1"
             onPress={handleRecharge}
           />
           <Button
             title={t('wallet.transfer')}
             variant="outline"
-            size="md"
+            size="sm"
             className="flex-1"
             onPress={handleTransfer}
           />
@@ -1307,10 +1340,10 @@ function NativeWalletScreen() {
         {monthlyInsights.ridesCount > 0 && (
           <View className="mb-6">
             <Text
-              variant="displayMd"
-              style={{ color: tokens.ink.primary, marginBottom: 12 }}
+              variant="captionMono"
+              style={{ color: tokens.ink.subtle, marginBottom: 8 }}
             >
-              {t('wallet.this_month', { defaultValue: 'Este mes' })}
+              {t('wallet.this_month', { defaultValue: 'ESTE MES' })}
             </Text>
             <View className="flex-row gap-3">
               {[
@@ -1348,10 +1381,10 @@ function NativeWalletScreen() {
         )}
 
         <Text
-          variant="displayMd"
-          style={{ color: tokens.ink.primary, marginBottom: 12 }}
+          variant="captionMono"
+          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
         >
-          {t('wallet.history')}
+          {t('wallet.history', { defaultValue: 'HISTORIAL' })}
         </Text>
 
         {/* BUG-280 — filter chips height fix v2.
