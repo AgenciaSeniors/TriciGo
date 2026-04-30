@@ -305,7 +305,7 @@ function WebWalletScreen() {
   // Login required
   if (!userId) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="flex-1 justify-center items-center">
           <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesion para ver tu billetera' })}</Text>
         </View>
@@ -314,7 +314,7 @@ function WebWalletScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="pt-4 pb-8">
           {/* ─── Balance Card ─── */}
@@ -352,11 +352,15 @@ function WebWalletScreen() {
                 <Pressable
                   key={opt.key}
                   onPress={() => setActiveFilter(opt.key)}
-                  className={`px-4 py-1.5 rounded-full border ${
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  className={`px-4 py-2 rounded-full border ${
                     activeFilter === opt.key
                       ? 'bg-primary-500 border-primary-500'
                       : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                   }`}
+                  accessibilityRole="radio"
+                  accessibilityLabel={opt.label}
+                  accessibilityState={{ selected: activeFilter === opt.key }}
                 >
                   <Text
                     variant="caption"
@@ -963,7 +967,7 @@ function NativeWalletScreen() {
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            paddingVertical: 14,
+            paddingVertical: 16,
             borderBottomWidth: 1,
             borderBottomColor: tokens.line,
           }}
@@ -1002,7 +1006,7 @@ function NativeWalletScreen() {
 
   if (loading) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <SkeletonBalance />
           <SkeletonListItem />
@@ -1015,7 +1019,7 @@ function NativeWalletScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       {/* Home-style layout: compact iOS-native header (h4 instead of
           large display), no big icon hero. The demo banner (~46px in
           demo builds) is non-blocking via SafeAreaView; no extra
@@ -1121,7 +1125,7 @@ function NativeWalletScreen() {
                     borderColor: tokens.accent.orangeGlow,
                     borderWidth: 1,
                     borderRadius: 16,
-                    padding: 14,
+                    padding: 16,
                   }}
                 >
                   <Text
@@ -1170,13 +1174,19 @@ function NativeWalletScreen() {
               <Pressable
                 key={opt.key}
                 onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
-                hitSlop={{ top: 8, bottom: 8 }}
+                // HIG fix — extend the tap area on all 4 sides so the
+                // ~36pt-tall chip becomes a 48pt+ effective target.
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                 className={`px-4 py-2 rounded-full border self-start ${
                   activeFilter === opt.key
                     ? 'bg-primary-500 border-primary-500'
                     : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                 }`}
                 accessibilityRole="radio"
+                // a11y fix — VoiceOver was just announcing "radio button,
+                // selected/not selected" without distinguishing chips.
+                // Now each chip says its label ("Todos", "Recargas", etc.).
+                accessibilityLabel={opt.label}
                 accessibilityState={{ selected: activeFilter === opt.key }}
               >
                 <Text
