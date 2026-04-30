@@ -13,8 +13,11 @@
       "associatedDomains": ["applinks:tricigo.com"],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
-        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para mostrar viajes cercanos",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo necesita tu ubicación para el seguimiento de viajes activos",
+        "NSLocationWhenInUseUsageDescription": "TriciGo Conductor usa tu ubicación para mostrar viajes cercanos a vos y calcular el tiempo estimado de llegada.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo Conductor usa tu ubicación en segundo plano durante un viaje activo para que el pasajero pueda ver tu trayecto en tiempo real, incluso si la app está minimizada. Sin esto, el pasajero pierde tu ubicación cuando salís de la app.",
+        "NSPhotoLibraryUsageDescription": "TriciGo Conductor usa tus fotos para subir documentos del vehículo y tu foto de perfil.",
+        "NSCameraUsageDescription": "TriciGo Conductor usa la cámara para escanear documentos del vehículo y tomar tu foto de perfil.",
+        "NSUserTrackingUsageDescription": "Usamos identificadores agregados para entender cómo se usa la app y mejorar la experiencia. Nunca compartimos tu identidad.",
         "UIBackgroundModes": [
           "location",
           "remote-notification"

@@ -21,7 +21,11 @@
       ],
       "infoPlist": {
         "CFBundleAllowMixedLocalizations": true,
-        "NSLocationWhenInUseUsageDescription": "TriciGo necesita tu ubicación para encontrar conductores cercanos",
+        "NSLocationWhenInUseUsageDescription": "TriciGo usa tu ubicación para mostrar conductores cercanos, calcular el viaje y compartirla con tu conductor cuando aceptes el viaje.",
+        "NSPhotoLibraryUsageDescription": "TriciGo necesita acceso a tus fotos para que puedas elegir una imagen de perfil.",
+        "NSCameraUsageDescription": "TriciGo usa la cámara para que puedas tomar tu foto de perfil.",
+        "NSContactsUsageDescription": "TriciGo accede a tus contactos solo si elegís agregar contactos de confianza para tu seguridad durante el viaje.",
+        "NSUserTrackingUsageDescription": "Usamos identificadores agregados para entender cómo se usa la app y mejorar la experiencia. Nunca compartimos tu identidad.",
         "UIBackgroundModes": [
           "remote-notification"
         ],
