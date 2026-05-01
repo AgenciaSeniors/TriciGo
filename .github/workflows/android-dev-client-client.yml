@@ -51,8 +51,12 @@ jobs:
           CLIENT_GS: ${{ secrets.CLIENT_GOOGLE_SERVICES_JSON }}
         run: |
           if [ -n "$CLIENT_GS" ]; then
-            echo "$CLIENT_GS" > apps/client/google-services.json
-            echo "✓ Wrote real google-services.json from CLIENT_GOOGLE_SERVICES_JSON secret"
+            # printf '%s' instead of echo — preserves the JSON byte-for-byte.
+            # echo mangles backslash escapes on some shells and `echo -n` is
+            # not portable; processDebugGoogleServices crashes on any byte
+            # mismatch with "MalformedJsonException".
+            printf '%s' "$CLIENT_GS" > apps/client/google-services.json
+            echo "✓ Wrote google-services.json from CLIENT_GOOGLE_SERVICES_JSON secret ($(wc -c < apps/client/google-services.json) bytes)"
           else
             cat > apps/client/google-services.json <<'PLACEHOLDER'
           {
