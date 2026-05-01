@@ -19,7 +19,26 @@ describe('reviewService', () => {
   });
 
   // ==================== submitReview ====================
+  //
+  // BUG-264 v2 — submitReview now has 3 layers of safety:
+  //   1. PRE-FLIGHT: SELECT for existing review before INSERT — Cuban
+  //      networks drop responses, so a duplicate INSERT could land if
+  //      the original succeeded server-side. The pre-flight returns the
+  //      existing row as success.
+  //   2. RETRY: up to 3 attempts with 500/1000ms backoff.
+  //   3. DUPLICATE-KEY RECOVERY: 23505 → fetch existing and return.
+  //
+  // The mocks below have to stub BOTH the pre-flight SELECT (returns
+  // null = no existing review) AND the subsequent INSERT.
   describe('submitReview', () => {
+    // Helper: build a chain that responds to the pre-flight
+    // .select('*').eq().eq().maybeSingle() with the given response.
+    function preflightChain(data: any = null, error: any = null) {
+      const chain = createMockQueryChain();
+      chain.maybeSingle.mockResolvedValue({ data, error });
+      return chain;
+    }
+
     it('inserts review without tags and returns it', async () => {
       const mockReview = {
         id: UUID.REVIEW_1,
@@ -34,7 +53,9 @@ describe('reviewService', () => {
       const mockSelect = vi.fn(() => ({ single: mockSingle }));
       const mockInsert = vi.fn(() => ({ select: mockSelect }));
 
-      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+      mockFrom
+        .mockReturnValueOnce(preflightChain(null, null))         // pre-flight: no existing review
+        .mockReturnValueOnce({ insert: mockInsert });            // INSERT the new review
 
       const result = await reviewService.submitReview({
         ride_id: UUID.RIDE_1,
@@ -65,6 +86,7 @@ describe('reviewService', () => {
       const mockTagInsert = vi.fn().mockResolvedValue({ error: null });
 
       mockFrom
+        .mockReturnValueOnce(preflightChain(null, null))      // pre-flight: no existing review
         .mockReturnValueOnce({ insert: mockInsert })          // reviews insert
         .mockReturnValueOnce({ insert: mockTagInsert });       // review_tags insert
 
@@ -89,7 +111,25 @@ describe('reviewService', () => {
       const mockSelect = vi.fn(() => ({ single: mockSingle }));
       const mockInsert = vi.fn(() => ({ select: mockSelect }));
 
-      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+      // Service retries 3 times. Each attempt does:
+      //   1. INSERT (fails with 23505)
+      //   2. duplicate-key recovery findExistingReview() — pre-flight chain
+      // Plus the initial pre-flight before the first attempt.
+      // We provide 23505 (a duplicate-key error) to take the "duplicate-key
+      // recovery" branch, but the recovery findExistingReview() returns null
+      // (no review exists), so the service continues retrying. After 3
+      // attempts, it throws Error("submitReview failed after 3 attempts: ...")
+      // which wraps the underlying error. We expect that wrapped Error here
+      // because the source-level retry/recovery path was added after these
+      // tests were written.
+      mockFrom
+        .mockReturnValueOnce(preflightChain(null, null))         // initial pre-flight
+        .mockReturnValueOnce({ insert: mockInsert })             // attempt 1 INSERT (23505)
+        .mockReturnValueOnce(preflightChain(null, null))         // attempt 1 duplicate-key recovery
+        .mockReturnValueOnce({ insert: mockInsert })             // attempt 2 INSERT (23505)
+        .mockReturnValueOnce(preflightChain(null, null))         // attempt 2 duplicate-key recovery
+        .mockReturnValueOnce({ insert: mockInsert })             // attempt 3 INSERT (23505)
+        .mockReturnValueOnce(preflightChain(null, null));        // attempt 3 duplicate-key recovery
 
       await expect(
         reviewService.submitReview({
@@ -98,7 +138,7 @@ describe('reviewService', () => {
           reviewee_id: UUID.USER_2,
           rating: 4,
         }),
-      ).rejects.toEqual(err);
+      ).rejects.toThrow(/submitReview failed after 3 attempts/);
     });
   });
 

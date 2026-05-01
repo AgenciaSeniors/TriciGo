@@ -153,7 +153,17 @@ describe('Wallet Service Integration', () => {
       });
 
       const result = await walletService.getBalance('nonexistent-user');
-      expect(result).toEqual({ available: 0, held: 0 });
+      // Service now also returns USD-mode and migration metadata fields (added
+      // when wallet USD-mode was rolled out). When no row exists, all are null
+      // / zero, but the shape matches what the wallet service returns today.
+      expect(result).toEqual({
+        available: 0,
+        held: 0,
+        availableUsdCents: null,
+        heldUsdCents: null,
+        migrationRate: null,
+        migrationBonusPct: null,
+      });
     });
 
     it('should return balances from existing account', async () => {

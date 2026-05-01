@@ -754,7 +754,12 @@ describe('adminService', () => {
       const result = await adminService.getPendingRecharges();
 
       expect(mockFrom).toHaveBeenCalledWith('wallet_recharge_requests');
-      expect(chain.select).toHaveBeenCalledWith('*, users!inner(full_name)');
+      // Service names the FK explicitly because wallet_recharge_requests
+      // has TWO FKs to users (user_id + processed_by). The implicit
+      // `users!inner(...)` returns PostgREST 300 ("Multiple Choices").
+      expect(chain.select).toHaveBeenCalledWith(
+        '*, users!wallet_recharge_requests_user_id_fkey!inner(full_name)',
+      );
       expect(chain.eq).toHaveBeenCalledWith('status', 'pending');
       expect(result[0]!.user_name).toBe('Luis');
     });
