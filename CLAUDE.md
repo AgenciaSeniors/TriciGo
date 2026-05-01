@@ -111,3 +111,72 @@ TriciGo opera en Cuba. Tener en cuenta:
 - Comunícate conmigo en **español**
 - Código, commits, comentarios en código y nombres de variables en **inglés**
 - Documentación técnica en **inglés**
+
+## Local dev & probar en el celular
+
+> Esta sección crece con cada sesión. Siempre revisarla antes de levantar Metro o pedirle al usuario que pruebe.
+
+### Conceptos base — `localhost` vs IP LAN
+
+| URL | Funciona desde | Por qué |
+|---|---|---|
+| `http://localhost:8081` | Solo **esta misma PC** (browser, iOS Sim, Android Emulator con `adb reverse`) | Loopback interface (`127.0.0.1`), inaccesible desde otros dispositivos. |
+| `http://192.168.x.x:8081` | Cualquier dispositivo en la **misma Wi-Fi** | IP LAN de la PC. |
+| `exp://192.168.x.x:8081` | Dev client de TriciGo en el celu | Mismo que arriba pero con esquema `exp://` que abre el dev client. |
+
+**Para conectarse desde el celu siempre se usa la IP LAN, nunca `localhost`.** PC y celu deben estar en la misma SSID (cuidado con redes "guest" o 5G/2.4G aisladas en algunos routers). Obtener IP en Windows: `Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Dhcp` (PowerShell).
+
+### Levantar Metro de forma limpia (Windows / PowerShell)
+
+```powershell
+# 1. Verificar si 8081 ya está tomado
+netstat -ano | Select-String ":8081\s+.*LISTENING"
+
+# 2. Identificar el proceso (si imprimió algo, copiá el PID)
+(Get-CimInstance Win32_Process -Filter "ProcessId=<PID>").CommandLine
+
+# 3. Matar (solo si confirmaste que es un Metro huérfano de otra sesión)
+Stop-Process -Id <PID> -Force
+
+# 4. Limpiar caches Metro/Expo (opcional pero ayuda en bundles raros)
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Temp\metro-*" -EA SilentlyContinue
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Temp\haste-map-*" -EA SilentlyContinue
+Remove-Item -Recurse -Force C:\Users\Eduardo\TriciGo\apps\client\.expo -EA SilentlyContinue
+
+# 5. Arrancar (usar --dev-client siempre que el celu tenga el dev client APK,
+#    NO usarlo si el plan es Expo Go)
+cd C:\Users\Eduardo\TriciGo\apps\client
+npx expo start --dev-client --port 8081 --clear
+```
+
+### Tres caminos para testear desde el celu
+
+**A. Dev client APK ya instalado (lo más común)** — Buscar en el celu el icono "TriciGo" o "TriciGo (Dev)". Abrirlo, "Enter URL manually", `exp://192.168.x.x:8081`, reload. Funciona TODO (Mapbox, Stripe, Sentry, expo-dev-client). El proyecto importa varios módulos nativos así que esto es el camino canónico para QA real.
+
+**B. Necesita un APK nuevo (CI cloud)** — el repo tiene workflow `android-dev-client-client.yml` que compila el APK en GitHub Actions:
+```powershell
+gh workflow run android-dev-client-client.yml --ref master
+gh run list --workflow=android-dev-client-client.yml --limit 1   # ver run id
+gh run download <RUN_ID> --name client-dev-client-apk
+```
+~10-15 min, después se pasa el `.apk` al celu, instalar con "fuentes desconocidas" habilitado.
+
+**C. Build local con EAS** — `npx eas-cli build --profile development --platform android`. Compila en la nube de Expo (10-20 min), devuelve URL de descarga. Requiere cuenta Expo (gratis).
+
+**D. Expo Go (limitado, NO recomendado)** — Expo Go no soporta los módulos nativos del proyecto: `@rnmapbox/maps`, `@stripe/stripe-react-native`, `@sentry/react-native`, `expo-dev-client`. Si lo usás, se pueden probar Perfil, Configuración, búsqueda de direcciones, recorte de foto, idiomas; **falla** mapa, recargas con tarjeta. Levantar con `npx expo start --port 8081` (sin `--dev-client`).
+
+### Troubleshooting de conexión celu ↔ Metro
+
+| Síntoma | Diagnóstico | Fix |
+|---|---|---|
+| "No se puede conectar al servidor de desarrollo" | Celu y PC en redes Wi-Fi distintas (5G "guest" vs 2.4G principal) | Asegurar misma SSID. Hacer ping a la IP de la PC desde el celu. |
+| Metro inicia pero el dev client no conecta | Firewall de Windows bloquea 8081 | Permitir Node.js en el firewall, o `New-NetFirewallRule -DisplayName "Metro 8081" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow` (admin) |
+| Metro dice `Waiting on http://127.0.0.1:8081` (loopback solo) | Modo host no detectado | Agregar `--host lan` al comando |
+| Bundling se queda colgado a mitad de camino | Cache corrupto | Reiniciar con `--clear` y limpiar `$env:LOCALAPPDATA\Temp\metro-*` |
+| Otra Metro huérfana ocupa el puerto | `netstat` muestra LISTENING + PID | `Stop-Process -Id <PID> -Force` (verificar primero que es un Metro de otro worktree) |
+| El celu abre la URL pero muestra JSON o "Welcome to Expo" | Se está abriendo en el browser, no en el dev client | Usar el esquema `exp://`, no `http://`. O escanear el QR con la app TriciGo, no con la cámara genérica. |
+| `taskkill /PID <X> /F` (CMD) si PowerShell falla por permisos | Comando alternativo para matar procesos | Funciona desde CMD normal sin admin |
+
+### Recordatorio para Claude
+
+**Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
