@@ -6,6 +6,7 @@ import {
   type ViewProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 
 export interface ScreenProps extends ViewProps {
   /** Use scroll view for scrollable content */
@@ -59,11 +60,34 @@ export function Screen({
     </View>
   );
 
+  // Sync StatusBar with the active theme so the Android status-bar
+  // strip never lags behind the rest of the screen during a theme
+  // toggle. For `cuban` we mirror the cubanLight/cubanDark paper
+  // colors; for `white` / `neutral` we follow the resolved scheme.
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  let statusBarBg: string | undefined;
+  let resolvedBarStyle: 'light-content' | 'dark-content' = statusBarStyle;
+  if (bg === 'dark') {
+    statusBarBg = '#111111';
+    resolvedBarStyle = 'light-content';
+  } else if (bg === 'mapDark') {
+    statusBarBg = '#0a0a0f';
+    resolvedBarStyle = 'light-content';
+  } else if (bg === 'cuban') {
+    statusBarBg = isDark ? '#0A0E1A' : '#FFFBF5';
+    resolvedBarStyle = isDark ? 'light-content' : 'dark-content';
+  } else if (bg === 'white' || bg === 'neutral') {
+    statusBarBg = isDark ? (bg === 'white' ? '#171717' : '#0A0A0A') : undefined;
+    resolvedBarStyle = isDark ? 'light-content' : statusBarStyle;
+  }
+
   return (
     <SafeAreaView className={`flex-1 ${bgClasses[bg]}`}>
       <StatusBar
-        barStyle={bg === 'dark' || bg === 'mapDark' ? 'light-content' : statusBarStyle}
-        backgroundColor={bg === 'dark' ? '#111111' : bg === 'mapDark' ? '#0a0a0f' : undefined}
+        barStyle={resolvedBarStyle}
+        backgroundColor={statusBarBg}
       />
       {scroll ? (
         <ScrollView

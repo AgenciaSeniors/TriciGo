@@ -1,5 +1,6 @@
 import React, { type ComponentProps } from 'react';
-import { View, useColorScheme } from 'react-native';
+import { View } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { Button } from './Button';
@@ -26,7 +27,7 @@ export function EmptyState({
   compact = false,
   forceDark = false,
 }: EmptyStateProps) {
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useColorScheme();
   const isDark = forceDark || colorScheme === 'dark';
 
   return (

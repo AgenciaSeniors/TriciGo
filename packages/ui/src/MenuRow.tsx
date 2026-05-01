@@ -1,5 +1,6 @@
 import React, { type ComponentProps } from 'react';
-import { View, Pressable, useColorScheme } from 'react-native';
+import { View, Pressable } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { colors } from '@tricigo/theme';
@@ -62,7 +63,7 @@ export function MenuRow({
   forceDark = false,
   className,
 }: MenuRowProps) {
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useColorScheme();
   const isDark = forceDark || colorScheme === 'dark';
 
   const iconColor = destructive
