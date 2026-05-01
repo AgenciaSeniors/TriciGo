@@ -542,7 +542,7 @@ export function useRideActions() {
         // Bugfix: method is `getAccount`, not `getAccountDetails` —
         // same return shape (CorporateAccount).
         const freshAccount = await corporateService.getAccount(d.corporateAccountId);
-        const remainingBudget = freshAccount.monthly_budget_trc - freshAccount.current_month_spent;
+        const remainingBudget = (freshAccount?.monthly_budget_trc ?? 0) - (freshAccount?.current_month_spent ?? 0);
         if (remainingBudget < (fareEstimate.estimated_fare_trc ?? 0)) {
           isSubmittingRef.current = false;
           pendingRequestIdRef.current = null;

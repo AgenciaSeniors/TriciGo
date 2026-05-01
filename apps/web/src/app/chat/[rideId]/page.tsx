@@ -52,11 +52,13 @@ export default function ChatPage() {
       setMessages((data as ChatMessage[]) ?? []);
 
       // Get driver name from ride
-      const { data: ride } = await supabase
+      const { data: rideRaw } = await supabase
         .from('rides')
         .select('driver:driver_profiles(user:users(full_name))')
         .eq('id', rideId)
         .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ride = rideRaw as any;
       if (ride?.driver?.user?.full_name) {
         setDriverName(ride.driver.user.full_name);
       }

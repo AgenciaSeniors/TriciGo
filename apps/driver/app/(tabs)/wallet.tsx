@@ -102,7 +102,7 @@ export default function WalletScreen() {
       const mapped: CommissionEntry[] = (txData ?? []).map((tx) => ({
         id: tx.id,
         ride_id: (tx as unknown as Record<string, unknown>).ride_id as string ?? '',
-        amount: tx.amount ?? 0,
+        amount: ((tx as unknown as Record<string, unknown>).amount as number) ?? 0,
         commission_rate: ((tx as unknown as Record<string, unknown>).commission_rate as number) ?? 0.15,
         created_at: tx.created_at,
         type: (tx.type as CommissionEntry['type']) ?? 'ride',

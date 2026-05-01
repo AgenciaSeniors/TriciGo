@@ -1840,7 +1840,7 @@ export const adminService = {
     }
     const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []) as Array<{
+    return (data ?? [] as unknown[]) as unknown as Array<{
       id: string;
       receipt_no: string;
       payment_intent_id: string;

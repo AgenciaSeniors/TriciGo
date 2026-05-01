@@ -3022,7 +3022,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       {!searchingField && routeDistanceM && (selectedEstimate?.estimated_duration_s || routeDurationS) && (
         <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
-            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil((selectedEstimate?.estimated_duration_s ?? routeDurationS) / 60)} min
+            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil((selectedEstimate?.estimated_duration_s ?? routeDurationS ?? 0) / 60)} min
           </Text>
         </View>
       )}

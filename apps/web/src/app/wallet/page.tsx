@@ -481,7 +481,7 @@ export default function WalletPage() {
                 {formatTRC(balance.available)}
               </p>
               <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>
-                ~{formatTRCasUSD(balance.available)}
+                ~{formatTRCasUSD(balance.available, exchangeRate)}
               </p>
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
@@ -676,7 +676,7 @@ export default function WalletPage() {
               />
               {transferAmount && !isNaN(parseInt(transferAmount)) && parseInt(transferAmount) > 0 && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  = {formatTRC(parseInt(transferAmount))} (~{formatTRCasUSD(parseInt(transferAmount))})
+                  = {formatTRC(parseInt(transferAmount))} (~{formatTRCasUSD(parseInt(transferAmount), exchangeRate)})
                 </p>
               )}
               <input

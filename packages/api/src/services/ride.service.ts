@@ -1952,7 +1952,7 @@ export const rideService = {
   ): Promise<import('@tricigo/utils').ReceiptData> {
     const supabase = getSupabaseClient();
 
-    const { data: ride, error: rideErr } = await supabase
+    const { data: _rideRaw, error: rideErr } = await supabase
       .from('rides')
       .select(
         'id, customer_id, driver_id, service_type, payment_method, ' +
@@ -1965,7 +1965,8 @@ export const rideService = {
       .eq('id', rideId)
       .single();
     if (rideErr) throw rideErr;
-    if (!ride) throw new Error('RIDE_NOT_FOUND');
+    if (!_rideRaw) throw new Error('RIDE_NOT_FOUND');
+    const ride = _rideRaw as unknown as Record<string, unknown>;
 
     const { data: snap } = await supabase
       .from('ride_pricing_snapshots')

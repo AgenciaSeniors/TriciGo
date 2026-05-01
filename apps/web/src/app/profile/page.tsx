@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
@@ -21,7 +21,7 @@ function IconBlog() { return <svg width="20" height="20" viewBox="0 0 24 24" fil
 function IconSupport() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>; }
 function IconChevron() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>; }
 
-const iconMap: Record<string, () => JSX.Element> = {
+const iconMap: Record<string, () => React.JSX.Element> = {
   'profile.menu_edit': IconEdit,
   'profile.menu_settings': IconSettings,
   'profile.menu_saved_locations': IconPin,

@@ -5,6 +5,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "react-native": [
+        "../../node_modules/react-native"
       ]
     },
     "types": [

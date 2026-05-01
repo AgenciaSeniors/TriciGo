@@ -452,7 +452,7 @@ export default function BookPage() {
     setPromoCode('');
     setPromoResult(null);
     setInsuranceSelected(false);
-    setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '' });
+    setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '', client_accompanies: false });
   }
 
   function handleSwapLocations() {

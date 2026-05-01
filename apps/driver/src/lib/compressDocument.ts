@@ -42,7 +42,7 @@ async function getFileSize(uri: string): Promise<number> {
       const blob = await res.blob();
       return blob.size;
     }
-    const info = await FileSystem.getInfoAsync(uri, { size: true });
+    const info = await FileSystem.getInfoAsync(uri);
     // Type from expo-file-system: `size` is present only when exists === true.
     return info.exists && 'size' in info ? (info.size ?? 0) : 0;
   } catch {

@@ -812,6 +812,7 @@ function RideMapViewInner({
                 {vehicleType && vehicleMarkerImages[`marker-${vehicleType}`] ? (
                   <Image
                     source={vehicleMarkerImages[`marker-${vehicleType}`]}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     style={{
                       width: MARKER.driver.size,
                       height: MARKER.driver.size,
@@ -819,8 +820,7 @@ function RideMapViewInner({
                       shadowOpacity: 0.45,
                       shadowRadius: 4,
                       shadowOffset: { width: 0, height: 2 },
-                      elevation: 6,
-                    }}
+                    } as any}
                     resizeMode="contain"
                   />
                 ) : (
