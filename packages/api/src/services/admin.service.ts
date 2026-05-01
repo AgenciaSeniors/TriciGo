@@ -1780,4 +1780,35 @@ export const adminService = {
       body: JSON.stringify({ transaction_id: transactionId, event_type: eventType }),
     });
   },
+
+  /**
+   * Wallet v2 phase 2 part B: trigger the one-time "+5% bonus" push
+   * notification for every user that received a migration bonus
+   * (customer_cash + tricicoin + corporate_cash). Routed through
+   * admin_send_wallet_v2_bonus_push() which is admin-gated and
+   * uses get_service_role_key() server-side to call send-push.
+   *
+   * Idempotency is the admin's responsibility — calling this twice
+   * sends two pushes per user. Confirm target count first via
+   * `getMigrationBonusTargetCount()`.
+   */
+  async sendWalletV2BonusPush(): Promise<{ ok: boolean; pushes_dispatched: number; note: string }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_send_wallet_v2_bonus_push');
+    if (error) throw error;
+    return data as { ok: boolean; pushes_dispatched: number; note: string };
+  },
+
+  /** Wallet v2 phase 2 part B: dry count for the bonus push button. */
+  async getMigrationBonusTargetCount(): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { count, error } = await supabase
+      .from('wallet_accounts')
+      .select('user_id', { count: 'exact', head: true })
+      .gt('migration_bonus_pct', 0)
+      .not('balance_usd_cents', 'is', null)
+      .not('user_id', 'is', null);
+    if (error) throw error;
+    return count ?? 0;
+  },
 };

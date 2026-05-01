@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, Inbox, Wallet, XCircle } from 'lucide-react';
+import { WalletV2BonusPushButton } from '@/components/wallet/WalletV2BonusPushButton';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
@@ -396,15 +397,18 @@ export default function WalletPage() {
             {t('wallet_admin.page_description', { defaultValue: 'TriciCoin en circulación, retiros, recargas y el libro mayor de movimientos.' })}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={listData.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Download className="h-3.5 w-3.5" />
-          {t('wallet_admin.export_csv', { defaultValue: 'Exportar CSV' })}
-        </button>
+        <div className="flex items-center gap-2">
+          <WalletV2BonusPushButton />
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={listData.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t('wallet_admin.export_csv', { defaultValue: 'Exportar CSV' })}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

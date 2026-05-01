@@ -13,7 +13,7 @@ import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { paymentService } from '@tricigo/api/services/payment';
 import type { StripeRechargeConfig } from '@tricigo/types';
-import { formatTriciCoin, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
+import { formatTriciCoin, formatTriciCoinUsd, formatCupApprox, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -121,12 +121,39 @@ function WebWalletScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
 
-  // Core wallet state
-  const [balance, setBalance] = useState({ available: 0, held: 0 });
+  // Core wallet state — Wallet v2 phase 2: holds the legacy CUP-pegged
+  // available/held PLUS the new USD-cents fields surfaced by the
+  // 00242 migration. Old display path keeps reading available/held.
+  const [balance, setBalance] = useState<{
+    available: number;
+    held: number;
+    availableUsdCents: number | null;
+    heldUsdCents: number | null;
+    migrationRate: number | null;
+    migrationBonusPct: number | null;
+  }>({
+    available: 0, held: 0,
+    availableUsdCents: null, heldUsdCents: null,
+    migrationRate: null, migrationBonusPct: null,
+  });
   const [accountId, setAccountId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<TxnFilter>('all');
+
+  // Wallet v2 phase 2: dismissal state for the migration banner.
+  // AsyncStorage falls back to localStorage on web automatically.
+  const WEB_MIGRATION_BANNER_KEY = '@tricigo/wallet_v2_banner_dismissed';
+  const [migrationBannerDismissed, setMigrationBannerDismissed] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem(WEB_MIGRATION_BANNER_KEY).then((v) => {
+      setMigrationBannerDismissed(v === '1');
+    });
+  }, []);
+  const dismissWebMigrationBanner = useCallback(() => {
+    setMigrationBannerDismissed(true);
+    AsyncStorage.setItem(WEB_MIGRATION_BANNER_KEY, '1').catch(() => { /* best-effort */ });
+  }, []);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -326,21 +353,49 @@ function WebWalletScreen() {
             <Text variant="caption" className="mb-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
               {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
             </Text>
-            <View className="flex-row items-center gap-2 mb-1">
-              <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
-              <Text variant="h2" className="font-bold" style={{ color: '#fff' }}>
-                {loading ? '...' : formatTriciCoin(balance.available)}
-              </Text>
-            </View>
-            <Text variant="caption" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              {loading ? '' : `\u2248 ${formatUSD(trcToUsd(balance.available, exchangeRate))}`}
-            </Text>
-            {balance.held > 0 && (
-              <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)} ({`\u2248 ${formatUSD(trcToUsd(balance.held, exchangeRate))}`})
-              </Text>
+            {/* Wallet v2 phase 2: switch primary display to USD when migrated. */}
+            {balance.availableUsdCents != null ? (
+              <>
+                <Text variant="h2" className="font-bold mb-1" style={{ color: '#fff', fontVariant: ['tabular-nums'] }}>
+                  {loading ? '...' : formatTriciCoinUsd(balance.availableUsdCents)}
+                </Text>
+                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.65)', fontVariant: ['tabular-nums'] }}>
+                  {loading ? '' : (balance.migrationRate ? formatCupApprox(balance.availableUsdCents, balance.migrationRate) : '')}
+                </Text>
+                {(balance.heldUsdCents ?? 0) > 0 && (
+                  <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.55)', fontVariant: ['tabular-nums'] }}>
+                    {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoinUsd(balance.heldUsdCents ?? 0)}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <View className="flex-row items-center gap-2 mb-1">
+                  <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
+                  <Text variant="h2" className="font-bold" style={{ color: '#fff' }}>
+                    {loading ? '...' : formatTriciCoin(balance.available)}
+                  </Text>
+                </View>
+                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  {loading ? '' : `\u2248 ${formatUSD(trcToUsd(balance.available, exchangeRate))}`}
+                </Text>
+                {balance.held > 0 && (
+                  <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)} ({`\u2248 ${formatUSD(trcToUsd(balance.held, exchangeRate))}`})
+                  </Text>
+                )}
+              </>
             )}
           </View>
+
+          {/* Wallet v2 phase 2: one-time migration announcement on web. */}
+          {!migrationBannerDismissed && balance.availableUsdCents != null && (
+            <WalletMigrationBanner
+              balanceUsdCents={balance.availableUsdCents}
+              bonusPct={balance.migrationBonusPct ?? 0}
+              onDismiss={dismissWebMigrationBanner}
+            />
+          )}
 
           {/* ─── Filter Tabs ─── */}
           <Text variant="h4" className="mb-2">
@@ -410,6 +465,12 @@ function WebWalletScreen() {
                 const entry = tx.ledger_entries?.[0];
                 const amount = entry?.amount ?? 0;
                 const isCredit = amount > 0;
+                // Wallet v2 phase 2: USD-equivalent caption per txn using
+                // the wallet's stamped migration_rate (provides a stable
+                // bridge from historical CUP-pegged amounts to the new
+                // unit-of-account without rewriting historical data).
+                const rateForTxn = balance.migrationRate ?? exchangeRate;
+                const usdEq = trcToUsd(Math.abs(amount), rateForTxn);
                 return (
                   <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100 dark:border-neutral-800">
                     <View
@@ -427,12 +488,20 @@ function WebWalletScreen() {
                       ) : null}
                       <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at, t('today'), t('yesterday'))}</Text>
                     </View>
-                    <Text
-                      variant="body"
-                      className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-                    >
-                      {isCredit ? '+' : ''}{formatTriciCoin(amount)}
-                    </Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text
+                        variant="body"
+                        className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+                        style={{ fontVariant: ['tabular-nums'] }}
+                      >
+                        {isCredit ? '+' : ''}{formatTriciCoin(amount)}
+                      </Text>
+                      {balance.availableUsdCents != null && (
+                        <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
+                          ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 );
               })}
@@ -980,6 +1049,11 @@ function NativeWalletScreen() {
   const renderTransaction = ({ item, index }: { item: TransactionWithAmount; index: number }) => {
     const amount = item.ledger_entries?.[0]?.amount ?? 0;
     const isCredit = amount > 0;
+    // Wallet v2 phase 2: USD-equivalent caption per txn (uses the
+    // wallet's stamped migration_rate as a stable bridge from
+    // historical CUP-pegged amounts to the new unit-of-account).
+    const rateForTxn = balance.migrationRate ?? exchangeRate;
+    const usdEq = trcToUsd(Math.abs(amount), rateForTxn);
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
         <View className="flex-row items-center py-3 border-b border-neutral-100 dark:border-neutral-800" accessible={true}>
@@ -987,12 +1061,20 @@ function NativeWalletScreen() {
             <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
             <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
           </View>
-          <Text
-            variant="body"
-            className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-          >
-            {isCredit ? '+' : ''}{formatTriciCoin(amount)}
-          </Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text
+              variant="body"
+              className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+              style={{ fontVariant: ['tabular-nums'] }}
+            >
+              {isCredit ? '+' : ''}{formatTriciCoin(amount)}
+            </Text>
+            {balance.availableUsdCents != null && (
+              <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
+                ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
+              </Text>
+            )}
+          </View>
         </View>
       </AnimatedCard>
     );
