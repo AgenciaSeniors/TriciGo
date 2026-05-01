@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Alert, Pressable, ActionSheetIOS, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
@@ -10,25 +9,17 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
-import { i18n } from '@tricigo/i18n';
-import { authService, customerService } from '@tricigo/api';
+import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import type { PaymentMethod, Language, CustomerProfile } from '@tricigo/types';
-import { logger, triggerHaptic } from '@tricigo/utils';
+import { triggerHaptic } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
-import { SkeletonCard } from '@tricigo/ui/Skeleton';
+import { AvatarCropModal } from '@/components/AvatarCropModal';
 
-const LANGUAGES: { value: Language; label: string }[] = [
-  { value: 'es', label: 'Español' },
-  { value: 'en', label: 'English' },
-  { value: 'pt', label: 'Português' },
-];
-
-const PAYMENT_METHODS: { value: PaymentMethod; labelKey: string }[] = [
-  { value: 'cash', labelKey: 'profile.payment_cash' },
-  { value: 'tricicoin', labelKey: 'profile.payment_tricicoin' },
-  { value: 'mixed', labelKey: 'profile.payment_mixed' },
-];
+interface PendingCrop {
+  uri: string;
+  width: number;
+  height: number;
+}
 
 export default function EditProfileScreen() {
   const { t } = useTranslation('common');
@@ -37,58 +28,74 @@ export default function EditProfileScreen() {
 
   const [fullName, setFullName] = useState(user?.full_name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
-  const [language, setLanguage] = useState<Language>(user?.preferred_language ?? 'es');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    customerService.ensureProfile(user.id).then((cp) => {
-      setCustomerProfile(cp);
-      setPaymentMethod(cp.default_payment_method);
-    }).catch((err) => logger.warn('[EditProfile] Failed to load:', err)).finally(() => setLoadingProfile(false));
-  }, [user]);
-
-  const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
+  const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
     try {
+      // We do NOT request `allowsEditing` from the picker — Android 13+ uses
+      // the system Photo Picker which ignores it. We always show our own
+      // circular crop modal so behavior is consistent across platforms.
       const pickerResult = source === 'camera'
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
+            quality: 1,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
+            quality: 1,
           });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
 
-      setUploadingAvatar(true);
-      // Compress to 300×300
-      const manipulated = await ImageManipulator.manipulateAsync(
-        pickerResult.assets[0].uri,
-        [{ resize: { width: 300, height: 300 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
+      const asset = pickerResult.assets[0];
+      if (!asset.width || !asset.height) {
+        // Fallback: shouldn't happen, but if dimensions are missing we abort.
+        Alert.alert(
+          t('error', { defaultValue: 'Error' }),
+          t('errors.profile_upload_failed', {
+            defaultValue: 'No se pudo procesar la imagen. Intenta otra vez.',
+          }),
+        );
+        return;
+      }
 
-      const publicUrl = await authService.uploadAvatar(user.id, manipulated.uri);
+      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+    } catch (err) {
+      const msg = String((err as { message?: string } | undefined)?.message ?? err ?? '');
+      console.error('[ProfileEdit] Image pick failed:', msg);
+      Alert.alert(
+        t('error', { defaultValue: 'Error' }),
+        t('errors.profile_upload_failed', {
+          defaultValue: 'No se pudo abrir la imagen. Intenta otra vez.',
+        }) + (msg ? `\n\n${msg}` : ''),
+      );
+    }
+  };
+
+  const handleCropConfirm = async (croppedUri: string) => {
+    if (!user) return;
+    setPendingCrop(null);
+    setUploadingAvatar(true);
+    try {
+      const publicUrl = await authService.uploadAvatar(user.id, croppedUri);
       setAvatarUrl(publicUrl);
       setUser({ ...user, avatar_url: publicUrl });
+      Toast.show({
+        type: 'success',
+        text1: t('profile.photo_updated', { defaultValue: 'Foto actualizada' }),
+      });
     } catch (err) {
-      const msg = String((err as any)?.message ?? err ?? '');
+      const msg = String((err as { message?: string } | undefined)?.message ?? err ?? '');
       console.error('[ProfileEdit] Avatar upload failed:', msg);
       Alert.alert(
         t('error', { defaultValue: 'Error' }),
-        t('errors.profile_upload_failed', { defaultValue: 'No se pudo subir la foto. Intenta con una imagen más pequeña.' }) + (msg ? `\n\n${msg}` : ''),
+        t('errors.profile_upload_failed', {
+          defaultValue: 'No se pudo subir la foto. Intenta con una imagen más pequeña.',
+        }) + (msg ? `\n\n${msg}` : ''),
       );
     } finally {
       setUploadingAvatar(false);
@@ -99,12 +106,16 @@ export default function EditProfileScreen() {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: [t('cancel'), t('profile.take_photo', { defaultValue: 'Tomar foto' }), t('profile.choose_photo', { defaultValue: 'Elegir de galería' })],
+          options: [
+            t('cancel'),
+            t('profile.take_photo', { defaultValue: 'Tomar foto' }),
+            t('profile.choose_photo', { defaultValue: 'Elegir de galería' }),
+          ],
           cancelButtonIndex: 0,
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) pickAndUploadAvatar('camera');
-          else if (buttonIndex === 2) pickAndUploadAvatar('gallery');
+          if (buttonIndex === 1) pickFromSource('camera');
+          else if (buttonIndex === 2) pickFromSource('gallery');
         },
       );
     } else {
@@ -113,8 +124,14 @@ export default function EditProfileScreen() {
         '',
         [
           { text: t('cancel'), style: 'cancel' },
-          { text: t('profile.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickAndUploadAvatar('camera') },
-          { text: t('profile.choose_photo', { defaultValue: 'Elegir de galería' }), onPress: () => pickAndUploadAvatar('gallery') },
+          {
+            text: t('profile.take_photo', { defaultValue: 'Tomar foto' }),
+            onPress: () => pickFromSource('camera'),
+          },
+          {
+            text: t('profile.choose_photo', { defaultValue: 'Elegir de galería' }),
+            onPress: () => pickFromSource('gallery'),
+          },
         ],
       );
     }
@@ -122,14 +139,13 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     if (!user) return;
-    // UX: validation errors used a blocking Alert.alert. Matching our
-    // rounds pattern, switch to a warning-haptic + Toast so the user
-    // stays in context and can fix the field immediately.
     if (fullName.trim().length < 2) {
       triggerHaptic('warning');
       Toast.show({
         type: 'info',
-        text1: t('profile.name_too_short', { defaultValue: 'El nombre debe tener al menos 2 caracteres' }),
+        text1: t('profile.name_too_short', {
+          defaultValue: 'El nombre debe tener al menos 2 caracteres',
+        }),
       });
       return;
     }
@@ -147,18 +163,12 @@ export default function EditProfileScreen() {
       const updated = await authService.updateProfile(user.id, {
         full_name: fullName.trim(),
         email: email.trim() || null,
-        preferred_language: language,
       });
       setUser(updated);
-      i18n.changeLanguage(language);
-
-      if (customerProfile && paymentMethod !== customerProfile.default_payment_method) {
-        await customerService.updateProfile(customerProfile.id, {
-          default_payment_method: paymentMethod,
-        });
-      }
-
-      Toast.show({ type: 'success', text1: t('profile.profile_saved', { defaultValue: 'Perfil guardado' }) });
+      Toast.show({
+        type: 'success',
+        text1: t('profile.profile_saved', { defaultValue: 'Perfil guardado' }),
+      });
       triggerHaptic('success');
       router.back();
     } catch {
@@ -167,18 +177,6 @@ export default function EditProfileScreen() {
       setSaving(false);
     }
   };
-
-  if (loadingProfile) {
-    return (
-      <Screen scroll bg="cuban" padded>
-        <View className="pt-4">
-          <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
-          <SkeletonCard lines={4} />
-          <SkeletonCard lines={2} />
-        </View>
-      </Screen>
-    );
-  }
 
   return (
     <Screen scroll bg="cuban" padded>
@@ -196,70 +194,45 @@ export default function EditProfileScreen() {
             loading={uploadingAvatar}
           />
           <Pressable onPress={handleAvatarPress} className="mt-2">
-            <Text variant="bodySmall" color="accent">{t('profile.change_photo', { defaultValue: 'Cambiar foto' })}</Text>
+            <Text variant="bodySmall" color="accent">
+              {t('profile.change_photo', { defaultValue: 'Cambiar foto' })}
+            </Text>
           </Pressable>
         </View>
 
-        <Input label={t('profile.name')} value={fullName} onChangeText={setFullName} />
-        <Input label={t('profile.email')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <Input
+          label={t('profile.name')}
+          value={fullName}
+          onChangeText={setFullName}
+        />
+        <Input
+          label={t('profile.email')}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
         <Input label={t('profile.phone')} value={user?.phone ?? ''} editable={false} />
 
-        {/* Language selector */}
-        <Text variant="label" className="mb-2 text-neutral-700">{t('profile.preferred_language')}</Text>
-        <View className="flex-row gap-2 mb-6">
-          {LANGUAGES.map((lang) => (
-            <Pressable
-              key={lang.value}
-              onPress={() => {
-                if (language !== lang.value) triggerHaptic('light');
-                setLanguage(lang.value);
-              }}
-              className={`flex-1 py-3 rounded-lg items-center border ${
-                language === lang.value
-                  ? 'bg-primary-500 border-primary-500'
-                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-              }`}
-            >
-              <Text
-                variant="body"
-                color={language === lang.value ? 'inverse' : 'primary'}
-                className="font-medium"
-              >
-                {lang.label}
-              </Text>
-            </Pressable>
-          ))}
+        <View className="mt-4">
+          <Button
+            title={t('save')}
+            onPress={handleSave}
+            loading={saving}
+            fullWidth
+            size="lg"
+          />
         </View>
-
-        {/* Payment method */}
-        <Text variant="label" className="mb-2 text-neutral-700">{t('profile.payment_method')}</Text>
-        <View className="flex-row gap-2 mb-6">
-          {PAYMENT_METHODS.map((pm) => (
-            <Pressable
-              key={pm.value}
-              onPress={() => {
-                if (paymentMethod !== pm.value) triggerHaptic('light');
-                setPaymentMethod(pm.value);
-              }}
-              className={`flex-1 py-3 rounded-lg items-center border ${
-                paymentMethod === pm.value
-                  ? 'bg-primary-500 border-primary-500'
-                  : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-              }`}
-            >
-              <Text
-                variant="bodySmall"
-                color={paymentMethod === pm.value ? 'inverse' : 'primary'}
-                className="font-medium"
-              >
-                {t(pm.labelKey)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Button title={t('save')} onPress={handleSave} loading={saving} fullWidth size="lg" />
       </View>
+
+      <AvatarCropModal
+        visible={pendingCrop !== null}
+        imageUri={pendingCrop?.uri ?? null}
+        imageWidth={pendingCrop?.width ?? 0}
+        imageHeight={pendingCrop?.height ?? 0}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={handleCropConfirm}
+      />
     </Screen>
   );
 }
