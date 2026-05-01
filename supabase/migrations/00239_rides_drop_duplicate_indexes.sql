@@ -1,0 +1,48 @@
+-- ============================================================
+-- Drop the two duplicate indexes on rides.
+-- ============================================================
+-- Audit finding: pg_indexes showed two pairs of indexes on `rides`
+-- with byte-for-byte identical definitions:
+--
+--   idx_rides_customer        ≡ idx_rides_customer_status
+--     btree (customer_id, status, created_at DESC)
+--
+--   idx_rides_driver          ≡ idx_rides_driver_status
+--     btree (driver_id, status, created_at DESC)
+--
+-- pg_stat_user_indexes traffic snapshot taken before dropping:
+--
+--   index                       size    scans   tuples_read
+--   idx_rides_customer          16 kB       0             0
+--   idx_rides_customer_status   16 kB  11,464       233,003
+--   idx_rides_driver            16 kB   1,618             0
+--   idx_rides_driver_status     16 kB  29,348        87,088
+--
+-- The siblings being dropped contribute essentially nothing — the
+-- planner already routes the same shape to the *_status survivors.
+-- Dropping them saves ~32 kB plus two extra index updates per
+-- INSERT/UPDATE/DELETE on `rides` (small per-row, but compounds
+-- with traffic).
+--
+-- Rollback (if ever needed):
+--   CREATE INDEX idx_rides_customer ON public.rides
+--     USING btree (customer_id, status, created_at DESC);
+--   CREATE INDEX idx_rides_driver ON public.rides
+--     USING btree (driver_id, status, created_at DESC);
+-- ============================================================
+
+DROP INDEX IF EXISTS public.idx_rides_customer;
+DROP INDEX IF EXISTS public.idx_rides_driver;
+
+-- Verification (run after applying):
+--   SELECT indexname FROM pg_indexes
+--    WHERE tablename='rides' AND indexname LIKE 'idx_rides_%'
+--    ORDER BY indexname;
+--   -- Expected: idx_rides_corporate_account, idx_rides_customer_status,
+--   --           idx_rides_driver_status, idx_rides_next, idx_rides_searching,
+--   --           idx_rides_share_token, idx_rides_city
+--
+--   EXPLAIN SELECT * FROM rides
+--   WHERE customer_id = '<some-uuid>' AND status = 'completed'
+--   ORDER BY created_at DESC LIMIT 20;
+--   -- Expected: Index Scan using idx_rides_customer_status
