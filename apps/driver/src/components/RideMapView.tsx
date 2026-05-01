@@ -111,7 +111,12 @@ const vehicleMarkerImages: Record<string, any> = {
   // 1950s vintage car that visually identifies the standard auto service.
   auto: require('../../assets/vehicles/markers/auto_clasico.png'),
   confort: require('../../assets/vehicles/markers/confort.png'),
+  mensajeria: require('../../assets/vehicles/markers/mensajeria.png'),
 };
+
+// Cargo box marker has no inherent "front" direction — keep rotation 0
+// instead of spinning a square around its center as the bearing changes.
+const NON_ROTATING_MARKERS = new Set<string>(['mensajeria']);
 
 // Demo-aware map fallback: returns São Paulo when EXPO_PUBLIC_DEMO_MODE=true,
 // Havana otherwise. Same pattern as apps/client/src/components/RideMapView.tsx.
@@ -1026,7 +1031,7 @@ function RideMapViewInner(
                       // 0=N, 90=E, 180=S, 270=W. The marker images are drawn
                       // pointing up (north) so a direct deg rotation aligns
                       // the nose with the direction of travel.
-                      { rotate: `${typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0}deg` },
+                      { rotate: `${(vehicleType && NON_ROTATING_MARKERS.has(vehicleType)) ? 0 : (typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0)}deg` },
                     ],
                   }}
                 >
@@ -1121,6 +1126,7 @@ function RideMapViewInner(
                 'marker-moto': vehicleMarkerImages.moto,
                 'marker-auto': vehicleMarkerImages.auto,
                 'marker-confort': vehicleMarkerImages.confort,
+                'marker-mensajeria': vehicleMarkerImages.mensajeria,
               }}
             />
             <MapboxGL.ShapeSource id="peers" shape={peersGeoJSON}>
@@ -1129,7 +1135,8 @@ function RideMapViewInner(
                 style={{
                   iconImage: ['get', 'icon'],
                   iconSize: 0.45,
-                  iconRotate: ['get', 'heading'],
+                  // Cargo box marker (mensajería) stays at 0deg — no inherent front.
+                  iconRotate: ['case', ['==', ['get', 'icon'], 'marker-mensajeria'], 0, ['get', 'heading']],
                   iconAllowOverlap: true,
                   iconRotationAlignment: 'map',
                   iconPitchAlignment: 'map',
