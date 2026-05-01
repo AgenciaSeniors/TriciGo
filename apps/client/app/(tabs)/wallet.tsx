@@ -153,17 +153,24 @@ function WebWalletScreen() {
   const [transferError, setTransferError] = useState('');
   const [transferSuccess, setTransferSuccess] = useState('');
 
-  // Fetch wallet data
+  // Fetch wallet data.
+  // ensureAccount is idempotent on the server side, balance/account
+  // queries don't depend on it, and the exchange rate is fully
+  // independent — they all batch into a single round-trip wave.
+  // Only getTransactions blocks on account.id resolution from
+  // getAccount, so we wait for the wave before issuing it.
   const fetchData = useCallback(async (resetTxns = true) => {
     if (!userId) return;
     try {
-      await walletService.ensureAccount(userId);
-      const [balanceData, account] = await Promise.all([
+      const [, balanceData, account, rate] = await Promise.all([
+        walletService.ensureAccount(userId),
         walletService.getBalance(userId),
         walletService.getAccount(userId),
+        exchangeRateService.getUsdCupRate().catch(() => null),
       ]);
       setBalance(balanceData);
       setAccountId(account?.id ?? null);
+      if (rate) setExchangeRate(rate);
 
       if (account?.id && resetTxns) {
         const txns = await walletService.getTransactions(account.id, 0, PAGE_SIZE);
@@ -171,12 +178,6 @@ function WebWalletScreen() {
         setPage(0);
         setHasMore((txns as TransactionWithAmount[]).length >= PAGE_SIZE);
       }
-
-      // Fetch exchange rate
-      try {
-        const rate = await exchangeRateService.getUsdCupRate();
-        if (rate) setExchangeRate(rate);
-      } catch { /* use default */ }
 
       // Wallet v2 PR 4: load user receipts so we can render the
       // "Descargar comprobante" button on matching recharge txns.
@@ -693,27 +694,32 @@ function NativeWalletScreen() {
   const [receiptByPiId, setReceiptByPiId] = useState<Map<string, { receipt_no: string; pdf_storage_path: string | null }>>(new Map());
   const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
 
+  // Fetch wallet data.
+  // ensureAccount, balance, account, exchange rate and Stripe config
+  // have no dependencies on each other — batch them into one wave.
+  // Only getTransactions blocks on account.id, so it runs after.
+  // (Stripe placeholder key 'pk_test_REPLACE_WITH_YOUR_KEY' means
+  // Stripe isn't yet provisioned for this env — UI will disable the
+  // card button with "Próximamente".)
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      await walletService.ensureAccount(userId);
-      const [balanceData, account] = await Promise.all([
+      const [, balanceData, account, rate, cfg] = await Promise.all([
+        walletService.ensureAccount(userId),
         walletService.getBalance(userId),
         walletService.getAccount(userId),
+        exchangeRateService.getUsdCupRate().catch(() => null),
+        paymentService.getStripeConfig().catch(() => null),
       ]);
       setBalance(balanceData);
       setAccountId(account?.id ?? null);
+      if (rate) setExchangeRate(rate);
+      if (cfg) setStripeConfig(cfg);
 
       if (account?.id) {
         const txns = await walletService.getTransactions(account.id, 0, 20);
         setTransactions(txns as TransactionWithAmount[]);
       }
-
-      // Fetch exchange rate
-      try {
-        const rate = await exchangeRateService.getUsdCupRate();
-        if (rate) setExchangeRate(rate);
-      } catch { /* use default */ }
 
       // Wallet v2 PR 4: load user receipts for the download button.
       try {
@@ -726,14 +732,6 @@ function NativeWalletScreen() {
       } catch (err) {
         logger.warn('Receipts fetch error (non-fatal)', { error: String(err) });
       }
-
-      // Fetch Stripe config (enabled + publishable key). Placeholder key
-      // ('pk_test_REPLACE_WITH_YOUR_KEY') means Stripe isn't yet provisioned
-      // for this env — UI will disable the card button with "Próximamente".
-      try {
-        const cfg = await paymentService.getStripeConfig();
-        setStripeConfig(cfg);
-      } catch { /* leave as null — card button stays disabled */ }
     } catch (err) {
       logger.error('Error fetching wallet', { error: String(err) });
     }
