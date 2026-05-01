@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -46,7 +46,9 @@ import {
   RecentPlacesList,
   CapitolioDivider,
   StopsList,
+  WeatherChip,
 } from '@tricigo/ui';
+import { useWeather } from '@/hooks/useWeather';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
@@ -1731,11 +1733,12 @@ function IdleView() {
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
-  // Home content feed — promotions + blog posts shown on idle view
+  // Home content feed — promotions + blog posts + campañas shown on idle view
   // (after recents, before services). See docs/superpowers/specs/
   // 2026-04-29-home-content-cards-design.md.
   const [activePromos, setActivePromos] = useState<Promotion[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [announcements, setAnnouncements] = useState<HomeAnnouncement[]>([]);
   // Last completed ride — re-engagement card (¿Volver a [destino]?)
   const [lastRide, setLastRide] = useState<{
     id: string;
@@ -1749,6 +1752,9 @@ function IdleView() {
   const { predictions } = useDestinationPredictions();
   // Surge is calculated in the backend but not shown to users
   // const { hasActiveSurge, maxMultiplier } = useSurgeZones();
+  const { data: weather } = useWeather(
+    userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null,
+  );
   const notifCenterEnabled = useFeatureFlag('notification_center_enabled');
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount);
@@ -1877,6 +1883,14 @@ function IdleView() {
         if (!cancelled) setBlogPosts(posts);
       } catch (err) {
         logger.warn('Failed to load blog feed', { error: String(err) });
+      }
+
+      try {
+        // RLS already filters out inactive/expired rows.
+        const items = await announcementService.getActive(null, 6);
+        if (!cancelled) setAnnouncements(items);
+      } catch (err) {
+        logger.warn('Failed to load announcements feed', { error: String(err) });
       }
     })();
     return () => { cancelled = true; };
@@ -2071,7 +2085,16 @@ function IdleView() {
               Go
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            {/* Weather chip — hides when no data; uses GPS-resolved coords */}
+            {weather && (
+              <WeatherChip
+                tempC={weather.tempC}
+                conditionCode={weather.conditionCode}
+                city={weather.city}
+                mode={mode}
+              />
+            )}
             {/* Theme toggle */}
             <Pressable
               onPress={() => setMode(mode === 'dark' ? 'light' : 'dark')}
@@ -2351,6 +2374,122 @@ function IdleView() {
           </View>
         )}
 
+        {/* ── Campañas (announcements) ── curated content cards from admin */}
+        {announcements.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.campaigns_label', { defaultValue: 'CAMPAÑAS' })}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingRight: 16 }}
+            >
+              {announcements.map((a) => {
+                const handlePress = () => {
+                  const url = a.cta_url;
+                  if (!url) return;
+                  // tricigo://, https://, mailto:, tel: → system handler
+                  // /route → in-app navigation
+                  if (url.startsWith('/')) {
+                    router.push(url as never);
+                  } else {
+                    Linking.openURL(url).catch(() => {
+                      // dead link — ignore silently, the card click is best-effort
+                    });
+                  }
+                };
+                return (
+                  <Pressable
+                    key={a.id}
+                    onPress={handlePress}
+                    style={{
+                      width: 260,
+                      backgroundColor: tokens.bg.elev1,
+                      borderColor: tokens.line,
+                      borderWidth: 1,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={a.title_es}
+                  >
+                    {a.image_url ? (
+                      <Image
+                        source={{ uri: a.image_url }}
+                        style={{ width: '100%', height: 110 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: '100%',
+                          height: 110,
+                          backgroundColor: tokens.bg.elev2,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="megaphone-outline" size={32} color={tokens.accent.orange} />
+                      </View>
+                    )}
+                    <View style={{ padding: 12 }}>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontFamily: 'BricolageGrotesque_700Bold',
+                          fontSize: 14,
+                          color: tokens.ink.primary,
+                          marginBottom: 4,
+                          lineHeight: 18,
+                        }}
+                      >
+                        {a.title_es}
+                      </Text>
+                      {a.body_es && (
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            fontFamily: 'Inter',
+                            fontSize: 11,
+                            color: tokens.ink.subtle,
+                            lineHeight: 14,
+                            marginBottom: a.cta_label_es ? 8 : 0,
+                          }}
+                        >
+                          {a.body_es}
+                        </Text>
+                      )}
+                      {a.cta_label_es && a.cta_url && (
+                        <View
+                          style={{
+                            alignSelf: 'flex-start',
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                            borderRadius: 999,
+                            backgroundColor: tokens.accent.orange,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: 'JetBrainsMono_600SemiBold',
+                              fontSize: 10,
+                              letterSpacing: 0.5,
+                              color: '#FFFBF5',
+                            }}
+                          >
+                            {a.cta_label_es.toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ── Novedades (blog) ── horizontal scroll of recent posts */}
         {blogPosts.length > 0 && (
           <View style={{ marginTop: 24 }}>
@@ -2442,7 +2581,7 @@ function IdleView() {
             <ServiceIconButton
               key={slug}
               icon={vehicleSelectionImages[slug]}
-              name={t(`service_type_short.${slug}` as const, { defaultValue: slug.split('_')[0]!.charAt(0).toUpperCase() + slug.split('_')[0]!.slice(1) })}
+              name={t(`service_type.${slug}` as const, { defaultValue: slug.split('_')[0]!.charAt(0).toUpperCase() + slug.split('_')[0]!.slice(1) })}
               dense
               mode={mode}
               onPress={() => {

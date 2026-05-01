@@ -83,20 +83,20 @@ const styles = StyleSheet.create({
   },
   cardDense: {
     borderRadius: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 4,
   },
   iconWrap: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   iconWrapDense: {
-    width: 44,
-    height: 44,
-    marginBottom: 4,
+    width: 54,
+    height: 54,
+    marginBottom: 6,
   },
   icon: {
     width: '100%',
@@ -104,11 +104,11 @@ const styles = StyleSheet.create({
   },
   name: {
     fontFamily: 'BricolageGrotesque_600SemiBold',
-    fontSize: 12,
+    fontSize: 13,
     letterSpacing: -0.2,
     textAlign: 'center',
   },
   nameDense: {
-    fontSize: 11,
+    fontSize: 12,
   },
 });
