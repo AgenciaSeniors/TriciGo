@@ -134,16 +134,30 @@ export default function ReviewsPage() {
       const reviewIds = (data ?? []).map((r: Record<string, unknown>) => r.id as string);
       let tagsMap: Record<string, string[]> = {};
       if (reviewIds.length > 0) {
+        // Schema drift: review_tags was refactored from `tag_key TEXT` (FK to
+        // review_tag_definitions.key) to `tag_id UUID` (FK to .id). The
+        // textual key now lives only in review_tag_definitions.tag_key, so
+        // we embed the parent row to read it. Without this, PostgREST
+        // returns 400 ("column review_tags.tag_key does not exist") and
+        // the page falls back to "No pudimos cargar las reseñas".
         const { data: tags } = await supabase
           .from('review_tags')
-          .select('review_id, tag_key')
+          .select('review_id, review_tag_definitions(tag_key)')
           .in('review_id', reviewIds);
         if (tags) {
-          tagsMap = tags.reduce((acc: Record<string, string[]>, tag: { review_id: string; tag_key: string }) => {
-            if (!acc[tag.review_id]) acc[tag.review_id] = [];
-            acc[tag.review_id]!.push(tag.tag_key);
-            return acc;
-          }, {});
+          tagsMap = tags.reduce(
+            (
+              acc: Record<string, string[]>,
+              tag: { review_id: string; review_tag_definitions: { tag_key: string } | null },
+            ) => {
+              const key = tag.review_tag_definitions?.tag_key;
+              if (!key) return acc;
+              if (!acc[tag.review_id]) acc[tag.review_id] = [];
+              acc[tag.review_id]!.push(key);
+              return acc;
+            },
+            {},
+          );
         }
       }
 
