@@ -3,7 +3,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 
-export type WalletAccountType = 'customer_cash' | 'driver_cash';
+// Mirror the wallet_account_type Postgres enum (see
+// supabase/migrations/00001_initial_schema.sql + 00094_trc_rebase). The
+// modal only renders toggles for the 2 cash variants today, but other
+// account types (notably 'tricicoin' for driver_quota / TC top-ups) are
+// still valid `defaultAccountType` values passed by callers like
+// drivers/[id]/page.tsx — without listing them here the build crashes
+// with "Type '"tricicoin"' is not assignable to type WalletAccountType".
+export type WalletAccountType =
+  | 'customer_cash'
+  | 'driver_cash'
+  | 'driver_hold'
+  | 'driver_quota'
+  | 'platform_revenue'
+  | 'platform_promotions'
+  | 'corporate_cash'
+  | 'tricicoin';
 
 interface AdjustWalletModalProps {
   open: boolean;
