@@ -175,10 +175,38 @@ Deno.serve(async (req) => {
 
     let sent = 0;
     let failed = 0;
-    if (pushResult.data) {
-      for (const ticket of pushResult.data) {
-        if (ticket.status === 'ok') sent++;
-        else failed++;
+    const deadTokens: string[] = [];
+    if (Array.isArray(pushResult.data)) {
+      pushResult.data.forEach((ticket: { status?: string; message?: string; details?: { error?: string } }, idx: number) => {
+        if (ticket.status === 'ok') {
+          sent++;
+          return;
+        }
+        failed++;
+        const errCode = ticket.details?.error;
+        const tokenForTicket = tokens[idx];
+        if (errCode === 'DeviceNotRegistered' && tokenForTicket) {
+          // The user uninstalled the app, disabled notifications, or
+          // the token rotated. Drop the dead row so future pushes don't
+          // waste Expo API calls on it.
+          deadTokens.push(tokenForTicket);
+        } else if (errCode === 'InvalidCredentials') {
+          console.error('[send-push] InvalidCredentials from Expo — FCM/APNs creds need to be re-uploaded in eas credentials');
+        } else if (errCode) {
+          console.warn(`[send-push] Expo ticket error: ${errCode}${ticket.message ? ' — ' + ticket.message : ''}`);
+        }
+      });
+    }
+
+    if (deadTokens.length > 0) {
+      const { error: cleanupErr } = await supabase
+        .from('user_devices')
+        .delete()
+        .in('push_token', deadTokens);
+      if (cleanupErr) {
+        console.warn('[send-push] Failed to clean dead tokens:', cleanupErr.message);
+      } else {
+        console.info(`[send-push] Cleaned ${deadTokens.length} dead token(s) from user_devices`);
       }
     }
 
