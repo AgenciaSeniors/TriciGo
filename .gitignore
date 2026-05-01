@@ -65,3 +65,7 @@ staging/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local-only download buckets (e.g. tmp-apk/ from gh run download)
+tmp-apk/
+*.apk
