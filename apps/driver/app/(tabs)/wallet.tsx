@@ -211,6 +211,7 @@ export default function WalletScreen() {
             ride earnings could pay commission, but commission only debits
             from tricicoin. Wrapping in {false && ...} preserves the JSX
             history for quick rollback if needed. */}
+        {/* eslint-disable-next-line no-constant-binary-expression */}
         {false && <AnimatedCard delay={100} className="rounded-2xl p-5 mb-6"
           style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
         >

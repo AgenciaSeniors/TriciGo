@@ -68,7 +68,9 @@ export function ArrivalCard({
       clearTimeout(checkTimer);
       clearTimeout(dismissTimer);
     };
-  }, [slideAnim, opacityAnim, checkScaleAnim]); // eslint-disable-line react-hooks/exhaustive-deps — onDismiss stored in ref
+    // onDismiss is stored in ref so it doesn't need to be in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideAnim, opacityAnim, checkScaleAnim]);
 
   const handleTap = () => {
     Animated.timing(opacityAnim, {

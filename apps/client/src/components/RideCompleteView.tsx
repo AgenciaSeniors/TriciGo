@@ -186,6 +186,21 @@ export function RideCompleteView() {
     }
   }, [ratingCategory]);
 
+  // Submit-success bounce animation. Hook must run before any early-return
+  // to satisfy rules-of-hooks; activeRide guard is checked just below.
+  useEffect(() => {
+    if (submitted) {
+      // U3.1: Bigger bounce for first ride
+      if (isFirstRide) scaleAnim.setValue(0.5);
+      const anim = Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
+      ]);
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [submitted, fadeAnim, scaleAnim, isFirstRide]);
+
   if (!activeRide) return null;
 
   const fareTrc = activeRide.final_fare_trc ?? activeRide.estimated_fare_trc;
@@ -299,19 +314,6 @@ export function RideCompleteView() {
       setSendingEmail(false);
     }
   };
-
-  useEffect(() => {
-    if (submitted) {
-      // U3.1: Bigger bounce for first ride
-      if (isFirstRide) scaleAnim.setValue(0.5);
-      const anim = Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
-      ]);
-      anim.start();
-      return () => anim.stop();
-    }
-  }, [submitted, fadeAnim, scaleAnim, isFirstRide]);
 
   if (submitted) {
     return (

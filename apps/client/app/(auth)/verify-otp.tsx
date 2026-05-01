@@ -29,17 +29,6 @@ export default function VerifyOTPScreen() {
   // pastes then also taps Verify. Same pattern shipped in driver R5.
   const autoVerifiedRef = useRef(false);
 
-  // Guard: phone param is required
-  if (!phone) {
-    return (
-      <Screen bg="white" padded>
-        <View className="flex-1 justify-center items-center">
-          <Text variant="body" color="error">{t('errors.generic')}</Text>
-        </View>
-      </Screen>
-    );
-  }
-
   // Use a stable effect that only re-runs when timer starts (not on every tick)
   useEffect(() => {
     if (resendTimer <= 0) return;
@@ -107,6 +96,17 @@ export default function VerifyOTPScreen() {
     if (code.length < 6) autoVerifiedRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
+
+  // Guard: phone param is required (rendered after hooks to satisfy rules-of-hooks)
+  if (!phone) {
+    return (
+      <Screen bg="white" padded>
+        <View className="flex-1 justify-center items-center">
+          <Text variant="body" color="error">{t('errors.generic')}</Text>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen bg="white" padded={false}>
