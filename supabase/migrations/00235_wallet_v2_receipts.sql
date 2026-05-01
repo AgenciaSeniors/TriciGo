@@ -50,16 +50,17 @@ CREATE INDEX idx_wallet_receipts_payment_intent
 -- 2. Atomic receipt-number generator: 'TG-YYYY-NNNNNN'
 CREATE SEQUENCE wallet_receipts_seq START 1;
 
-CREATE OR REPLACE FUNCTION generate_receipt_no()
+CREATE OR REPLACE FUNCTION public.generate_receipt_no()
 RETURNS text
 LANGUAGE sql
 VOLATILE
+SET search_path = ''
 AS $$
   SELECT 'TG-' || to_char(now(), 'YYYY') || '-' ||
-         lpad(nextval('wallet_receipts_seq')::text, 6, '0');
+         lpad(nextval('public.wallet_receipts_seq'::regclass)::text, 6, '0');
 $$;
 
-GRANT EXECUTE ON FUNCTION generate_receipt_no() TO service_role;
+GRANT EXECUTE ON FUNCTION public.generate_receipt_no() TO service_role;
 
 -- 3. RLS — users see only their own; admins see all
 ALTER TABLE wallet_receipts ENABLE ROW LEVEL SECURITY;
