@@ -145,12 +145,23 @@ export default function ReviewsPage() {
           .select('review_id, review_tag_definitions(tag_key)')
           .in('review_id', reviewIds);
         if (tags) {
-          tagsMap = tags.reduce(
-            (
-              acc: Record<string, string[]>,
-              tag: { review_id: string; review_tag_definitions: { tag_key: string } | null },
-            ) => {
-              const key = tag.review_tag_definitions?.tag_key;
+          // PostgREST TypeScript types embed FKs as arrays even for to-one
+          // relationships (because the SDK can't tell statically). Cast to
+          // unknown first then to a tolerant shape that accepts both arrays
+          // and single objects.
+          type EmbeddedTag = {
+            review_id: string;
+            review_tag_definitions:
+              | { tag_key: string }
+              | { tag_key: string }[]
+              | null;
+          };
+          tagsMap = (tags as unknown as EmbeddedTag[]).reduce(
+            (acc: Record<string, string[]>, tag: EmbeddedTag) => {
+              const def = Array.isArray(tag.review_tag_definitions)
+                ? tag.review_tag_definitions[0]
+                : tag.review_tag_definitions;
+              const key = def?.tag_key;
               if (!key) return acc;
               if (!acc[tag.review_id]) acc[tag.review_id] = [];
               acc[tag.review_id]!.push(key);
