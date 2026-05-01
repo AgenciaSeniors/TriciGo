@@ -23,6 +23,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 // Lazy require Stripe SDK (native only). Fallbacks keep web build compiling.
 let useStripe: (() => {
@@ -135,6 +136,11 @@ function WebWalletScreen() {
   // Recharge state
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
 
+  // Wallet v2 PR 4: receipt index by payment_intent_id so each recharge
+  // txn can render a "Descargar comprobante" button.
+  const [receiptByPiId, setReceiptByPiId] = useState<Map<string, { receipt_no: string; pdf_storage_path: string | null }>>(new Map());
+  const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // P2P Transfer state
@@ -172,10 +178,37 @@ function WebWalletScreen() {
         setPage(0);
         setHasMore((txns as TransactionWithAmount[]).length >= PAGE_SIZE);
       }
+
+      // Wallet v2 PR 4: load user receipts so we can render the
+      // "Descargar comprobante" button on matching recharge txns.
+      try {
+        const receipts = await walletService.getReceipts(userId, 100);
+        const map = new Map<string, { receipt_no: string; pdf_storage_path: string | null }>();
+        for (const r of receipts) {
+          map.set(r.payment_intent_id, { receipt_no: r.receipt_no, pdf_storage_path: r.pdf_storage_path });
+        }
+        setReceiptByPiId(map);
+      } catch (err) {
+        logger.warn('Receipts fetch error (non-fatal)', { error: String(err) });
+      }
     } catch (err) {
       logger.error('Wallet fetch error', { error: String(err) });
     }
   }, [userId]);
+
+  // Wallet v2 PR 4: open the receipt PDF via a fresh signed URL.
+  const openReceipt = useCallback(async (storagePath: string, receiptNo: string) => {
+    setOpeningReceipt(receiptNo);
+    try {
+      const url = await walletService.getReceiptSignedUrl(storagePath);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      logger.error('Receipt open failed', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }) });
+    } finally {
+      setOpeningReceipt(null);
+    }
+  }, [t]);
 
   useEffect(() => {
     if (!userId) {
@@ -409,29 +442,53 @@ function WebWalletScreen() {
                 const entry = tx.ledger_entries?.[0];
                 const amount = entry?.amount ?? 0;
                 const isCredit = amount > 0;
+                // Wallet v2 PR 4: match this txn to a receipt via payment_intent_id.
+                const receipt = tx.type === 'recharge' && tx.reference_type === 'payment_intent' && tx.reference_id
+                  ? receiptByPiId.get(tx.reference_id)
+                  : null;
+                const canDownload = !!receipt?.pdf_storage_path;
                 return (
-                  <View key={tx.id} className="flex-row items-center py-3 border-b border-neutral-100 dark:border-neutral-800">
-                    <View
-                      style={{
-                        width: 8, height: 8, borderRadius: 4, marginRight: 10,
-                        backgroundColor: isCredit ? '#16a34a' : '#ef4444',
-                      }}
-                    />
-                    <View className="flex-1">
-                      <Text variant="bodySmall" numberOfLines={1}>
-                        {getTransactionLabel(tx.type, isCredit, t)}
+                  <View key={tx.id} className="py-3 border-b border-neutral-100 dark:border-neutral-800">
+                    <View className="flex-row items-center">
+                      <View
+                        style={{
+                          width: 8, height: 8, borderRadius: 4, marginRight: 10,
+                          backgroundColor: isCredit ? '#16a34a' : '#ef4444',
+                        }}
+                      />
+                      <View className="flex-1">
+                        <Text variant="bodySmall" numberOfLines={1}>
+                          {getTransactionLabel(tx.type, isCredit, t)}
+                        </Text>
+                        {tx.description ? (
+                          <Text variant="caption" color="tertiary" numberOfLines={1}>{tx.description}</Text>
+                        ) : null}
+                        <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at, t('today'), t('yesterday'))}</Text>
+                      </View>
+                      <Text
+                        variant="body"
+                        className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+                      >
+                        {isCredit ? '+' : ''}{formatTriciCoin(amount)}
                       </Text>
-                      {tx.description ? (
-                        <Text variant="caption" color="tertiary" numberOfLines={1}>{tx.description}</Text>
-                      ) : null}
-                      <Text variant="caption" color="tertiary">{getRelativeDay(tx.created_at, t('today'), t('yesterday'))}</Text>
                     </View>
-                    <Text
-                      variant="body"
-                      className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-                    >
-                      {isCredit ? '+' : ''}{formatTriciCoin(amount)}
-                    </Text>
+                    {canDownload && receipt && (
+                      <Pressable
+                        onPress={() => openReceipt(receipt.pdf_storage_path!, receipt.receipt_no)}
+                        disabled={openingReceipt === receipt.receipt_no}
+                        style={{ marginTop: 6, marginLeft: 18, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('wallet.download_receipt_aria', { defaultValue: 'Descargar comprobante {{no}}', no: receipt.receipt_no })}
+                      >
+                        <Ionicons name="download-outline" size={13} color={colors.brand.orange} />
+                        <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600' }}>
+                          {openingReceipt === receipt.receipt_no
+                            ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                            : t('wallet.download_receipt', { defaultValue: 'Comprobante' })}{' '}
+                          <Text variant="caption" style={{ color: colors.brand.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
+                        </Text>
+                      </Pressable>
+                    )}
                   </View>
                 );
               })}
@@ -633,6 +690,10 @@ function NativeWalletScreen() {
 
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
 
+  // Wallet v2 PR 4: receipt index by payment_intent_id.
+  const [receiptByPiId, setReceiptByPiId] = useState<Map<string, { receipt_no: string; pdf_storage_path: string | null }>>(new Map());
+  const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
+
   // Fetch wallet data.
   // ensureAccount, balance, account, exchange rate and Stripe config
   // have no dependencies on each other — batch them into one wave.
@@ -658,6 +719,18 @@ function NativeWalletScreen() {
       if (account?.id) {
         const txns = await walletService.getTransactions(account.id, 0, 20);
         setTransactions(txns as TransactionWithAmount[]);
+      }
+
+      // Wallet v2 PR 4: load user receipts for the download button.
+      try {
+        const receipts = await walletService.getReceipts(userId, 100);
+        const map = new Map<string, { receipt_no: string; pdf_storage_path: string | null }>();
+        for (const r of receipts) {
+          map.set(r.payment_intent_id, { receipt_no: r.receipt_no, pdf_storage_path: r.pdf_storage_path });
+        }
+        setReceiptByPiId(map);
+      } catch (err) {
+        logger.warn('Receipts fetch error (non-fatal)', { error: String(err) });
       }
     } catch (err) {
       logger.error('Error fetching wallet', { error: String(err) });
@@ -949,22 +1022,61 @@ function NativeWalletScreen() {
     { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
 
+  // Wallet v2 PR 4: native receipt opener uses Linking.openURL (web build
+  // never reaches NativeWalletScreen, so window.open is not needed here).
+  const openReceiptNative = useCallback(async (storagePath: string, receiptNo: string) => {
+    setOpeningReceipt(receiptNo);
+    try {
+      const url = await walletService.getReceiptSignedUrl(storagePath);
+      await Linking.openURL(url);
+    } catch (err) {
+      logger.error('Receipt open failed', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }) });
+    } finally {
+      setOpeningReceipt(null);
+    }
+  }, [t]);
+
   const renderTransaction = ({ item, index }: { item: TransactionWithAmount; index: number }) => {
     const amount = item.ledger_entries?.[0]?.amount ?? 0;
     const isCredit = amount > 0;
+    // Wallet v2 PR 4: only Stripe recharges (reference_type='payment_intent') get receipts.
+    const receipt = item.type === 'recharge' && item.reference_type === 'payment_intent' && item.reference_id
+      ? receiptByPiId.get(item.reference_id)
+      : null;
+    const canDownload = !!receipt?.pdf_storage_path;
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
-        <View className="flex-row items-center py-3 border-b border-neutral-100 dark:border-neutral-800" accessible={true}>
-          <View className="flex-1">
-            <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
-            <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
+        <View className="py-3 border-b border-neutral-100 dark:border-neutral-800" accessible={true}>
+          <View className="flex-row items-center">
+            <View className="flex-1">
+              <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
+              <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
+            </View>
+            <Text
+              variant="body"
+              className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+            >
+              {isCredit ? '+' : ''}{formatTriciCoin(amount)}
+            </Text>
           </View>
-          <Text
-            variant="body"
-            className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-          >
-            {isCredit ? '+' : ''}{formatTriciCoin(amount)}
-          </Text>
+          {canDownload && receipt && (
+            <Pressable
+              onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
+              disabled={openingReceipt === receipt.receipt_no}
+              className="mt-1.5 self-start flex-row items-center"
+              accessibilityRole="button"
+              accessibilityLabel={t('wallet.download_receipt_aria', { defaultValue: 'Descargar comprobante {{no}}', no: receipt.receipt_no })}
+            >
+              <Ionicons name="download-outline" size={13} color={colors.brand.orange} />
+              <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600', marginLeft: 4 }}>
+                {openingReceipt === receipt.receipt_no
+                  ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                  : t('wallet.download_receipt', { defaultValue: 'Comprobante' })}{' '}
+                <Text variant="caption" style={{ color: colors.brand.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
+              </Text>
+            </Pressable>
+          )}
         </View>
       </AnimatedCard>
     );
@@ -1187,19 +1299,51 @@ function NativeWalletScreen() {
             onChangeText={setRechargeAmount}
             keyboardType="numeric"
           />
-          {parseFloat(rechargeAmount) > 0 && (
-            <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
-              <Text variant="caption" color="secondary">
-                ≈ {Math.round(parseFloat(rechargeAmount) * exchangeRate).toLocaleString()} CUP
-                {stripeConfig?.feeUsd ? ` · +$${stripeConfig.feeUsd.toFixed(2)} USD fee` : ''}
-              </Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                {t('wallet.recharge_min_hint', {
-                  defaultValue: `Mínimo $${MIN_RECHARGE_USD} USD · Conversión al tipo de cambio actual`,
-                })}
-              </Text>
-            </View>
-          )}
+          {(() => {
+            // Wallet v2 PR 5: top-up preview (USD → fee → net TC → CUP).
+            // Spec §10 #2: fee = 3% of charged USD, minimum $0.50.
+            // Fall back to the spec rule when stripeConfig hasn't loaded.
+            const usdNum = parseFloat(rechargeAmount);
+            if (!Number.isFinite(usdNum) || usdNum <= 0) return null;
+            const fee = stripeConfig?.feeUsd != null
+              ? stripeConfig.feeUsd
+              : Math.max(usdNum * 0.03, 0.50);
+            const net = Math.max(0, usdNum - fee);
+            const cupEq = Math.round(net * exchangeRate);
+            const belowMin = usdNum < MIN_RECHARGE_USD;
+            return (
+              <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
+                <Text variant="bodySmall" className="font-semibold" style={{ color: colors.brand.orange }}>
+                  {t('wallet.recharge_preview_total', {
+                    defaultValue: 'Recargás ${{usd}} USD = {{tc}} TriciCoin',
+                    usd: usdNum.toFixed(2),
+                    tc: net.toFixed(2),
+                  })}
+                </Text>
+                <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
+                  ≈ ${net.toFixed(2)} {t('wallet.recharge_preview_net', {
+                    defaultValue: 'netos (después del 3% de comisión: -${{fee}})',
+                    fee: fee.toFixed(2),
+                  })}
+                </Text>
+                <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
+                  {t('wallet.recharge_preview_cup', {
+                    defaultValue: 'Equivale a {{cup}} CUP al cambio de hoy (1 USD = {{rate}} CUP)',
+                    cup: cupEq.toLocaleString(),
+                    rate: Math.round(exchangeRate).toLocaleString(),
+                  })}
+                </Text>
+                {belowMin && (
+                  <Text variant="caption" style={{ marginTop: 6, color: '#b45309', fontWeight: '600' }}>
+                    {t('wallet.recharge_min_warning', {
+                      defaultValue: 'Mínimo ${{min}} USD por recarga.',
+                      min: MIN_RECHARGE_USD,
+                    })}
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
           {!stripeReady && (
             <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
               <Text variant="caption" style={{ color: '#b45309' }}>

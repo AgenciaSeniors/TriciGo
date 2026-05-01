@@ -393,4 +393,47 @@ export const walletService = {
     if (error) throw error;
     logger.info('config_updated', { key, value });
   },
+
+  /**
+   * Wallet v2 PR 4: list the user's wallet recharge receipts so the
+   * client can show a "Descargar comprobante" button next to each
+   * historical recharge transaction. RLS on wallet_receipts (added
+   * in migration 00235) already restricts SELECT to user_id=auth.uid().
+   */
+  async getReceipts(userId: string, limit = 50) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_receipts')
+      .select('id, payment_intent_id, receipt_no, pdf_storage_path, pdf_generated_at, usd_charged, tc_credited, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data ?? []) as Array<{
+      id: string;
+      payment_intent_id: string;
+      receipt_no: string;
+      pdf_storage_path: string | null;
+      pdf_generated_at: string | null;
+      usd_charged: string;
+      tc_credited: string;
+      created_at: string;
+    }>;
+  },
+
+  /**
+   * Wallet v2 PR 4: mint a short-lived signed URL for a private
+   * receipts/<user_id>/<TG-...>.pdf path. Storage RLS already
+   * enforces owner-only reads — this just hands the authenticated
+   * user a fresh download token.
+   */
+  async getReceiptSignedUrl(storagePath: string, expirySec = 3600): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from('receipts')
+      .createSignedUrl(storagePath, expirySec);
+    if (error) throw error;
+    if (!data?.signedUrl) throw new Error('signed_url_missing');
+    return data.signedUrl;
+  },
 };

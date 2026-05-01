@@ -188,6 +188,50 @@ Deno.serve(async (req) => {
 
         console.log(`Stripe recharge processed: ${tricigoIntentId} → txn ${txnId}`);
 
+        // Persist card brand + last4 from Stripe PaymentMethod (Wallet v2 PR 3).
+        // The webhook PI doesn't always carry expanded charges, so retrieve the
+        // PaymentMethod separately. Failures are non-fatal — the wallet was
+        // already credited; receipt will fall back to a generic card label.
+        let cardBrand: string | null = null;
+        let cardLast4: string | null = null;
+        try {
+          const pmRef = pi.payment_method;
+          if (typeof pmRef === 'string' && pmRef.length > 0) {
+            const pm = await stripe.paymentMethods.retrieve(pmRef);
+            if (pm.card) {
+              cardBrand = pm.card.brand ?? null;
+              cardLast4 = pm.card.last4 ?? null;
+            }
+          }
+        } catch (pmErr) {
+          console.warn(`[process-stripe-webhook] Failed to fetch PM details for ${tricigoIntentId}:`, pmErr);
+        }
+        if (cardBrand || cardLast4) {
+          await supabase
+            .from('payment_intents')
+            .update({ card_brand: cardBrand, card_last4: cardLast4 })
+            .eq('id', tricigoIntentId);
+        }
+
+        // Asynchronously trigger receipt generation (Wallet v2 PR 3).
+        // Fire-and-forget so the webhook returns to Stripe in <1 s; the EF
+        // handles its own idempotency via wallet_receipts.payment_intent_id
+        // UNIQUE. Driver-quota recharges don't get receipts (corporate
+        // accounting, not customer-facing).
+        if (rechargeType !== 'driver_quota') {
+          fetch(`${supabaseUrl}/functions/v1/generate-recharge-receipt`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify({ payment_intent_id: tricigoIntentId }),
+          }).catch((efErr) => {
+            console.error(`[process-stripe-webhook] generate-recharge-receipt trigger failed for ${tricigoIntentId}:`, efErr);
+          });
+        }
+
         // Send push notification
         await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, true);
 
