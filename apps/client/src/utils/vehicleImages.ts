@@ -27,5 +27,8 @@ export const vehicleMarkerImages: Record<ServiceTypeSlug, ImageSourcePropType> =
   moto_standard: require('../../assets/vehicles/markers/moto.png'),
   auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/markers/confort.png'),
-  mensajeria: require('../../assets/vehicles/markers/moto.png'),
+  // mensajeria now has its own marker (kraft box, top-down) — no longer
+  // falls back to moto.png. The box has no inherent "front" direction, so
+  // map views must skip iconRotate-by-bearing for this slug.
+  mensajeria: require('../../assets/vehicles/markers/mensajeria.png'),
 };

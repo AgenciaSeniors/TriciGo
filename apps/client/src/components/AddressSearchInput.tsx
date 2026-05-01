@@ -662,7 +662,9 @@ function AddressSearchInputInner({
             </View>
           )}
 
-          {/* Recent addresses section */}
+          {/* Recent addresses section. Icon uses brand orange in both
+              themes (matches Saved rows above) and text uses explicit
+              primary color so dark mode meets WCAG 4.5:1 contrast. */}
           {recentAddresses.length > 0 && (
             <View className="mb-2">
               <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
@@ -674,14 +676,15 @@ function AddressSearchInputInner({
                   className="flex-row items-center px-3 py-2.5 rounded-lg"
                   onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null })}
                 >
-                  <Ionicons name="time-outline" size={16} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
-                  <Text variant="bodySmall" className="flex-1 ml-3 font-medium" numberOfLines={1}>{r.address}</Text>
+                  <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
+                  <Text variant="bodySmall" color="primary" className="flex-1 ml-3 font-medium" numberOfLines={1}>{r.address}</Text>
                 </Pressable>
               ))}
             </View>
           )}
 
-          {/* Predicted destinations */}
+          {/* Predicted destinations ("Sugeridos"). Same contrast fix as
+              Recientes — icon orange, text primary in dark mode. */}
           {predictions.length > 0 && (
             <View className="mb-2">
               <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
@@ -693,8 +696,8 @@ function AddressSearchInputInner({
                   className="flex-row items-center px-3 py-2.5 rounded-lg"
                   onPress={() => handleSelectMerged({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 0, source: 'prediction', icon: 'navigate-outline', distanceKm: null })}
                 >
-                  <Ionicons name={p.reason === 'frequent' ? 'star' : 'navigate-outline'} size={16} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
-                  <Text variant="bodySmall" className="flex-1 ml-3 font-medium" numberOfLines={1}>{p.address}</Text>
+                  <Ionicons name={p.reason === 'frequent' ? 'star' : 'navigate-outline'} size={16} color={colors.brand.orange} />
+                  <Text variant="bodySmall" color="primary" className="flex-1 ml-3 font-medium" numberOfLines={1}>{p.address}</Text>
                 </Pressable>
               ))}
             </View>

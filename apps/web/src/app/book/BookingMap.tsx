@@ -100,7 +100,12 @@ const VEHICLE_IMAGES: Record<string, string> = {
   moto: '/images/vehicles/markers/moto@2x.png',
   auto: '/images/vehicles/markers/auto@2x.png',
   confort: '/images/vehicles/markers/confort@2x.png',
+  mensajeria: '/images/vehicles/markers/mensajeria@2x.png',
 };
+
+// Cargo box marker (mensajería) has no inherent "front" — keep it upright
+// instead of rotating with bearing.
+const NON_ROTATING_MARKERS = new Set<string>(['mensajeria']);
 
 function createVehicleMarkerEl(vehicleType: string, heading: number | null, etaSeconds?: number | null): HTMLDivElement {
   const el = document.createElement('div');
@@ -113,7 +118,7 @@ function createVehicleMarkerEl(vehicleType: string, heading: number | null, etaS
   });
 
   const imgSrc = VEHICLE_IMAGES[vehicleType] ?? VEHICLE_IMAGES.auto;
-  const rotation = heading ?? 0;
+  const rotation = NON_ROTATING_MARKERS.has(vehicleType) ? 0 : (heading ?? 0);
 
   // Vehicle icon
   const icon = document.createElement('div');
@@ -574,6 +579,7 @@ export default function BookingMap({
         ['vehicle-moto', '/images/vehicles/markers/moto@2x.png'],
         ['vehicle-auto', '/images/vehicles/markers/auto@2x.png'],
         ['vehicle-confort', '/images/vehicles/markers/confort@2x.png'],
+        ['vehicle-mensajeria', '/images/vehicles/markers/mensajeria@2x.png'],
       ];
       images.forEach(([name, url]) => {
         if (!map.hasImage(name)) {
@@ -594,7 +600,8 @@ export default function BookingMap({
         layout: {
           'icon-image': ['get', 'icon'],
           'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.3, 14, 0.45, 18, 0.55],
-          'icon-rotate': ['get', 'heading'],
+          // Cargo box marker (mensajería) stays at 0deg — no inherent front.
+          'icon-rotate': ['case', ['==', ['get', 'icon'], 'vehicle-mensajeria'], 0, ['get', 'heading']],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
