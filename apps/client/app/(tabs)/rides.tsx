@@ -656,6 +656,7 @@ function NativeRidesScreen() {
           serviceTypes={serviceTypes}
           paymentMethods={paymentMethods}
           labels={filterLabels}
+          dark={isDark}
         />
 
         {/* Scheduled rides section — Cuban Modern card with orange accent */}

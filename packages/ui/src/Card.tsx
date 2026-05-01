@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, useColorScheme, type ViewProps, type ViewStyle } from 'react-native';
+import { View, type ViewProps, type ViewStyle } from 'react-native';
+import { useColorScheme } from 'nativewind';
 
 export interface CardProps extends ViewProps {
   variant?: 'elevated' | 'outlined' | 'filled' | 'surface';
@@ -46,7 +47,7 @@ export function Card({
   style,
   ...props
 }: CardProps & { className?: string }) {
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useColorScheme();
   const isDark = forceDark || theme === 'dark' || (theme === 'auto' && colorScheme === 'dark');
   const isLight = theme === 'light';
 
