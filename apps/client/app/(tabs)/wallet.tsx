@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
+import { WalletMigrationBanner } from '@tricigo/ui/WalletMigrationBanner';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { useTranslation } from '@tricigo/i18n';
@@ -630,12 +632,36 @@ function NativeWalletScreen() {
   const isDark = colorScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
 
-  const [balance, setBalance] = useState({ available: 0, held: 0 });
+  const [balance, setBalance] = useState<{
+    available: number;
+    held: number;
+    availableUsdCents: number | null;
+    heldUsdCents: number | null;
+    migrationRate: number | null;
+    migrationBonusPct: number | null;
+  }>({
+    available: 0, held: 0,
+    availableUsdCents: null, heldUsdCents: null,
+    migrationRate: null, migrationBonusPct: null,
+  });
   const [accountId, setAccountId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<TxnFilter>('all');
+
+  // Wallet v2 phase 2: dismissal state for the migration banner.
+  const MIGRATION_BANNER_KEY = '@tricigo/wallet_v2_banner_dismissed';
+  const [migrationBannerDismissed, setMigrationBannerDismissed] = useState(true); // default true to avoid flash
+  useEffect(() => {
+    AsyncStorage.getItem(MIGRATION_BANNER_KEY).then((v) => {
+      setMigrationBannerDismissed(v === '1');
+    });
+  }, []);
+  const dismissMigrationBanner = useCallback(() => {
+    setMigrationBannerDismissed(true);
+    AsyncStorage.setItem(MIGRATION_BANNER_KEY, '1').catch(() => { /* best-effort */ });
+  }, []);
 
   // U3.4: Count-up animation for balance after recharge
   const [displayBalance, setDisplayBalance] = useState(0);
@@ -1109,11 +1135,24 @@ function NativeWalletScreen() {
           </Text>
         </View>
 
+        {/* Wallet v2 phase 2: one-time migration announcement (dismissible). */}
+        {!migrationBannerDismissed && balance.availableUsdCents != null && (
+          <WalletMigrationBanner
+            balanceUsdCents={balance.availableUsdCents}
+            bonusPct={balance.migrationBonusPct ?? 0}
+            onDismiss={dismissMigrationBanner}
+          />
+        )}
+
         <AnimatedCard delay={0}>
           {/* U3.4: Use displayBalance for count-up animation */}
+          {/* Wallet v2 phase 2: switch to USD mode when migration data is loaded. */}
           <BalanceBadge
             balance={displayBalance}
             held={balance.held}
+            balanceUsdCents={balance.availableUsdCents}
+            heldUsdCents={balance.heldUsdCents}
+            exchangeRate={balance.migrationRate ?? exchangeRate}
             size="lg"
             showHeld
             coinIcon={tricoinSmall}

@@ -128,16 +128,49 @@ export const walletService = {
    * Get available + held balance. Same backward-compat rule as
    * `getAccount`: defaults to 'customer_cash' (rider). Drivers MUST
    * pass 'driver_cash' to see their real earnings.
+   *
+   * Wallet v2 phase 2: also returns the USD-cents equivalent + the
+   * exchange-rate snapshot taken at migration (00242). Callers that
+   * want to render in USD use the `*UsdCents` fields; legacy callers
+   * keep using `available` / `held` (CUP-pegged) without changes.
    */
   async getBalance(
     userId: string,
     accountType: WalletAccountKind = 'customer_cash',
-  ): Promise<{ available: number; held: number }> {
-    const account = await walletService.getAccount(userId, accountType);
-    if (!account) return { available: 0, held: 0 };
+  ): Promise<{
+    available: number;
+    held: number;
+    availableUsdCents: number | null;
+    heldUsdCents: number | null;
+    migrationRate: number | null;
+    migrationBonusPct: number | null;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_accounts')
+      .select('balance, held_balance, balance_usd_cents, held_balance_usd_cents, migration_rate, migration_bonus_pct')
+      .eq('user_id', userId)
+      .eq('account_type', accountType)
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) {
+      return { available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null };
+    }
+    const row = data as {
+      balance: number;
+      held_balance: number;
+      balance_usd_cents: number | null;
+      held_balance_usd_cents: number | null;
+      migration_rate: string | number | null;
+      migration_bonus_pct: string | number | null;
+    };
     return {
-      available: account.balance,
-      held: account.held_balance,
+      available: row.balance,
+      held: row.held_balance,
+      availableUsdCents: row.balance_usd_cents,
+      heldUsdCents: row.held_balance_usd_cents,
+      migrationRate: row.migration_rate != null ? Number(row.migration_rate) : null,
+      migrationBonusPct: row.migration_bonus_pct != null ? Number(row.migration_bonus_pct) : null,
     };
   },
 

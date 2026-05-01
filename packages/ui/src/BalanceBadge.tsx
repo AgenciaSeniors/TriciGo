@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, Image, ImageSourcePropType } from 'react-native';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, formatTriciCoinUsd, formatCupApprox } from '@tricigo/utils';
 
 export interface BalanceBadgeProps {
-  /** Balance amount in centavos */
+  /** Balance amount in CUP whole units (legacy, pre-Wallet v2). */
   balance: number;
-  /** Optional held amount in centavos */
+  /** Optional held amount in CUP whole units (legacy). */
   held?: number;
   /** Size variant */
   size?: 'sm' | 'md' | 'lg';
@@ -22,6 +22,17 @@ export interface BalanceBadgeProps {
   /** Gradient end point */
   gradientEnd?: { x: number; y: number };
   className?: string;
+  /**
+   * Wallet v2 phase 2: render the balance as USD-equivalent (1 TC ≡ 1 USD).
+   * When `balanceUsdCents` is provided, the badge shows "$19.41" as the
+   * primary figure plus an "≈ 10,287 CUP" muted subtitle. Falls back to
+   * the legacy CUP-pegged TC display when this prop is absent.
+   */
+  balanceUsdCents?: number | null;
+  /** Wallet v2 phase 2: held amount in USD cents (paired with balanceUsdCents). */
+  heldUsdCents?: number | null;
+  /** Wallet v2 phase 2: USD/CUP rate used for the CUP approximation line. */
+  exchangeRate?: number | null;
 }
 
 export function BalanceBadge({
@@ -35,12 +46,30 @@ export function BalanceBadge({
   gradientStart = { x: 0, y: 0 },
   gradientEnd = { x: 1, y: 1 },
   className,
+  balanceUsdCents,
+  heldUsdCents,
+  exchangeRate,
 }: BalanceBadgeProps) {
   const sizeConfig = {
     sm: { label: 'text-xs', amount: 'text-lg', container: 'px-3 py-2', iconSize: 24 },
     md: { label: 'text-sm', amount: 'text-2xl', container: 'px-4 py-3', iconSize: 28 },
     lg: { label: 'text-base', amount: 'text-4xl', container: 'px-6 py-4', iconSize: 36 },
   }[size];
+
+  // Wallet v2 phase 2: when USD-cents is supplied, switch to USD-as-primary
+  // rendering with the CUP equivalent as a muted subtitle. Legacy mode
+  // (formatTriciCoin) is preserved when the new prop is absent so existing
+  // call sites don't change behavior.
+  const isUsdMode = balanceUsdCents != null;
+  const primaryText = isUsdMode
+    ? formatTriciCoinUsd(balanceUsdCents ?? 0)
+    : formatTriciCoin(balance);
+  const heldText = isUsdMode
+    ? formatTriciCoinUsd(heldUsdCents ?? 0)
+    : formatTriciCoin(held);
+  const cupApprox = isUsdMode && exchangeRate != null
+    ? formatCupApprox(balanceUsdCents ?? 0, exchangeRate)
+    : null;
 
   const content = (
     <>
@@ -59,12 +88,18 @@ export function BalanceBadge({
       </View>
       <Text
         className={`${sizeConfig.amount} text-white font-extrabold mt-0.5`}
+        style={{ fontVariant: ['tabular-nums'] }}
       >
-        {formatTriciCoin(balance)}
+        {primaryText}
       </Text>
-      {showHeld && held > 0 && (
-        <Text className="text-xs text-white/50 mt-1">
-          Retenido: {formatTriciCoin(held)}
+      {cupApprox && (
+        <Text className="text-xs text-white/60 mt-0.5" style={{ fontVariant: ['tabular-nums'] }}>
+          {cupApprox}
+        </Text>
+      )}
+      {showHeld && (isUsdMode ? (heldUsdCents ?? 0) > 0 : held > 0) && (
+        <Text className="text-xs text-white/50 mt-1" style={{ fontVariant: ['tabular-nums'] }}>
+          Retenido: {heldText}
         </Text>
       )}
     </>
@@ -82,7 +117,7 @@ export function BalanceBadge({
         className={containerClass}
         accessible
         accessibilityRole="text"
-        accessibilityLabel={`TriciCoin: ${formatTriciCoin(balance)}${showHeld && held > 0 ? `, held: ${formatTriciCoin(held)}` : ''}`}
+        accessibilityLabel={`TriciCoin: ${primaryText}${cupApprox ? `, ${cupApprox}` : ''}${showHeld && (isUsdMode ? (heldUsdCents ?? 0) > 0 : held > 0) ? `, retenido ${heldText}` : ''}`}
       >
         {content}
       </GradientComponent>
@@ -93,7 +128,7 @@ export function BalanceBadge({
     <View
       accessible
       accessibilityRole="text"
-      accessibilityLabel={`TriciCoin: ${formatTriciCoin(balance)}${showHeld && held > 0 ? `, held: ${formatTriciCoin(held)}` : ''}`}
+      accessibilityLabel={`TriciCoin: ${primaryText}${cupApprox ? `, ${cupApprox}` : ''}${showHeld && (isUsdMode ? (heldUsdCents ?? 0) > 0 : held > 0) ? `, retenido ${heldText}` : ''}`}
       className={`bg-neutral-950 ${containerClass}`}
     >
       {content}

@@ -34,13 +34,61 @@ export function formatTRC(amount: number): string {
 }
 
 /**
- * Format TriciCoin balance for wallet display.
+ * Format TriciCoin balance for wallet display (legacy CUP-pegged unit).
  *
  *   formatTriciCoin(5000) → "5,000 TC"
+ *
+ * @deprecated for wallet balance headers post Wallet v2 phase 1 migration
+ *  (00242). Use `formatTriciCoinUsd(usdCents)` for new surfaces. This
+ *  helper stays in use for ride fares, platform-internal accounting,
+ *  and any context where TC still represents CUP-pegged whole units.
  */
 export function formatTriciCoin(amount: number): string {
   const formatted = Math.max(0, Math.round(safeNum(amount))).toLocaleString('es-CU');
   return `${formatted} TC`;
+}
+
+/**
+ * Wallet v2 phase 2: format an USD-cents balance as the new TriciCoin
+ * unit (1 TC ≡ 1 USD per spec §1).
+ *
+ *   formatTriciCoinUsd(1941)                 → "$19.41"
+ *   formatTriciCoinUsd(1941, { withSymbol }) → "19.41 TC"
+ *   formatTriciCoinUsd(1941, { compact })    → "$19" (rounded, for chips)
+ *
+ * For the dual-line header pattern, pair this with `formatCupApprox`:
+ *   $19.41             ← formatTriciCoinUsd(1941)
+ *   ≈ 10,287 CUP        ← formatCupApprox(1941, rate)
+ */
+export function formatTriciCoinUsd(
+  usdCents: number,
+  opts: { withSymbol?: boolean; compact?: boolean } = {},
+): string {
+  const usd = safeNum(usdCents) / 100;
+  if (opts.compact) {
+    const rounded = Math.round(usd);
+    return opts.withSymbol ? `${rounded} TC` : `$${rounded}`;
+  }
+  const formatted = usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return opts.withSymbol ? `${formatted} TC` : `$${formatted}`;
+}
+
+/**
+ * Wallet v2 phase 2: render the CUP equivalence of a USD-cents balance
+ * at the current exchange rate. Used as the muted secondary line under
+ * the primary USD figure.
+ *
+ *   formatCupApprox(1941, 530) → "≈ 10,287 CUP"
+ */
+export function formatCupApprox(usdCents: number, exchangeRate: number): string {
+  if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) return '';
+  const cup = Math.round((safeNum(usdCents) / 100) * exchangeRate);
+  return `≈ ${cup.toLocaleString('es-CU')} CUP`;
+}
+
+/** USD-cents → numeric USD (e.g. 1941 → 19.41). */
+export function centsToUsd(cents: number): number {
+  return safeNum(cents) / 100;
 }
 
 /**
