@@ -1189,19 +1189,51 @@ function NativeWalletScreen() {
             onChangeText={setRechargeAmount}
             keyboardType="numeric"
           />
-          {parseFloat(rechargeAmount) > 0 && (
-            <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
-              <Text variant="caption" color="secondary">
-                ≈ {Math.round(parseFloat(rechargeAmount) * exchangeRate).toLocaleString()} CUP
-                {stripeConfig?.feeUsd ? ` · +$${stripeConfig.feeUsd.toFixed(2)} USD fee` : ''}
-              </Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                {t('wallet.recharge_min_hint', {
-                  defaultValue: `Mínimo $${MIN_RECHARGE_USD} USD · Conversión al tipo de cambio actual`,
-                })}
-              </Text>
-            </View>
-          )}
+          {(() => {
+            // Wallet v2 PR 5: top-up preview (USD → fee → net TC → CUP).
+            // Spec §10 #2: fee = 3% of charged USD, minimum $0.50.
+            // Fall back to the spec rule when stripeConfig hasn't loaded.
+            const usdNum = parseFloat(rechargeAmount);
+            if (!Number.isFinite(usdNum) || usdNum <= 0) return null;
+            const fee = stripeConfig?.feeUsd != null
+              ? stripeConfig.feeUsd
+              : Math.max(usdNum * 0.03, 0.50);
+            const net = Math.max(0, usdNum - fee);
+            const cupEq = Math.round(net * exchangeRate);
+            const belowMin = usdNum < MIN_RECHARGE_USD;
+            return (
+              <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
+                <Text variant="bodySmall" className="font-semibold" style={{ color: colors.brand.orange }}>
+                  {t('wallet.recharge_preview_total', {
+                    defaultValue: 'Recargás ${{usd}} USD = {{tc}} TriciCoin',
+                    usd: usdNum.toFixed(2),
+                    tc: net.toFixed(2),
+                  })}
+                </Text>
+                <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
+                  ≈ ${net.toFixed(2)} {t('wallet.recharge_preview_net', {
+                    defaultValue: 'netos (después del 3% de comisión: -${{fee}})',
+                    fee: fee.toFixed(2),
+                  })}
+                </Text>
+                <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
+                  {t('wallet.recharge_preview_cup', {
+                    defaultValue: 'Equivale a {{cup}} CUP al cambio de hoy (1 USD = {{rate}} CUP)',
+                    cup: cupEq.toLocaleString(),
+                    rate: Math.round(exchangeRate).toLocaleString(),
+                  })}
+                </Text>
+                {belowMin && (
+                  <Text variant="caption" style={{ marginTop: 6, color: '#b45309', fontWeight: '600' }}>
+                    {t('wallet.recharge_min_warning', {
+                      defaultValue: 'Mínimo ${{min}} USD por recarga.',
+                      min: MIN_RECHARGE_USD,
+                    })}
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
           {!stripeReady && (
             <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
               <Text variant="caption" style={{ color: '#b45309' }}>
