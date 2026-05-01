@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -53,7 +53,7 @@ import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { SplitInviteCard } from '@/components/SplitInviteCard';
 import { FareSplitSheet } from '@/components/FareSplitSheet';
-import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory } from '@tricigo/types';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory, Promotion } from '@tricigo/types';
 import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -1661,7 +1661,7 @@ function NativeHomeScreen() {
     const enableScroll = flowStep !== 'active';
     return (
       <>
-        <Screen bg="white" padded scroll={enableScroll}>
+        <Screen bg="cuban" padded scroll={enableScroll}>
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
@@ -1731,6 +1731,20 @@ function IdleView() {
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  // Home content feed — promotions + blog posts shown on idle view
+  // (after recents, before services). See docs/superpowers/specs/
+  // 2026-04-29-home-content-cards-design.md.
+  const [activePromos, setActivePromos] = useState<Promotion[]>([]);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  // Last completed ride — re-engagement card (¿Volver a [destino]?)
+  const [lastRide, setLastRide] = useState<{
+    id: string;
+    pickup_address: string;
+    dropoff_address: string;
+    pickup_location: { latitude: number; longitude: number } | null;
+    dropoff_location: { latitude: number; longitude: number } | null;
+    created_at: string;
+  } | null>(null);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
   // Surge is calculated in the backend but not shown to users
@@ -1829,6 +1843,74 @@ function IdleView() {
         if (!cancelled) setWalletBalance(bal.available);
       } catch (err) { logger.warn('Failed to load wallet', { error: String(err) }); }
       if (!cancelled) setInitialLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Fetch home content feed — active promotions + recent blog posts.
+  // Both are best-effort; failures are silent (the home stays usable
+  // without these sections). Fires once on mount, no realtime updates
+  // (idle content doesn't change often enough to justify a subscription).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const nowIso = new Date().toISOString();
+        // Active promos: is_active=true AND (no end date OR not yet expired).
+        const { data: promos } = await supabase
+          .from('promotions')
+          .select('*')
+          .eq('is_active', true)
+          .or(`valid_until.is.null,valid_until.gt.${nowIso}`)
+          .order('created_at', { ascending: false })
+          .limit(6);
+        if (!cancelled && Array.isArray(promos)) {
+          setActivePromos(promos as Promotion[]);
+        }
+      } catch (err) {
+        logger.warn('Failed to load promotions feed', { error: String(err) });
+      }
+
+      try {
+        const posts = await blogService.getPublishedPosts(0, 6);
+        if (!cancelled) setBlogPosts(posts);
+      } catch (err) {
+        logger.warn('Failed to load blog feed', { error: String(err) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Last ride — fetch the most recent COMPLETED trip so we can show a
+  // "¿Volver a [destino]?" card. Re-engagement pattern from Uber Eats:
+  // most repeat trips are to the same handful of destinations, so a
+  // 1-tap shortcut to the last drop-off saves the user from typing.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await rideService.getRideHistoryFiltered({
+          userId: user.id,
+          page: 0,
+          pageSize: 1,
+          status: ['completed'],
+        });
+        if (cancelled || !data || data.length === 0) return;
+        const ride = data[0];
+        if (!ride) return;
+        setLastRide({
+          id: ride.id,
+          pickup_address: ride.pickup_address ?? '',
+          dropoff_address: ride.dropoff_address ?? '',
+          pickup_location: ride.pickup_location,
+          dropoff_location: ride.dropoff_location,
+          created_at: ride.created_at,
+        });
+      } catch (err) {
+        logger.warn('Failed to load last ride', { error: String(err) });
+      }
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
@@ -2109,6 +2191,245 @@ function IdleView() {
           </View>
         )}
 
+        {/* ── Tu último viaje ── 1-tap re-book of the last completed trip */}
+        {lastRide && lastRide.dropoff_address && lastRide.dropoff_location && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.last_ride_label', { defaultValue: 'TU ÚLTIMO VIAJE' })}
+            </Text>
+            <Pressable
+              onPress={() => {
+                if (!lastRide.dropoff_location) return;
+                triggerHaptic('light');
+                setDropoff(lastRide.dropoff_address, lastRide.dropoff_location);
+                setFlowStep('selecting');
+              }}
+              style={{
+                backgroundColor: tokens.bg.elev1,
+                borderColor: tokens.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.last_ride_a11y', {
+                defaultValue: `Volver a ${lastRide.dropoff_address}`,
+                address: lastRide.dropoff_address,
+              })}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  backgroundColor: tokens.accent.orangeGlow,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="repeat" size={20} color={tokens.accent.orange} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    color: tokens.ink.subtle,
+                    marginBottom: 2,
+                  }}
+                >
+                  {t('home.go_back_to', { defaultValue: '¿Volver a' })}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: '600',
+                    color: tokens.ink.primary,
+                  }}
+                >
+                  {lastRide.dropoff_address}?
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={tokens.ink.subtle} />
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Promos ── horizontal scroll of active promotions */}
+        {activePromos.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.promos_label', { defaultValue: 'PROMOS' })}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingRight: 16 }}
+            >
+              {activePromos.map((promo) => {
+                // Build a human-readable headline from the schema fields.
+                // Promotions have no title column — synthesize one from
+                // discount_percent / discount_fixed_cup. Centavos → CUP.
+                const headline = promo.discount_percent
+                  ? `${promo.discount_percent}% OFF`
+                  : promo.discount_fixed_cup
+                    ? `${Math.round(promo.discount_fixed_cup / 100)} CUP`
+                    : '🎁';
+                const expiry = promo.valid_until
+                  ? new Date(promo.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                  : null;
+                return (
+                  <Pressable
+                    key={promo.id}
+                    onPress={() => router.push('/profile/referral')}
+                    style={{
+                      width: 220,
+                      backgroundColor: tokens.bg.elev1,
+                      borderColor: tokens.accent.orange,
+                      borderWidth: 1,
+                      borderRadius: 16,
+                      padding: 14,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Promo ${promo.code}: ${headline}`}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <View
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 999,
+                          backgroundColor: tokens.accent.orangeGlow,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="pricetag" size={14} color={tokens.accent.orange} />
+                      </View>
+                      <Text
+                        style={{
+                          fontFamily: 'JetBrainsMono_500Medium',
+                          fontSize: 11,
+                          color: tokens.ink.subtle,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {promo.code}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: 'BricolageGrotesque_700Bold',
+                        fontSize: 22,
+                        color: tokens.accent.orange,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {headline}
+                    </Text>
+                    {expiry && (
+                      <Text
+                        style={{
+                          fontFamily: 'JetBrainsMono_400Regular',
+                          fontSize: 10,
+                          color: tokens.ink.subtle,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {t('home.promo_expires', { defaultValue: `Hasta ${expiry}`, date: expiry })}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── Novedades (blog) ── horizontal scroll of recent posts */}
+        {blogPosts.length > 0 && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 8 }}>
+              {t('home.news_label', { defaultValue: 'NOVEDADES' })}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 10, paddingRight: 16 }}
+            >
+              {blogPosts.map((post) => (
+                <Pressable
+                  key={post.id}
+                  onPress={() => router.push('/profile/blog')}
+                  style={{
+                    width: 240,
+                    backgroundColor: tokens.bg.elev1,
+                    borderColor: tokens.line,
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={post.title_es}
+                >
+                  {post.cover_image_url ? (
+                    <Image
+                      source={{ uri: post.cover_image_url }}
+                      style={{ width: '100%', height: 100 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    // Fallback gradient when no cover — uses brand orange.
+                    <View
+                      style={{
+                        width: '100%',
+                        height: 100,
+                        backgroundColor: tokens.bg.elev2,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="newspaper-outline" size={28} color={tokens.ink.subtle} />
+                    </View>
+                  )}
+                  <View style={{ padding: 12 }}>
+                    <Text
+                      numberOfLines={2}
+                      style={{
+                        fontFamily: 'BricolageGrotesque_600SemiBold',
+                        fontSize: 14,
+                        color: tokens.ink.primary,
+                        marginBottom: 4,
+                        lineHeight: 18,
+                      }}
+                    >
+                      {post.title_es}
+                    </Text>
+                    {post.excerpt_es && (
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          color: tokens.ink.subtle,
+                          lineHeight: 14,
+                        }}
+                      >
+                        {post.excerpt_es}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ── Capitolio divider (Cuban identity marker) ── */}
         <CapitolioDivider mode={mode} height={72} />
 
@@ -2305,16 +2626,20 @@ const VEHICLE_ICONS: Record<string, any> = {
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
 function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'waypoint' | null) => void }) {
-  // BUG-282 — initial map center. Read the cached last-known position from
-  // AsyncStorage (written by IdleView's GPS effect) so the map opens at
-  // "where you are" instead of the demo-city fallback (São Paulo). Stays
-  // null on first launch ever — RideMapView falls back to HAVANA_CENTER
-  // / demo city in that case. Once draft.pickup is set (post-IdleView)
-  // the camera fits bounds anyway and this initial value is discarded.
+  // BUG-282 (revised) — initial map center.
+  // Two-stage resolution: (1) AsyncStorage cache for an instant first
+  // frame, (2) fresh GPS fix that overrides the cache once it arrives.
+  // Without (2), a first-ever install (empty cache) or a stale cache
+  // would leave the map stuck at the demo fallback (São Paulo) even
+  // when the user is somewhere else (e.g. Foz do Iguaçu). The Camera's
+  // `key` prop in RideMapView remounts cleanly on each update.
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   useEffect(() => {
+    let cancelled = false;
+
+    // Stage 1: instant read from cache (no GPS hardware wait)
     AsyncStorage.getItem('last_known_location').then((cached) => {
-      if (!cached) return;
+      if (cancelled || !cached) return;
       try {
         const { latitude, longitude } = JSON.parse(cached);
         if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
@@ -2322,6 +2647,37 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         }
       } catch { /* malformed */ }
     }).catch(() => {});
+
+    // Stage 2: fresh GPS — gives the truth even on first install or
+    // after the user moved cities. Permission was already requested
+    // in IdleView; we only call the position APIs (no permission UI
+    // re-prompt here).
+    (async () => {
+      try {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted' || cancelled) return;
+        // Cheapest first: last known native fix (instant if any app
+        // touched GPS recently). Then fall back to a fresh fix.
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
+        if (!pos || cancelled) return;
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+        setUserCenter([lng, lat]);
+        // Refresh cache so any sibling/subsequent view also benefits.
+        AsyncStorage.setItem(
+          'last_known_location',
+          JSON.stringify({ latitude: lat, longitude: lng }),
+        ).catch(() => {});
+      } catch { /* silently fall back to cache */ }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);

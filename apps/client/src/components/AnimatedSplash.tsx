@@ -46,11 +46,16 @@ export interface AnimatedSplashProps {
 
 const PALETTE = {
   client: {
-    bgFrom: '#FF6A1F', // brand orange — lighter top
-    bgTo: '#E84500',   // brand orange — slightly deeper bottom
-    pinTint: '#FFFFFF',
-    accent: '#FFFFFF',
-    taglineColor: 'rgba(255,255,255,0.78)',
+    // Solid slate matching native splash bg (apps/client/app.json) so
+    // there is no color jump when AnimatedSplash mounts on top of the
+    // native splash. Brand orange comes through via the pin + dots,
+    // not the background — this gives the white "Trici" + orange "Go"
+    // wordmark proper contrast (orange-on-orange was washing out "Go").
+    bgFrom: '#0F0F23',
+    bgTo: '#0F0F23',
+    pinTint: '#FF4D00', // brand orange pin
+    accent: '#FF4D00',  // orange dots
+    taglineColor: 'rgba(255,255,255,0.65)',
   },
   driver: {
     bgFrom: '#1A1A33', // dark slate (warmer than pure black)
@@ -218,11 +223,13 @@ export function AnimatedSplash({
           />
         </Animated.View>
 
-        {/* Wordmark — already white in source PNG */}
+        {/* Wordmark — width matches native splash (imageWidth: 220 in
+            app.json) so the wordmark doesn't shift when AnimatedSplash
+            mounts on top of the native splash. */}
         <Image
           source={wordmarkSource}
           resizeMode="contain"
-          style={{ width: 180, height: 48, marginTop: 16 }}
+          style={{ width: 220, height: 55, marginTop: 16 }}
           accessibilityIgnoresInvertColors
         />
 

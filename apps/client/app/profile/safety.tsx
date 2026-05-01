@@ -103,7 +103,7 @@ export default function SafetyCenterScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadSafetyData(); }} />;
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
         <ScreenHeader title={t('safety.title')} onBack={() => router.back()} />
 

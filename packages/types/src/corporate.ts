@@ -23,6 +23,17 @@ export interface CorporateAccount {
   approved_at: string | null;
   suspended_at: string | null;
   suspended_reason: string | null;
+  /**
+   * 00235: per-account commission override. Decimal percent (e.g. 8.5 = 8.5%).
+   * NULL means use the platform default (~15%). When set lower than the
+   * platform rate, corporate riders pay LESS while drivers earn the same.
+   */
+  commission_percent: number | null;
+  /**
+   * 00235: when true, this corporate_account is a driver fleet (not a
+   * regular corporate client). Drives admin UI + which sub-table to use.
+   */
+  is_fleet_owner: boolean;
   created_at: string;
   updated_at: string;
 }

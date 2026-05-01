@@ -43,6 +43,12 @@ export function useMapboxOffline(): OfflinePackState {
 
   useEffect(() => {
     if (Platform.OS === 'web' || !MapboxGL || initiated.current) return;
+    // Skip the Havana offline pack download in demo mode — when the
+    // user is testing outside Cuba (e.g. Brazil), pre-downloading
+    // Cuban tiles creates a race against the live MapView trying to
+    // fetch tiles for the user's actual location. The first map mount
+    // ends up gray. Skipping in demo lets the SDK fetch online cleanly.
+    if (process.env.EXPO_PUBLIC_DEMO_MODE === 'true') return;
     initiated.current = true;
 
     async function checkAndDownload() {

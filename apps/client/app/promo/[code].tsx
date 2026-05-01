@@ -41,7 +41,7 @@ export default function PromoDeepLinkScreen() {
   }, [code, isAuthenticated]);
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.brand.orange} />
         <Text variant="body" color="secondary" className="mt-4">

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, ViewStyle, useColorScheme } from 'react-native';
+import { View, Animated, ViewStyle } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { colors } from '@tricigo/theme';
 
 interface SkeletonProps {
@@ -21,7 +22,7 @@ export function Skeleton({
   className,
   style,
 }: SkeletonProps) {
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const opacity = useRef(new Animated.Value(0.4)).current;
 

@@ -67,7 +67,7 @@ export default function ReferralDeepLinkScreen() {
 
   if (applied) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="flex-1 items-center justify-center">
           <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
             <Text variant="h1" color="inverse">✓</Text>
@@ -85,7 +85,7 @@ export default function ReferralDeepLinkScreen() {
 
   if (error) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="flex-1 items-center justify-center">
           <Text variant="h3" className="mb-2">
             {t('error', { defaultValue: 'Error' })}
@@ -104,7 +104,7 @@ export default function ReferralDeepLinkScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.brand.orange} />
         <Text variant="body" color="secondary" className="mt-4">

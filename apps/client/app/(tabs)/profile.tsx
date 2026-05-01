@@ -17,8 +17,10 @@ import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { Platform } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
-import { useThemeStore } from '@/stores/theme.store';
+import { useThemeStore, setThemeMode } from '@/stores/theme.store';
+import { useTokens } from '@/hooks/useTokens';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Switch } from 'react-native';
 
 // Web profile: uses real user data from auth store
 function WebProfileScreen() {
@@ -56,14 +58,12 @@ function WebProfileScreen() {
       items: [
         { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety', iconBg: 'success' as const },
         { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts', iconBg: 'info' as const },
-        { icon: 'car-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), href: '/profile/ride-preferences', iconBg: 'warning' as const },
       ],
     },
     {
       title: t('profile.section_business', { defaultValue: 'Negocios' }),
       items: [
         { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Cuentas corporativas' }), href: '/profile/corporate', iconBg: 'neutral' as const },
-        { icon: 'repeat-outline' as const, label: t('profile.recurring_rides', { defaultValue: 'Viajes recurrentes' }), href: '/profile/recurring-rides', iconBg: 'info' as const },
       ],
     },
     {
@@ -79,9 +79,9 @@ function WebProfileScreen() {
   ];
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
-        <Text variant="h3" className="mb-6">{t('profile.title', { defaultValue: 'Perfil' })}</Text>
+        <Text variant="h4" className="mb-6">{t('profile.title', { defaultValue: 'Perfil' })}</Text>
         <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
           <View className="mr-4">
             <View style={{
@@ -107,7 +107,7 @@ function WebProfileScreen() {
 
         {menuSections.map((section) => (
           <View key={section.title}>
-            <Text variant="caption" color="tertiary" className="mt-5 mb-2 uppercase tracking-wider font-semibold">
+            <Text variant="captionMono" color="tertiary" className="mt-5 mb-2">
               {section.title}
             </Text>
             {section.items.map((item, i) => (
@@ -146,6 +146,7 @@ function NativeProfileScreen() {
   const reset = useAuthStore((s) => s.reset);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const setUser = useAuthStore((s) => s.setUser);
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,7 +162,7 @@ function NativeProfileScreen() {
 
   if (isLoading) {
     return (
-      <Screen scroll bg="white" padded>
+      <Screen scroll bg="cuban" padded>
         <View className="pt-4">
           <SkeletonCard lines={2} />
           <SkeletonCard lines={3} />
@@ -200,7 +201,6 @@ function NativeProfileScreen() {
       items: [
         { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
         { icon: 'location-outline' as const, label: t('profile.saved_locations'), onPress: () => router.push('/profile/saved-locations'), iconBg: 'info' as const },
-        { icon: 'options-outline' as const, label: t('profile.ride_preferences', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/ride-preferences'), iconBg: 'warning' as const },
       ],
     },
     {
@@ -213,7 +213,6 @@ function NativeProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        { icon: 'repeat-outline' as const, label: t('recurring_rides'), onPress: () => router.push('/profile/recurring-rides'), iconBg: 'info' as const },
         { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
       ],
     },
@@ -230,7 +229,7 @@ function NativeProfileScreen() {
   ];
 
   return (
-    <Screen bg="white" padded={false}>
+    <Screen bg="cuban" padded={false}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16 }}
         showsVerticalScrollIndicator={false}
@@ -243,54 +242,121 @@ function NativeProfileScreen() {
           />
         }
       >
-        <View className="pt-4">
-          <Text variant="h3" className="mb-6">
-            {t('profile.title')}
-          </Text>
+        <View
+          className="pt-4"
+          style={{ backgroundColor: tokens.bg.paper, flex: 1 }}
+        >
+          {/* iOS-style small title — Inter h4 (20pt) instead of Bricolage 28pt */}
+          <View className="flex-row items-center justify-between mb-4">
+            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+              {t('profile.title')}
+            </Text>
+          </View>
 
-          {/* User info card */}
+          {/* User info card — compact Cuban surface with quick dark-mode
+              toggle inline (instant access from any session). */}
           <AnimatedCard delay={0}>
-            <Card variant="filled" padding="md" className="mb-6 flex-row items-center">
-              <View className="mr-4">
-                <LinearGradient
-                  colors={[colors.primary[500], colors.primary[300]]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 32, padding: 3 }}
-                >
-                  <View style={{ borderRadius: 29, overflow: 'hidden' }}>
-                    <Avatar
-                      uri={user?.avatar_url}
-                      name={user?.full_name ?? 'U'}
-                      size={56}
-                      onPress={() => router.push('/profile/edit')}
-                      showEditBadge
-                    />
-                  </View>
-                </LinearGradient>
-              </View>
-              <View className="flex-1">
-                <View className="flex-row items-center gap-2">
-                  <Text variant="h4">{user?.full_name ?? 'Usuario'}</Text>
-                  {user?.level && (
-                    <StatusBadge
-                      label={t(`profile.level_${user.level}`)}
-                      variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
-                    />
-                  )}
+            <View
+              style={{
+                backgroundColor: tokens.bg.elev1,
+                borderColor: tokens.line,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 14,
+                marginBottom: 8,
+                ...(isDark ? {} : {
+                  shadowColor: '#1A1414',
+                  shadowOpacity: 0.04,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 1,
+                }),
+              }}
+            >
+              <View className="flex-row items-center">
+                <View className="mr-3">
+                  <LinearGradient
+                    colors={[colors.primary[500], colors.primary[300]]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ borderRadius: 28, padding: 2.5 }}
+                  >
+                    <View style={{ borderRadius: 25.5, overflow: 'hidden' }}>
+                      <Avatar
+                        uri={user?.avatar_url}
+                        name={user?.full_name ?? 'U'}
+                        size={48}
+                        onPress={() => router.push('/profile/edit')}
+                        showEditBadge
+                      />
+                    </View>
+                  </LinearGradient>
                 </View>
-                <Text variant="bodySmall" color="secondary">
-                  {user?.phone ?? '+53 5XXXXXXX'}
-                </Text>
+                <View className="flex-1">
+                  <View className="flex-row items-center gap-2">
+                    <Text variant="body" style={{ color: tokens.ink.primary, fontWeight: '600' }}>
+                      {user?.full_name ?? 'Usuario'}
+                    </Text>
+                    {user?.level && (
+                      <StatusBadge
+                        label={t(`profile.level_${user.level}`)}
+                        variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
+                      />
+                    )}
+                  </View>
+                  <Text
+                    variant="caption"
+                    style={{ color: tokens.ink.secondary, marginTop: 2 }}
+                  >
+                    {user?.phone ?? '+53 5XXXXXXX'}
+                  </Text>
+                </View>
               </View>
-            </Card>
+
+              {/* Quick dark mode toggle — iOS-native Switch, sits inside the
+                  user card so it's reachable in 1 tap from anywhere. The
+                  full Theme settings (system / light / dark) still live in
+                  Settings sub-page for power users. */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: tokens.line,
+                }}
+              >
+                <View className="flex-row items-center gap-2">
+                  <Ionicons
+                    name={isDark ? 'moon' : 'sunny-outline'}
+                    size={18}
+                    color={tokens.accent.orange}
+                  />
+                  <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>
+                    {t('profile.dark_mode', { defaultValue: 'Modo oscuro' })}
+                  </Text>
+                </View>
+                <Switch
+                  value={isDark}
+                  onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
+                  trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={tokens.line}
+                />
+              </View>
+            </View>
           </AnimatedCard>
 
-          {/* Menu sections */}
+          {/* Menu sections — captionMono labels for that mono-tag feel */}
           <StaggeredList staggerDelay={40}>
             {menuSections.map((section) => (
               <View key={section.title}>
-                <Text variant="caption" color="tertiary" className="mt-5 mb-2 uppercase tracking-wider font-semibold">
+                <Text
+                  variant="captionMono"
+                  style={{ color: tokens.ink.subtle, marginTop: 20, marginBottom: 8 }}
+                >
                   {section.title}
                 </Text>
                 {section.items.map((item, idx) => (

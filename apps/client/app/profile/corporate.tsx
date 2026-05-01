@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Alert, Pressable, TextInput } from 'react-native';
+import { View, Alert, Pressable, TextInput } from 'react-native';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -8,14 +8,13 @@ import { Input } from '@tricigo/ui/Input';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
-import { EmptyState } from '@tricigo/ui/EmptyState';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useRouter } from 'expo-router';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { useAuthStore } from '@/stores/auth.store';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
-import * as Linking from 'expo-linking';
+import CorporateRequestForm from '@/components/CorporateRequestForm';
 import * as Sharing from 'expo-sharing';
 // Bugfix: same as rides.tsx — cacheDirectory + EncodingType live in the
 // /legacy entrypoint post-SDK migration, otherwise the CSV export path
@@ -45,6 +44,23 @@ export default function CorporateProfileScreen() {
   const router = useRouter();
   const userId = useAuthStore((s) => s.user?.id);
   const { accounts, loading } = useCorporateAccounts();
+
+  // Pending/rejected request status — only shown when the user has no
+  // approved memberships to render the dashboard for.
+  const [requestStatus, setRequestStatus] = useState<CorporateAccount | null>(null);
+  const [requestLoading, setRequestLoading] = useState(true);
+  const [requestVersion, setRequestVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) return;
+    setRequestLoading(true);
+    corporateService.getRequestStatus(userId)
+      .then((data) => { if (!cancelled) setRequestStatus(data); })
+      .catch(() => { if (!cancelled) setRequestStatus(null); })
+      .finally(() => { if (!cancelled) setRequestLoading(false); });
+    return () => { cancelled = true; };
+  }, [userId, requestVersion]);
 
   // Role map: accountId -> role (loaded eagerly)
   const [roleMap, setRoleMap] = useState<Record<string, CorporateEmployeeRole | null>>({});
@@ -345,7 +361,7 @@ export default function CorporateProfileScreen() {
   };
 
   return (
-    <Screen bg="white" padded scroll>
+    <Screen bg="cuban" padded scroll>
       <ScreenHeader
         title={t('corporate.title', { defaultValue: 'Cuenta Corporativa' })}
         onBack={() => router.back()}
@@ -357,20 +373,65 @@ export default function CorporateProfileScreen() {
         </Text>
       )}
 
-      {!loading && accounts.length === 0 && (
-        <EmptyState
-          icon="business-outline"
-          title={t('corporate.no_membership', { defaultValue: 'No perteneces a ninguna empresa' })}
-          description={t('corporate.no_membership_description', {
-            defaultValue:
-              'Las cuentas corporativas permiten que tu empresa gestione y pague tus viajes. Solicita acceso a tu administrador o conoce más sobre este beneficio.',
-          })}
-          action={{
-            label: t('corporate.request_access', { defaultValue: 'Solicitar acceso corporativo' }),
-            onPress: () => Linking.openURL('https://tricigo.com/corporate'),
-          }}
-          className="mt-8"
-        />
+      {!loading && accounts.length === 0 && !requestLoading && (
+        <>
+          {/* Pending review */}
+          {requestStatus?.status === 'pending' && (
+            <Card variant="outlined" padding="lg" className="mt-6">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Ionicons name="hourglass-outline" size={20} color={colors.primary[500]} />
+                <Text variant="h4">Solicitud en revisión</Text>
+              </View>
+              <Text variant="bodySmall" color="secondary" className="mb-3">
+                Recibimos tu solicitud para <Text className="font-semibold">{requestStatus.name}</Text>. Nuestro equipo la está revisando y te contactaremos en 1–2 días hábiles.
+              </Text>
+              <View className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
+                <Text variant="caption" color="secondary">Contacto registrado</Text>
+                <Text variant="body">{requestStatus.contact_phone}</Text>
+                {requestStatus.contact_email && (
+                  <Text variant="bodySmall" color="secondary">{requestStatus.contact_email}</Text>
+                )}
+              </View>
+            </Card>
+          )}
+
+          {/* Rejected — allow resubmit */}
+          {requestStatus?.status === 'rejected' && (
+            <View className="mt-6">
+              <Card variant="filled" padding="lg" className="mb-3 bg-error-50 dark:bg-error-900/20">
+                <View className="flex-row items-center gap-2 mb-2">
+                  <Ionicons name="close-circle-outline" size={20} color={colors.error.DEFAULT} />
+                  <Text variant="h4" color="error">Solicitud rechazada</Text>
+                </View>
+                {requestStatus.suspended_reason && (
+                  <Text variant="bodySmall" color="secondary">
+                    Motivo: {(() => {
+                      try {
+                        const parsed = JSON.parse(requestStatus.suspended_reason);
+                        return parsed?.reason ?? requestStatus.suspended_reason;
+                      } catch {
+                        return requestStatus.suspended_reason;
+                      }
+                    })()}
+                  </Text>
+                )}
+                <Text variant="bodySmall" color="secondary" className="mt-2">
+                  Puedes corregir los datos y volver a enviar la solicitud.
+                </Text>
+              </Card>
+              <CorporateRequestForm
+                onSubmitted={() => setRequestVersion((v) => v + 1)}
+              />
+            </View>
+          )}
+
+          {/* No request yet — show form */}
+          {!requestStatus && (
+            <CorporateRequestForm
+              onSubmitted={() => setRequestVersion((v) => v + 1)}
+            />
+          )}
+        </>
       )}
 
       {accounts.map((acc) => {

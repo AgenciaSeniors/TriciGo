@@ -19,12 +19,17 @@ import {
   isValidDemoPhone,
   normalizeDemoPhone,
 } from '@/config/demo';
+import { useThemeStore } from '@/stores/theme.store';
+import { useTokens } from '@/hooks/useTokens';
 
 const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
   const { isPhone } = useResponsive();
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const tokens = useTokens();
+  const isDark = resolvedScheme === 'dark';
   const [phone, setPhone] = useState('');
   const [dialCode, setDialCode] = useState<string>(
     DEMO_MODE ? DEMO_DIAL_CODES[0]!.code : '+53',
@@ -72,9 +77,15 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero section with gradient */}
+          {/* Hero section with gradient — vibrant orange in light,
+              muted deeper oranges in dark to keep brand without
+              clashing with the dark scheme. */}
           <LinearGradient
-            colors={['#FF4D00', '#FF6B2C', '#FF8F5C']}
+            colors={
+              isDark
+                ? ['#8B2900', '#B53600', '#FF4D00']
+                : ['#FF4D00', '#FF6B2C', '#FF8F5C']
+            }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{ paddingTop: 80, paddingBottom: 40, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}
@@ -158,7 +169,7 @@ export default function LoginScreen() {
                   style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', paddingHorizontal: 24 }}
                   onPress={() => setDialPickerOpen(false)}
                 >
-                  <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 12 }}>
+                  <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 12 }}>
                     {DEMO_DIAL_CODES.map((d) => (
                       <Pressable
                         key={d.code}
@@ -169,7 +180,7 @@ export default function LoginScreen() {
                           gap: 10,
                           padding: 14,
                           borderRadius: 12,
-                          backgroundColor: pressed ? '#F4EEE2' : 'transparent',
+                          backgroundColor: pressed ? tokens.bg.elev2 : 'transparent',
                         })}
                       >
                         <Text variant="body" className="font-semibold">{d.emoji} {d.code}</Text>
@@ -306,13 +317,13 @@ export default function LoginScreen() {
 
       {/* Legal Content Modal */}
       <Modal visible={!!legalType} animationType="slide" onRequestClose={() => setLegalType(null)}>
-        <View style={{ flex: 1, backgroundColor: '#fff' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' }}>
-            <Text variant="body" className="font-semibold">
+        <View style={{ flex: 1, backgroundColor: tokens.bg.paper }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: tokens.line }}>
+            <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>
               {legalType === 'terms' ? t('auth.terms_link', { defaultValue: 'Términos de Servicio' }) : t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
             </Text>
             <Pressable onPress={() => setLegalType(null)} hitSlop={12}>
-              <Ionicons name="close" size={24} color="#333" />
+              <Ionicons name="close" size={24} color={tokens.ink.secondary} />
             </Pressable>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>

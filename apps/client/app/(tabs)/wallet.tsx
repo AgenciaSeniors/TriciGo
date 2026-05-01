@@ -20,6 +20,8 @@ import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
+import { useTokens } from '@/hooks/useTokens';
+import { useThemeStore } from '@/stores/theme.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
@@ -366,7 +368,7 @@ function WebWalletScreen() {
   // Login required
   if (!userId) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="flex-1 justify-center items-center">
           <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesion para ver tu billetera' })}</Text>
         </View>
@@ -375,7 +377,7 @@ function WebWalletScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="pt-4 pb-8">
           {/* ─── Balance Card ─── */}
@@ -441,11 +443,15 @@ function WebWalletScreen() {
                 <Pressable
                   key={opt.key}
                   onPress={() => setActiveFilter(opt.key)}
-                  className={`px-4 py-1.5 rounded-full border ${
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  className={`px-4 py-2 rounded-full border ${
                     activeFilter === opt.key
                       ? 'bg-primary-500 border-primary-500'
                       : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                   }`}
+                  accessibilityRole="radio"
+                  accessibilityLabel={opt.label}
+                  accessibilityState={{ selected: activeFilter === opt.key }}
                 >
                   <Text
                     variant="caption"
@@ -697,8 +703,9 @@ function WebWalletScreen() {
 
 function NativeWalletScreen() {
   const { t } = useTranslation('common');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
+  const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
 
   const [balance, setBalance] = useState<{
@@ -1147,22 +1154,53 @@ function NativeWalletScreen() {
     const canDownload = !!receipt?.pdf_storage_path;
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
-        <View className="py-3 border-b border-neutral-100 dark:border-neutral-800" accessible={true}>
-          <View className="flex-row items-center">
-            <View className="flex-1">
-              <Text variant="bodySmall" numberOfLines={1}>{item.description || getTransactionLabel(item.type, isCredit, t)}</Text>
-              <Text variant="caption" color="tertiary">{getRelativeDay(item.created_at, t('today'), t('yesterday'))}</Text>
+        {/* Cuban Modern visual tokens (sub-project #5) layered over wallet
+            v2 functional structure (USD caption + receipt download from
+            master). Master's outer View handles padding + border via the
+            token system; the inner row keeps amount + USD caption right-
+            aligned, and the optional receipt button hangs below the row
+            on its own line. */}
+        <View
+          style={{
+            paddingVertical: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: tokens.line,
+          }}
+          accessible={true}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={{ color: tokens.ink.primary, fontWeight: '500' }}
+              >
+                {item.description || getTransactionLabel(item.type, isCredit, t)}
+              </Text>
+              <Text
+                variant="captionMono"
+                style={{ color: tokens.ink.subtle, marginTop: 2 }}
+              >
+                {getRelativeDay(item.created_at, t('today'), t('yesterday'))}
+              </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text
-                variant="body"
-                className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
-                style={{ fontVariant: ['tabular-nums'] }}
+                variant="numberMono"
+                style={{
+                  fontWeight: '600',
+                  color: isCredit
+                    ? (isDark ? '#4ADE80' : '#16A34A')
+                    : (isDark ? '#F87171' : '#DC2626'),
+                }}
               >
                 {isCredit ? '+' : ''}{formatTriciCoin(amount)}
               </Text>
               {balance.availableUsdCents != null && (
-                <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
+                <Text
+                  variant="captionMono"
+                  style={{ color: tokens.ink.subtle, marginTop: 2 }}
+                >
                   ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
                 </Text>
               )}
@@ -1172,16 +1210,16 @@ function NativeWalletScreen() {
             <Pressable
               onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
               disabled={openingReceipt === receipt.receipt_no}
-              className="mt-1.5 self-start flex-row items-center"
+              style={{ marginTop: 6, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
               accessibilityRole="button"
               accessibilityLabel={t('wallet.download_receipt_aria', { defaultValue: 'Descargar comprobante {{no}}', no: receipt.receipt_no })}
             >
-              <Ionicons name="download-outline" size={13} color={colors.brand.orange} />
-              <Text variant="caption" style={{ color: colors.brand.orange, fontWeight: '600', marginLeft: 4 }}>
+              <Ionicons name="download-outline" size={13} color={tokens.accent.orange} />
+              <Text variant="captionMono" style={{ color: tokens.accent.orange, fontWeight: '600', marginLeft: 4 }}>
                 {openingReceipt === receipt.receipt_no
                   ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
                   : t('wallet.download_receipt', { defaultValue: 'Comprobante' })}{' '}
-                <Text variant="caption" style={{ color: colors.brand.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
+                <Text variant="captionMono" style={{ color: tokens.accent.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
               </Text>
             </Pressable>
           )}
@@ -1192,7 +1230,7 @@ function NativeWalletScreen() {
 
   if (loading) {
     return (
-      <Screen bg="white" padded>
+      <Screen bg="cuban" padded>
         <View className="pt-4">
           <SkeletonBalance />
           <SkeletonListItem />
@@ -1205,16 +1243,24 @@ function NativeWalletScreen() {
   }
 
   return (
-    <Screen bg="white" padded>
-      {/* BUG-280 — header now uses pt-6 (was pt-4) so the page title clears
-          the demo banner overlay shown in production-debug builds. The h3
-          was previously cut off when the banner is on. */}
-      <View className="pt-6 flex-1">
-        <View className="flex-row items-center gap-2.5 mb-5">
-          <Image source={tricoinLogo} style={{ width: 40, height: 40 }} resizeMode="contain" />
-          <Text variant="h3">
-            {t('wallet.title')}
-          </Text>
+    <Screen bg="cuban" padded>
+      {/* Home-style layout: compact iOS-native header (h4 instead of
+          large display), no big icon hero. The demo banner (~46px in
+          demo builds) is non-blocking via SafeAreaView; no extra
+          padding hack needed. */}
+      <View
+        className="pt-4 flex-1"
+        style={{ backgroundColor: tokens.bg.paper }}
+      >
+        {/* iOS-style small title row — Inter h4 (20pt), aligned with the
+            "RECIENTES" / "SERVICIOS" mono labels of the home. */}
+        <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center gap-2">
+            <Image source={tricoinLogo} style={{ width: 22, height: 22 }} resizeMode="contain" />
+            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+              {t('wallet.title')}
+            </Text>
+          </View>
         </View>
 
         {/* Wallet v2 phase 2: one-time migration announcement (dismissible). */}
@@ -1226,36 +1272,66 @@ function NativeWalletScreen() {
           />
         )}
 
+        {/* Mono label above balance, mirrors home's section header style. */}
+        <Text
+          variant="captionMono"
+          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
+        >
+          {t('wallet.balance_label', { defaultValue: 'SALDO DISPONIBLE' })}
+        </Text>
+
+        {/* Compact balance card — bg.elev1 surface with line border instead
+            of the heavy orange hero gradient (redesign V2). Numbers in
+            BalanceBadge stay big (it's the primary metric of this screen)
+            but the surface is calmer and matches the home's card aesthetic.
+            BalanceBadge keeps wallet v2 USD-mode props so the badge auto-
+            switches to "$X.XX" when migration data is available. */}
         <AnimatedCard delay={0}>
-          {/* U3.4: Use displayBalance for count-up animation */}
-          {/* Wallet v2 phase 2: switch to USD mode when migration data is loaded. */}
-          <BalanceBadge
-            balance={displayBalance}
-            held={balance.held}
-            balanceUsdCents={balance.availableUsdCents}
-            heldUsdCents={balance.heldUsdCents}
-            exchangeRate={balance.migrationRate ?? exchangeRate}
-            size="lg"
-            showHeld
-            coinIcon={tricoinSmall}
-            GradientComponent={LinearGradient}
-            gradientColors={['#FF4D00', '#FF8A5C']}
-            className="mb-5"
-          />
+          <View
+            style={{
+              backgroundColor: tokens.bg.elev1,
+              borderColor: tokens.line,
+              borderWidth: 1,
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 16,
+              ...(isDark ? {} : {
+                shadowColor: '#1A1414',
+                shadowOpacity: 0.04,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 1,
+              }),
+            }}
+          >
+            <BalanceBadge
+              balance={displayBalance}
+              held={balance.held}
+              balanceUsdCents={balance.availableUsdCents}
+              heldUsdCents={balance.heldUsdCents}
+              exchangeRate={balance.migrationRate ?? exchangeRate}
+              size="md"
+              showHeld
+              coinIcon={tricoinSmall}
+              GradientComponent={LinearGradient}
+              gradientColors={['#FF4D00', '#FF8A5C']}
+            />
+          </View>
         </AnimatedCard>
 
-        <View className="flex-row gap-3 mb-6">
+        {/* Compact action buttons — smaller than before, iOS native size */}
+        <View className="flex-row gap-2 mb-6">
           <Button
             title={t('wallet.recharge')}
             variant="primary"
-            size="md"
+            size="sm"
             className="flex-1"
             onPress={handleRecharge}
           />
           <Button
             title={t('wallet.transfer')}
             variant="outline"
-            size="md"
+            size="sm"
             className="flex-1"
             onPress={handleTransfer}
           />
@@ -1267,83 +1343,115 @@ function NativeWalletScreen() {
             cards are visually noisy when there's nothing to show. */}
         {monthlyInsights.ridesCount > 0 && (
           <View className="mb-6">
-            <Text variant="h4" className="mb-3">
-              {t('wallet.this_month', { defaultValue: 'Este mes' })}
+            <Text
+              variant="captionMono"
+              style={{ color: tokens.ink.subtle, marginBottom: 8 }}
+            >
+              {t('wallet.this_month', { defaultValue: 'ESTE MES' })}
             </Text>
             <View className="flex-row gap-3">
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.total_spent', { defaultValue: 'Total gastado' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {formatTriciCoin(monthlyInsights.totalSpent)}
-                </Text>
-              </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.rides_count', { defaultValue: 'Viajes' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {monthlyInsights.ridesCount}
-                </Text>
-              </View>
-              <View className="flex-1 bg-primary-50 dark:bg-primary-950 rounded-2xl p-4">
-                <Text variant="caption" color="secondary" className="mb-1.5">
-                  {t('wallet.avg_ride', { defaultValue: 'Promedio' })}
-                </Text>
-                <Text className="font-bold text-primary-700 dark:text-primary-300" style={{ fontSize: 17, fontVariant: ['tabular-nums'] as never }}>
-                  {formatTriciCoin(monthlyInsights.avgRide)}
-                </Text>
-              </View>
+              {[
+                { label: t('wallet.total_spent', { defaultValue: 'Total gastado' }), value: formatTriciCoin(monthlyInsights.totalSpent) },
+                { label: t('wallet.rides_count', { defaultValue: 'Viajes' }), value: String(monthlyInsights.ridesCount) },
+                { label: t('wallet.avg_ride', { defaultValue: 'Promedio' }), value: formatTriciCoin(monthlyInsights.avgRide) },
+              ].map((stat) => (
+                <View
+                  key={stat.label}
+                  style={{
+                    flex: 1,
+                    backgroundColor: tokens.bg.elev1,
+                    borderColor: tokens.accent.orangeGlow,
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    padding: 16,
+                  }}
+                >
+                  <Text
+                    variant="captionMono"
+                    style={{ color: tokens.ink.secondary, marginBottom: 6 }}
+                  >
+                    {stat.label}
+                  </Text>
+                  <Text
+                    variant="numberMono"
+                    style={{ color: tokens.accent.orange, fontWeight: '600', fontSize: 17 }}
+                  >
+                    {stat.value}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
         )}
 
-        <Text variant="h4" className="mb-3">
-          {t('wallet.history')}
+        <Text
+          variant="captionMono"
+          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
+        >
+          {t('wallet.history', { defaultValue: 'HISTORIAL' })}
         </Text>
 
-        {/* BUG-280 — filter chips height fix v2.
-            Bug: when the FlatList below had few items (e.g. filter "Recargas"
-            showing 2 rows), the parent flex-1 column gave extra vertical space
-            to the chip ScrollView, and `flex-row` (default align-items: stretch)
-            stretched every chip to fill that height — chips became huge ovals.
-            Fix:
-              1. ScrollView: style flexGrow:0 + maxHeight so it stops expanding.
-              2. Wrapper: items-start (align-items: flex-start) so each chip
-                 sizes to its content height regardless of the row height. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mb-3"
-          style={{ flexGrow: 0, maxHeight: 48 }}
-          contentContainerStyle={{ paddingRight: 16, alignItems: 'flex-start' }}
-        >
-          <View className="flex-row gap-2 items-start">
-            {filterOptions.map((opt) => (
-              <Pressable
-                key={opt.key}
-                onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
-                hitSlop={{ top: 8, bottom: 8 }}
-                className={`px-4 py-2 rounded-full border self-start ${
-                  activeFilter === opt.key
-                    ? 'bg-primary-500 border-primary-500'
-                    : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-                }`}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: activeFilter === opt.key }}
-              >
-                <Text
-                  variant="caption"
-                  color={activeFilter === opt.key ? 'inverse' : 'secondary'}
-                  className="font-medium"
+        {/* Filter chips — clean implementation that doesn't fight the
+            parent layout. Wrapping the ScrollView in a fixed-height
+            container is enough to prevent the FlatList sibling from
+            stretching it; no `items-start` / `self-start` / maxHeight
+            hacks needed. Each chip gets a fixed minHeight so the row
+            looks uniform regardless of which one is active. */}
+        <View style={{ height: 40, marginBottom: 12 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingRight: 16, alignItems: 'center' }}
+          >
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              {filterOptions.map((opt) => (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => { triggerSelection(); setActiveFilter(opt.key); }}
+                  // HIG fix — extend the tap area on all 4 sides so the
+                  // 36pt-tall chip becomes a 48pt+ effective target.
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  style={{
+                    height: 36,
+                    paddingHorizontal: 16,
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor:
+                      activeFilter === opt.key
+                        ? tokens.accent.orange
+                        : tokens.bg.elev1,
+                    borderColor:
+                      activeFilter === opt.key
+                        ? tokens.accent.orange
+                        : tokens.line,
+                  }}
+                  accessibilityRole="radio"
+                  // a11y fix — VoiceOver was just announcing "radio button,
+                  // selected/not selected" without distinguishing chips.
+                  // Now each chip says its label ("Todos", "Recargas", etc.).
+                  accessibilityLabel={opt.label}
+                  accessibilityState={{ selected: activeFilter === opt.key }}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
+                  <Text
+                    variant="caption"
+                    style={{
+                      fontWeight: '500',
+                      color:
+                        activeFilter === opt.key
+                          ? '#FFFFFF'
+                          : tokens.ink.secondary,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
 
         <FlatList
           data={filteredTransactions}

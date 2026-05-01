@@ -122,7 +122,7 @@ export default function EmergencyContactScreen() {
 
   if (loading) {
     return (
-      <Screen scroll bg="white" padded>
+      <Screen scroll bg="cuban" padded>
         <View className="pt-4">
           <ScreenHeader title={t('profile.emergency_contact_title')} onBack={() => router.back()} />
           <SkeletonCard lines={4} />
@@ -132,7 +132,7 @@ export default function EmergencyContactScreen() {
   }
 
   return (
-    <Screen scroll bg="white" padded>
+    <Screen scroll bg="cuban" padded>
       <View className="pt-4">
         <ScreenHeader title={t('profile.emergency_contact_title')} onBack={() => router.back()} />
 

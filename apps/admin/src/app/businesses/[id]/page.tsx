@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { FleetReview } from '@/components/FleetReview';
 import type {
   CorporateAccount,
   CorporateAccountStatus,
@@ -40,6 +41,8 @@ export default function BusinessDetailPage() {
   const [suspendReason, setSuspendReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [commissionInput, setCommissionInput] = useState<string>('');
+  const [savingCommission, setSavingCommission] = useState(false);
 
   async function fetchData() {
     if (!id) return;
@@ -55,6 +58,11 @@ export default function BusinessDetailPage() {
       setEmployees(emps);
       setRides(rds);
       setBalance(bal);
+      setCommissionInput(
+        acc?.commission_percent !== null && acc?.commission_percent !== undefined
+          ? String(acc.commission_percent)
+          : '',
+      );
     } catch (err) {
       // Error handled by UI
     } finally {
@@ -104,6 +112,26 @@ export default function BusinessDetailPage() {
       await fetchData();
       showToast('success', t('businesses.reactivated_success', { defaultValue: 'Empresa reactivada' }));
     } finally { setActionLoading(false); }
+  }
+
+  async function handleSaveCommission() {
+    if (!id || !adminUserId) return;
+    const trimmed = commissionInput.trim();
+    const value = trimmed === '' ? null : Number(trimmed);
+    if (value !== null && (Number.isNaN(value) || value < 0 || value > 15)) {
+      showToast('error', 'Comisión inválida (0–15%)');
+      return;
+    }
+    setSavingCommission(true);
+    try {
+      await corporateService.setCommissionPercent(id, value, adminUserId);
+      await fetchData();
+      showToast('success', value === null ? 'Comisión revertida al default' : `Comisión actualizada a ${value}%`);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSavingCommission(false);
+    }
   }
 
   if (loading) {
@@ -234,6 +262,53 @@ export default function BusinessDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Commission override */}
+      <div className="bg-white border rounded-xl p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="text-sm font-medium text-neutral-500 mb-1">Comisión variable</h3>
+            <p className="text-xs text-neutral-500 max-w-md">
+              Default plataforma: <span className="font-medium text-neutral-700">15%</span>. Reduce solo para acuerdos especiales —
+              el pasajero paga menos pero el conductor cobra lo mismo. Dejá vacío para usar el default.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              max={15}
+              step={0.5}
+              className="w-24 border rounded-lg px-3 py-2 text-sm font-mono"
+              placeholder="—"
+              value={commissionInput}
+              aria-label="Comisión por viaje (%)"
+              onChange={(e) => setCommissionInput(e.target.value)}
+            />
+            <span className="text-sm text-neutral-500">%</span>
+            <button
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              onClick={handleSaveCommission}
+              disabled={savingCommission}
+            >
+              {savingCommission ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+        {account.commission_percent !== null && account.commission_percent !== undefined && (
+          <p className="mt-2 text-xs text-emerald-700">
+            Comisión actual: {account.commission_percent}% (descuento de {(15 - account.commission_percent).toFixed(1)}pp absorbido por la plataforma)
+          </p>
+        )}
+      </div>
+
+      {/* Fleet review (only for is_fleet_owner accounts) */}
+      {account.is_fleet_owner && adminUserId && (
+        <div className="bg-white border rounded-xl p-5">
+          <h3 className="text-sm font-medium text-neutral-500 mb-3">Flota — conductores</h3>
+          <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} />
+        </div>
+      )}
 
       {/* Employees */}
       <div className="bg-white border rounded-xl p-5">

@@ -170,7 +170,7 @@ export default function HelpScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchTickets(); }} />;
 
   return (
-    <Screen bg="white" padded>
+    <Screen bg="cuban" padded>
       <View className="pt-4 flex-1">
         <ScreenHeader title={t('profile.help_title')} onBack={() => router.back()} />
 

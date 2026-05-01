@@ -238,13 +238,14 @@ function RootLayoutInner() {
     onLayoutReady();
   }, [onLayoutReady]);
 
-  // BUG-289 — keep AnimatedSplash visible 1.2s after fonts load so the
-  // pulse + dot loader actually plays (otherwise on a hot reload the
-  // overlay would fade out instantly and feel pointless).
+  // BUG-289 — keep AnimatedSplash visible 2.5s after fonts load so the
+  // pulse + dot loader + tagline have time to read. Was 1.2s but felt
+  // rushed (200ms fade-in + ~700ms visible + 250ms fade-out = ~1s total).
+  // 2500ms gives ~2s of fully visible polished splash before fade-out.
   const [splashVisible, setSplashVisible] = React.useState(true);
   useEffect(() => {
     if (!fontsLoaded) return;
-    const t = setTimeout(() => setSplashVisible(false), 1200);
+    const t = setTimeout(() => setSplashVisible(false), 2500);
     return () => clearTimeout(t);
   }, [fontsLoaded]);
 

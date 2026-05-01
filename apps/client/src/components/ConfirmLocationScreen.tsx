@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, Pressable, Animated, Platform, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
 // BUG-281: branded dropoff pin asset. The image is a white silhouette on
@@ -205,16 +206,20 @@ export function ConfirmLocationScreen({
     );
   }
 
-  // BUG-282 — pull a cached last-known position as a fallback before the
-  // demo-city/Havana fallback. This catches the edge case where the user
-  // opens the picker on first launch before the GPS effect populates
-  // draft.pickup. Cache reads asynchronously, so we use it via state and
-  // remount the Camera (key prop below) when it resolves.
+  // BUG-282 (revised) — two-stage user-location resolution: instant
+  // AsyncStorage cache read, then fresh GPS fix that overrides it.
+  // On first install the cache is empty, so without the GPS stage the
+  // picker would open at the demo-city / Havana fallback even when the
+  // user is somewhere else. Skipped entirely if the caller already
+  // provided a valid initialLocation.
   const [cachedFallback, setCachedFallback] = useState<[number, number] | null>(null);
   useEffect(() => {
-    if (initialLocation) return; // initialLocation is already valid, no need
+    if (initialLocation) return;
+    let cancelled = false;
+
+    // Stage 1 — cache (instant)
     AsyncStorage.getItem('last_known_location').then((raw) => {
-      if (!raw) return;
+      if (cancelled || !raw) return;
       try {
         const { latitude, longitude } = JSON.parse(raw);
         if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
@@ -222,6 +227,31 @@ export function ConfirmLocationScreen({
         }
       } catch { /* malformed */ }
     }).catch(() => {});
+
+    // Stage 2 — fresh GPS (overrides cache when it resolves)
+    (async () => {
+      try {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted' || cancelled) return;
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
+        if (!pos || cancelled) return;
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+        setCachedFallback([lng, lat]);
+        AsyncStorage.setItem(
+          'last_known_location',
+          JSON.stringify({ latitude: lat, longitude: lng }),
+        ).catch(() => {});
+      } catch { /* silent — fall back to cache or demo fallback */ }
+    })();
+
+    return () => { cancelled = true; };
   }, [initialLocation]);
 
   const initialCenter: [number, number] = initialLocation
