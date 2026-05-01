@@ -1327,9 +1327,14 @@ export const adminService = {
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
+    // wallet_recharge_requests has TWO FKs to users (user_id +
+    // processed_by) so the implicit `users!inner(...)` returns
+    // PostgREST 300 ("Multiple Choices") and the admin Billeteras →
+    // Recargas pendientes tab shows "No pudimos cargar los datos".
+    // Naming the FK explicitly picks the requester (user_id).
     const { data, error } = await supabase
       .from('wallet_recharge_requests')
-      .select('*, users!inner(full_name)')
+      .select('*, users!wallet_recharge_requests_user_id_fkey!inner(full_name)')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .range(from, to);
