@@ -51,8 +51,9 @@ jobs:
           DRIVER_GS: ${{ secrets.DRIVER_GOOGLE_SERVICES_JSON }}
         run: |
           if [ -n "$DRIVER_GS" ]; then
-            echo "$DRIVER_GS" > apps/driver/google-services.json
-            echo "✓ Wrote real google-services.json from DRIVER_GOOGLE_SERVICES_JSON secret"
+            # printf '%s' instead of echo — preserves the JSON byte-for-byte.
+            printf '%s' "$DRIVER_GS" > apps/driver/google-services.json
+            echo "✓ Wrote google-services.json from DRIVER_GOOGLE_SERVICES_JSON secret ($(wc -c < apps/driver/google-services.json) bytes)"
           else
             cat > apps/driver/google-services.json <<'PLACEHOLDER'
           {
