@@ -60,6 +60,8 @@ interface PaymentIntentRow {
   fee_usd: number | null;
   paid_at: string | null;
   created_at: string;
+  card_brand: string | null;
+  card_last4: string | null;
 }
 
 interface UserRow {
@@ -114,7 +116,8 @@ Deno.serve(async (req) => {
       .from('payment_intents')
       .select(
         'id, user_id, amount_usd, amount_cup, exchange_rate, status, ' +
-        'payment_provider, stripe_payment_intent_id, fee_usd, paid_at, created_at',
+        'payment_provider, stripe_payment_intent_id, fee_usd, paid_at, created_at, ' +
+        'card_brand, card_last4',
       )
       .eq('id', body.payment_intent_id)
       .single();
@@ -165,6 +168,8 @@ Deno.serve(async (req) => {
       user: userRow,
       amounts,
       stripePaymentIntentId: piRow.stripe_payment_intent_id ?? '',
+      cardBrand: piRow.card_brand,
+      cardLast4: piRow.card_last4,
       dateISO,
     });
 
@@ -199,9 +204,8 @@ Deno.serve(async (req) => {
       exchange_at: dateISO,
       cup_equivalent: amounts.cupEquivalent.toFixed(2),
       stripe_payment_intent_id: piRow.stripe_payment_intent_id ?? '',
-      // card_brand / card_last4 NOT yet populated by webhook — see PR 3 spec
-      card_brand: null,
-      card_last4: null,
+      card_brand: piRow.card_brand,
+      card_last4: piRow.card_last4,
       pdf_storage_path: storagePath,
       pdf_generated_at: new Date().toISOString(),
     };
@@ -296,11 +300,13 @@ interface PdfArgs {
   user: UserRow;
   amounts: ComputedAmounts;
   stripePaymentIntentId: string;
+  cardBrand: string | null;
+  cardLast4: string | null;
   dateISO: string;
 }
 
 async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
-  const { receiptNo, user, amounts, stripePaymentIntentId, dateISO } = args;
+  const { receiptNo, user, amounts, stripePaymentIntentId, cardBrand, cardLast4, dateISO } = args;
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]); // A4 in points
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
@@ -361,7 +367,12 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   // Payment method (card brand + last4 will be wired in PR 3)
   page.drawText('Método de pago:', { x: left, y, size: 10, font: helvBold, color: ink });
   y -= 16;
-  page.drawText('Tarjeta de crédito/débito (Stripe)', { x: left, y, size: 10, font: helv, color: ink });
+  const cardLine = cardBrand && cardLast4
+    ? `${capitalize(cardBrand)} terminada en •••• ${cardLast4}`
+    : cardBrand
+      ? `${capitalize(cardBrand)} (Stripe)`
+      : 'Tarjeta de crédito/débito (Stripe)';
+  page.drawText(cardLine, { x: left, y, size: 10, font: helv, color: ink });
   y -= 14;
   if (stripePaymentIntentId) {
     page.drawText(`Stripe PaymentIntent: ${stripePaymentIntentId}`, { x: left, y, size: 8, font: helv, color: muted });
@@ -413,6 +424,10 @@ function formatDate(iso: string): string {
 
 function formatCup(cup: number): string {
   return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 2 }).format(cup) + ' CUP';
+}
+
+function capitalize(s: string): string {
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 // ── Email helpers ──
