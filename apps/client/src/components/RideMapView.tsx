@@ -45,7 +45,13 @@ const vehicleMarkerImages: Record<string, any> = {
   'marker-moto': require('../../assets/vehicles/markers/moto.png'),
   'marker-auto': require('../../assets/vehicles/markers/auto_clasico.png'),
   'marker-confort': require('../../assets/vehicles/markers/confort.png'),
+  'marker-mensajeria': require('../../assets/vehicles/markers/mensajeria.png'),
 };
+
+// Service slugs whose marker has no inherent "front" direction — rotation
+// by bearing would feel arbitrary (e.g. mensajeria is rendered as a square
+// cargo box, not a vehicle silhouette).
+const NON_ROTATING_MARKERS = new Set<string>(['mensajeria']);
 
 interface GeoPoint {
   latitude: number;
@@ -800,7 +806,7 @@ function RideMapViewInner({
                   backgroundColor: 'transparent',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transform: [{ rotate: `${animatedDriver.heading ?? 0}deg` }],
+                  transform: [{ rotate: `${(vehicleType && NON_ROTATING_MARKERS.has(vehicleType)) ? 0 : (animatedDriver.heading ?? 0)}deg` }],
                 }}
               >
                 {vehicleType && vehicleMarkerImages[`marker-${vehicleType}`] ? (
@@ -839,7 +845,9 @@ function RideMapViewInner({
                   iconSize: 0.55,
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
-                  iconRotate: ['get', 'heading'],
+                  // Cargo box marker (mensajería) has no front — keep rotation 0;
+                  // all vehicle markers rotate by their reported heading.
+                  iconRotate: ['case', ['==', ['get', 'icon'], 'marker-mensajeria'], 0, ['get', 'heading']],
                 }}
               />
             </MapboxGL.ShapeSource>
