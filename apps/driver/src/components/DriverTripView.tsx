@@ -1357,29 +1357,18 @@ function TripCompleteView() {
 
   const handleDownloadReceipt = async () => {
     if (!activeTrip) return;
-    const html = generateReceiptHTML({
-      rideId: activeTrip.id,
-      date: activeTrip.completed_at ?? activeTrip.created_at,
-      pickupAddress: activeTrip.pickup_address ?? '',
-      dropoffAddress: activeTrip.dropoff_address ?? '',
-      driverName: null,
-      vehiclePlate: null,
-      serviceType: activeTrip.service_type,
-      paymentMethod: activeTrip.payment_method === 'cash'
-        ? t('payment.cash', { defaultValue: 'Efectivo' })
-        : activeTrip.payment_method === 'corporate'
-          ? t('payment.corporate', { defaultValue: 'Cuenta corporativa' })
-          : activeTrip.payment_method === 'mixed'
-            ? t('payment.mixed', { defaultValue: 'Mixto' })
-            : 'TriciCoin',
-      fareCup: activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup,
-      fareTrc: activeTrip.final_fare_trc ?? activeTrip.estimated_fare_trc ?? null,
-      distanceM: activeTrip.actual_distance_m ?? activeTrip.estimated_distance_m ?? 0,
-      durationS: activeTrip.actual_duration_s ?? activeTrip.estimated_duration_s ?? 0,
-      surgeMultiplier: activeTrip.surge_multiplier ?? 1,
-      discountCup: activeTrip.discount_amount_cup ?? 0,
-    });
     try {
+      const data = await rideService.getReceiptData(activeTrip.id, 'driver');
+      // Localise the raw payment_method enum on the way out.
+      const paymentLabel =
+        activeTrip.payment_method === 'cash'
+          ? t('payment.cash', { defaultValue: 'Efectivo' })
+          : activeTrip.payment_method === 'corporate'
+            ? t('payment.corporate', { defaultValue: 'Cuenta corporativa' })
+            : activeTrip.payment_method === 'mixed'
+              ? t('payment.mixed', { defaultValue: 'Mixto' })
+              : 'TriciCoin';
+      const html = generateReceiptHTML({ ...data, paymentMethod: paymentLabel });
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });

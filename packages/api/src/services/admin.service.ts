@@ -1811,4 +1811,76 @@ export const adminService = {
     if (error) throw error;
     return count ?? 0;
   },
+
+  /**
+   * Wallet v2 PR 9: list wallet recharge receipts for the admin
+   * "Comprobantes emitidos" tab. RLS on wallet_receipts already
+   * grants admins full read access via the
+   * `wallet_receipts_admin_all` policy from migration 00235.
+   *
+   * Joined with the user's email/full_name for display.
+   */
+  async getRecentReceipts(page = 0, pageSize = 50, search?: string) {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase
+      .from('wallet_receipts')
+      .select(
+        'id, receipt_no, payment_intent_id, user_id, usd_charged, fee_usd, net_usd, ' +
+        'tc_credited, exchange_rate, cup_equivalent, card_brand, card_last4, ' +
+        'pdf_storage_path, pdf_generated_at, email_sent_at_user, email_sent_at_admin, ' +
+        'created_at, ' +
+        'user:users!wallet_receipts_user_id_fkey(full_name, email, phone)',
+      )
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (search && search.trim().length > 0) {
+      query = query.or(`receipt_no.ilike.%${search.trim()}%,stripe_payment_intent_id.ilike.%${search.trim()}%`);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as Array<{
+      id: string;
+      receipt_no: string;
+      payment_intent_id: string;
+      user_id: string;
+      usd_charged: string;
+      fee_usd: string;
+      net_usd: string;
+      tc_credited: string;
+      exchange_rate: string;
+      cup_equivalent: string;
+      card_brand: string | null;
+      card_last4: string | null;
+      pdf_storage_path: string | null;
+      pdf_generated_at: string | null;
+      email_sent_at_user: string | null;
+      email_sent_at_admin: string | null;
+      created_at: string;
+      user: { full_name: string | null; email: string | null; phone: string | null } | null;
+    }>;
+  },
+
+  /**
+   * Wallet v2 PR 9: mint a signed URL for the receipts bucket so
+   * admins can download PDFs from the admin tab. Storage RLS allows
+   * admins via the `receipts_admin_read` policy.
+   */
+  async getReceiptSignedUrl(storagePath: string, expirySec = 3600): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from('receipts')
+      .createSignedUrl(storagePath, expirySec);
+    if (error) throw error;
+    if (!data?.signedUrl) throw new Error('signed_url_missing');
+    return data.signedUrl;
+  },
+
+  // Note (Wallet v2 PR 9 scope): regenerate-PDF action intentionally
+  // omitted from this PR. The generate-recharge-receipt EF requires a
+  // service_role apikey, which the admin browser can't expose. A
+  // future PR will add an admin-gated RPC that pg_net.http_posts to
+  // the EF using get_service_role_key() server-side. For now the
+  // admin tab is read-only + download-existing-PDFs.
 };

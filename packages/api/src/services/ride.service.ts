@@ -1935,4 +1935,121 @@ export const rideService = {
       )
       .subscribe();
   },
+
+  /**
+   * Build the data shape consumed by `generateReceiptHTML` for a single
+   * completed ride. Pulls the final pricing snapshot + the
+   * counterparty's name in a single round-trip per side, plus a small
+   * shared ride lookup for the addresses, payment method and dates.
+   *
+   * Both passenger and driver receipts read from the same underlying
+   * pricing snapshot — the variant only changes which fields end up
+   * in the final payload.
+   */
+  async getReceiptData(
+    rideId: string,
+    variant: 'passenger' | 'driver',
+  ): Promise<import('@tricigo/utils').ReceiptData> {
+    const supabase = getSupabaseClient();
+
+    const { data: ride, error: rideErr } = await supabase
+      .from('rides')
+      .select(
+        'id, customer_id, driver_id, service_type, payment_method, ' +
+        'pickup_address, dropoff_address, ' +
+        'final_fare_cup, estimated_fare_cup, final_fare_trc, estimated_fare_trc, ' +
+        'discount_amount_cup, surge_multiplier, tip_amount, exchange_rate_usd_cup, ' +
+        'actual_distance_m, estimated_distance_m, actual_duration_s, estimated_duration_s, ' +
+        'completed_at, created_at',
+      )
+      .eq('id', rideId)
+      .single();
+    if (rideErr) throw rideErr;
+    if (!ride) throw new Error('RIDE_NOT_FOUND');
+
+    const { data: snap } = await supabase
+      .from('ride_pricing_snapshots')
+      .select('base_fare, subtotal, commission_rate, commission_amount, total, surge_multiplier')
+      .eq('ride_id', rideId)
+      .eq('snapshot_type', 'final')
+      .maybeSingle();
+
+    const dateISO = (ride.completed_at as string | null) ?? (ride.created_at as string);
+    const { deriveReceiptNo } = await import('@tricigo/utils');
+    const receiptNo = deriveReceiptNo(ride.id as string, dateISO);
+
+    const distanceM = (ride.actual_distance_m as number | null) ?? (ride.estimated_distance_m as number) ?? 0;
+    const durationS = (ride.actual_duration_s as number | null) ?? (ride.estimated_duration_s as number) ?? 0;
+    const totalCup = (ride.final_fare_cup as number | null) ?? (ride.estimated_fare_cup as number);
+    const subtotalCup = (snap?.subtotal as number | null) ?? totalCup;
+    const surgeMult = Number(snap?.surge_multiplier ?? ride.surge_multiplier ?? 1);
+    const surgeAmountCup = surgeMult > 1 ? Math.max(0, Math.round(subtotalCup * (surgeMult - 1))) : 0;
+    const exchangeRateUsdCup = ride.exchange_rate_usd_cup != null ? Number(ride.exchange_rate_usd_cup) : null;
+
+    const base = {
+      receiptNo,
+      rideId: ride.id as string,
+      date: dateISO,
+      pickupAddress: ride.pickup_address as string,
+      dropoffAddress: ride.dropoff_address as string,
+      serviceType: ride.service_type as string,
+      distanceM,
+      durationS,
+      paymentMethod: ride.payment_method as string,
+      exchangeRateUsdCup,
+    };
+
+    if (variant === 'passenger') {
+      const { data: driverProfile } = ride.driver_id
+        ? await supabase
+            .from('driver_profiles')
+            .select('user_id, vehicles(plate_number)')
+            .eq('id', ride.driver_id as string)
+            .maybeSingle()
+        : { data: null };
+      const driverUserId = (driverProfile?.user_id as string | undefined) ?? null;
+      const { data: driverUser } = driverUserId
+        ? await supabase.from('users').select('full_name').eq('id', driverUserId).maybeSingle()
+        : { data: null };
+      const vehicleArr = driverProfile?.vehicles as { plate_number: string }[] | { plate_number: string } | null | undefined;
+      const vehiclePlate = Array.isArray(vehicleArr) ? vehicleArr[0]?.plate_number ?? null : vehicleArr?.plate_number ?? null;
+
+      return {
+        variant: 'passenger',
+        ...base,
+        driverName: (driverUser?.full_name as string | null) ?? null,
+        vehiclePlate,
+        subtotalCup,
+        surgeMultiplier: surgeMult,
+        surgeAmountCup,
+        discountCup: (ride.discount_amount_cup as number | null) ?? 0,
+        tipCup: (ride.tip_amount as number | null) ?? 0,
+        totalCup,
+        fareTrc: (ride.final_fare_trc as number | null) ?? (ride.estimated_fare_trc as number | null) ?? null,
+      };
+    }
+
+    // driver variant
+    const { data: passengerUser } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', ride.customer_id as string)
+      .maybeSingle();
+    const grossFareCup = totalCup;
+    const commissionRate = Number(snap?.commission_rate ?? 0);
+    const commissionCup = (snap?.commission_amount as number | null) ?? Math.round(grossFareCup * commissionRate);
+    const tipCup = (ride.tip_amount as number | null) ?? 0;
+    const netCup = grossFareCup - commissionCup + tipCup;
+
+    return {
+      variant: 'driver',
+      ...base,
+      passengerName: (passengerUser?.full_name as string | null) ?? null,
+      grossFareCup,
+      commissionRate,
+      commissionCup,
+      tipCup,
+      netCup,
+    };
+  },
 };

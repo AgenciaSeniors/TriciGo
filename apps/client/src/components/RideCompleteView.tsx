@@ -270,25 +270,13 @@ export function RideCompleteView() {
 
   const handleDownloadReceipt = async () => {
     if (!activeRide) return;
-    const html = generateReceiptHTML({
-      rideId: activeRide.id,
-      date: activeRide.completed_at ?? activeRide.created_at,
-      pickupAddress: activeRide.pickup_address ?? '',
-      dropoffAddress: activeRide.dropoff_address ?? '',
-      driverName: rideWithDriver?.driver_name ?? null,
-      vehiclePlate: rideWithDriver?.vehicle_plate ?? null,
-      serviceType: activeRide.service_type,
-      paymentMethod: activeRide.payment_method === 'corporate'
-        ? t('payment.paid_corporate', { defaultValue: 'Cuenta corporativa' })
-        : activeRide.payment_method,
-      fareCup: activeRide.final_fare_cup ?? activeRide.estimated_fare_cup,
-      fareTrc: activeRide.final_fare_trc ?? activeRide.estimated_fare_trc ?? null,
-      distanceM: activeRide.actual_distance_m ?? activeRide.estimated_distance_m ?? 0,
-      durationS: activeRide.actual_duration_s ?? activeRide.estimated_duration_s ?? 0,
-      surgeMultiplier: activeRide.surge_multiplier ?? 1,
-      discountCup: activeRide.discount_amount_cup ?? 0,
-    });
     try {
+      const data = await rideService.getReceiptData(activeRide.id, 'passenger');
+      // Override the raw payment_method with a translated label when corporate.
+      const dataWithPaymentLabel = activeRide.payment_method === 'corporate'
+        ? { ...data, paymentMethod: t('payment.paid_corporate', { defaultValue: 'Cuenta corporativa' }) }
+        : data;
+      const html = generateReceiptHTML(dataWithPaymentLabel);
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });

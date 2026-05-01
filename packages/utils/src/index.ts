@@ -6,7 +6,13 @@ export * from './geo';
 export * from './fareCalculator';
 export { initAnalytics, trackEvent, identifyUser, resetAnalytics } from './analytics';
 export type { AnalyticsEvent } from './analytics';
-export { generateReceiptHTML, type ReceiptData } from './receipt-template';
+export {
+  generateReceiptHTML,
+  deriveReceiptNo,
+  type ReceiptData,
+  type PassengerReceiptData,
+  type DriverReceiptData,
+} from './receipt-template';
 export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
