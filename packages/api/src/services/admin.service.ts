@@ -1674,13 +1674,24 @@ export const adminService = {
    * Calls admin_adjust_wallet RPC (migration 00133).
    *
    * @param targetUserId — user whose wallet is adjusted
-   * @param accountType — 'customer_cash' (passenger) or 'driver_cash' (driver quota)
+   * @param accountType — any value of the wallet_account_type Postgres
+   *   enum: 'customer_cash', 'driver_cash', 'driver_hold', 'driver_quota',
+   *   'platform_revenue', 'platform_promotions', 'corporate_cash',
+   *   'tricicoin'. The RPC validates the value server-side.
    * @param amountCup — positive = credit, negative = debit
    * @param reason — required, ≥3 chars
    */
   async adjustWallet(
     targetUserId: string,
-    accountType: 'customer_cash' | 'driver_cash',
+    accountType:
+      | 'customer_cash'
+      | 'driver_cash'
+      | 'driver_hold'
+      | 'driver_quota'
+      | 'platform_revenue'
+      | 'platform_promotions'
+      | 'corporate_cash'
+      | 'tricicoin',
     amountCup: number,
     reason: string,
   ): Promise<{ transaction_id: string; account_id: string; amount_cup: number; new_balance: number }> {
