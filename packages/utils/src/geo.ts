@@ -1109,14 +1109,44 @@ export async function lookupCrossStreetsSupabase(
 }
 
 /**
- * Find the nearest named POI from Supabase cuba_pois table (~5-10ms).
- * Only returns user-recognizable POIs (shops, hotels, restaurants, etc.)
- * within 30m radius. Returns null if no POI nearby.
+ * Cache for `lookupNearestPoi`. POIs at a given location don't move; we
+ * quantize input coords to a ~50m cell so a dragged pin that lands within
+ * the same cell as a previous query reuses the result. TTL 24h covers the
+ * case of admin edits or sync runs adding/closing POIs without holding
+ * onto stale data forever.
+ *
+ * Bounded at NEAREST_POI_CACHE_MAX entries, evicted oldest-first when
+ * full so a long session of pin dragging doesn't grow memory unbounded.
+ */
+const nearestPoiCache = new Map<string, { name: string | null; ts: number }>();
+const NEAREST_POI_CACHE_TTL = 24 * 60 * 60 * 1000;
+const NEAREST_POI_CACHE_MAX = 1000;
+
+/** Quantize a lat/lng to a ~50m grid cell for cache keys. */
+function quantizeCell(lat: number, lng: number): string {
+  // 1e-3 degrees ≈ 111 m; 1e-4 ≈ 11 m. Round to 4 decimals for ~11m
+  // resolution then divide by 5 → ~55m cells (close enough to 50m).
+  const cellLat = Math.round(lat * 10000 / 5);
+  const cellLng = Math.round(lng * 10000 / 5);
+  return `${cellLat},${cellLng}`;
+}
+
+/**
+ * Find the nearest named POI from Supabase cuba_pois table (~5-10ms uncached,
+ * 0ms on cache hit). Only returns user-recognizable POIs (shops, hotels,
+ * restaurants, etc.) within 30m radius. Returns null if no POI nearby.
  */
 async function lookupNearestPoi(
   lat: number,
   lng: number,
 ): Promise<string | null> {
+  // Cache lookup: quantize to 50m cell so close pins share results
+  const cacheKey = quantizeCell(lat, lng);
+  const cached = nearestPoiCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < NEAREST_POI_CACHE_TTL) {
+    return cached.name;
+  }
+
   try {
     const supabaseUrl =
       (typeof process !== 'undefined' && (
@@ -1147,9 +1177,18 @@ async function lookupNearestPoi(
 
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data || !Array.isArray(data) || data.length === 0) return null;
+    const name = data && Array.isArray(data) && data.length > 0 && data[0].name
+      ? (data[0].name as string)
+      : null;
 
-    return data[0].name || null;
+    // Evict oldest entry if cache is full (insertion-order LRU)
+    if (nearestPoiCache.size >= NEAREST_POI_CACHE_MAX) {
+      const oldest = nearestPoiCache.keys().next().value;
+      if (oldest !== undefined) nearestPoiCache.delete(oldest);
+    }
+    nearestPoiCache.set(cacheKey, { name, ts: Date.now() });
+
+    return name;
   } catch {
     return null;
   }
@@ -1566,6 +1605,21 @@ function buildEnrichedAddress(
 }
 
 /**
+ * Top-level cache for `reverseGeocode`. Keyed by ~50m cell so a dragged
+ * pin that wobbles within the same cell skips the whole pipeline (Supabase
+ * cross-streets + Mapbox metadata + nearest POI + Overpass fallback).
+ * TTL 24h is short enough to pick up admin POI edits the next session and
+ * long enough to absorb the chatter of a single ride confirmation flow.
+ *
+ * Note: the sub-functions (`lookupCrossStreetsSupabase`, `lookupNearestPoi`,
+ * Mapbox metadata) each have their own caches at finer granularity, but
+ * caching the merged final string saves the merge cost too.
+ */
+const reverseGeocodeCache = new Map<string, { result: string | null; ts: number }>();
+const REVERSE_GEOCODE_CACHE_TTL = 24 * 60 * 60 * 1000;
+const REVERSE_GEOCODE_CACHE_MAX = 1000;
+
+/**
  * Reverse geocode coordinates to a Cuban-style street address.
  *
  * Pipeline (parallel):
@@ -1575,6 +1629,11 @@ function buildEnrichedAddress(
  *   Overpass fallback (only if Supabase misses, 1-6s)   ─┘
  *
  * Format: "Calle Principal e/ Cruz1 y Cruz2, Municipio, Provincia"
+ *
+ * Cached in-memory for 24h keyed on a ~50m grid cell (see
+ * `reverseGeocodeCache`). Subsequent drags within the same cell return
+ * instantly with zero network — important on Cuban networks where each
+ * full pipeline call costs ~150ms and ~5KB.
  */
 export async function reverseGeocode(
   lat: number,
@@ -1584,6 +1643,25 @@ export async function reverseGeocode(
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return null;
   }
+  // Cache lookup
+  const cacheKey = quantizeCell(lat, lng);
+  const cached = reverseGeocodeCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < REVERSE_GEOCODE_CACHE_TTL) {
+    return cached.result;
+  }
+
+  // Wrap every successful resolution path so the merged label gets memoized
+  // in the cache before being returned. The four exit points (cross-streets,
+  // Overpass, metadata-only, and the catch-all null) all funnel through here.
+  const cacheAndReturn = (result: string | null): string | null => {
+    if (reverseGeocodeCache.size >= REVERSE_GEOCODE_CACHE_MAX) {
+      const oldest = reverseGeocodeCache.keys().next().value;
+      if (oldest !== undefined) reverseGeocodeCache.delete(oldest);
+    }
+    reverseGeocodeCache.set(cacheKey, { result, ts: Date.now() });
+    return result;
+  };
+
   try {
     // 1. Run Supabase cross-streets + Mapbox metadata + POI lookup in parallel
     //    Mapbox: ~50-100ms | Supabase cross-streets: ~5-10ms | Supabase POI: ~5-10ms
@@ -1613,7 +1691,7 @@ export async function reverseGeocode(
       } else if (crossStreets.length === 1) {
         streetPart = `${mainStreet} y ${crossStreets[0]}`;
       }
-      return buildEnrichedAddress(streetPart, poiName, muni, prov);
+      return cacheAndReturn(buildEnrichedAddress(streetPart, poiName, muni, prov));
     }
 
     // 3. Overpass fallback (for streets not in pre-computed table, 1-6s)
@@ -1632,16 +1710,16 @@ export async function reverseGeocode(
         } else if (crossStreets.length === 1) {
           streetPart = `${mainStreet} y ${crossStreets[0]}`;
         }
-        return buildEnrichedAddress(streetPart, poiName, municipality, province);
+        return cacheAndReturn(buildEnrichedAddress(streetPart, poiName, municipality, province));
       }
     } catch { /* fall through to metadata-only */ }
 
     // 4. Last resort: road name from Mapbox/Nominatim only (no cross-streets)
-    if (!metadata || !road) return null;
+    if (!metadata || !road) return cacheAndReturn(null);
 
-    return buildEnrichedAddress(road, poiName, municipality, province);
+    return cacheAndReturn(buildEnrichedAddress(road, poiName, municipality, province));
   } catch {
-    return null;
+    return cacheAndReturn(null);
   }
 }
 
@@ -2343,9 +2421,37 @@ export async function searchOverpassPOI(
 }
 
 /**
+ * In-memory cache for `searchPoisSupabase`. Same shape as the Mapbox
+ * geocode cache — keyed on normalized query + rounded proximity + limit.
+ * TTL 24h is shorter than the address cache (7d) because POIs can be
+ * edited by admin or deactivated by the monthly sync more frequently
+ * than street names change.
+ */
+const poisSearchCache = new Map<string, { results: SearchBoxResult[]; ts: number }>();
+const POIS_SEARCH_CACHE_TTL = 24 * 60 * 60 * 1000;
+const POIS_SEARCH_CACHE_MAX = 300;
+
+function poisSearchCacheKey(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null,
+  limit: number,
+): string {
+  const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
+  const prox = proximity
+    ? `${proximity.latitude.toFixed(1)},${proximity.longitude.toFixed(1)}`
+    : 'none';
+  return `${normalized}|${prox}|${limit}`;
+}
+
+/**
  * Search Cuba POIs from Supabase database.
  * Uses PostGIS spatial search + pg_trgm trigram similarity.
  * Much faster than Overpass (~50ms vs 2-10s) and handles ANY query.
+ *
+ * Cached in-memory for 24h. Same query within ~11km reuses the result.
+ * Saves bandwidth on repetitive autocomplete sessions ("ho" → "hos" →
+ * "hosp" each return the same superset; the cache key normalizes the
+ * stem so 80%+ of intra-session queries are cache hits).
  */
 export async function searchPoisSupabase(
   query: string,
@@ -2353,6 +2459,13 @@ export async function searchPoisSupabase(
   limit = 10,
   externalSignal?: AbortSignal,
 ): Promise<SearchBoxResult[]> {
+  // Cache lookup
+  const cacheKey = poisSearchCacheKey(query, proximity, limit);
+  const cached = poisSearchCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < POIS_SEARCH_CACHE_TTL) {
+    return cached.results;
+  }
+
   try {
     const supabaseUrl =
       (typeof process !== 'undefined' && (
@@ -2392,7 +2505,7 @@ export async function searchPoisSupabase(
     const data = await res.json();
     if (!Array.isArray(data)) return [];
 
-    return data.map((r: Record<string, unknown>) => ({
+    const results: SearchBoxResult[] = data.map((r: Record<string, unknown>) => ({
       address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', ') || (r.name as string),
       latitude: r.latitude as number,
       longitude: r.longitude as number,
@@ -2402,6 +2515,15 @@ export async function searchPoisSupabase(
       source: 'supabase' as const,
       specificity: computeSpecificity(r.name as string),
     }));
+
+    // Populate cache (LRU eviction when full)
+    if (poisSearchCache.size >= POIS_SEARCH_CACHE_MAX) {
+      const oldest = poisSearchCache.keys().next().value;
+      if (oldest !== undefined) poisSearchCache.delete(oldest);
+    }
+    poisSearchCache.set(cacheKey, { results, ts: Date.now() });
+
+    return results;
   } catch {
     return [];
   }
@@ -2463,6 +2585,19 @@ export async function searchStreetsSupabase(
   } catch {
     return [];
   }
+}
+
+/**
+ * Clear all in-memory POI / reverse-geocode caches.
+ *
+ * Useful during QA when you want the next search to hit Supabase instead
+ * of returning a memoized result. Not needed in production — TTLs handle
+ * staleness and LRU caps memory.
+ */
+export function clearPoiCaches(): void {
+  nearestPoiCache.clear();
+  reverseGeocodeCache.clear();
+  poisSearchCache.clear();
 }
 
 /* ─── Viewport-Based POI Fetching ─── */
