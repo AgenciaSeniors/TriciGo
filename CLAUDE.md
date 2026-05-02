@@ -177,6 +177,64 @@ gh run download <RUN_ID> --name client-dev-client-apk
 | El celu abre la URL pero muestra JSON o "Welcome to Expo" | Se está abriendo en el browser, no en el dev client | Usar el esquema `exp://`, no `http://`. O escanear el QR con la app TriciGo, no con la cámara genérica. |
 | `taskkill /PID <X> /F` (CMD) si PowerShell falla por permisos | Comando alternativo para matar procesos | Funciona desde CMD normal sin admin |
 
+### ADB Wireless Debugging (camino canónico verificado)
+
+Cuando el usuario activa "Depuración inalámbrica" en el celu y ya pareó la PC al menos una vez (Android 11+), no hace falta cable ni firewall LAN. **Usar `adb reverse` para que el celu acceda a Metro vía `localhost:8081` por el túnel adb.** Esto evita problemas de Wi-Fi guest/aislada y NO requiere abrir puerto en firewall.
+
+`adb` no suele estar en PATH en Windows; la ruta canónica es:
+```
+C:\Users\Eduardo\AppData\Local\Android\Sdk\platform-tools\adb.exe
+```
+
+Flujo (PowerShell):
+```powershell
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+
+# 1. Listar dispositivos (debe aparecer "<IP>:<puerto> device")
+& $adb devices
+
+# 2. Si no aparece: el usuario abre Configuración > Opciones de desarrollador > Depuración inalámbrica.
+#    Para vincular por primera vez: tap "Vincular dispositivo con código de vinculación".
+#    El celu muestra <IP_PAIR>:<PUERTO_PAIR> + código de 6 dígitos.
+& $adb pair <IP_PAIR>:<PUERTO_PAIR>   # te pide el código
+# Después el menú principal de Wireless debugging muestra OTRA <IP>:<PUERTO> de conexión:
+& $adb connect <IP>:<PUERTO>
+
+# 3. Establecer reverse — el celu accede a localhost:8081 (puerto del Metro de la PC)
+& $adb -s <IP>:<PUERTO> reverse tcp:8081 tcp:8081
+& $adb -s <IP>:<PUERTO> reverse --list   # debe mostrar "host-XX tcp:8081 tcp:8081"
+
+# 4. Verificar conectividad celu→Metro
+& $adb -s <IP>:<PUERTO> shell 'curl -s http://localhost:8081/status'
+# debe imprimir: packager-status:running
+
+# 5. Forzar abrir el dev client en un proyecto específico (resetea URL cacheada)
+& $adb -s <IP>:<PUERTO> shell "am force-stop app.tricigo.client"
+& $adb -s <IP>:<PUERTO> shell 'am start -W -a android.intent.action.VIEW -d "exp+tricigo-client://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" app.tricigo.client'
+```
+
+**Esquemas custom del dev client TriciGo Cliente** (sacados de `app.json` + `dumpsys package`):
+- `exp+tricigo-client://expo-development-client/?url=...` — abrir un proyecto en el dev client (MainActivity)
+- `tricigo://...` — deep links de la app real
+- `expo-dev-launcher://` — abre la pantalla nativa para ingresar URL (AuthActivity)
+
+El driver tendría su propio package (`app.tricigo.driver`) — verificar su scheme con `dumpsys package app.tricigo.driver | grep Scheme`.
+
+### "Pantalla en blanco" — protocolo de diagnóstico
+
+Si el celu carga el dev client y queda en blanco/splash sin renderizar la app, **NO asumir** problema de RN runtime. Primero ver si Metro recibió la request del bundle:
+
+1. **Tail del log de Metro.** Si está estático en "Waiting on http://localhost:8081" sin requests entrantes → el celu no se conectó. Causas: URL cacheada inválida en dev launcher, `adb reverse` no aplicado, o el celu intenta una IP/host viejo. Fix: lanzar app con intent explícito (paso 5 arriba).
+
+2. **Si Metro empezó a bundlear y muestra `Bundling failed`** + `Unable to resolve "@tricigo/X/Y"` → es un import roto. Causa típica: el archivo existe en `packages/X/src/Y.tsx` pero NO está en el `exports` map de `packages/X/package.json`. Los packages monorepo de TriciGo (`@tricigo/ui`, `@tricigo/api`, etc.) usan `exports` map estricto, lo que **bloquea** cualquier subpath no listado. Fix: agregar `"./Y": "./src/Y.tsx"` al `exports`, **reiniciar Metro con `--clear`** (no basta con reload — el resolver cachea exports).
+
+3. **Si Metro bundleó OK** y Metro_log muestra `Bundled <ms>ms (<N> modules)` pero la pantalla sigue en blanco → ahora sí, error JS runtime. Capturar logcat filtrado:
+   ```powershell
+   $pid = (& $adb -s <IP>:<PUERTO> shell "pidof app.tricigo.client").Trim()
+   & $adb -s <IP>:<PUERTO> logcat -d --pid=$pid -t 400 -v brief | Select-String "ReactNativeJS|FATAL|JSException"
+   ```
+   Buscar `FATAL`, `JavaScript Error`, `Exception` o stacks. Reportar al usuario con el error.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
