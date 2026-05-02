@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -9,20 +9,29 @@ import {
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
 import { colors } from '@tricigo/theme';
-
-// ─── Nominatim config (Cuba-specific, same as web app) ──────────────────────
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-// Cuba bounding box: west, south, east, north
-const CUBA_VIEWBOX = '-84.9,19.8,-74.1,23.3';
+import {
+  searchPoisSupabase,
+  searchStreetsSupabase,
+  searchAddress,
+  type GeoPoint,
+  type SearchBoxResult,
+} from '@tricigo/utils';
 
 interface AddressResult {
   id: string;
+  /** Top line of the result (POI name when available, otherwise the street). */
+  title: string;
+  /** Bottom line — the street address when title is a POI name; empty otherwise. */
+  subtitle: string;
+  /** What we hand back to onSelect — combined "POI, street" or just street. */
   address: string;
-  shortName: string;
   latitude: number;
   longitude: number;
+  /** True for POI rows (so we render an icon + don't dedup against streets). */
+  isPoi: boolean;
 }
 
 interface AddressSearchBarProps {
@@ -31,50 +40,58 @@ interface AddressSearchBarProps {
   placeholder?: string;
 }
 
-async function searchNominatim(query: string): Promise<AddressResult[]> {
+/**
+ * Search the same Supabase POI + street cascade as the rider client.
+ *
+ * Order:
+ *   1. Supabase cuba_pois (high-specificity POI matches first)
+ *   2. Supabase street_intersections (cross-streets, "Calle 23 e/ M y N")
+ *   3. Supabase cuba_pois (low-specificity / generic matches)
+ *   4. Mapbox Search Box fallback when everything above is empty
+ *
+ * Driver searches usually mean "I need to navigate to this address" so the
+ * full Cuban cross-street format is what we want — the rider client already
+ * uses this same cascade.
+ */
+async function searchUnified(query: string, near: GeoPoint | null): Promise<AddressResult[]> {
   if (query.trim().length < 2) return [];
-  try {
-    const url =
-      `${NOMINATIM_BASE}?q=${encodeURIComponent(query)}` +
-      `&countrycodes=cu&limit=6&format=json&addressdetails=1` +
-      `&bounded=1&viewbox=${CUBA_VIEWBOX}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        headers: { 'Accept-Language': 'es', 'User-Agent': 'TriciGoDriver/1.0' },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-    } catch {
-      clearTimeout(timeoutId);
-      return [];
-    }
-    if (!res.ok) return [];
-    const data: any[] = await res.json();
+  const [poiResults, streetResults] = await Promise.all([
+    searchPoisSupabase(query, near, 5).catch(() => [] as SearchBoxResult[]),
+    searchStreetsSupabase(query, near, 5).catch(() => [] as SearchBoxResult[]),
+  ]);
 
-    return data.map((item, idx) => {
-      // Build a short human-friendly name
-      const addr = item.address ?? {};
-      const parts: string[] = [];
-      if (addr.road) parts.push(addr.road);
-      if (addr.suburb || addr.neighbourhood) parts.push(addr.suburb ?? addr.neighbourhood);
-      if (addr.city || addr.town || addr.municipality) parts.push(addr.city ?? addr.town ?? addr.municipality);
-      const shortName = parts.length ? parts.join(', ') : item.display_name.split(',').slice(0, 2).join(',');
+  const toResult = (r: SearchBoxResult, idx: number): AddressResult => {
+    const isPoi = !!(r.place_name && r.place_name !== r.address);
+    return {
+      id: `${r.source}-${r.latitude}-${r.longitude}-${idx}`,
+      title: isPoi ? r.place_name : r.address,
+      subtitle: isPoi ? r.address : '',
+      address: isPoi && r.full_address ? `${r.place_name}, ${r.full_address}` : r.address,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      isPoi,
+    };
+  };
 
-      return {
-        id: item.place_id?.toString() ?? `${idx}`,
-        address: item.display_name,
-        shortName: shortName.trim(),
-        latitude: parseFloat(item.lat),
-        longitude: parseFloat(item.lon),
-      };
-    });
-  } catch {
-    return [];
-  }
+  const highSpecPois = poiResults.filter(r => r.specificity >= 0.8).map(toResult);
+  const lowSpecPois  = poiResults.filter(r => r.specificity <  0.8).map(toResult);
+  const streets      = streetResults.map(toResult);
+
+  const merged = [...highSpecPois, ...streets, ...lowSpecPois];
+  if (merged.length > 0) return merged.slice(0, 8);
+
+  // Mapbox / Nominatim fallback only when Supabase had nothing
+  const fallback = await searchAddress(query, 6, near).catch(() => []);
+  return fallback.map((r, idx) => ({
+    id: `mapbox-${idx}`,
+    title: r.displayName || r.address,
+    subtitle: r.address && r.address !== (r.displayName || r.address) ? r.address : '',
+    address: r.address,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    isPoi: !!(r.displayName && r.displayName !== r.address),
+  }));
 }
 
 export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...' }: AddressSearchBarProps) {
@@ -82,11 +99,31 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   const [results, setResults] = useState<AddressResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [near, setNear] = useState<GeoPoint | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastQueryRef = useRef<string>('');
   const inputRef = useRef<TextInput>(null);
+
+  // Bias search results to the driver's current vicinity so closer
+  // matches outrank far-away ones with similar names.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getLastKnownPositionAsync();
+        if (!cancelled && pos) {
+          setNear({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleChangeText = useCallback((text: string) => {
     setQuery(text);
+    lastQueryRef.current = text;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!text.trim()) {
       setResults([]);
@@ -95,15 +132,17 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     }
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
-      const found = await searchNominatim(text);
+      const found = await searchUnified(text, near);
+      // Drop stale responses if the user kept typing
+      if (lastQueryRef.current !== text) return;
       setResults(found);
       setLoading(false);
-    }, 300);
-  }, []);
+    }, 350);
+  }, [near]);
 
   const handleSelect = useCallback(
     (item: AddressResult) => {
-      setQuery(item.shortName);
+      setQuery(item.title);
       setResults([]);
       setFocused(false);
       Keyboard.dismiss();
@@ -177,7 +216,7 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
                   ]}
                 >
                   <Ionicons
-                    name="location-outline"
+                    name={item.isPoi ? 'business-outline' : 'location-outline'}
                     size={16}
                     color={colors.brand.orange}
                     style={{ marginRight: 10, marginTop: 1 }}
@@ -188,15 +227,17 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
                       numberOfLines={1}
                       style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}
                     >
-                      {item.shortName}
+                      {item.title}
                     </Text>
-                    <Text
-                      variant="caption"
-                      numberOfLines={1}
-                      style={{ color: colors.neutral[400], marginTop: 1 }}
-                    >
-                      {item.address}
-                    </Text>
+                    {item.subtitle ? (
+                      <Text
+                        variant="caption"
+                        numberOfLines={1}
+                        style={{ color: colors.neutral[400], marginTop: 1 }}
+                      >
+                        {item.subtitle}
+                      </Text>
+                    ) : null}
                   </View>
                 </Pressable>
               )}

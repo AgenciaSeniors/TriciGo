@@ -187,23 +187,31 @@ function AddressSearchInputInner({
           searchPoisSupabase(text, userLocation, 5),
           searchStreetsSupabase(text, userLocation, 5),
         ]);
-        // Merge: streets first (more relevant for Cuban addresses),
-        // then POIs, then Mapbox fallback.
+        // Merge order:
+        //  - HIGH-specificity POIs first (proper names like "Hospital
+        //    Hermanos Ameijeiras") because that's what the user typed
+        //  - Then streets (better for generic Cuban "Calle 23" queries)
+        //  - Then low-specificity POIs (generic categories like "Hospital")
+        //  - Mapbox fallback only if everything above is empty
         //
-        // Bugfix: both Supabase helpers return SearchBoxResult (with
-        // `place_name`) while the component state is typed
-        // AddressSearchResult (with `displayName`). Normalize every
-        // branch to the AddressSearchResult shape so the dropdown has
-        // a consistent label and setResults stops complaining.
+        // Each result keeps a separate `displayName` (POI name) and
+        // `address` so the dropdown can render the POI name as title
+        // with the street as subtitle. Both Supabase helpers return
+        // SearchBoxResult — normalize to AddressSearchResult.
         const normalize = (r: SearchBoxResult): AddressSearchResult => ({
           address: r.address,
           latitude: r.latitude,
           longitude: r.longitude,
-          displayName: r.place_name || r.address,
+          // Only set displayName when different from address (e.g. a real
+          // POI name). When equal, render a single-line result.
+          displayName: r.place_name && r.place_name !== r.address ? r.place_name : undefined,
         });
+        const highSpecPois = poiResults.filter(r => r.specificity >= 0.8).map(normalize);
+        const lowSpecPois  = poiResults.filter(r => r.specificity <  0.8).map(normalize);
         const merged: AddressSearchResult[] = [
+          ...highSpecPois,
           ...streetResults.map(normalize),
-          ...poiResults.map(normalize),
+          ...lowSpecPois,
         ];
         // searchAddress already returns AddressSearchResult[] — no
         // normalize map needed on the fallback branch.
@@ -361,6 +369,7 @@ function AddressSearchInputInner({
   // shapes type-check without an unsafe cast at each call site.
   const handleSelectMerged = (item: {
     address: string;
+    displayName?: string;
     latitude: number;
     longitude: number;
     priority?: number;
@@ -373,25 +382,48 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
-    // Immediately select with current address
-    onSelect(item.address, { latitude: item.latitude, longitude: item.longitude });
-    // Background: enrich with Cuban cross-street format via reverseGeocode
+    // Immediate select: if the item is a POI with a known street address,
+    // combine "POI name, street" so the user sees the full label right
+    // away (no flicker waiting for reverseGeocode background enrich).
+    const initial = item.displayName && item.address && item.displayName !== item.address
+      ? `${item.displayName}, ${item.address}`
+      : item.address;
+    onSelect(initial, { latitude: item.latitude, longitude: item.longitude });
+    // Background: enrich with Cuban cross-street format via reverseGeocode.
+    // reverseGeocode already prepends the nearest POI when it finds one,
+    // so this naturally upgrades a "Calle 23" pick to "Hotel Bruzón, Calle 23
+    // e/ X y Y, Vedado, La Habana" once the network returns.
     if (item.latitude && item.longitude) {
       reverseGeocode(item.latitude, item.longitude).then((enriched) => {
-        if (enriched && enriched !== item.address) {
-          // If the original was a POI name (not a street), prepend it
-          const isPoiName = !item.address.includes(' e/ ') && !item.address.includes(' entre ') && !item.address.match(/^(Calle|Avenida|Calzada|Carretera)\s/i);
-          const finalAddress = isPoiName && !enriched.includes(item.address)
-            ? `${item.address}, ${enriched}`
-            : enriched;
-          onSelect(finalAddress, { latitude: item.latitude, longitude: item.longitude });
-        }
+        if (!enriched || enriched === initial) return;
+        // If the original was a POI name (not a street) and the enriched
+        // address doesn't already include it, keep prepending it so the
+        // user-visible label always carries the POI name.
+        const poiHint = item.displayName ?? item.address;
+        const looksLikeStreet =
+          poiHint.includes(' e/ ') || poiHint.includes(' entre ') ||
+          /^(Calle|Avenida|Calzada|Carretera|Av\.)\s/i.test(poiHint);
+        const finalAddress = !looksLikeStreet && !enriched.includes(poiHint)
+          ? `${poiHint}, ${enriched}`
+          : enriched;
+        onSelect(finalAddress, { latitude: item.latitude, longitude: item.longitude });
       }).catch(() => {});
     }
   };
 
-  // UBER-1.3: Merge and rank all sources into a single list of 3
-  type MergedResult = { address: string; latitude: number; longitude: number; priority: number; source: string; distanceKm: number | null; icon: string };
+  // UBER-1.3: Merge and rank all sources into a single list of up to 5.
+  // displayName carries the POI name when distinct from address so the
+  // dropdown can render two-line "POI / address" rows.
+  type MergedResult = {
+    address: string;
+    displayName?: string;
+    latitude: number;
+    longitude: number;
+    priority: number;
+    source: string;
+    distanceKm: number | null;
+    icon: string;
+  };
 
   const mergedResults: MergedResult[] = (() => {
     if (!hasActiveQuery) return [];
@@ -409,14 +441,28 @@ function AddressSearchInputInner({
       .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 3, source: 'recent', icon: 'time-outline' as const }));
 
     const matchedApi = results
-      .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 4, source: 'api', icon: 'location-outline' as const }));
+      .map((r) => ({
+        address: r.address,
+        displayName: r.displayName,                             // ← POI name passes through
+        latitude: r.latitude,
+        longitude: r.longitude,
+        priority: 4,
+        source: r.displayName ? 'poi' : 'api',                  // ← POI vs street
+        icon: r.displayName ? ('business-outline' as const) : ('location-outline' as const),
+      }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];
 
-    // Remove duplicates: if two items are within 100m, keep the one with lower priority number
+    // Dedup: collapse near-coincident items (<100m) UNLESS one is a POI
+    // and the other is a street — those represent different things even
+    // at the same coordinate (e.g. the entrance of "Hotel Bruzón" sits on
+    // "Calle 25"; both are useful suggestions).
     const deduped: typeof all = [];
     for (const item of all) {
       const isDup = deduped.some((d) => {
+        const isPoiVsStreet =
+          (d.source === 'poi') !== (item.source === 'poi');
+        if (isPoiVsStreet) return false;
         const dist = haversineDistance(
           { latitude: d.latitude, longitude: d.longitude },
           { latitude: item.latitude, longitude: item.longitude },
@@ -519,7 +565,7 @@ function AddressSearchInputInner({
                 key={`merged-${item.source}-${item.latitude}-${item.longitude}`}
                 className={`px-4 flex-row items-center border-b border-neutral-100 dark:border-neutral-800 ${index === 0 ? 'py-4' : 'py-3'}`}
                 onPress={() => handleSelectMerged(item)}
-                accessibilityLabel={item.address}
+                accessibilityLabel={item.displayName ? `${item.displayName}, ${item.address}` : item.address}
               >
                 <Ionicons
                   name={item.icon as any}
@@ -527,13 +573,33 @@ function AddressSearchInputInner({
                   color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
                 />
                 <View className="flex-1 ml-2">
-                  <Text
-                    variant={index === 0 ? 'body' : 'bodySmall'}
-                    className={index === 0 ? 'font-semibold' : ''}
-                    numberOfLines={2}
-                  >
-                    {item.address}
-                  </Text>
+                  {/* Two-line layout when this is a POI with a separate
+                      street address. Single-line when result is a plain
+                      street/intersection (displayName === undefined). */}
+                  {item.displayName ? (
+                    <>
+                      <Text
+                        variant={index === 0 ? 'body' : 'bodySmall'}
+                        className="font-semibold"
+                        numberOfLines={1}
+                      >
+                        {item.displayName}
+                      </Text>
+                      {item.address && item.address !== item.displayName && (
+                        <Text variant="caption" color="tertiary" numberOfLines={1} className="mt-0.5">
+                          {item.address}
+                        </Text>
+                      )}
+                    </>
+                  ) : (
+                    <Text
+                      variant={index === 0 ? 'body' : 'bodySmall'}
+                      className={index === 0 ? 'font-semibold' : ''}
+                      numberOfLines={2}
+                    >
+                      {item.address}
+                    </Text>
+                  )}
                 </View>
                 {item.distanceKm != null && Number.isFinite(item.distanceKm) && item.distanceKm < 500 && (
                   <Text variant="caption" color="tertiary" className="ml-2">
