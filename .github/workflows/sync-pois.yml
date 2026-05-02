@@ -1,0 +1,148 @@
+name: Sync POIs from open datasets
+
+# Monthly sync of OSM + Overture + Foursquare into cuba_pois.
+# See scripts/sync-pois/README.md for details.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'   # day 1 of each month, 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      bbox:
+        description: 'Bounding box (w,s,e,n). Default: all Cuba.'
+        required: false
+        default: '-85.0,19.5,-74.0,23.5'
+      dry_run:
+        description: 'If "true", parse + dedup but skip Supabase writes'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      foursquare_release:
+        description: 'Foursquare release date (YYYY-MM-DD)'
+        required: false
+        default: '2026-04-14'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Download + merge + upsert POIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/sync-pois/requirements.txt
+
+      - name: Install osmium-tool (for OSM filtering)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends osmium-tool
+
+      - name: Install Python deps
+        run: |
+          pip install -r scripts/sync-pois/requirements.txt
+
+      - name: Resolve bbox
+        id: cfg
+        run: |
+          BBOX="${{ github.event.inputs.bbox || '-85.0,19.5,-74.0,23.5' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          FSQ_RELEASE="${{ github.event.inputs.foursquare_release || '2026-04-14' }}"
+          echo "bbox=$BBOX" >> "$GITHUB_OUTPUT"
+          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+          echo "fsq_release=$FSQ_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "Bbox: $BBOX  |  Dry run: $DRY_RUN  |  FSQ release: $FSQ_RELEASE"
+
+      # ─────────── Step 1: Download Overture Places ───────────
+      - name: Download Overture Places (bbox-filtered)
+        run: |
+          mkdir -p /tmp/sync
+          overturemaps download \
+            --bbox=${{ steps.cfg.outputs.bbox }} \
+            -t place \
+            -f geojson \
+            -o /tmp/sync/overture.geojson
+          ls -lah /tmp/sync/overture.geojson
+          echo "Overture features: $(jq '.features | length' /tmp/sync/overture.geojson)"
+
+      # ─────────── Step 2: Download Foursquare OS Places ───────────
+      - name: Download Foursquare OS Places (bbox-filtered)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::warning::HF_TOKEN secret not set — skipping Foursquare. To enable, add HF_TOKEN to GitHub repo secrets (free at huggingface.co/settings/tokens)."
+            touch /tmp/sync/foursquare.parquet
+          else
+            python scripts/sync-pois/download_foursquare.py \
+              --bbox=${{ steps.cfg.outputs.bbox }} \
+              --out /tmp/sync/foursquare.parquet \
+              --release ${{ steps.cfg.outputs.fsq_release }}
+            ls -lah /tmp/sync/foursquare.parquet
+          fi
+
+      # ─────────── Step 3: Download OSM Cuba extract ───────────
+      - name: Download OSM Cuba extract + filter POIs
+        run: |
+          curl -sSL --fail \
+            https://download.geofabrik.de/central-america/cuba-latest.osm.pbf \
+            -o /tmp/sync/cuba.osm.pbf
+          ls -lah /tmp/sync/cuba.osm.pbf
+
+          osmium tags-filter /tmp/sync/cuba.osm.pbf \
+            n/amenity n/shop n/tourism n/leisure n/office n/historic n/healthcare n/public_transport \
+            -o /tmp/sync/osm-pois.geojson \
+            --output-format=geojson \
+            --overwrite
+          ls -lah /tmp/sync/osm-pois.geojson
+          echo "OSM features: $(jq '.features | length' /tmp/sync/osm-pois.geojson)"
+
+      # ─────────── Step 4: Merge + dedup + upsert ───────────
+      - name: Merge sources + upsert to Supabase
+        id: upsert
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          DRY_RUN: ${{ steps.cfg.outputs.dry_run == 'true' && '1' || '' }}
+        run: |
+          python scripts/sync-pois/merge_and_upsert.py \
+            --osm /tmp/sync/osm-pois.geojson \
+            --overture /tmp/sync/overture.geojson \
+            --foursquare /tmp/sync/foursquare.parquet \
+            --bbox=${{ steps.cfg.outputs.bbox }}
+
+      # ─────────── Step 5: Notify ───────────
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## POI sync ${{ job.status }}"
+            echo ""
+            echo "- **Bbox**: \`${{ steps.cfg.outputs.bbox }}\`"
+            echo "- **Dry run**: ${{ steps.cfg.outputs.dry_run }}"
+            echo "- **FSQ release**: ${{ steps.cfg.outputs.fsq_release }}"
+            echo "- **Inserted**: ${{ steps.upsert.outputs.inserted || 'n/a' }}"
+            echo "- **Updated**: ${{ steps.upsert.outputs.updated || 'n/a' }}"
+            echo "- **Total merged**: ${{ steps.upsert.outputs.total || 'n/a' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Slack notify (success or failure)
+        if: always() && env.SLACK_WEBHOOK != ''
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
+        run: |
+          STATUS_EMOJI=":white_check_mark:"
+          if [ "${{ job.status }}" != "success" ]; then STATUS_EMOJI=":x:"; fi
+          PAYLOAD=$(jq -nc \
+            --arg t "$STATUS_EMOJI POI sync ${{ job.status }}" \
+            --arg b "Inserted: ${{ steps.upsert.outputs.inserted || 'n/a' }} | Updated: ${{ steps.upsert.outputs.updated || 'n/a' }} | Total: ${{ steps.upsert.outputs.total || 'n/a' }}\nBbox: \`${{ steps.cfg.outputs.bbox }}\`" \
+            '{text: $t, blocks: [{type:"section", text:{type:"mrkdwn", text:$b}}]}')
+          curl -sS -X POST -H 'Content-Type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK" || true
