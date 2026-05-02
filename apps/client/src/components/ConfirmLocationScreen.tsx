@@ -195,17 +195,6 @@ export function ConfirmLocationScreen({
   const isPickup = mode === 'pickup';
   const pinColor = isPickup ? '#22c55e' : colors.brand.orange;
 
-  if (!MapboxGL) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? darkColors.background.primary : colors.neutral[100] }}>
-        <Text variant="body" color="secondary">
-          {t('map.unavailable', { defaultValue: 'Mapa no disponible' })}
-        </Text>
-        <Button title={t('common.close', { defaultValue: 'Cerrar' })} onPress={onClose} className="mt-4" />
-      </View>
-    );
-  }
-
   // BUG-282 (revised) — two-stage user-location resolution: instant
   // AsyncStorage cache read, then fresh GPS fix that overrides it.
   // On first install the cache is empty, so without the GPS stage the
@@ -253,6 +242,17 @@ export function ConfirmLocationScreen({
 
     return () => { cancelled = true; };
   }, [initialLocation]);
+
+  if (!MapboxGL) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? darkColors.background.primary : colors.neutral[100] }}>
+        <Text variant="body" color="secondary">
+          {t('map.unavailable', { defaultValue: 'Mapa no disponible' })}
+        </Text>
+        <Button title={t('common.close', { defaultValue: 'Cerrar' })} onPress={onClose} className="mt-4" />
+      </View>
+    );
+  }
 
   const initialCenter: [number, number] = initialLocation
     && Number.isFinite(initialLocation.longitude) && Number.isFinite(initialLocation.latitude)

@@ -37,7 +37,7 @@ export function useDriverRideInit() {
   // visible symptom was activeTrip flickering between truthy/null which
   // unmounted/remounted RideMapView (idle/active variants) repeatedly.
   const setActiveTrip = useDriverRideStore((s) => s.setActiveTrip);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<{ unsubscribe: () => void } | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -310,7 +310,7 @@ export function useDriverRideActions() {
   const setActiveTrip = useDriverRideStore((s) => s.setActiveTrip);
   const removeRequest = useDriverRideStore((s) => s.removeRequest);
   const reset = useDriverRideStore((s) => s.reset);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<{ unsubscribe: () => void } | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
 
   // Cleanup on unmount

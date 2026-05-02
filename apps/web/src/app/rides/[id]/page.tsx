@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
 import type { RideWithDriver } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 
@@ -379,7 +379,7 @@ export default function RideDetailPage() {
                           {formatTRC(ride.final_fare_trc)}
                         </span>
                         <p style={{ margin: '0.15rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                          {formatCUP(ride.final_fare_cup ?? 0)} · ~{formatTRCasUSD(ride.final_fare_trc)}
+                          {formatCUP(ride.final_fare_cup ?? 0)} · ~{formatTRCasUSD(ride.final_fare_trc ?? 0, ride.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE)}
                         </p>
                       </div>
                     </div>

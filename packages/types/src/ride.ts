@@ -169,6 +169,15 @@ export interface Ride {
   // Ride-offer window (only set when fetched via getSearchingRides
   // for the authenticated driver). Present as timestamp ISO string.
   offer_expires_at?: string;
+
+  // BUG-246: GPS unavailable flow — set by the driver-side reportGpsUnavailable
+  // RPC when the driver's GPS is broken mid-ride. The rider sees a consent modal.
+  driver_gps_status?: 'unavailable' | 'rider_consented' | 'resolved' | null;
+
+  // BUG-222: excess distance fields — set by complete_ride_and_pay when the
+  // driver traveled more than 1.3× the estimated distance.
+  excess_distance_uncharged_m?: number | null;
+  excess_distance_reason?: string | null;
 }
 
 /**
@@ -295,6 +304,8 @@ export interface CompleteRideResult {
   quota_deduction_amount: number;
   /** Driver's remaining quota balance after deduction */
   quota_balance_after: number;
+  /** BUG-222: meters driven beyond 1.3× the estimated distance, uncharged */
+  excess_distance_uncharged_m?: number | null;
 }
 
 /** Ride with joined rider info for driver display */

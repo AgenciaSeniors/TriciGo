@@ -155,10 +155,10 @@ function SheetContent({
   const earningsScale3 = useRef(new Animated.Value(1)).current;
   const earningsScales = [earningsScale1, earningsScale2, earningsScale3];
   const handleEarningsPressIn = (index: number) => {
-    Animated.spring(earningsScales[index], { toValue: 0.98, damping: 15, stiffness: 300, useNativeDriver: true }).start();
+    Animated.spring(earningsScales[index]!, { toValue: 0.98, damping: 15, stiffness: 300, useNativeDriver: true }).start();
   };
   const handleEarningsPressOut = (index: number) => {
-    Animated.spring(earningsScales[index], { toValue: 1, damping: 15, stiffness: 300, useNativeDriver: true }).start();
+    Animated.spring(earningsScales[index]!, { toValue: 1, damping: 15, stiffness: 300, useNativeDriver: true }).start();
   };
 
   // ── 1. Alert banners ──────────────────────────────────────────────────────

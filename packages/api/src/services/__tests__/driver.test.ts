@@ -395,21 +395,29 @@ describe('driverService', () => {
   });
 
   // ==================== updateRideStatus ====================
+  //
+  // BUG-244: routed through update_ride_status_v2 RPC for proximity gate
+  // on arrived_at_pickup / arrived_at_destination. The service ALSO
+  // does a follow-up SELECT on rides for delivery-mode notifications.
   describe('updateRideStatus', () => {
-    it('updates ride status with arrived_at_pickup timestamp', async () => {
-      const chain = createMockQueryChain({ data: null, error: null });
-      mockFrom.mockReturnValueOnce(chain);
+    it('routes through update_ride_status_v2 RPC for arrived_at_pickup', async () => {
+      // RPC succeeds (not gated, no proximity issue)
+      mockRpc.mockResolvedValueOnce({ data: { success: true }, error: null });
+
+      // Follow-up SELECT for delivery notifications: select('customer_id, ride_mode').eq().single()
+      const followUpChain = createMockQueryChain();
+      followUpChain.single.mockResolvedValue({
+        data: { customer_id: 'u-1', ride_mode: 'passenger' },
+        error: null,
+      });
+      mockFrom.mockReturnValueOnce(followUpChain);
 
       await driverService.updateRideStatus('r-1', 'arrived_at_pickup' as any);
 
-      expect(mockFrom).toHaveBeenCalledWith('rides');
-      expect(chain.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'arrived_at_pickup',
-          driver_arrived_at: expect.any(String),
-        }),
-      );
-      expect(chain.eq).toHaveBeenCalledWith('id', 'r-1');
+      expect(mockRpc).toHaveBeenCalledWith('update_ride_status_v2', expect.objectContaining({
+        p_ride_id: 'r-1',
+        p_new_status: 'arrived_at_pickup',
+      }));
     });
 
     it('throws when status is completed', async () => {

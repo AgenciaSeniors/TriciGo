@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "expo start",
     "build": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --config ../../tools/lint-rules.config.mjs",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

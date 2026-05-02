@@ -106,6 +106,13 @@ export default function RideDetailScreen() {
     return () => { cancelled = true; };
   }, [id]);
 
+  const handleCopyRideId = useCallback(async () => {
+    if (!id) return;
+    await Clipboard.setStringAsync(id);
+    Toast.show({ type: 'success', text1: t('common:copied') });
+    triggerHaptic('light');
+  }, [id, t]);
+
   if (loading) {
     return (
       <Screen bg="cuban" padded>
@@ -132,13 +139,6 @@ export default function RideDetailScreen() {
   const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
   const fareCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
   const isCompleted = ride.status === 'completed';
-
-  const handleCopyRideId = useCallback(async () => {
-    if (!id) return;
-    await Clipboard.setStringAsync(id);
-    Toast.show({ type: 'success', text1: t('common:copied') });
-    triggerHaptic('light');
-  }, [id, t]);
 
   const handleShare = () => {
     if (ride.share_token) {

@@ -86,7 +86,7 @@ export default function SettingsScreen() {
       const updated = await authService.updateProfile(user.id, { preferred_language: next });
       setUser(updated);
     } catch (err) {
-      logger.warn('[Settings] Failed to persist language:', err);
+      logger.warn('[Settings] Failed to persist language:', { error: String(err) });
     }
   };
 
@@ -94,7 +94,7 @@ export default function SettingsScreen() {
     if (!customerProfile) return;
     triggerHaptic('light');
     const idx = PAYMENT_CYCLE.indexOf(paymentMethod);
-    const next = PAYMENT_CYCLE[(idx + 1) % PAYMENT_CYCLE.length];
+    const next = PAYMENT_CYCLE[(idx + 1) % PAYMENT_CYCLE.length]!;
     // Optimistic update
     setPaymentMethod(next);
     try {
@@ -102,7 +102,7 @@ export default function SettingsScreen() {
     } catch (err) {
       // Revert on error
       setPaymentMethod(paymentMethod);
-      logger.warn('[Settings] Failed to update payment method:', err);
+      logger.warn('[Settings] Failed to update payment method:', { error: String(err) });
     }
   };
 

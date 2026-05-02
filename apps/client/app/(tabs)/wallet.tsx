@@ -775,7 +775,10 @@ function NativeWalletScreen() {
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
   const [stripeConfig, setStripeConfig] = useState<StripeRechargeConfig | null>(null);
 
-  // Stripe SDK hook (null on web / if SDK not available)
+  // Stripe SDK hook (null on web / if SDK not available). Platform.OS is
+  // constant for the lifetime of the component, so the conditional is
+  // effectively static — useStripe is always called or always not.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const stripe = useStripe ? useStripe() : null;
 
   // Transfer state

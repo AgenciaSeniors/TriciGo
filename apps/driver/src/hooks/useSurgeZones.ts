@@ -35,7 +35,7 @@ export function useSurgeZones(enabled: boolean): SurgeZoneWithBoundary[] {
         .map((s) => s.zone_id)
         .filter((id): id is string => id !== null);
 
-      let boundaryMap = new Map<string, { boundary: any; name: string }>();
+      const boundaryMap = new Map<string, { boundary: any; name: string }>();
 
       if (zoneIds.length > 0) {
         const supabase = getSupabaseClient();

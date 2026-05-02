@@ -230,7 +230,8 @@ export default function TrackRidePage() {
   useEffect(() => {
     if (!ride || ride.ride_mode !== 'cargo') return;
     deliveryService.getDeliveryDetails(rideId).then((d) => {
-      if (d) setDeliveryDetails(d);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (d) setDeliveryDetails(d as any);
     }).catch(() => {});
   }, [ride?.ride_mode, rideId]);
 

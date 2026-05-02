@@ -198,9 +198,9 @@ export default function AdminReceiptsPage() {
             ) : rows.length === 0 ? (
               <tr><td colSpan={10}>
                 <AdminEmptyState
-                  icon={FileText}
+                  icon={<FileText className="w-10 h-10 text-neutral-300 dark:text-neutral-500" />}
                   title={t('receipts.empty_title', { defaultValue: 'Sin comprobantes' })}
-                  body={search
+                  description={search
                     ? t('receipts.empty_search', { defaultValue: 'Ninguno coincide con la búsqueda.' })
                     : t('receipts.empty_body', { defaultValue: 'Las recargas Stripe completadas aparecerán aquí.' })}
                 />

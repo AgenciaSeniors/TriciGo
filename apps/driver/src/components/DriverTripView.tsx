@@ -151,10 +151,8 @@ export function useActiveTripMapData() {
     !!driverLocationMap &&
     !!activeTrip?.pickup_location &&
     haversineDistance(
-      driverLocationMap.latitude,
-      driverLocationMap.longitude,
-      activeTrip.pickup_location.latitude,
-      activeTrip.pickup_location.longitude,
+      { latitude: driverLocationMap.latitude, longitude: driverLocationMap.longitude },
+      { latitude: activeTrip.pickup_location.latitude, longitude: activeTrip.pickup_location.longitude },
     ) < 30; // meters
 
   return {
@@ -684,7 +682,7 @@ export function DriverTripView() {
       {/* BUG-246: GPS unavailable status + rider consent state. Replaces
            the previous self-bypass cap. Now: when GPS broken, driver tells
            the rider via the backend, rider decides via modal in their app. */}
-      {!driverLocation && activeTrip.status !== 'completed' && activeTrip.status !== 'canceled' && (
+      {!driverLocation && activeTrip.status !== 'canceled' && (
         <View style={{
           marginBottom: 8,
           padding: 10,
