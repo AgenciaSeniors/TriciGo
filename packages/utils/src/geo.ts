@@ -2025,12 +2025,19 @@ export async function searchAddressMapbox(
       };
     });
 
-    // Store in cache (LRU-ish: drop the oldest entry when full)
-    if (geocodeCache.size >= GEOCODE_CACHE_MAX) {
-      const oldest = geocodeCache.keys().next().value;
-      if (oldest) geocodeCache.delete(oldest);
+    // Only cache positive results — caching `[]` would freeze a one-off
+    // transient failure (network blip, Mapbox 5xx) into a 7-day "no
+    // results" answer for a query that's actually valid. The trade-off
+    // is that genuinely empty queries re-request, but those are rare
+    // (users don't typically retype the same misspelling) and cheap
+    // (Mapbox returns 200 with [] fast).
+    if (results.length > 0) {
+      if (geocodeCache.size >= GEOCODE_CACHE_MAX) {
+        const oldest = geocodeCache.keys().next().value;
+        if (oldest) geocodeCache.delete(oldest);
+      }
+      geocodeCache.set(key, { results, ts: Date.now() });
     }
-    geocodeCache.set(key, { results, ts: Date.now() });
 
     return results;
   } catch {
