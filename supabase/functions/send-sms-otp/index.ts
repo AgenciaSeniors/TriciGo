@@ -109,7 +109,6 @@ Deno.serve(async (req) => {
           }],
           message_globals: {
             originator: d7Sender,
-            report_url: '',
           },
         };
 
