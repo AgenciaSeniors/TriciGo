@@ -33,6 +33,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
@@ -115,6 +116,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/content', labelKey: 'sidebar.content', defaultLabel: 'Contenido', icon: FileText },
       { href: '/blog', labelKey: 'sidebar.blog', defaultLabel: 'Bitácora', icon: Newspaper },
+      { href: '/announcements', labelKey: 'sidebar.announcements', defaultLabel: 'Anuncios home', icon: Sparkles },
       { href: '/notifications', labelKey: 'sidebar.notifications', defaultLabel: 'Avisos push', icon: Bell },
     ],
   },
