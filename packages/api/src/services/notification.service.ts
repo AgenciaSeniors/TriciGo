@@ -573,6 +573,68 @@ export const notificationService = {
   },
 
   /**
+   * Admin-only. Broadcast a push notification to every user with a
+   * registered push_token who has signed in within the last 30 days.
+   *
+   * Used by the "Notificar ahora" button on admin announcement and
+   * blog pages — when an admin publishes a new banner or blog post and
+   * wants riders to know immediately, instead of waiting for them to
+   * open the app and see it inline.
+   *
+   * Flow:
+   *   1. Call `get_active_push_user_ids` RPC (admin-gated; returns []
+   *      or throws if the caller is not an admin).
+   *   2. If non-empty, invoke the existing `send-push` edge function
+   *      with the resolved user_ids + title/body + a deep-link data
+   *      payload that opens the app on the home tab.
+   *
+   * The deep_link defaults to `tricigo://home` so a tap reopens the app
+   * where the banner/card lives. Pass a custom value to land elsewhere.
+   *
+   * Returns the count of users targeted (after DB-side dedup).
+   */
+  async broadcastToActiveUsers(opts: {
+    title: string;
+    body: string;
+    contentType: 'announcement' | 'blog' | 'campaign';
+    contentId?: string;
+    deepLink?: string;
+  }): Promise<{ targeted: number }> {
+    const supabase = getSupabaseClient();
+
+    // 1. Resolve eligible user_ids (admin-only RPC)
+    const { data: userIds, error: rpcError } = await supabase.rpc(
+      'get_active_push_user_ids',
+      { p_active_days: 30 },
+    );
+    if (rpcError) throw rpcError;
+
+    const ids = (userIds ?? []) as string[];
+    if (ids.length === 0) {
+      return { targeted: 0 };
+    }
+
+    // 2. Forward to the existing send-push edge function. It already
+    //    handles Expo formatting, retries, and notification_log inserts.
+    const { error: pushError } = await supabase.functions.invoke('send-push', {
+      body: {
+        user_ids: ids,
+        title: opts.title,
+        body: opts.body,
+        category: opts.contentType,
+        data: {
+          deep_link: opts.deepLink ?? 'tricigo://home',
+          content_type: opts.contentType,
+          ...(opts.contentId ? { content_id: opts.contentId } : {}),
+        },
+      },
+    });
+    if (pushError) throw pushError;
+
+    return { targeted: ids.length };
+  },
+
+  /**
    * Subscribe to real-time inbox notifications for a user.
    * Follows the same pattern as chatService.subscribeToMessages().
    */

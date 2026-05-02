@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Newspaper, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
-import { blogService } from '@tricigo/api';
+import { blogService, notificationService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -39,6 +39,11 @@ export default function BlogAdminPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
   const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+  // ID of the post currently queued for a "Notificar ahora" push.
+  // null = no modal open. We hold the full row so the confirmation
+  // modal can preview the title before sending to thousands of users.
+  const [notifyTarget, setNotifyTarget] = useState<BlogPost | null>(null);
+  const [notifying, setNotifying] = useState(false);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -126,6 +131,39 @@ export default function BlogAdminPage() {
       await loadPosts();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : t('blog.delete_error', { defaultValue: 'No pudimos eliminar el post.' }));
+    }
+  };
+
+  const handleNotify = async (post: BlogPost) => {
+    setNotifying(true);
+    try {
+      const { targeted } = await notificationService.broadcastToActiveUsers({
+        title: post.title_es || post.title_en || '(sin título)',
+        body: post.excerpt_es || post.excerpt_en || '',
+        contentType: 'blog',
+        contentId: post.id,
+      });
+      showToast(
+        'success',
+        targeted > 0
+          ? t('blog.toast_notified', {
+              defaultValue: 'Notificación enviada a {{count}} usuarios',
+              count: targeted,
+            })
+          : t('blog.toast_notified_none', {
+              defaultValue: 'No hay usuarios activos con notificaciones habilitadas.',
+            }),
+      );
+      setNotifyTarget(null);
+    } catch (err) {
+      showToast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : t('blog.notify_error', { defaultValue: 'No pudimos enviar la notificación.' }),
+      );
+    } finally {
+      setNotifying(false);
     }
   };
 
@@ -364,6 +402,10 @@ export default function BlogAdminPage() {
             onClick: (p) => void handleTogglePublish(p),
           },
           {
+            label: t('blog.action_notify', { defaultValue: 'Notificar ahora' }),
+            onClick: (p) => setNotifyTarget(p),
+          },
+          {
             label: t('blog.action_delete', { defaultValue: 'Eliminar' }),
             tone: 'danger',
             onClick: (p) => setDeleteModalId(p.id),
@@ -383,6 +425,34 @@ export default function BlogAdminPage() {
           }
         }}
         onCancel={() => setDeleteModalId(null)}
+      />
+
+      <AdminConfirmModal
+        open={!!notifyTarget}
+        title={t('blog.notify_title', { defaultValue: 'Enviar notificación push' })}
+        message={
+          notifyTarget
+            ? t('blog.notify_confirm', {
+                defaultValue:
+                  'Se enviará una notificación a todos los usuarios activos en los últimos 30 días con notificaciones habilitadas.\n\nTítulo: "{{title}}"\nResumen: "{{excerpt}}"',
+                title: notifyTarget.title_es || notifyTarget.title_en || '(sin título)',
+                excerpt: notifyTarget.excerpt_es || notifyTarget.excerpt_en || '(sin resumen)',
+              })
+            : ''
+        }
+        confirmLabel={
+          notifying
+            ? t('blog.notifying', { defaultValue: 'Enviando…' })
+            : t('blog.notify_confirm_btn', { defaultValue: 'Enviar' })
+        }
+        onConfirm={async () => {
+          if (notifyTarget && !notifying) {
+            await handleNotify(notifyTarget);
+          }
+        }}
+        onCancel={() => {
+          if (!notifying) setNotifyTarget(null);
+        }}
       />
     </div>
   );
