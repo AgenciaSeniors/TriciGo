@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Megaphone, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
-import { announcementService } from '@tricigo/api';
+import { announcementService, notificationService } from '@tricigo/api';
 import type { HomeAnnouncement } from '@tricigo/api';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -62,6 +62,11 @@ export default function AnnouncementsAdminPage() {
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
   const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+  // ID of the announcement currently queued for a "Notificar ahora" push.
+  // null = no modal open. We hold the full row so the confirmation modal
+  // can preview the title/body before sending to thousands of users.
+  const [notifyTarget, setNotifyTarget] = useState<HomeAnnouncement | null>(null);
+  const [notifying, setNotifying] = useState(false);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -142,6 +147,39 @@ export default function AnnouncementsAdminPage() {
       await loadItems();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : t('announcements.delete_error', { defaultValue: 'No pudimos eliminar el anuncio.' }));
+    }
+  };
+
+  const handleNotify = async (a: HomeAnnouncement) => {
+    setNotifying(true);
+    try {
+      const { targeted } = await notificationService.broadcastToActiveUsers({
+        title: a.title_es,
+        body: a.body_es ?? '',
+        contentType: 'announcement',
+        contentId: a.id,
+      });
+      showToast(
+        'success',
+        targeted > 0
+          ? t('announcements.toast_notified', {
+              defaultValue: 'Notificación enviada a {{count}} usuarios',
+              count: targeted,
+            })
+          : t('announcements.toast_notified_none', {
+              defaultValue: 'No hay usuarios activos con notificaciones habilitadas.',
+            }),
+      );
+      setNotifyTarget(null);
+    } catch (err) {
+      showToast(
+        'error',
+        err instanceof Error
+          ? err.message
+          : t('announcements.notify_error', { defaultValue: 'No pudimos enviar la notificación.' }),
+      );
+    } finally {
+      setNotifying(false);
     }
   };
 
@@ -406,6 +444,10 @@ export default function AnnouncementsAdminPage() {
             onClick: (a) => void handleToggleActive(a),
           },
           {
+            label: t('announcements.action_notify', { defaultValue: 'Notificar ahora' }),
+            onClick: (a) => setNotifyTarget(a),
+          },
+          {
             label: t('announcements.action_delete', { defaultValue: 'Eliminar' }),
             tone: 'danger',
             onClick: (a) => setDeleteModalId(a.id),
@@ -425,6 +467,34 @@ export default function AnnouncementsAdminPage() {
           }
         }}
         onCancel={() => setDeleteModalId(null)}
+      />
+
+      <AdminConfirmModal
+        open={!!notifyTarget}
+        title={t('announcements.notify_title', { defaultValue: 'Enviar notificación push' })}
+        message={
+          notifyTarget
+            ? t('announcements.notify_confirm', {
+                defaultValue:
+                  'Se enviará una notificación a todos los usuarios activos en los últimos 30 días con notificaciones habilitadas.\n\nTítulo: "{{title}}"\nCuerpo: "{{body}}"',
+                title: notifyTarget.title_es,
+                body: notifyTarget.body_es ?? '(sin cuerpo)',
+              })
+            : ''
+        }
+        confirmLabel={
+          notifying
+            ? t('announcements.notifying', { defaultValue: 'Enviando…' })
+            : t('announcements.notify_confirm_btn', { defaultValue: 'Enviar' })
+        }
+        onConfirm={async () => {
+          if (notifyTarget && !notifying) {
+            await handleNotify(notifyTarget);
+          }
+        }}
+        onCancel={() => {
+          if (!notifying) setNotifyTarget(null);
+        }}
       />
     </div>
   );
