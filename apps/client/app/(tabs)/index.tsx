@@ -2283,6 +2283,9 @@ function IdleView() {
           </View>
         )}
 
+        {/* ── Capitolio divider (Cuban identity marker) ── */}
+        <CapitolioDivider mode={mode} height={72} />
+
         {/* ── Promos ── horizontal scroll of active promotions */}
         {activePromos.length > 0 && (
           <View style={{ marginTop: 24 }}>
@@ -2568,9 +2571,6 @@ function IdleView() {
             </ScrollView>
           </View>
         )}
-
-        {/* ── Capitolio divider (Cuban identity marker) ── */}
-        <CapitolioDivider mode={mode} height={72} />
 
         {/* ── Servicios — 5 en fila ── */}
         <Text style={{ fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 10, letterSpacing: 2, color: tokens.ink.subtle, marginBottom: 10 }}>
