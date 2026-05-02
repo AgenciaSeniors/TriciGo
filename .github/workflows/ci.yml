@@ -43,9 +43,39 @@ jobs:
         env:
           CI: true
 
+      # Apply Supabase migrations on every push to master.
+      #
+      # The fresh CI runner has no link state, so `db push --linked` fails with
+      # "Cannot find project ref. Have you run supabase link?". We fix that with
+      # an explicit `link` step using the project ref baked into the workflow.
+      #
+      # Both link and push need a DB password to authenticate the direct
+      # postgres:// connection. We read it from SUPABASE_DB_PASSWORD; if it's
+      # not configured we skip the push with a warning rather than failing the
+      # whole CI run (the operator can apply via Supabase MCP / CLI manually).
+      - name: Setup Supabase CLI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
       - name: Apply Supabase migrations
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: npx supabase db push --linked
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_REF: lqaufszburqvlslpcuac
+        run: |
+          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+            echo "::warning::SUPABASE_DB_PASSWORD secret not set — skipping migration push."
+            echo "::warning::Add it under repo Settings → Secrets → Actions to enable post-merge migrations."
+            exit 0
+          fi
+          # Link explicitly so `db push --linked` finds the project ref. The
+          # link state lives in supabase/.temp on the runner — it's discarded
+          # at the end of the job, which is fine; we re-link on every run.
+          supabase link --project-ref "$PROJECT_REF"
+          # Push will be a no-op when all local migrations are already in the
+          # remote `supabase_migrations.schema_migrations` table (e.g. when
+          # the operator already applied via MCP).
+          supabase db push --linked
