@@ -485,8 +485,14 @@ export interface AddressSearchResult {
   latitude: number;
   /** Longitude */
   longitude: number;
-  /** Display name from Nominatim */
-  displayName: string;
+  /**
+   * Display label for the row. When set and different from `address` it
+   * means the result is a POI with both a name (this field) AND a street
+   * address (`address`); the dropdown renders two-line "Name / Address"
+   * for that case. When omitted, the row is a plain street/intersection
+   * and the dropdown renders single-line `address` only.
+   */
+  displayName?: string;
 }
 
 /* ─── Nominatim throttle ─── */
