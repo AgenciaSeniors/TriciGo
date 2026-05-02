@@ -1,0 +1,244 @@
+{
+  "_doc": "Maps source-specific taxonomies to TriciGo unified categories. Used by merge-and-upsert.py to fill cuba_pois.tricigo_category. Cuba-specific (paladar, MIPYME, etc).",
+  "_format": {
+    "osm": "Maps `category=value` (e.g. amenity=hospital) to TriciGo category. Wildcard '*' matches any subcategory.",
+    "foursquare": "Maps fsq_category_id (numeric, see https://docs.foursquare.com/data-products/docs/categories) or label keyword to TriciGo category.",
+    "overture": "Maps Overture primary_category (lowercased) to TriciGo category."
+  },
+
+  "osm": {
+    "amenity=hospital": "hospital",
+    "amenity=clinic": "hospital",
+    "amenity=doctors": "hospital",
+    "amenity=dentist": "hospital",
+    "amenity=pharmacy": "pharmacy",
+    "healthcare=hospital": "hospital",
+    "healthcare=pharmacy": "pharmacy",
+
+    "amenity=school": "school",
+    "amenity=university": "school",
+    "amenity=college": "school",
+    "amenity=kindergarten": "school",
+    "amenity=library": "school",
+
+    "amenity=townhall": "gov",
+    "amenity=courthouse": "gov",
+    "amenity=post_office": "gov",
+    "amenity=public_building": "gov",
+    "office=government": "gov",
+    "office=diplomatic": "embassy",
+    "amenity=embassy": "embassy",
+
+    "tourism=hotel": "hotel",
+    "tourism=guest_house": "hotel",
+    "tourism=hostel": "hotel",
+    "tourism=motel": "hotel",
+    "tourism=apartment": "hotel",
+    "tourism=chalet": "hotel",
+
+    "amenity=restaurant": "restaurant",
+    "amenity=cafe": "cafe",
+    "amenity=ice_cream": "cafe",
+    "amenity=fast_food": "cafe",
+    "amenity=bar": "bar",
+    "amenity=pub": "bar",
+    "amenity=biergarten": "bar",
+    "amenity=nightclub": "bar",
+
+    "shop=supermarket": "supermarket",
+    "shop=convenience": "supermarket",
+    "shop=mall": "supermarket",
+    "shop=department_store": "supermarket",
+    "shop=*": "shop",
+
+    "amenity=bank": "bank",
+    "amenity=atm": "atm",
+    "amenity=fuel": "gas_station",
+
+    "tourism=museum": "museum",
+    "tourism=gallery": "museum",
+    "tourism=attraction": "museum",
+    "tourism=viewpoint": "museum",
+    "tourism=artwork": "museum",
+    "historic=*": "museum",
+
+    "leisure=park": "park",
+    "leisure=garden": "park",
+    "leisure=playground": "park",
+    "leisure=*": "park",
+
+    "natural=beach": "beach",
+
+    "amenity=place_of_worship": "religion",
+
+    "amenity=bus_station": "transport",
+    "amenity=ferry_terminal": "transport",
+    "amenity=taxi": "transport",
+    "amenity=fuel_station": "gas_station",
+    "public_transport=*": "transport",
+    "railway=station": "transport",
+    "railway=halt": "transport",
+    "aeroway=aerodrome": "transport",
+    "aeroway=terminal": "transport",
+
+    "office=*": "gov"
+  },
+
+  "foursquare": {
+    "_doc": "Foursquare uses numeric category IDs (fsq_category_id). The labels here let merge-and-upsert.py match by label substring when ID lookup fails.",
+    "label_keywords": {
+      "hospital": "hospital",
+      "clinic": "hospital",
+      "doctor": "hospital",
+      "medical": "hospital",
+      "pharmacy": "pharmacy",
+      "drugstore": "pharmacy",
+
+      "school": "school",
+      "university": "school",
+      "college": "school",
+      "library": "school",
+
+      "government": "gov",
+      "post_office": "gov",
+      "embassy": "embassy",
+      "consulate": "embassy",
+
+      "hotel": "hotel",
+      "lodging": "hotel",
+      "guest_house": "hotel",
+      "hostel": "hotel",
+      "bnb": "hotel",
+      "motel": "hotel",
+      "resort": "hotel",
+
+      "restaurant": "restaurant",
+      "paladar": "paladar",
+      "cafe": "cafe",
+      "coffee": "cafe",
+      "bakery": "cafe",
+      "ice_cream": "cafe",
+      "bar": "bar",
+      "pub": "bar",
+      "nightclub": "bar",
+      "lounge": "bar",
+
+      "grocery": "supermarket",
+      "supermarket": "supermarket",
+      "market": "supermarket",
+      "convenience": "supermarket",
+
+      "bank": "bank",
+      "atm": "atm",
+      "gas_station": "gas_station",
+      "fuel": "gas_station",
+
+      "museum": "museum",
+      "gallery": "museum",
+      "monument": "museum",
+      "landmark": "museum",
+      "attraction": "museum",
+
+      "park": "park",
+      "garden": "park",
+      "plaza": "park",
+      "square": "park",
+
+      "beach": "beach",
+
+      "church": "religion",
+      "mosque": "religion",
+      "temple": "religion",
+      "synagogue": "religion",
+      "religious": "religion",
+
+      "bus_station": "transport",
+      "train_station": "transport",
+      "airport": "transport",
+      "taxi": "transport",
+      "ferry": "transport"
+    }
+  },
+
+  "overture": {
+    "_doc": "Overture primary_category values mapped to TriciGo. Lowercase match, fall through to substring check.",
+    "exact": {
+      "hospital": "hospital",
+      "clinic": "hospital",
+      "medical_center": "hospital",
+      "pharmacy": "pharmacy",
+      "drugstore": "pharmacy",
+
+      "school": "school",
+      "university": "school",
+      "college": "school",
+      "library": "school",
+      "preschool": "school",
+
+      "city_hall": "gov",
+      "government_office": "gov",
+      "post_office": "gov",
+      "embassy": "embassy",
+      "consulate": "embassy",
+
+      "hotel": "hotel",
+      "motel": "hotel",
+      "hostel": "hotel",
+      "bed_and_breakfast": "hotel",
+      "guest_house": "hotel",
+      "casa_particular": "hotel",
+      "resort": "hotel",
+
+      "restaurant": "restaurant",
+      "cuban_restaurant": "paladar",
+      "paladar": "paladar",
+      "cafe": "cafe",
+      "coffee_shop": "cafe",
+      "ice_cream_shop": "cafe",
+      "bakery": "cafe",
+      "bar": "bar",
+      "pub": "bar",
+      "nightclub": "bar",
+
+      "supermarket": "supermarket",
+      "grocery_store": "supermarket",
+      "convenience_store": "supermarket",
+
+      "bank": "bank",
+      "atm": "atm",
+      "gas_station": "gas_station",
+
+      "museum": "museum",
+      "art_gallery": "museum",
+      "historic_site": "museum",
+      "monument": "museum",
+      "tourist_attraction": "museum",
+
+      "park": "park",
+      "playground": "park",
+      "garden": "park",
+
+      "beach": "beach",
+
+      "church": "religion",
+      "mosque": "religion",
+      "temple": "religion",
+
+      "bus_station": "transport",
+      "train_station": "transport",
+      "airport": "transport",
+      "taxi_stand": "transport"
+    },
+    "substring": {
+      "hospital": "hospital",
+      "school": "school",
+      "hotel": "hotel",
+      "restaurant": "restaurant",
+      "cafe": "cafe",
+      "bar": "bar",
+      "shop": "shop",
+      "store": "shop",
+      "park": "park"
+    }
+  }
+}
