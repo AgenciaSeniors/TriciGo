@@ -3,6 +3,8 @@ export * from './schemas';
 export * from './errors';
 export type { SupabaseClient } from './client';
 export { authService } from './services/auth.service';
+export { poiService, TRICIGO_CATEGORIES } from './services/poi.service';
+export type { Poi, PoiInput, PoiSource, TriciGoCategory, PoiListFilters, PoiListResult } from './services/poi.service';
 export { walletService } from './services/wallet.service';
 export { rideService } from './services/ride.service';
 export { driverService } from './services/driver.service';
