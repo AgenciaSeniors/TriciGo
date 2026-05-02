@@ -623,42 +623,41 @@ async function fetchMetadataNominatim(lat: number, lng: number): Promise<GeoMeta
 
 /* ─── OSRM Routing ─── */
 
-/** Route cache: avoids re-fetching the same route within 5 minutes. */
+/** Route cache: avoids re-fetching the same route within the TTL window. */
 const routeCache = new Map<string, { result: RouteResult; ts: number }>();
-const ROUTE_CACHE_TTL = 5 * 60 * 1000; // 5 min
-const ROUTE_CACHE_MAX = 30;
+// 30 min covers a single ride lifecycle (quote → pickup → active → complete)
+// without re-fetching, since traffic in Cuba doesn't shift fast enough to
+// invalidate a route polyline within that window.
+const ROUTE_CACHE_TTL = 30 * 60 * 1000;
+const ROUTE_CACHE_MAX = 500;
 
 function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
-  // ~50m precision: same intersection pair → cache hit
-  return `${(from.lat ?? 0).toFixed(4)},${(from.lng ?? 0).toFixed(4)}_${(to.lat ?? 0).toFixed(4)},${(to.lng ?? 0).toFixed(4)}`;
+  // ~110m precision (toFixed(3)): pickup points within the same block hit
+  // the same key. For Cuba where pickup is approximate ("entre L y M"),
+  // tighter precision just costs us cache hits without UX benefit.
+  return `${(from.lat ?? 0).toFixed(3)},${(from.lng ?? 0).toFixed(3)}_${(to.lat ?? 0).toFixed(3)},${(to.lng ?? 0).toFixed(3)}`;
 }
 
 /**
- * Fetch route via Mapbox Directions API (primary) with OSRM fallback.
- * Mapbox provides traffic-aware routing and more accurate ETAs.
- * Results are cached for 5 minutes to avoid redundant API calls.
+ * Fetch route via OSRM (primary, free, public infra) with Mapbox Directions
+ * as fallback when OSRM is unreachable or returns no route.
+ *
+ * Order rationale: at TriciGo's volume (~500 rides/day → ~75k Directions
+ * calls/month) Mapbox would cost ~$150/mo. OSRM gives equivalent results
+ * for Cuba's road network — traffic-aware routing isn't useful here since
+ * Cuba doesn't have the Waze-density data Mapbox depends on for it.
+ * Mapbox stays as a hot fallback so a single OSRM outage doesn't kill the
+ * app; the 30-min cache absorbs most of the duplicate requests anyway.
  */
 export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
-  // Check cache first
   const key = routeCacheKey(from, to);
   const cached = routeCache.get(key);
   if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) return cached.result;
 
-  // Try Mapbox first (traffic-aware, better accuracy)
-  const mapboxResult = await fetchRouteMapbox(from, to);
-  if (mapboxResult) {
-    if (routeCache.size >= ROUTE_CACHE_MAX) {
-      const oldest = routeCache.keys().next().value;
-      if (oldest) routeCache.delete(oldest);
-    }
-    routeCache.set(key, { result: mapboxResult, ts: Date.now() });
-    return mapboxResult;
-  }
-
-  // Fallback to OSRM (free, no auth)
+  // Try OSRM first (free)
   const osrmResult = await fetchRouteOSRM(from, to);
   if (osrmResult) {
     if (routeCache.size >= ROUTE_CACHE_MAX) {
@@ -666,8 +665,19 @@ export async function fetchRoute(
       if (oldest) routeCache.delete(oldest);
     }
     routeCache.set(key, { result: osrmResult, ts: Date.now() });
+    return osrmResult;
   }
-  return osrmResult;
+
+  // Fallback to Mapbox if OSRM failed
+  const mapboxResult = await fetchRouteMapbox(from, to);
+  if (mapboxResult) {
+    if (routeCache.size >= ROUTE_CACHE_MAX) {
+      const oldest = routeCache.keys().next().value;
+      if (oldest) routeCache.delete(oldest);
+    }
+    routeCache.set(key, { result: mapboxResult, ts: Date.now() });
+  }
+  return mapboxResult;
 }
 
 /**
@@ -1923,14 +1933,52 @@ export async function validatePickupLocation(
 /* ─── Mapbox Geocoding v6 (Primary Forward Search) ─── */
 
 /**
+ * Geocoding cache. Addresses don't change, so keeping autocomplete results
+ * for ~7 days is safe. The previous implementation had no cache at all and
+ * fired one Mapbox request per keystroke → at TriciGo volume that was the
+ * single biggest line on the Mapbox bill (~$225/mo at 500 rides/day).
+ *
+ * Key normalization: lowercase + trim + collapse whitespace. Proximity is
+ * rounded to ~11km (toFixed(1)) so the same query nearby reuses the result;
+ * the search results are typed enough that exact-meter precision isn't
+ * needed to keep them relevant.
+ */
+const geocodeCache = new Map<string, { results: AddressSearchResult[]; ts: number }>();
+const GEOCODE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const GEOCODE_CACHE_MAX = 500;
+
+function geocodeCacheKey(
+  query: string,
+  proximity: { latitude: number; longitude: number } | null,
+  limit: number,
+): string {
+  const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
+  const prox = proximity
+    ? `${proximity.latitude.toFixed(1)},${proximity.longitude.toFixed(1)}`
+    : 'none';
+  return `${normalized}|${prox}|${limit}`;
+}
+
+/**
  * Search for addresses using Mapbox Geocoding v6 API.
  * Faster (~200ms) and better POI coverage than Nominatim. No rate limit.
+ *
+ * Cached in-memory for 7 days (see `geocodeCache` above). The cache is
+ * keyed on normalized query + rounded proximity + limit, so identical
+ * autocomplete queries (very common: same user typing "calle 23" twice
+ * within a session, or two riders looking up "habana vieja") cost zero
+ * Mapbox requests after the first hit.
  */
 export async function searchAddressMapbox(
   query: string,
   proximity: { latitude: number; longitude: number } | null = null,
   limit = 5,
 ): Promise<AddressSearchResult[]> {
+  // Cache lookup
+  const key = geocodeCacheKey(query, proximity, limit);
+  const cached = geocodeCache.get(key);
+  if (cached && Date.now() - cached.ts < GEOCODE_CACHE_TTL) return cached.results;
+
   try {
     const token =
       (typeof process !== 'undefined' && (
@@ -1964,7 +2012,7 @@ export async function searchAddressMapbox(
     const features = data?.features;
     if (!Array.isArray(features)) return [];
 
-    return features.map((f: Record<string, unknown>) => {
+    const results = features.map((f: Record<string, unknown>) => {
       const props = f.properties as Record<string, unknown> | undefined;
       const geom = f.geometry as { coordinates: [number, number] } | undefined;
       const address = (props?.full_address as string) || (props?.name as string) || '';
@@ -1976,6 +2024,22 @@ export async function searchAddressMapbox(
         displayName: address,
       };
     });
+
+    // Only cache positive results — caching `[]` would freeze a one-off
+    // transient failure (network blip, Mapbox 5xx) into a 7-day "no
+    // results" answer for a query that's actually valid. The trade-off
+    // is that genuinely empty queries re-request, but those are rare
+    // (users don't typically retype the same misspelling) and cheap
+    // (Mapbox returns 200 with [] fast).
+    if (results.length > 0) {
+      if (geocodeCache.size >= GEOCODE_CACHE_MAX) {
+        const oldest = geocodeCache.keys().next().value;
+        if (oldest) geocodeCache.delete(oldest);
+      }
+      geocodeCache.set(key, { results, ts: Date.now() });
+    }
+
+    return results;
   } catch {
     return [];
   }
