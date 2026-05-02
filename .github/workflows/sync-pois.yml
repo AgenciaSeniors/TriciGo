@@ -109,7 +109,9 @@ jobs:
       - name: Merge sources + upsert to Supabase
         id: upsert
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Reuses NEXT_PUBLIC_SUPABASE_URL (already configured for Deploy Web/Admin)
+          # rather than requiring a duplicate SUPABASE_URL secret. Same value.
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
           DRY_RUN: ${{ steps.cfg.outputs.dry_run == 'true' && '1' || '' }}
         run: |
