@@ -142,6 +142,7 @@ jobs:
             echo "- **FSQ release**: ${{ steps.cfg.outputs.fsq_release }}"
             echo "- **Inserted**: ${{ steps.upsert.outputs.inserted || 'n/a' }}"
             echo "- **Updated**: ${{ steps.upsert.outputs.updated || 'n/a' }}"
+            echo "- **Skipped (admin-locked)**: ${{ steps.upsert.outputs.skipped_admin || 'n/a' }}"
             echo "- **Total merged**: ${{ steps.upsert.outputs.total || 'n/a' }}"
           } >> "$GITHUB_STEP_SUMMARY"
 

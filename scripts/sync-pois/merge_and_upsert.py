@@ -431,22 +431,28 @@ def dedup_records(records: list[Record]) -> list[Record]:
 # Supabase upsert
 # ──────────────────────────────────────────────────────────────
 
+UPSERT_BATCH_SIZE = 5000  # rows per RPC call — Postgres+Supabase comfortably handle this
+
 def upsert_to_supabase(records: list[Record], dry_run: bool) -> dict[str, int]:
     """Upsert records to cuba_pois preserving admin overrides.
 
-    Strategy (simple, in-memory):
-      1. Fetch all non-admin rows: { source_ids → row_id }
-      2. For each new merged record:
-         - If any source_id matches existing row → UPDATE (not is_admin protected)
-         - Else → INSERT
-      3. Soft-deactivate non-admin rows not touched in last 60 days (separate run)
+    Calls the `bulk_upsert_pois(JSONB)` RPC (migration 00250) which does
+    the insert/update split server-side in a single transaction per
+    batch. The previous client-side per-row UPDATE loop took ~16 min for
+    20K rows and didn't fit in the 30-minute workflow timeout for full
+    Cuba (~80K+ rows).
+
+    Behavior rules (enforced server-side, mirror Python intent):
+      - Rows with `is_admin = TRUE` are NEVER touched.
+      - Match by any shared (key, value) entry in source_ids.
+      - Sync-managed columns get rewritten; admin-set values preserved.
     """
     if dry_run:
         print(f"[upsert] DRY_RUN — would write {len(records)} records", flush=True)
         sample = records[:5] if records else []
         for r in sample:
             print(f"  • {r.name} ({r.tricigo_category}) @ {r.lat:.4f},{r.lng:.4f} src={r.source}", flush=True)
-        return {"would_insert": len(records), "would_update": 0}
+        return {"would_insert": len(records), "would_update": 0, "skipped_admin": 0}
 
     from supabase import create_client
 
@@ -454,54 +460,19 @@ def upsert_to_supabase(records: list[Record], dry_run: bool) -> dict[str, int]:
     key = os.environ["SUPABASE_SERVICE_ROLE"]
     sb = create_client(url, key)
 
-    # Build map of existing source_ids → row id (paginated)
-    existing: dict[str, int] = {}
-    page_size = 5000
-    offset = 0
-    print("[upsert] fetching existing source_ids…", flush=True)
-    while True:
-        resp = (
-            sb.table("cuba_pois")
-            .select("id, source_ids")
-            .neq("is_admin", True)
-            .range(offset, offset + page_size - 1)
-            .execute()
-        )
-        rows = resp.data or []
-        if not rows:
-            break
-        for row in rows:
-            for src_key, src_id in (row.get("source_ids") or {}).items():
-                existing[f"{src_key}:{src_id}"] = row["id"]
-        if len(rows) < page_size:
-            break
-        offset += page_size
-    print(f"[upsert] {len(existing)} existing source_id mappings loaded", flush=True)
-
-    inserts: list[dict] = []
-    updates: list[tuple[int, dict]] = []
-    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    for r in records:
-        # Find matching existing row by any source_id
-        existing_id = None
-        for src_key, src_id in r.source_ids.items():
-            existing_id = existing.get(f"{src_key}:{src_id}")
-            if existing_id:
-                break
-
-        payload = {
+    def to_payload(r: Record) -> dict:
+        """Marshal a Record into the JSONB shape the RPC expects."""
+        return {
             "name": r.name,
             "name_normalized": r.name_normalized,
             "category": r.category or "other",
             "subcategory": r.subcategory,
             "tricigo_category": r.tricigo_category,
             "address": r.address,
-            "city": r.municipality,
             "municipality": r.municipality,
             "province": r.province,
-            "location": f"SRID=4326;POINT({r.lng} {r.lat})",
-            "tags": {},
+            "lat": r.lat,
+            "lng": r.lng,
             "source": "merged" if len(r.source_ids) > 1 else r.source,
             "source_ids": r.source_ids,
             "phone": r.phone,
@@ -509,33 +480,48 @@ def upsert_to_supabase(records: list[Record], dry_run: bool) -> dict[str, int]:
             "socials": r.socials,
             "hours": r.hours,
             "confidence": r.confidence,
-            "is_active": True,
-            "synced_at": now_iso,
+            "osm_id": r.osm_id,
+            "osm_type": r.osm_type,
         }
-        if existing_id:
-            updates.append((existing_id, payload))
+
+    total_inserted = 0
+    total_updated = 0
+    total_skipped = 0
+    total = len(records)
+
+    for chunk_start in range(0, total, UPSERT_BATCH_SIZE):
+        chunk = records[chunk_start:chunk_start + UPSERT_BATCH_SIZE]
+        payload = [to_payload(r) for r in chunk]
+        try:
+            resp = sb.rpc("bulk_upsert_pois", {"p_records": payload}).execute()
+        except Exception as exc:
+            print(f"[upsert] batch starting at {chunk_start} failed: {exc!r}", file=sys.stderr)
+            raise
+        # bulk_upsert_pois returns a single row (i, u, s) — supabase-py
+        # surfaces it as a list of dicts.
+        rows = resp.data or []
+        if rows:
+            row = rows[0]
+            ins = int(row.get("inserted_count") or 0)
+            upd = int(row.get("updated_count") or 0)
+            skp = int(row.get("skipped_admin_count") or 0)
         else:
-            payload["osm_id"] = r.osm_id
-            payload["osm_type"] = r.osm_type
-            inserts.append(payload)
+            ins = upd = skp = 0
+        total_inserted += ins
+        total_updated += upd
+        total_skipped += skp
+        print(
+            f"[upsert] batch {chunk_start // UPSERT_BATCH_SIZE + 1}: "
+            f"+{ins} inserted, {upd} updated, {skp} skipped (admin) "
+            f"({chunk_start + len(chunk)}/{total} total processed)",
+            flush=True,
+        )
 
-    print(f"[upsert] {len(inserts)} inserts, {len(updates)} updates pending", flush=True)
-
-    inserted = 0
-    for chunk_start in range(0, len(inserts), MAX_BATCH_SIZE):
-        chunk = inserts[chunk_start:chunk_start + MAX_BATCH_SIZE]
-        sb.table("cuba_pois").insert(chunk).execute()
-        inserted += len(chunk)
-        print(f"  inserted {inserted}/{len(inserts)}", flush=True)
-
-    updated = 0
-    for row_id, payload in updates:
-        sb.table("cuba_pois").update(payload).eq("id", row_id).execute()
-        updated += 1
-        if updated % 1000 == 0:
-            print(f"  updated {updated}/{len(updates)}", flush=True)
-
-    return {"inserted": inserted, "updated": updated}
+    return {
+        "inserted": total_inserted,
+        "updated": total_updated,
+        "skipped_admin": total_skipped,
+    }
 
 
 # ──────────────────────────────────────────────────────────────
@@ -575,12 +561,13 @@ def main() -> int:
     stats = upsert_to_supabase(merged, dry_run=dry_run)
     print(f"[main] done: {stats}", flush=True)
 
-    # Output for GH Actions
+    # Output for GH Actions step summary + downstream steps
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         with open(gh_out, "a") as f:
-            f.write(f"inserted={stats.get('inserted', 0)}\n")
-            f.write(f"updated={stats.get('updated', 0)}\n")
+            f.write(f"inserted={stats.get('inserted', stats.get('would_insert', 0))}\n")
+            f.write(f"updated={stats.get('updated', stats.get('would_update', 0))}\n")
+            f.write(f"skipped_admin={stats.get('skipped_admin', 0)}\n")
             f.write(f"total={len(merged)}\n")
 
     return 0
