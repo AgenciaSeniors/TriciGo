@@ -304,7 +304,11 @@ def load_overture(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]
             continue
         cats = props.get("categories") or {}
         primary = cats.get("primary")
-        ovt_id = props.get("id")
+        # Same RFC 7946 §3.2 issue we hit with OSM: the Overture Place ID
+        # lives at the GeoJSON feature top-level (`feat["id"]`), not in
+        # properties. Fall through to props in case a different exporter
+        # carries it there.
+        ovt_id = feat.get("id") or props.get("id") or props.get("ovt_id")
         confidence = float(props.get("confidence", 0.5) or 0.5)
         addresses = props.get("addresses") or []
         addr = addresses[0] if addresses else {}
