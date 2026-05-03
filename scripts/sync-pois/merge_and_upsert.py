@@ -228,15 +228,21 @@ def load_osm(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
         else:
             continue  # skip rows without a recognized POI tag
 
-        # osmium export emits OSM identity in two possible shapes depending
-        # on which flags were passed:
-        #   • `--add-unique-id=type_id` → `@id = "n123"` / "w456" / "r789"
-        #     (type prefix + numeric)
-        #   • Older / split shape → `@type=node` + `@id=123`
-        #   • A custom upstream might pass "node/123" (slash-separated)
-        # Handle all three so the script doesn't silently drop OSM IDs.
+        # osmium export with `--add-unique-id=type_id` puts the OSM
+        # identity at the FEATURE TOP LEVEL (per GeoJSON RFC 7946 §3.2)
+        # as `feat["id"] = "n26241064"` — NOT inside properties. We try
+        # the top-level first, then fall back to legacy property names
+        # in case a different upstream tool is feeding us GeoJSON:
+        #   • `feat["id"]`           — RFC 7946 + osmium `--add-unique-id`
+        #   • `props["@id"]`         — older osmium / overpass turbo
+        #   • `props["osm_id"]`      — geojson_to_osm-style outputs
+        # Then parse the prefix (n/w/r) or "/"-separated forms.
         type_prefix_map = {"n": "node", "w": "way", "r": "relation"}
-        raw_id = props.get("@id") or props.get("osm_id")
+        raw_id = (
+            feat.get("id")
+            or props.get("@id")
+            or props.get("osm_id")
+        )
         osm_type = props.get("@type") or "node"
         osm_id_int: int | None = None
         if raw_id is not None:
