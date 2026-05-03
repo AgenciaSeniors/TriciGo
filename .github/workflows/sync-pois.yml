@@ -97,11 +97,20 @@ jobs:
             -o /tmp/sync/cuba.osm.pbf
           ls -lah /tmp/sync/cuba.osm.pbf
 
+          # osmium tags-filter only outputs OSM PBF/XML — it cannot emit
+          # GeoJSON directly (it's not a format `osmium export` accepts as
+          # input either way). Two-step: tags-filter narrows to POI tags,
+          # then export converts the resulting .osm.pbf to GeoJSON.
           osmium tags-filter /tmp/sync/cuba.osm.pbf \
             n/amenity n/shop n/tourism n/leisure n/office n/historic n/healthcare n/public_transport \
-            -o /tmp/sync/osm-pois.geojson \
-            --output-format=geojson \
+            -o /tmp/sync/osm-pois-filtered.osm.pbf \
             --overwrite
+
+          osmium export /tmp/sync/osm-pois-filtered.osm.pbf \
+            -f geojson \
+            -o /tmp/sync/osm-pois.geojson \
+            --overwrite
+
           ls -lah /tmp/sync/osm-pois.geojson
           echo "OSM features: $(jq '.features | length' /tmp/sync/osm-pois.geojson)"
 
