@@ -19,9 +19,9 @@ on:
         type: choice
         options: ['false', 'true']
       foursquare_release:
-        description: 'Foursquare release date (YYYY-MM-DD)'
+        description: 'Foursquare release date (YYYY-MM-DD or "latest")'
         required: false
-        default: '2026-04-14'
+        default: 'latest'
 
 permissions:
   contents: read
@@ -55,7 +55,7 @@ jobs:
         run: |
           BBOX="${{ github.event.inputs.bbox || '-85.0,19.5,-74.0,23.5' }}"
           DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
-          FSQ_RELEASE="${{ github.event.inputs.foursquare_release || '2026-04-14' }}"
+          FSQ_RELEASE="${{ github.event.inputs.foursquare_release || 'latest' }}"
           echo "bbox=$BBOX" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
           echo "fsq_release=$FSQ_RELEASE" >> "$GITHUB_OUTPUT"
