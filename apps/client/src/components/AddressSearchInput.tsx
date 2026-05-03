@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji } from '@tricigo/utils';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -182,22 +182,23 @@ function AddressSearchInputInner({
           // If no intersection found, fall through to normal search
         }
 
-        // ── Normal search: Supabase POIs + Streets in parallel, fall back to Mapbox ──
-        const [poiResults, streetResults] = await Promise.all([
-          searchPoisSupabase(text, userLocation, 5),
-          searchStreetsSupabase(text, userLocation, 5),
-        ]);
-        // Merge order:
-        //  - HIGH-specificity POIs first (proper names like "Hospital
-        //    Hermanos Ameijeiras") because that's what the user typed
-        //  - Then streets (better for generic Cuban "Calle 23" queries)
-        //  - Then low-specificity POIs (generic categories like "Hospital")
-        //  - Mapbox fallback only if everything above is empty
-        //
+        // ── Smart POI search ──
+        // search_pois_smart already detects category intent (e.g. "Bar"
+        // → bar category; "consultorio del medico" → hospital), mixes
+        // name + category matches, and sinks generic-name placeholders.
+        // When the user typed a category keyword (matchedCategory != null
+        // on the rows), suppress the streets fetch entirely — searching
+        // "Bar" should not surface streets named "Bartolomé*". When the
+        // query has no detected category, run streets in parallel for
+        // address-style queries like "Calle 23 e/ M y N".
+        const poiResults = await searchPoisSupabase(text, userLocation, 6);
+        const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
+        const streetResults: SearchBoxResult[] = detectedCategory
+          ? []                                                              // category search → drop streets
+          : await searchStreetsSupabase(text, userLocation, 5);
         // Each result keeps a separate `displayName` (POI name) and
         // `address` so the dropdown can render the POI name as title
-        // with the street as subtitle. Both Supabase helpers return
-        // SearchBoxResult — normalize to AddressSearchResult.
+        // with the street as subtitle.
         const normalize = (r: SearchBoxResult): AddressSearchResult => ({
           address: r.address,
           latitude: r.latitude,
@@ -205,7 +206,13 @@ function AddressSearchInputInner({
           // Only set displayName when different from address (e.g. a real
           // POI name). When equal, render a single-line result.
           displayName: r.place_name && r.place_name !== r.address ? r.place_name : undefined,
+          tricigoCategory: r.tricigoCategory ?? null,
         });
+        // The smart RPC already orders rows correctly (name match
+        // quality, then is_admin, then distance, generic-name rows last).
+        // Keep that order; only inject streets between high-spec and
+        // low-spec POIs when streets are actually available (non-category
+        // queries).
         const highSpecPois = poiResults.filter(r => r.specificity >= 0.8).map(normalize);
         const lowSpecPois  = poiResults.filter(r => r.specificity <  0.8).map(normalize);
         const merged: AddressSearchResult[] = [
@@ -423,6 +430,13 @@ function AddressSearchInputInner({
     source: string;
     distanceKm: number | null;
     icon: string;
+    /**
+     * Category emoji rendered to the left of the row. Set for POI rows
+     * coming from `search_pois_smart` so the dropdown shows 🏥 / 🍺 / ⛽
+     * / etc. at a glance. Streets and Mapbox-fallback rows leave this
+     * undefined and fall back to the Ionicon `icon` field.
+     */
+    emoji?: string;
   };
 
   const mergedResults: MergedResult[] = (() => {
@@ -449,6 +463,7 @@ function AddressSearchInputInner({
         priority: 4,
         source: r.displayName ? 'poi' : 'api',                  // ← POI vs street
         icon: r.displayName ? ('business-outline' as const) : ('location-outline' as const),
+        emoji: r.displayName ? tricigoCategoryEmoji(r.tricigoCategory) : undefined,
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];
@@ -567,11 +582,17 @@ function AddressSearchInputInner({
                 onPress={() => handleSelectMerged(item)}
                 accessibilityLabel={item.displayName ? `${item.displayName}, ${item.address}` : item.address}
               >
-                <Ionicons
-                  name={item.icon as any}
-                  size={index === 0 ? 18 : 16}
-                  color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
-                />
+                {item.emoji ? (
+                  <Text style={{ fontSize: index === 0 ? 20 : 18, width: 22, textAlign: 'center' }}>
+                    {item.emoji}
+                  </Text>
+                ) : (
+                  <Ionicons
+                    name={item.icon as any}
+                    size={index === 0 ? 18 : 16}
+                    color={index === 0 ? colors.brand.orange : (isDark ? darkColors.text.secondary : colors.neutral[500])}
+                  />
+                )}
                 <View className="flex-1 ml-2">
                   {/* Two-line layout when this is a POI with a separate
                       street address. Single-line when result is a plain
