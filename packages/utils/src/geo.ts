@@ -493,6 +493,13 @@ export interface AddressSearchResult {
    * and the dropdown renders single-line `address` only.
    */
   displayName?: string;
+  /**
+   * `tricigo_category` of the underlying POI when it came from
+   * `search_pois_smart`. The dropdown uses this to pick a category
+   * emoji icon. Optional — undefined for street rows and Mapbox
+   * fallback rows.
+   */
+  tricigoCategory?: string | null;
 }
 
 /* ─── Nominatim throttle ─── */
@@ -2194,6 +2201,17 @@ export interface SearchBoxResult {
   category?: string;
   source: 'searchbox' | 'nominatim' | 'overpass' | 'supabase';
   specificity: number; // 0-1: 1 = unique named POI, 0 = generic
+  /**
+   * Smart-search metadata (only populated when the row came from
+   * `search_pois_smart`). The cliente uses these to:
+   *   - Pick a category emoji icon
+   *   - Suppress unrelated street results when the user typed a
+   *     category keyword (e.g. typing "Bar" should not return streets
+   *     starting with "Bar*")
+   */
+  matchedCategory?: string | null;       // tricigo_category detected from query
+  matchReason?: 'name_exact' | 'name_prefix' | 'name_substring' | 'category_only';
+  tricigoCategory?: string | null;       // category of the actual row
 }
 
 /** Known generic category words — results matching ONLY these get low specificity */
@@ -2215,6 +2233,40 @@ export function computeSpecificity(placeName: string): number {
   const firstWord = normalized.split(/[\s,]+/)[0] ?? '';
   if (GENERIC_POI_WORDS.has(firstWord) && normalized.length > firstWord.length + 2) return 0.8;
   return 1.0;
+}
+
+/**
+ * Map a `tricigo_category` value (returned by `search_pois_smart`) to
+ * an emoji icon. Used by the search dropdown and the on-map POI layer
+ * to render category at a glance \u2014 emoji renders the same on Android,
+ * iOS and the web admin panel without bundling extra icon fonts.
+ *
+ * Falls back to a generic pin when the category is unknown / null.
+ */
+export function tricigoCategoryEmoji(category?: string | null): string {
+  switch (category) {
+    case 'hospital':    return '\ud83c\udfe5';
+    case 'pharmacy':    return '\ud83d\udc8a';
+    case 'school':      return '\ud83c\udfeb';
+    case 'gov':         return '\ud83c\udfdb\ufe0f';
+    case 'hotel':       return '\ud83c\udfe8';
+    case 'restaurant':  return '\ud83c\udf7d\ufe0f';
+    case 'paladar':     return '\ud83c\udf74';
+    case 'cafe':        return '\u2615';
+    case 'bar':         return '\ud83c\udf7a';
+    case 'supermarket': return '\ud83d\uded2';
+    case 'shop':        return '\ud83d\udecd\ufe0f';
+    case 'bank':        return '\ud83c\udfe6';
+    case 'atm':         return '\ud83c\udfe7';
+    case 'gas_station': return '\u26fd';
+    case 'museum':      return '\ud83d\uddbc\ufe0f';
+    case 'park':        return '\ud83c\udf33';
+    case 'beach':       return '\ud83c\udfd6\ufe0f';
+    case 'embassy':     return '\ud83d\udec2';
+    case 'religion':    return '\u26ea';
+    case 'transport':   return '\ud83d\ude8c';
+    default:            return '\ud83d\udccd';
+  }
 }
 
 /**
@@ -2495,7 +2547,15 @@ export async function searchPoisSupabase(
       if (externalSignal.aborted) { clearTimeout(timeout); return []; }
       externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
     }
-    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_pois`, {
+    // search_pois_smart (migration 00255) supersedes the legacy search_pois:
+    //   - Detects category intent via Spanish/Cuban-vernacular keyword
+    //     dictionary (longest-prefix match on `cuba_search_keywords`).
+    //   - Mixes name matches (cross-category) with category-only matches.
+    //   - Sinks generic-name placeholders ("Bar", "Restaurante" alone)
+    //     to the bottom server-side, so we don't have to re-rank here.
+    //   - Returns `matched_category`, `match_reason`, `tricigo_category`
+    //     which the cliente uses to suppress unrelated streets.
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/search_pois_smart`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2511,16 +2571,35 @@ export async function searchPoisSupabase(
     const data = await res.json();
     if (!Array.isArray(data)) return [];
 
-    const results: SearchBoxResult[] = data.map((r: Record<string, unknown>) => ({
-      address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', ') || (r.name as string),
-      latitude: r.latitude as number,
-      longitude: r.longitude as number,
-      place_name: r.name as string,
-      full_address: [r.address, r.neighborhood, r.city].filter(Boolean).join(', '),
-      category: (r.subcategory as string) || (r.category as string) || '',
-      source: 'supabase' as const,
-      specificity: computeSpecificity(r.name as string),
-    }));
+    const results: SearchBoxResult[] = data.map((r: Record<string, unknown>) => {
+      const name = (r.name as string) || '';
+      const matchReason = r.match_reason as SearchBoxResult['matchReason'];
+      // The smart RPC already orders generic-name placeholders to the
+      // bottom, but we still need a per-row `specificity` for callers
+      // that do their own merge logic. Treat name_exact + category-only
+      // matches against a detected category keyword as low-specificity
+      // (they are the OSM "Bar"/"Restaurante" placeholder rows).
+      let specificity = computeSpecificity(name);
+      if (matchReason === 'name_exact' && r.matched_category) {
+        specificity = Math.min(specificity, 0.2);
+      } else if (matchReason === 'category_only') {
+        // Real category match with a proper name — high signal.
+        specificity = Math.max(specificity, 0.8);
+      }
+      return {
+        address: [r.address, r.municipality, r.province].filter(Boolean).join(', ') || name,
+        latitude: r.latitude as number,
+        longitude: r.longitude as number,
+        place_name: name,
+        full_address: [r.address, r.municipality, r.province].filter(Boolean).join(', '),
+        category: (r.subcategory as string) || (r.category as string) || '',
+        source: 'supabase' as const,
+        specificity,
+        matchedCategory: (r.matched_category as string | null) ?? null,
+        matchReason,
+        tricigoCategory: (r.tricigo_category as string | null) ?? null,
+      };
+    });
 
     // Populate cache (LRU eviction when full)
     if (poisSearchCache.size >= POIS_SEARCH_CACHE_MAX) {

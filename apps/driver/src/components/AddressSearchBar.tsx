@@ -16,6 +16,7 @@ import {
   searchPoisSupabase,
   searchStreetsSupabase,
   searchAddress,
+  tricigoCategoryEmoji,
   type GeoPoint,
   type SearchBoxResult,
 } from '@tricigo/utils';
@@ -32,6 +33,8 @@ interface AddressResult {
   longitude: number;
   /** True for POI rows (so we render an icon + don't dedup against streets). */
   isPoi: boolean;
+  /** Category emoji (POI rows from search_pois_smart only). */
+  emoji?: string;
 }
 
 interface AddressSearchBarProps {
@@ -56,10 +59,15 @@ interface AddressSearchBarProps {
 async function searchUnified(query: string, near: GeoPoint | null): Promise<AddressResult[]> {
   if (query.trim().length < 2) return [];
 
-  const [poiResults, streetResults] = await Promise.all([
-    searchPoisSupabase(query, near, 5).catch(() => [] as SearchBoxResult[]),
-    searchStreetsSupabase(query, near, 5).catch(() => [] as SearchBoxResult[]),
-  ]);
+  // search_pois_smart already detects category intent (e.g. "Bar" /
+  // "Hospital") and sinks generic OSM placeholders. When a category
+  // keyword is detected, suppress the streets fetch so searching "Bar"
+  // doesn't surface "Bartolomé*" streets — we only want bars.
+  const poiResults = await searchPoisSupabase(query, near, 6).catch(() => [] as SearchBoxResult[]);
+  const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
+  const streetResults: SearchBoxResult[] = detectedCategory
+    ? []
+    : await searchStreetsSupabase(query, near, 5).catch(() => [] as SearchBoxResult[]);
 
   const toResult = (r: SearchBoxResult, idx: number): AddressResult => {
     const isPoi = !!(r.place_name && r.place_name !== r.address);
@@ -71,6 +79,7 @@ async function searchUnified(query: string, near: GeoPoint | null): Promise<Addr
       latitude: r.latitude,
       longitude: r.longitude,
       isPoi,
+      emoji: isPoi ? tricigoCategoryEmoji(r.tricigoCategory) : undefined,
     };
   };
 
@@ -215,12 +224,20 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
                     pressed && styles.resultItemPressed,
                   ]}
                 >
-                  <Ionicons
-                    name={item.isPoi ? 'business-outline' : 'location-outline'}
-                    size={16}
-                    color={colors.brand.orange}
-                    style={{ marginRight: 10, marginTop: 1 }}
-                  />
+                  {item.emoji ? (
+                    <Text
+                      style={{ fontSize: 18, width: 22, textAlign: 'center', marginRight: 8, marginTop: 1 }}
+                    >
+                      {item.emoji}
+                    </Text>
+                  ) : (
+                    <Ionicons
+                      name={item.isPoi ? 'business-outline' : 'location-outline'}
+                      size={16}
+                      color={colors.brand.orange}
+                      style={{ marginRight: 10, marginTop: 1 }}
+                    />
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text
                       variant="body"
