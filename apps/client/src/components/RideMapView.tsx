@@ -700,27 +700,38 @@ function RideMapViewInner({
         )}
 
         {/* BUG-281 — Dropoff marker uses the branded TriciGo pin asset
-            (white silhouette tinted brand-orange). The icon is already a
-            location-pin shape, so we anchor at y:1 so the tip points to
-            the actual coordinate. The bounce-in scale animation is preserved. */}
+            (white silhouette tinted brand-orange). Anchored at y:1 so the
+            pin's tip points to the actual coordinate.
+         *
+         *  BUG-307 — switched from PointAnnotation to MarkerView for the
+         *  same reason BUG-274 fixed the driver marker: PointAnnotation
+         *  takes a NATIVE SNAPSHOT of the React child at mount and never
+         *  re-snapshots when transform animations update. The bounce-in
+         *  scale (0.3 → 1) ran only on the JS side, so the rendered pin
+         *  stayed at 30% size — visually invisible. BUG-285's "explicit
+         *  width/height on wrapper" fix never addressed this; the snapshot
+         *  was 44×44 but always at scale 0.3.
+         *
+         *  MarkerView renders the actual React tree, so the Animated.spring
+         *  on dropoffScale animates visually too. The `key` derived from
+         *  coordinates forces a remount when the destination changes (same
+         *  trick as the driver MarkerView), so position updates land
+         *  reliably on Android.
+         *
+         *  Trade-off: MarkerView doesn't support `draggable` the way
+         *  PointAnnotation does. Drag-to-correct-dropoff lives on the
+         *  ConfirmLocation flow, where the user moves the map under a
+         *  static pin instead — this view is the route-preview / vehicle
+         *  picker, where the dropoff is already committed and shouldn't
+         *  be dragged anyway. `onDropoffDrag` is therefore intentionally
+         *  not wired up here. */}
         {dropoffLocation && (
-          <MapboxGL.PointAnnotation
+          <MapboxGL.MarkerView
             id="dropoff"
+            key={`dropoff-${dropoffLocation.latitude.toFixed(5)}-${dropoffLocation.longitude.toFixed(5)}`}
             coordinate={toCoord(dropoffLocation)}
             anchor={{ x: 0.5, y: 1 }}
-            draggable={!!onDropoffDrag}
-            onDragEnd={(e: any) => {
-              if (onDropoffDrag && e?.geometry?.coordinates) {
-                const [lng, lat] = e.geometry.coordinates;
-                onDropoffDrag({ latitude: lat, longitude: lng });
-              }
-            }}
           >
-            {/* BUG-285 — wrapper needs an explicit width/height. Without
-                them PointAnnotation snapshotted a 0×0 View on mount and
-                the user saw "se marca la ruta pero no sale el dropoff".
-                The wrapper now matches the asset size so the snapshot
-                contains the full pin pixels. */}
             <Animated.View
               style={{
                 width: 44,
@@ -742,7 +753,7 @@ function RideMapViewInner({
                 accessibilityLabel="Destino"
               />
             </Animated.View>
-          </MapboxGL.PointAnnotation>
+          </MapboxGL.MarkerView>
         )}
 
         {/* Waypoint markers — Cuban Modern StopMarker. Taller (36px)
