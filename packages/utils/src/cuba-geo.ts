@@ -228,3 +228,33 @@ export const CUBA_MUNICIPALITIES: Record<string, GeoOption[]> = {
     { value: 'isla_de_la_juventud', label: 'Isla de la Juventud' },
   ],
 };
+
+/**
+ * Strip Cuban admin-level prefixes ("Provincia de", "Municipio de",
+ * "Ciudad de") from a place label so it fits in compact UI like the
+ * weather chip in the home header (which only has ~14 chars of width
+ * next to the temperature reading).
+ *
+ * Why this exists: Mapbox's Spanish-locale reverse geocode for Cuba
+ * sometimes falls back to region-level results when the coords don't
+ * cleanly match a place/locality (small towns, coastal coords, rural
+ * roads). Those rows come back named "Provincia de La Habana",
+ * "Provincia de Sancti Spíritus", or "Municipio Habana del Este",
+ * which then truncate to "Provincia de L…" in compact chips and look
+ * broken. Stripping the prefix gives us "La Habana" / "Sancti
+ * Spíritus" / "Habana del Este" — usable everywhere.
+ *
+ * Idempotent: passes clean names through unchanged. If the strip
+ * leaves a 0-1 char remnant (the input was basically just the
+ * prefix), falls back to the original to avoid rendering an empty
+ * label.
+ */
+export function normalizeCubanCityLabel(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const stripped = name
+    .replace(/^\s*(provincia|provincias|municipio|municipios|ciudad)(\s+de)?\s+/i, '')
+    .trim();
+  if (stripped.length < 2) return name.trim() || null;
+  return stripped;
+}
+
