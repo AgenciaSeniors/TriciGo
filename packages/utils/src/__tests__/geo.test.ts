@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   haversineDistance,
   estimateRoadDistance,
@@ -7,6 +7,8 @@ import {
   adjustETAForVehicle,
   HAVANA_PRESETS,
   HAVANA_CENTER,
+  fetchRoute,
+  clearRouteCache,
 } from '../geo';
 
 describe('haversineDistance', () => {
@@ -174,5 +176,91 @@ describe('HAVANA_CENTER', () => {
     expect(HAVANA_CENTER.latitude).toBeLessThan(23.2);
     expect(HAVANA_CENTER.longitude).toBeGreaterThan(-82.5);
     expect(HAVANA_CENTER.longitude).toBeLessThan(-82.3);
+  });
+});
+
+/**
+ * Regression test for the "stale route on dropoff change" bug:
+ * the user reported that going casa → trabajo, then changing trabajo
+ * to a nearby hotel (~80m away in Centro Habana), produced the SAME
+ * route polyline + the SAME fare estimate. Root cause: routeCacheKey
+ * quantized to ~110m precision (toFixed(3)), so the second fetchRoute
+ * hit the first cached route. Fix: tighten to ~1m (toFixed(5)).
+ *
+ * This test mocks the network and asserts that two destinations within
+ * ~80m produce two distinct cache entries (= two network calls).
+ */
+describe('routeCache invalidation on close-by destinations', () => {
+  beforeEach(() => {
+    clearRouteCache();
+    vi.restoreAllMocks();
+  });
+
+  it('does NOT collide cache keys for destinations ~60m apart', async () => {
+    // These coords intentionally land in the SAME toFixed(3) bucket
+    // ("23.140,-82.365") but in DIFFERENT toFixed(5) buckets — the
+    // exact failure mode of the original bug. Destination 2 is ~60m
+    // from destination 1, well within a Habana city block.
+    const trabajo = { lat: 23.1400, lng: -82.3650 };
+    const hotel   = { lat: 23.1404, lng: -82.3654 };
+    const casa    = { lat: 23.1345, lng: -82.3821 };
+
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      // Return distinct routes per destination so a cache hit would
+      // surface as the wrong distance/duration.
+      const isTrabajo = u.includes(`${trabajo.lng},${trabajo.lat}`);
+      return new Response(
+        JSON.stringify({
+          routes: [{
+            geometry: { coordinates: [[casa.lng, casa.lat], isTrabajo ? [trabajo.lng, trabajo.lat] : [hotel.lng, hotel.lat]] },
+            distance: isTrabajo ? 1234 : 1888,
+            duration: isTrabajo ? 200 : 280,
+          }],
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const route1 = await fetchRoute(casa, trabajo);
+    const route2 = await fetchRoute(casa, hotel);
+
+    expect(route1?.distance_m).toBe(1234);
+    expect(route2?.distance_m).toBe(1888);              // ← would FAIL if cached
+    expect(fetchSpy).toHaveBeenCalledTimes(2);          // both calls must hit network
+  });
+
+  it('DOES reuse cache for the exact same destination', async () => {
+    const dest = { lat: 23.14045, lng: -82.36488 };
+    const casa = { lat: 23.13452, lng: -82.38215 };
+
+    const fetchSpy = vi.fn(async () => new Response(
+      JSON.stringify({ routes: [{ geometry: { coordinates: [[casa.lng, casa.lat], [dest.lng, dest.lat]] }, distance: 1888, duration: 280 }] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await fetchRoute(casa, dest);
+    await fetchRoute(casa, dest);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);          // second call hits cache
+  });
+
+  it('clearRouteCache forces a re-fetch even for identical coords', async () => {
+    const dest = { lat: 23.14045, lng: -82.36488 };
+    const casa = { lat: 23.13452, lng: -82.38215 };
+
+    const fetchSpy = vi.fn(async () => new Response(
+      JSON.stringify({ routes: [{ geometry: { coordinates: [[casa.lng, casa.lat], [dest.lng, dest.lat]] }, distance: 1888, duration: 280 }] }),
+      { status: 200 },
+    ));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await fetchRoute(casa, dest);
+    clearRouteCache();
+    await fetchRoute(casa, dest);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

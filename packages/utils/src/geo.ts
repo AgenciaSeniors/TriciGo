@@ -645,10 +645,31 @@ const ROUTE_CACHE_TTL = 30 * 60 * 1000;
 const ROUTE_CACHE_MAX = 500;
 
 function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }): string {
-  // ~110m precision (toFixed(3)): pickup points within the same block hit
-  // the same key. For Cuba where pickup is approximate ("entre L y M"),
-  // tighter precision just costs us cache hits without UX benefit.
-  return `${(from.lat ?? 0).toFixed(3)},${(from.lng ?? 0).toFixed(3)}_${(to.lat ?? 0).toFixed(3)},${(to.lng ?? 0).toFixed(3)}`;
+  // ~1m precision (toFixed(5)). The previous setting was toFixed(3) (~110m
+  // precision) which intentionally collapsed pickup points within the same
+  // block — but that same collapse silently returned a STALE route when
+  // the user switched the destination to a nearby POI (e.g. "Hospital
+  // Hermanos Ameijeiras" → "Hotel Bruzón" in Centro Habana, ~80m apart).
+  // The cached route from the first destination would come back, and so
+  // would the fare estimate (since `getLocalFareEstimate` calls
+  // `fetchRoute` for distance/duration). Result: changing the destination
+  // appeared to do nothing.
+  //
+  // POI coords from `cuba_pois` are stable to the meter, saved locations
+  // are stable, and GPS jitter on pickup is well below the 30-min TTL
+  // anyway — so the lost cache hits from tighter precision are negligible
+  // compared to the correctness fix.
+  return `${(from.lat ?? 0).toFixed(5)},${(from.lng ?? 0).toFixed(5)}_${(to.lat ?? 0).toFixed(5)},${(to.lng ?? 0).toFixed(5)}`;
+}
+
+/**
+ * Clear the in-memory route cache. Call this when the user explicitly
+ * resets a ride draft (cancel, reset) or when you want to force the next
+ * `fetchRoute` to hit OSRM/Mapbox fresh. Defense-in-depth on top of the
+ * 1m-precision cache key.
+ */
+export function clearRouteCache(): void {
+  routeCache.clear();
 }
 
 /**
