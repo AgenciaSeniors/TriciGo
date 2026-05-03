@@ -228,14 +228,28 @@ def load_osm(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
         else:
             continue  # skip rows without a recognized POI tag
 
-        osm_id = props.get("@id") or props.get("osm_id")
+        # osmium export emits OSM identity in two possible shapes depending
+        # on which flags were passed:
+        #   • `--add-unique-id=type_id` → `@id = "n123"` / "w456" / "r789"
+        #     (type prefix + numeric)
+        #   • Older / split shape → `@type=node` + `@id=123`
+        #   • A custom upstream might pass "node/123" (slash-separated)
+        # Handle all three so the script doesn't silently drop OSM IDs.
+        type_prefix_map = {"n": "node", "w": "way", "r": "relation"}
+        raw_id = props.get("@id") or props.get("osm_id")
         osm_type = props.get("@type") or "node"
-        if osm_id and "/" in str(osm_id):
-            osm_type, osm_id = str(osm_id).split("/", 1)
-        try:
-            osm_id_int = int(osm_id) if osm_id is not None else None
-        except (TypeError, ValueError):
-            osm_id_int = None
+        osm_id_int: int | None = None
+        if raw_id is not None:
+            raw = str(raw_id).strip()
+            if "/" in raw:
+                osm_type, raw = raw.split("/", 1)
+            elif raw and raw[0].lower() in type_prefix_map:
+                osm_type = type_prefix_map[raw[0].lower()]
+                raw = raw[1:]
+            try:
+                osm_id_int = int(raw) if raw else None
+            except ValueError:
+                osm_id_int = None
 
         yield Record(
             name=name,
@@ -243,7 +257,7 @@ def load_osm(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
             lat=lat,
             lng=lng,
             source="osm",
-            source_ids={"osm": f"{osm_type}/{osm_id}"} if osm_id_int else {},
+            source_ids={"osm": f"{osm_type}/{osm_id_int}"} if osm_id_int else {},
             osm_id=osm_id_int,
             osm_type=osm_type,
             category=category,
