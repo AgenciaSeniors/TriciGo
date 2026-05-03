@@ -1,0 +1,75 @@
+name: Load Cuba admin areas (one-shot)
+
+# One-time loader for the cuba_admin_areas table.
+#
+# Pulls 16 provincias (admin_level=4) and 168 municipios (admin_level=6)
+# from OSM via Overpass, assembles polygons from way members, inserts
+# them into Supabase via the insert_cuba_admin_area RPC, then runs the
+# spatial backfill of cuba_pois.province + municipality.
+#
+# Triggered manually. Re-running is safe: insert_cuba_admin_area uses
+# ON CONFLICT (osm_id) DO UPDATE so each run upserts the same 184 rows.
+# run_cuba_admin_backfill() only updates rows that don't already have
+# province/municipality and never touches is_admin=true rows.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    name: Load admin areas + backfill cuba_pois
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: pip install supabase
+
+      - name: Fetch provincias (admin_level=4) from Overpass
+        run: |
+          mkdir -p /tmp/cuba-admin
+          curl -sS --max-time 90 -X POST 'https://overpass-api.de/api/interpreter' \
+            --data-urlencode 'data=[out:json][timeout:60];
+            relation["boundary"="administrative"]["admin_level"="4"]["ISO3166-2"~"^CU-"];
+            out geom;' \
+            -o /tmp/cuba-admin/provincias-geom.json
+          ls -lah /tmp/cuba-admin/provincias-geom.json
+          echo "Provincia relations: $(grep -c '"type": "relation"' /tmp/cuba-admin/provincias-geom.json)"
+
+      - name: Fetch municipios (admin_level=6) from Overpass
+        run: |
+          curl -sS --max-time 240 -X POST 'https://overpass-api.de/api/interpreter' \
+            --data-urlencode 'data=[out:json][timeout:180];
+            area["ISO3166-1"="CU"][admin_level=2]->.cuba;
+            relation(area.cuba)["boundary"="administrative"]["admin_level"="6"];
+            out geom;' \
+            -o /tmp/cuba-admin/municipios-geom.json
+          ls -lah /tmp/cuba-admin/municipios-geom.json
+          echo "Municipio relations: $(grep -c '"type": "relation"' /tmp/cuba-admin/municipios-geom.json)"
+
+      - name: Load admin areas + run backfill
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          python scripts/backfill-cuba-geo/load_admin_areas.py \
+            --provincias /tmp/cuba-admin/provincias-geom.json \
+            --municipios /tmp/cuba-admin/municipios-geom.json
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Cuba admin areas load: ${{ job.status }}"
+            echo ""
+            echo "Re-run anytime — RPC is idempotent via ON CONFLICT."
+          } >> "$GITHUB_STEP_SUMMARY"
