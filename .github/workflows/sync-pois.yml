@@ -106,8 +106,14 @@ jobs:
             -o /tmp/sync/osm-pois-filtered.osm.pbf \
             --overwrite
 
+          # `--add-unique-id=type_id` injects @id into each feature's
+          # properties as "n123" / "w456" / "r789" so the upsert can
+          # match against existing cuba_pois rows by source_ids.{osm}.
+          # Without this flag osmium drops the OSM identity entirely
+          # and every sync looks like a fresh insert.
           osmium export /tmp/sync/osm-pois-filtered.osm.pbf \
             -f geojson \
+            --add-unique-id=type_id \
             -o /tmp/sync/osm-pois.geojson \
             --overwrite
 
