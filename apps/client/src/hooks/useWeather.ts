@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { normalizeCubanCityLabel } from '@tricigo/utils';
 
 export type WeatherData = {
   tempC: number;
@@ -69,7 +70,8 @@ async function fetchCityFromMapbox(lat: number, lon: number): Promise<string | n
     const feature = data?.features?.[0];
     if (!feature) return null;
     const ctx = feature.properties?.context ?? {};
-    return ctx.place?.name || ctx.locality?.name || feature.properties?.name || null;
+    const raw = ctx.place?.name || ctx.locality?.name || feature.properties?.name || null;
+    return normalizeCubanCityLabel(raw);
   } catch {
     return null;
   }
@@ -98,7 +100,11 @@ export function useWeather(coords: { latitude: number; longitude: number } | nul
                 tempC: cached.tempC,
                 description: cached.description,
                 conditionCode: cached.conditionCode,
-                city: cached.city,
+                // Re-normalize on read so users who already have
+                // "Provincia de ..." cached from a previous app version
+                // see the cleaned label instantly, not after the 30-min
+                // TTL flips.
+                city: normalizeCubanCityLabel(cached.city),
               });
             }
             return;
