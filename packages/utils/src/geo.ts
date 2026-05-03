@@ -2692,10 +2692,18 @@ export interface ViewportPoi {
   name: string;
   category: string;
   subcategory: string;
+  /**
+   * Unified TriciGo category — always present for rows synced after
+   * migration 00248. Older OSM rows may have null. The cliente map
+   * uses this to pick a category emoji (`tricigoCategoryEmoji`).
+   */
+  tricigo_category: string | null;
   lat: number;
   lng: number;
   address: string | null;
   importance: number;
+  /** True when an admin curated this row in the panel. */
+  is_admin: boolean;
 }
 
 export async function fetchPoisInViewport(

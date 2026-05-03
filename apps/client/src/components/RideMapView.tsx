@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react'
 import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, tricigoCategoryEmoji } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
@@ -103,6 +103,13 @@ interface RideMapViewProps {
   pois?: ViewportPoi[];
   /** Called when the map camera changes — use to update viewport POIs */
   onCameraChanged?: (bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number }, zoom: number) => void;
+  /**
+   * Called when the user taps an unclustered POI marker on the map.
+   * Parent should open a bottom sheet showing the POI name + category +
+   * an "Ir aquí" button that wires the coords as pickup or dropoff
+   * depending on the current ride state.
+   */
+  onPoiPress?: (poi: { id: number; name: string; tricigo_category: string | null; lat: number; lng: number; address: string | null }) => void;
   /** When true, map fills all available space via flex:1 instead of fixed height */
   fullscreen?: boolean;
   /**
@@ -152,6 +159,13 @@ function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
         name: p.name,
         category: p.category,
         subcategory: p.subcategory,
+        // Smart category-aware emoji — falls back to a pin glyph 📍 when
+        // the row has no tricigo_category (older OSM rows). Used by the
+        // emoji SymbolLayer so the user sees 🏥 / 🍺 / ⛽ at a glance.
+        tricigo_category: p.tricigo_category ?? '',
+        emoji: tricigoCategoryEmoji(p.tricigo_category),
+        is_admin: p.is_admin ? 1 : 0,
+        // Legacy color used by the small-dot CircleLayer (zoom 12-14).
         color: POI_COLORS[p.subcategory] || '#78909C',
       },
     })),
@@ -206,6 +220,7 @@ function RideMapViewInner({
   height = 200,
   pois,
   onCameraChanged,
+  onPoiPress,
   fullscreen,
   initialUserCenter,
 }: RideMapViewProps) {
@@ -551,7 +566,29 @@ function RideMapViewInner({
 
         {/* POI dots + labels (rendered below routes and markers) */}
         {poiGeoJSON && (
-          <MapboxGL.ShapeSource id="pois" shape={poiGeoJSON} cluster clusterMaxZoomLevel={14} clusterRadius={40}>
+          <MapboxGL.ShapeSource
+            id="pois"
+            shape={poiGeoJSON}
+            cluster
+            clusterMaxZoomLevel={14}
+            clusterRadius={40}
+            // Tap → emit POI to parent (which opens the bottom sheet).
+            // The event payload's `features` array carries our properties.
+            onPress={(e: { features?: Array<{ properties?: Record<string, unknown>; geometry?: { coordinates?: [number, number] } }> }) => {
+              const feat = e.features?.[0];
+              if (!feat || !feat.properties || !onPoiPress) return;
+              if (feat.properties.point_count) return; // cluster tap, ignore
+              const coords = feat.geometry?.coordinates ?? [0, 0];
+              onPoiPress({
+                id: Number(feat.properties.id),
+                name: String(feat.properties.name ?? ''),
+                tricigo_category: (feat.properties.tricigo_category as string) || null,
+                lat: Number(coords[1]),
+                lng: Number(coords[0]),
+                address: (feat.properties.address as string) || null,
+              });
+            }}
+          >
             {/* Cluster circles — smaller */}
             <MapboxGL.CircleLayer
               id="poi-clusters"
@@ -573,10 +610,13 @@ function RideMapViewInner({
                 textColor: '#333',
               }}
             />
-            {/* Individual POI dots — smaller */}
+            {/* Small dots — visible at low zoom (12-14) before emoji
+                takes over. Keeps the map readable when the user is
+                zoomed out and emoji would crowd the screen. */}
             <MapboxGL.CircleLayer
               id="poi-unclustered"
               filter={['!', ['has', 'point_count']]}
+              maxZoomLevel={14.99}
               style={{
                 circleColor: ['get', 'color'],
                 circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 7],
@@ -584,22 +624,40 @@ function RideMapViewInner({
                 circleStrokeColor: 'rgba(255,255,255,0.9)',
               }}
             />
+            {/* Category emoji — rendered as a SymbolLayer text glyph.
+                Native emoji rendering means no asset bundling and a
+                single layer covers all 21 categories. Visible at zoom
+                15+ where the user is already street-level and can
+                resolve individual icons. */}
+            <MapboxGL.SymbolLayer
+              id="poi-emoji"
+              filter={['!', ['has', 'point_count']]}
+              minZoomLevel={15}
+              style={{
+                textField: ['get', 'emoji'],
+                textSize: ['interpolate', ['linear'], ['zoom'], 15, 14, 18, 22],
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
+                textHaloColor: 'rgba(255,255,255,0.85)',
+                textHaloWidth: 1.2,
+              }}
+            />
             {/* POI name labels — smaller */}
             <MapboxGL.SymbolLayer
               id="poi-labels"
               filter={['!', ['has', 'point_count']]}
-              minZoomLevel={14}
+              minZoomLevel={16}
               style={{
                 textField: ['get', 'name'],
-                textSize: ['interpolate', ['linear'], ['zoom'], 14, 8, 16, 10],
-                textOffset: [0, 1.0],
+                textSize: ['interpolate', ['linear'], ['zoom'], 16, 9, 18, 11],
+                textOffset: [0, 1.4],
                 textAnchor: 'top',
                 textMaxWidth: 7,
                 textOptional: true,
                 textAllowOverlap: false,
-                textColor: '#555',
+                textColor: '#444',
                 textHaloColor: 'rgba(255,255,255,0.95)',
-                textHaloWidth: 1,
+                textHaloWidth: 1.2,
               }}
             />
           </MapboxGL.ShapeSource>
