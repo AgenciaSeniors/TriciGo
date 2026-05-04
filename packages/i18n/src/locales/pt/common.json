@@ -223,6 +223,15 @@
     "theme_system": "Sistema"
   },
 
+  "reviews": {
+    "title": "Minhas avaliações",
+    "total_count": "{{count}} avaliações",
+    "no_reviews": "Você ainda não tem avaliações",
+    "tags_breakdown_title": "O que os passageiros destacam",
+    "tags_positive_label": "O que vai bem",
+    "tags_negative_label": "Para melhorar"
+  },
+
   "safety": {
     "title": "Centro de Segurança",
     "desc": "Suas ferramentas de segurança em um só lugar",

@@ -224,6 +224,15 @@
     "theme_system": "System"
   },
 
+  "reviews": {
+    "title": "My reviews",
+    "total_count": "{{count}} reviews",
+    "no_reviews": "No reviews yet",
+    "tags_breakdown_title": "What riders highlight",
+    "tags_positive_label": "What's working",
+    "tags_negative_label": "To improve"
+  },
+
   "safety": {
     "title": "Safety Center",
     "desc": "Your safety tools in one place",

@@ -10,7 +10,8 @@ import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
 import { midnightEmber } from '@tricigo/theme';
 import { ErrorState } from '@tricigo/ui/ErrorState';
-import type { Review } from '@tricigo/types';
+import type { Review, ReviewTagSummaryItem } from '@tricigo/types';
+import { ReviewTagsBreakdown } from '@/components/profile/ReviewTagsBreakdown';
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +45,7 @@ export default function DriverReviewsScreen() {
     average_rating: number;
     total_reviews: number;
     rating_distribution: Record<number, number>;
+    top_tags?: ReviewTagSummaryItem[];
   } | null>(null);
 
   const fetchReviews = useCallback(async (pageNum: number, reset = false) => {
@@ -167,6 +169,9 @@ export default function DriverReviewsScreen() {
             </View>
           </Card>
         )}
+
+        {/* N4: Tag breakdown — what passengers highlight (positive vs to-improve) */}
+        <ReviewTagsBreakdown topTags={summary?.top_tags} />
 
         {/* Reviews list */}
         <FlatList
