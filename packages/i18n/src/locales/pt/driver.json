@@ -46,6 +46,7 @@
     "break_status": "Em descanso · Não recebendo solicitações",
     "suggestion_label": "SUGESTÃO",
     "suggestion_body": "Hotspot a {{distance}} km · {{count}} viagens ativas",
+    "suggestion_body_popular": "Zona popular a {{distance}} km",
     "suggestion_go": "Ir até lá",
     "suggestion_a11y": "Ir a zona quente a {{distance}} km com {{count}} viagens esperando",
     "pause": "Pausar",

@@ -46,6 +46,7 @@
     "break_status": "On break · Not accepting requests",
     "suggestion_label": "SUGGESTION",
     "suggestion_body": "Hotspot {{distance}} km away · {{count}} live trips",
+    "suggestion_body_popular": "Popular spot {{distance}} km away",
     "suggestion_go": "Head there",
     "suggestion_a11y": "Go to hotspot {{distance}} km away with {{count}} live trips",
     "pause": "Pause",
