@@ -45,6 +45,7 @@ import { useDemandHotspots } from '@/hooks/useDemandHotspots';
 import { usePopularLocations } from '@/hooks/usePopularLocations';
 import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useSurgeZones } from '@/hooks/useSurgeZones';
+import { useSmartSuggestion } from '@/hooks/useSmartSuggestion';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewRef } from '@/components/RideMapView';
@@ -591,38 +592,19 @@ function NativeDriverHomeScreen() {
   // replaces the passive "~5 min wait" line with an actionable
   // suggestion card (see `nearestHotspot` below).
 
-  // V2 — Smart suggestion target for HomeBottomSheet. The single best
-  // hotspot (highest intensity * proximity, with at least one live ride
-  // requested) within 5 km. Used to render the "Hotspot a 3 km · 6
-  // viajes activos → Ir hacia allá" card. null → card hides.
-  const nearestHotspot = useMemo(() => {
-    if (!demandHotspots.length || !driverLat || !driverLng) return null;
-    const candidates = demandHotspots
-      .filter((p) => p.live_rides_count > 0 && p.intensity >= 0.4)
-      .map((p) => {
-        const distM = haversineDistance(
-          { latitude: driverLat, longitude: driverLng },
-          { latitude: p.lat, longitude: p.lng },
-        );
-        return {
-          lat: p.lat,
-          lng: p.lng,
-          distance: Math.round(distM / 100) / 10,
-          liveCount: p.live_rides_count,
-          score: p.intensity * (1 / Math.max(distM, 100)),
-        };
-      })
-      .filter((p) => p.distance <= 5);
-    if (candidates.length === 0) return null;
-    candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0]!;
-    return {
-      lat: best.lat,
-      lng: best.lng,
-      distance: best.distance,
-      liveCount: best.liveCount,
-    };
-  }, [demandHotspots, driverLat, driverLng]);
+  // Phase 2 N1 — Smart route suggestion for HomeBottomSheet. Composes the
+  // three demand signals (live hotspots, surge zones, popular pickup
+  // clusters) into a single ranked target. Replaces the prior hotspots-only
+  // useMemo; the surge multiplier and `popular` source fall through into
+  // the bottom-sheet card so the driver gets richer context ("Hotspot a 3
+  // km · 6 viajes · +50% surge"). Returns null when no candidate scores
+  // within range.
+  const nearestHotspot = useSmartSuggestion({
+    driverLocation,
+    hotspots: demandHotspots,
+    surgeZones,
+    popularLocations,
+  });
 
   // OMEGA: Online time tracking for earnings per hour
   useEffect(() => {

@@ -56,8 +56,10 @@ import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 /**
- * Smart suggestion to pre-position the driver toward a high-demand zone.
- * Computed by the parent from `useDemandHotspots` + driver location.
+ * Smart suggestion to pre-position the driver toward a high-demand
+ * zone. Computed by the parent via `useSmartSuggestion`, which
+ * composes live demand hotspots, surge zones, and historical popular
+ * pickup clusters into a single ranked recommendation (Phase 2 N1).
  */
 export interface NearestHotspot {
   lat: number;
@@ -66,6 +68,17 @@ export interface NearestHotspot {
   distance: number;
   /** Live concurrent rides being requested in this hotspot. */
   liveCount: number;
+  /**
+   * Surge multiplier in effect at this point (1 = no surge).
+   * Optional so older callers without N1 wiring keep compiling.
+   */
+  surgeMultiplier?: number;
+  /**
+   * Where the suggestion came from. `live` = current request hotspot,
+   * `popular` = historical pickup cluster fallback. Used to choose
+   * the right copy when surfacing the suggestion.
+   */
+  source?: 'live' | 'popular';
 }
 
 export interface HomeBottomSheetProps {
@@ -475,7 +488,7 @@ function SheetContent({
           </View>
 
           {/* Smart suggestion card (solo cuando hay hotspot real) */}
-          {nearestHotspot && nearestHotspot.liveCount > 0 && (
+          {nearestHotspot && (nearestHotspot.liveCount > 0 || nearestHotspot.source === 'popular') && (
             <Pressable
               onPress={() => {
                 triggerHaptic('medium');
@@ -506,12 +519,49 @@ function SheetContent({
                 midnightEmber.text.body,
                 { color: midnightEmber.map.text.primary, fontWeight: '600' },
               ]}>
-                {t('home.suggestion_body', {
-                  distance: nearestHotspot.distance,
-                  count: nearestHotspot.liveCount,
-                  defaultValue: 'Hotspot a {{distance}} km · {{count}} viajes activos',
-                })}
+                {nearestHotspot.source === 'popular' && nearestHotspot.liveCount === 0
+                  ? t('home.suggestion_body_popular', {
+                      distance: nearestHotspot.distance,
+                      defaultValue: 'Zona popular a {{distance}} km',
+                    })
+                  : t('home.suggestion_body', {
+                      distance: nearestHotspot.distance,
+                      count: nearestHotspot.liveCount,
+                      defaultValue: 'Hotspot a {{distance}} km · {{count}} viajes activos',
+                    })}
               </RNText>
+              {/* N1 — surge multiplier badge when this point sits inside
+                  an active surge zone. The "+X%" framing is friendlier
+                  than "1.5x" for non-power users. */}
+              {nearestHotspot.surgeMultiplier !== undefined && nearestHotspot.surgeMultiplier > 1 && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    backgroundColor: midnightEmber.accent[300],
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: midnightEmber.radius.pill,
+                    alignSelf: 'flex-start',
+                    marginTop: 6,
+                  }}
+                >
+                  <Ionicons
+                    name="flame"
+                    size={11}
+                    color={midnightEmber.accent[800]}
+                  />
+                  <RNText
+                    style={[
+                      midnightEmber.text.caption,
+                      { color: midnightEmber.accent[800], fontWeight: '700' },
+                    ]}
+                  >
+                    +{Math.round((nearestHotspot.surgeMultiplier - 1) * 100)}%
+                  </RNText>
+                </View>
+              )}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
                 <Ionicons
                   name="arrow-forward"
