@@ -68,7 +68,7 @@ export function WaitTimer({ arrivedAt, freeMinutes }: WaitTimerProps) {
       }}
     >
       <Text variant="caption" color="inverse" className="opacity-60 mb-1">
-        {t('trip.waiting_passenger', { defaultValue: 'Esperando al pasajero' })}
+        {t('trip.waiting_passenger', { defaultValue: 'Esperando' })}
       </Text>
       <Text
         style={{
@@ -91,7 +91,7 @@ export function WaitTimer({ arrivedAt, freeMinutes }: WaitTimerProps) {
             fontWeight: '600',
           }}
         >
-          {t('trip.wait_charging', { defaultValue: 'Cobrando espera' })} +{billableMin} min
+          {t('trip.wait_charging', { defaultValue: 'Cobrando' })} +{billableMin} min
         </Text>
       )}
     </View>

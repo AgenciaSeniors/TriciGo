@@ -90,12 +90,16 @@ function useTripSteps() {
 
 function useActionLabels(): Partial<Record<RideStatus, string>> {
   const { t } = useTranslation('driver');
+  // PR-C microcopy: dropped the verbose action labels in favour of a more
+  // conversational "compañero de ruta" tone that fits the Cuban brand
+  // voice. The verbs stay sentence-case because the buttons themselves
+  // already provide the visual emphasis.
   return {
-    accepted: t('trip.action_en_route', { defaultValue: 'En camino al pasajero' }),
-    driver_en_route: t('trip.action_arrived', { defaultValue: 'Llegué al punto de recogida' }),
+    accepted: t('trip.action_en_route', { defaultValue: 'Voy en camino' }),
+    driver_en_route: t('trip.action_arrived', { defaultValue: 'Llegué al pasajero' }),
     arrived_at_pickup: t('trip.action_start', { defaultValue: 'Iniciar viaje' }),
-    in_progress: t('trip.action_arrived_destination', { defaultValue: 'Llegué al destino' }),
-    arrived_at_destination: t('trip.action_finish', { defaultValue: 'Finalizar viaje' }),
+    in_progress: t('trip.action_arrived_destination', { defaultValue: 'Llegué' }),
+    arrived_at_destination: t('trip.action_finish', { defaultValue: 'Finalizar' }),
   };
 }
 
@@ -849,7 +853,7 @@ export function DriverTripView() {
             variant="bodySmall"
             style={{ color: midnightEmber.map.text.tertiary }}
           >
-            {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
+            {t('trip.earned', { defaultValue: 'Vas a ganar' })}
           </Text>
           <View style={{ alignItems: 'flex-end' }}>
             <Text
@@ -870,19 +874,12 @@ export function DriverTripView() {
         </View>
       )}
 
-      {/* Surge indicator */}
-      {(activeTrip.surge_multiplier ?? 1) > 1 && (
-        <Text
-          variant="caption"
-          style={{
-            color: midnightEmber.map.text.tertiary,
-            textAlign: 'center',
-            marginBottom: 16,
-          }}
-        >
-          {t('trip.surge_active', { multiplier: activeTrip.surge_multiplier, defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa` })}
-        </Text>
-      )}
+      {/* PR-C: surge indicator removed from the active-trip view. The
+          driver already saw the surge multiplier in the IncomingRideCard
+          before accepting; repeating it during the drive adds noise.
+          The post-trip TripCompleteView still shows it as part of the
+          earnings breakdown so the surge stays visible where it
+          actually matters (the receipt). */}
 
     </DraggableSheet>
   );
