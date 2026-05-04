@@ -80,6 +80,7 @@ function NativeDriverProfileScreen() {
       items: [
         { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
         { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents'), iconBg: 'warning' as const },
+        { icon: 'options-outline' as const, label: t('preferences.driver_title', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/driver-preferences'), iconBg: 'info' as const },
         { icon: 'location-outline' as const, label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones'), iconBg: 'info' as const },
         { icon: 'car-outline' as const, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), iconBg: 'neutral' as const },
       ],

@@ -264,6 +264,23 @@ export const driverService = {
   },
 
   /**
+   * Update driver matching preferences (driver_profiles.preferences JSONB).
+   * Equivalente por rol al `customerService.updateProfile({ ride_preferences })`
+   * del rider.
+   */
+  async updatePreferences(
+    driverId: string,
+    preferences: import('@tricigo/types').DriverPreferences,
+  ): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update({ preferences })
+      .eq('id', driverId);
+    if (error) throw error;
+  },
+
+  /**
    * Update driver location.
    */
   async updateLocation(
