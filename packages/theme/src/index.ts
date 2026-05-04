@@ -13,3 +13,34 @@ export {
   pressScale,
   stateOpacity,
 } from './interaction';
+
+// ============================================================
+// Midnight Ember — Driver formal design system
+// Replaces fragmented driverDarkColors / driverLightColors /
+// driverMapDarkColors / driverStandardLightColors over time.
+// New driver code MUST consume these tokens, not hex literals.
+// ============================================================
+export {
+  midnightEmber,
+  midnightEmberMap,
+  midnightEmberScreen,
+  midnightEmberAccent,
+  midnightEmberState,
+  midnightEmberTripPhase,
+  driverText,
+  driverMotion,
+  driverRadius,
+  driverShadow,
+} from './midnight-ember';
+export type {
+  MidnightEmberMap,
+  MidnightEmberScreen,
+  MidnightEmberAccent,
+  MidnightEmberState,
+  MidnightEmberTripPhase,
+  DriverTextVariant,
+  DriverMotionPreset,
+  DriverRadiusToken,
+  DriverShadowToken,
+  MidnightEmberToken,
+} from './midnight-ember';

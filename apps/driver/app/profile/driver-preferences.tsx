@@ -35,7 +35,9 @@ const DEFAULT_PREFS: Required<DriverPreferences> = {
   accepts_minors_alone: true,
 };
 
-const MUSIC_OPTIONS: { value: DriverPreferences['music_preference']; label: string }[] = [
+// NonNullable porque `DriverPreferences['music_preference']` es opcional
+// pero estos literales del UI nunca son undefined.
+const MUSIC_OPTIONS: { value: NonNullable<DriverPreferences['music_preference']>; label: string }[] = [
   { value: 'none', label: 'Sin música' },
   { value: 'low', label: 'Bajo / radio' },
   { value: 'any', label: 'Cualquiera' },
