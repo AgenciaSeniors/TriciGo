@@ -332,15 +332,24 @@ export default function DriverSettingsScreen() {
               {THEME_OPTIONS.map((option) => {
                 const active = themeMode === option.value;
                 return (
+                  // V3 — press feedback + a11y state for the theme segmented
+                  // control. The active variant is already visually obvious
+                  // (filled accent bg, inverse text), but inactive tabs gave
+                  // no tactile ack on tap. opacity 0.7 on press provides the
+                  // <100ms feedback HIG/MD recommend.
                   <Pressable
                     key={option.value}
                     onPress={() => setThemeMode(option.value)}
                     className="flex-1 py-3 items-center flex-row justify-center"
-                    style={{
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={t(option.labelKey, { defaultValue: option.value })}
+                    style={({ pressed }) => ({
                       backgroundColor: active
                         ? midnightEmber.accent[500]
                         : midnightEmber.screen.bg.canvas,
-                    }}
+                      opacity: pressed ? 0.7 : 1,
+                    })}
                   >
                     <Ionicons
                       name={option.icon}
@@ -553,6 +562,14 @@ export default function DriverSettingsScreen() {
                   onValueChange={handleAutoAcceptToggle}
                   trackColor={SWITCH_TRACK}
                   accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
+                  // V3 — mirror visual disabled state in the a11y tree so
+                  // VoiceOver/TalkBack announces "dimmed" / "disabled".
+                  // Eligibility gating (50+ trips, 4.5+ rating) is opaque
+                  // to screen-reader users without this.
+                  accessibilityState={{
+                    checked: autoAcceptEnabled,
+                    disabled: !autoAcceptEligible || autoAcceptLoading,
+                  }}
                 />
               }
             />
@@ -571,6 +588,12 @@ export default function DriverSettingsScreen() {
                   onValueChange={handleSmsToggle}
                   trackColor={SWITCH_TRACK}
                   accessibilityLabel={t('profile.notif_sms')}
+                  // V3 — same as auto-accept above: mirror loading/disabled
+                  // visual state in the a11y tree.
+                  accessibilityState={{
+                    checked: smsEnabled,
+                    disabled: smsLoading,
+                  }}
                 />
               }
             />
@@ -585,9 +608,16 @@ export default function DriverSettingsScreen() {
                 defaultValue: 'Eliminar tu cuenta es permanente. Se perderan todos tus datos, historial de viajes y balance.',
               })}
             </Text>
+            {/* V3 — destructive action gets explicit press feedback. The
+                  current visual is already strong (danger-tinted bg + border
+                  + trash icon), but pressing gave no immediate ack. The
+                  opacity drop on press completes the feedback loop without
+                  amplifying the visual weight (we don't want the delete
+                  CTA to be MORE attention-grabbing than the trip view's
+                  primary CTAs). */}
             <Pressable
               onPress={handleDeleteAccount}
-              style={{
+              style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -597,7 +627,9 @@ export default function DriverSettingsScreen() {
                 borderWidth: 1,
                 borderColor: `${midnightEmber.state.danger}4D`,
                 minHeight: 48,
-              }}
+                opacity: pressed ? 0.7 : 1,
+              })}
+              android_ripple={{ color: `${midnightEmber.state.danger}26` }}
               accessibilityRole="button"
               accessibilityLabel={t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
             >
