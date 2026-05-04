@@ -1,34 +1,40 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+/**
+ * In-ride chat page (web).
+ *
+ * Refactored to use the shared `useChat()` hook which:
+ *   - Reads from the correct `ride_messages` table (the previous
+ *     implementation was reading from `chat_messages`, which doesn't
+ *     exist in the database — chat was effectively broken on web).
+ *   - Adds polling fallback every 8s for when Supabase realtime drops.
+ *   - Adds typing indicators (broadcast).
+ *   - Adds an offline outgoing queue persisted to localStorage that
+ *     drains automatically on `online` event.
+ *
+ * Mirrors mobile `apps/client/app/chat/[rideId].tsx`.
+ */
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-
-type ChatMessage = {
-  id: string;
-  ride_id: string;
-  sender_id: string;
-  content: string;
-  created_at: string;
-  sender_role: 'rider' | 'driver';
-};
+import { useChat } from '@/hooks/useChat';
 
 export default function ChatPage() {
   const { rideId } = useParams<{ rideId: string }>();
   const router = useRouter();
   const { t } = useTranslation();
+
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [text, setText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [driverName, setDriverName] = useState('Conductor');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // BUG-011 fix: Auth guard
+  // Auth guard
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
@@ -40,64 +46,34 @@ export default function ChatPage() {
     if (!authLoading && !userId) router.replace('/login');
   }, [authLoading, userId, router]);
 
-  const fetchMessages = useCallback(async () => {
+  // Driver name lookup (one-shot, from the rides + driver_profiles + users join)
+  useEffect(() => {
     if (!rideId) return;
-    try {
-      const supabase = getSupabaseClient();
-      const { data } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('ride_id', rideId)
-        .order('created_at', { ascending: true });
-      setMessages((data as ChatMessage[]) ?? []);
-
-      // Get driver name from ride
-      const { data: rideRaw } = await supabase
-        .from('rides')
-        .select('driver:driver_profiles(user:users(full_name))')
-        .eq('id', rideId)
-        .single();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ride = rideRaw as any;
-      if (ride?.driver?.user?.full_name) {
-        setDriverName(ride.driver.user.full_name);
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: rideRaw } = await getSupabaseClient()
+          .from('rides')
+          .select('driver:driver_profiles(user:users(full_name))')
+          .eq('id', rideId)
+          .single();
+        if (cancelled) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ride = rideRaw as any;
+        if (ride?.driver?.user?.full_name) setDriverName(ride.driver.user.full_name);
+      } catch {
+        /* fallback to default driverName */
       }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
+    })();
+    return () => { cancelled = true; };
   }, [rideId]);
 
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+  const { messages, loading, remoteTyping, sendMessage, notifyTyping } = useChat(rideId, userId);
 
-  // Realtime subscription
-  useEffect(() => {
-    if (!rideId) return;
-    const supabase = getSupabaseClient();
-    const channel = supabase
-      .channel(`chat:${rideId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages',
-        filter: `ride_id=eq.${rideId}`,
-      }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as ChatMessage]);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [rideId]);
-
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom on new messages OR typing toggle
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, remoteTyping]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -106,15 +82,7 @@ export default function ChatPage() {
     const content = text.trim();
     setText('');
     try {
-      const supabase = getSupabaseClient();
-      await supabase.from('chat_messages').insert({
-        ride_id: rideId,
-        sender_id: userId,
-        content,
-        sender_role: 'rider',
-      });
-    } catch {
-      setText(content); // restore on error
+      await sendMessage(content);
     } finally {
       setSending(false);
     }
@@ -184,6 +152,7 @@ export default function ChatPage() {
         ) : (
           messages.map((msg) => {
             const isMine = msg.sender_id === userId;
+            const isPending = !!msg._pending;
             return (
               <div
                 key={msg.id}
@@ -200,22 +169,46 @@ export default function ChatPage() {
                     background: isMine ? 'var(--primary)' : 'var(--bg-card)',
                     color: isMine ? 'white' : 'var(--text-primary)',
                     border: isMine ? 'none' : '1px solid var(--border-light)',
+                    opacity: isPending ? 0.6 : 1,
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.4 }}>{msg.content}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.4 }}>{msg.body}</p>
                   <p style={{
                     margin: '0.25rem 0 0',
                     fontSize: '0.7rem',
                     opacity: 0.7,
                     textAlign: 'right',
                   }}>
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {isPending
+                      ? t('web.message_pending', { defaultValue: 'Pendiente · sin red' })
+                      : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
             );
           })
         )}
+
+        {/* Typing indicator (the other party) — only visible when actively typing */}
+        {remoteTyping && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div
+              style={{
+                padding: '0.5rem 0.875rem',
+                borderRadius: '1rem 1rem 1rem 0.25rem',
+                background: 'var(--bg-card)',
+                color: 'var(--text-tertiary)',
+                border: '1px solid var(--border-light)',
+                fontSize: '0.875rem',
+                fontStyle: 'italic',
+              }}
+              aria-live="polite"
+            >
+              {t('web.typing', { defaultValue: 'escribiendo…' })}
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -233,7 +226,12 @@ export default function ChatPage() {
         <input
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            // Notify typing on every keystroke; the hook debounces
+            // broadcasts to once every 2s so we don't spam the channel.
+            notifyTyping();
+          }}
           placeholder={t('web.type_message', { defaultValue: 'Escribe un mensaje...' })}
           style={{
             flex: 1,
