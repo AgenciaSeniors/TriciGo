@@ -505,7 +505,17 @@ function SheetContent({
           <Pressable
             onPress={() => { triggerHaptic('light'); onToggleOnline(); }}
             disabled={toggling}
-            style={{ marginTop: 14, alignItems: 'center', paddingVertical: 8 }}
+            // V2 — paddingVertical 8 → 14 + minHeight 44 to clear HIG.
+            // body-dense text is ~18pt; 18 + 14×2 = 46. Visual still
+            // reads as a discreet underline link, but the tap area is
+            // now full-width and 44pt+ tall.
+            style={{
+              marginTop: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 14,
+              minHeight: 44,
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('home.disconnect_full', { defaultValue: 'Desconectar completamente' })}
           >
@@ -741,7 +751,17 @@ function Banner({
           </RNText>
         )}
         {actionLabel && onActionPress && (
-          <Pressable onPress={onActionPress} disabled={actionDisabled} hitSlop={6}>
+          // V2 — hitSlop bumped from 6 to 14 to bring the effective tap
+          // zone above 44pt (caption text is ~16pt high; 16 + 14×2 = 44).
+          // The visible style is intentionally compact — we don't want to
+          // turn a banner action into a huge button — but the hit area
+          // must clear HIG.
+          <Pressable
+            onPress={onActionPress}
+            disabled={actionDisabled}
+            hitSlop={14}
+            accessibilityRole="button"
+          >
             <RNText style={[
               midnightEmber.text.caption,
               {
