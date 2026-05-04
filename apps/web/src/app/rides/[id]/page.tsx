@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
 import type { RideWithDriver } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
+import { TipFlow } from '@/components/TipFlow';
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
   searching: { label: 'Buscando conductor', bg: '#fef3c7', color: '#d97706' },
@@ -57,34 +58,31 @@ export default function RideDetailPage() {
     });
   }, []);
 
-  // ── Load ride ──
-  useEffect(() => {
+  // ── Load ride (extracted as a memoized fn so the TipFlow can call
+  // it after a tip is submitted to refresh the receipt with the new
+  // tip_amount). ──
+  const loadRide = useCallback(async () => {
     if (!userId || !rideId) return;
-    let cancelled = false;
-
-    async function loadRide() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await rideService.getRideWithDriver(rideId!);
-        if (!cancelled) {
-          if (!data) {
-            setError('Viaje no encontrado');
-          } else {
-            setRide(data);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load ride:', err);
-        if (!cancelled) setError('Error al cargar el viaje');
-      } finally {
-        if (!cancelled) setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await rideService.getRideWithDriver(rideId);
+      if (!data) {
+        setError('Viaje no encontrado');
+      } else {
+        setRide(data);
       }
+    } catch (err) {
+      console.error('Failed to load ride:', err);
+      setError('Error al cargar el viaje');
+    } finally {
+      setLoading(false);
     }
-
-    loadRide();
-    return () => { cancelled = true; };
   }, [userId, rideId]);
+
+  useEffect(() => {
+    loadRide();
+  }, [loadRide]);
 
   // ── Auth gate (after all hooks) ──
   if (authLoading) {
@@ -415,6 +413,22 @@ export default function RideDetailPage() {
                   </div>
                 ))}
               </div>
+              {/* Tip flow — only for non-cash rides that don't already have
+                  a tip_amount. Cash tips happen offline so we don't surface
+                  the UI; if the user already tipped, hide the prompt to
+                  avoid duplicate charges. Mirrors the visibility predicate
+                  in apps/client/src/components/RideCompleteView.tsx:582. */}
+              {ride.status === 'completed' &&
+                ride.payment_method !== 'cash' &&
+                userId &&
+                (!ride.tip_amount || ride.tip_amount === 0) && (
+                <TipFlow
+                  rideId={ride.id}
+                  userId={userId}
+                  onTipSubmitted={loadRide}
+                />
+              )}
+
               {/* Post-trip actions */}
               {ride.status === 'completed' && (
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
