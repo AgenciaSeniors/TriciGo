@@ -6,6 +6,7 @@
 import type {
   DriverProfile,
   DriverDocument,
+  DriverPeakHourCell,
   CancellationPenalty,
   Vehicle,
   VehicleType,
@@ -1019,6 +1020,27 @@ export const driverService = {
       ratingAvg: profile.rating_avg ?? 5.0,
       matchScore: profile.match_score ?? 50,
     };
+  },
+
+  /**
+   * Phase 2 N2 — fetch per-driver earnings + trip count grouped by
+   * day-of-week × hour-of-day for the last `days` days. Powers the
+   * "Tus mejores horas" 7×24 heatmap on the earnings tab.
+   *
+   * Empty array when the driver has no completed rides in the window
+   * (server returns 0 rows; we tolerate `data === null` for safety).
+   */
+  async getPersonalPeakHours(
+    driverId: string,
+    days = 30,
+  ): Promise<DriverPeakHourCell[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_peak_hours_personal', {
+      p_driver_id: driverId,
+      p_days: days,
+    });
+    if (error) throw error;
+    return (data as DriverPeakHourCell[] | null) ?? [];
   },
 
   // ==================== IDENTITY VERIFICATION ====================

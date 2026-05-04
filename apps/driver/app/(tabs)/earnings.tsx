@@ -47,6 +47,8 @@ import { useDriverStore } from '@/stores/driver.store';
 import { EarningsBarChart } from '@/components/EarningsBarChart';
 import type { BarChartDataPoint } from '@/components/EarningsBarChart';
 import { HourlyHeatmap } from '@/components/HourlyHeatmap';
+import { PersonalPeakHours } from '@/components/earnings/PersonalPeakHours';
+import { useDriverPeakHours } from '@/hooks/useDriverPeakHours';
 import { EarningsByZoneChart } from '@/components/EarningsByZoneChart';
 import { useDriverEarningsByZone } from '@/hooks/useDriverEarningsByZone';
 import { useEarningsData, getDateRange, type Period } from '@/hooks/useEarningsData';
@@ -85,6 +87,13 @@ function NativeEarningsScreen() {
 
   const [period, setPeriod] = useState<Period>('day');
   const [txExpanded, setTxExpanded] = useState(false);
+
+  // N2 — personal peak hours (DOW × hour earnings heatmap, last 30d)
+  const { data: peakHours, loading: peakHoursLoading } = useDriverPeakHours({
+    driverId: driverProfileId,
+    days: 30,
+    enabled: !!driverProfileId,
+  });
 
   const {
     loading,
@@ -252,10 +261,13 @@ function NativeEarningsScreen() {
             period={period}
           />
 
-          {/* Hourly Heatmap */}
+          {/* Hourly Heatmap — current-period trip activity */}
           {periodTrips.length > 0 && (
             <HourlyHeatmap trips={periodTrips} theme="light" />
           )}
+
+          {/* N2 — personal peak hours (30-day earnings × DOW × hour) */}
+          <PersonalPeakHours data={peakHours} loading={peakHoursLoading} />
 
           {/* Earnings by zone (top 5) */}
           <EarningsByZoneChart data={earningsByZone} loading={earningsByZoneLoading} />

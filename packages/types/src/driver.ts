@@ -141,6 +141,20 @@ export interface DriverStatusHistoryEntry {
   created_at: string;
 }
 
+/**
+ * Per-driver earnings × hour-of-week cell, returned by the RPC
+ * `get_driver_peak_hours_personal` (migration 00258). Used to render
+ * the "Tus mejores horas" 7 × 24 heatmap on the earnings tab.
+ */
+export interface DriverPeakHourCell {
+  /** 0 = Sunday, 6 = Saturday (matches Postgres EXTRACT(DOW)). */
+  day_of_week: number;
+  /** 0..23 server-local. */
+  hour_of_day: number;
+  total_earnings_cup: number;
+  trip_count: number;
+}
+
 /** Nearby vehicle for map display (returned by find_nearby_vehicles RPC) */
 export interface NearbyVehicle {
   driver_profile_id: string;
