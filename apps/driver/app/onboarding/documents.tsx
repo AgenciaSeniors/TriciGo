@@ -11,7 +11,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
@@ -231,14 +231,14 @@ export default function DocumentsScreen() {
           >
             <Card forceDark variant="surface" padding="md" className="mb-3 flex-row items-center">
               {doc.uploading ? (
-                <ActivityIndicator size="small" color={colors.brand.orange} />
+                <ActivityIndicator size="small" color={midnightEmber.accent[500]} />
               ) : doc.uploaded && doc.mimeType === 'application/pdf' ? (
-                <Ionicons name="document-text" size={24} color={colors.status.verified} />
+                <Ionicons name="document-text" size={24} color={midnightEmber.state.success} />
               ) : (
                 <Ionicons
                   name={doc.uploaded ? 'checkmark-circle' : 'cloud-upload-outline'}
                   size={24}
-                  color={doc.uploaded ? colors.status.verified : colors.neutral[400]}
+                  color={doc.uploaded ? midnightEmber.state.success : midnightEmber.map.text.tertiary}
                 />
               )}
               <View className="flex-1 ml-3">
@@ -253,7 +253,7 @@ export default function DocumentsScreen() {
                   </Text>
                 )}
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.neutral[500]} />
+              <Ionicons name="chevron-forward" size={20} color={midnightEmber.map.text.tertiary} />
             </Card>
           </Pressable>
         ))}

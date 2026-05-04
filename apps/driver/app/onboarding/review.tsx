@@ -9,6 +9,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -130,7 +131,7 @@ export default function ReviewScreen() {
       accessibilityRole="button"
       accessibilityLabel={t('onboarding.edit_section', { defaultValue: 'Editar sección' })}
     >
-      <Text variant="caption" style={{ color: '#FF4D00', fontWeight: '600' }}>
+      <Text variant="caption" style={{ color: midnightEmber.accent[500], fontWeight: '600' }}>
         {t('common.edit', { defaultValue: 'Editar' })}
       </Text>
     </Pressable>
@@ -189,20 +190,32 @@ export default function ReviewScreen() {
             </View>
           </View>
           <View className="flex-row flex-wrap gap-2 mb-2">
-            <View className="bg-[#252540] px-3 py-1.5 rounded-full">
+            <View
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: midnightEmber.map.bg.elevated }}
+            >
               <Text variant="caption" color="inverse">{vehicle.color}</Text>
             </View>
-            <View className="bg-[#252540] px-3 py-1.5 rounded-full">
+            <View
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: midnightEmber.map.bg.elevated }}
+            >
               <Text variant="caption" color="inverse">{vehicle.plate_number}</Text>
             </View>
-            <View className="bg-[#252540] px-3 py-1.5 rounded-full flex-row items-center gap-1">
-              <Ionicons name="people" size={12} color="#A3A3A3" />
+            <View
+              className="px-3 py-1.5 rounded-full flex-row items-center gap-1"
+              style={{ backgroundColor: midnightEmber.map.bg.elevated }}
+            >
+              <Ionicons name="people" size={12} color={midnightEmber.map.text.tertiary} />
               <Text variant="caption" color="inverse">{vehicle.capacity} pasajeros</Text>
             </View>
           </View>
           {vehicle.accepts_cargo && (
-            <View className="flex-row items-center bg-primary-500/10 rounded-lg px-3 py-2 mt-1">
-              <Ionicons name="cube" size={14} color="#FF4D00" />
+            <View
+              className="flex-row items-center rounded-lg px-3 py-2 mt-1"
+              style={{ backgroundColor: midnightEmber.accent.glow }}
+            >
+              <Ionicons name="cube" size={14} color={midnightEmber.accent[500]} />
               <Text variant="caption" color="accent" className="ml-2">
                 {t('onboarding.accepts_deliveries')} — Max {vehicle.max_cargo_weight_kg} kg
               </Text>
@@ -222,7 +235,7 @@ export default function ReviewScreen() {
             <Ionicons
               name={uploadedCount === 5 ? 'checkmark-circle' : 'alert-circle'}
               size={20}
-              color={uploadedCount === 5 ? '#22C55E' : '#F59E0B'}
+              color={uploadedCount === 5 ? midnightEmber.state.success : midnightEmber.state.warning}
             />
             <Text variant="body" color="inverse" className="ml-2">
               {t('onboarding.documents_count', { count: uploadedCount, total: 5 })}
@@ -246,7 +259,7 @@ export default function ReviewScreen() {
              explicitly. Previously the button just looked grayed out with
              no explanation — drivers thought the app was broken. */}
         {!submitting && uploadedCount < 5 && (
-          <Text variant="caption" style={{ color: '#F59E0B', textAlign: 'center', marginTop: 8 }}>
+          <Text variant="caption" style={{ color: midnightEmber.state.warning, textAlign: 'center', marginTop: 8 }}>
             {t('onboarding.submit_disabled_docs', {
               missing: 5 - uploadedCount,
               defaultValue: `Falta${5 - uploadedCount === 1 ? '' : 'n'} ${5 - uploadedCount} documento${5 - uploadedCount === 1 ? '' : 's'} por subir.`,

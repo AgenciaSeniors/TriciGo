@@ -6,7 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -90,8 +90,11 @@ export default function PendingScreen() {
     return (
       <Screen bg="dark" statusBarStyle="light-content">
         <View className="flex-1 justify-center items-center px-8">
-          <View className="w-20 h-20 rounded-full bg-red-500/20 items-center justify-center mb-4">
-            <Ionicons name="close-circle" size={60} color="#ef4444" />
+          <View
+            className="w-20 h-20 rounded-full items-center justify-center mb-4"
+            style={{ backgroundColor: `${midnightEmber.state.danger}33` }}
+          >
+            <Ionicons name="close-circle" size={60} color={midnightEmber.state.danger} />
           </View>
           <Text variant="h3" color="inverse" className="mt-2 text-center">
             {t('onboarding.rejected_title', { defaultValue: 'Solicitud rechazada' })}
@@ -100,8 +103,15 @@ export default function PendingScreen() {
             {t('onboarding.rejected_description', { defaultValue: 'Tu solicitud de conductor no fue aprobada. Revisa tus documentos y contacta soporte si tienes preguntas.' })}
           </Text>
           {rejectionReason && (
-            <View className="mt-4 bg-red-500/10 rounded-xl px-4 py-3">
-              <Text variant="bodySmall" className="text-red-400 text-center">
+            <View
+              className="mt-4 rounded-xl px-4 py-3"
+              style={{ backgroundColor: `${midnightEmber.state.danger}1A` }}
+            >
+              <Text
+                variant="bodySmall"
+                className="text-center"
+                style={{ color: midnightEmber.state.danger }}
+              >
                 {rejectionReason}
               </Text>
             </View>
@@ -135,8 +145,11 @@ export default function PendingScreen() {
     return (
       <Screen bg="dark" statusBarStyle="light-content">
         <View className="flex-1 justify-center items-center px-8">
-          <View className="w-20 h-20 rounded-full bg-amber-500/20 items-center justify-center mb-4">
-            <Ionicons name="warning" size={60} color="#f59e0b" />
+          <View
+            className="w-20 h-20 rounded-full items-center justify-center mb-4"
+            style={{ backgroundColor: `${midnightEmber.state.warning}33` }}
+          >
+            <Ionicons name="warning" size={60} color={midnightEmber.state.warning} />
           </View>
           <Text variant="h3" color="inverse" className="mt-2 text-center">
             {t('onboarding.suspended_title', { defaultValue: 'Cuenta suspendida' })}
@@ -145,8 +158,15 @@ export default function PendingScreen() {
             {t('onboarding.suspended_description', { defaultValue: 'Tu cuenta de conductor ha sido suspendida temporalmente.' })}
           </Text>
           {suspensionReason && (
-            <View className="mt-4 bg-amber-500/10 rounded-xl px-4 py-3">
-              <Text variant="bodySmall" className="text-amber-400 text-center">
+            <View
+              className="mt-4 rounded-xl px-4 py-3"
+              style={{ backgroundColor: `${midnightEmber.state.warning}1A` }}
+            >
+              <Text
+                variant="bodySmall"
+                className="text-center"
+                style={{ color: midnightEmber.state.warning }}
+              >
                 {suspensionReason}
               </Text>
             </View>
@@ -168,7 +188,7 @@ export default function PendingScreen() {
   return (
     <Screen bg="dark" statusBarStyle="light-content">
       <View className="flex-1 justify-center items-center px-8">
-        <Ionicons name="time-outline" size={80} color={colors.brand.orange} />
+        <Ionicons name="time-outline" size={80} color={midnightEmber.accent[500]} />
         <Text variant="h3" color="inverse" className="mt-6 text-center">
           {t('onboarding.pending_review')}
         </Text>
@@ -177,8 +197,14 @@ export default function PendingScreen() {
         </Text>
         {/* UX: concrete time window makes the wait feel bounded.
              Drivers otherwise refresh every 5 minutes and give up. */}
-        <View className="mt-5 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
-          <Text variant="caption" style={{ color: '#FFB380' }}>
+        <View
+          className="mt-5 border rounded-xl px-4 py-2"
+          style={{
+            backgroundColor: midnightEmber.accent.glow,
+            borderColor: `${midnightEmber.accent[500]}4D`,
+          }}
+        >
+          <Text variant="caption" style={{ color: midnightEmber.accent[200] }}>
             {t('onboarding.pending_sla', { defaultValue: 'Tiempo promedio: 24 horas hábiles' })}
           </Text>
         </View>
@@ -200,7 +226,7 @@ export default function PendingScreen() {
             onPress={openSupport}
           />
           <Pressable onPress={doLogout} hitSlop={10} className="py-2">
-            <Text variant="caption" style={{ color: '#9CA3AF', textAlign: 'center' }}>
+            <Text variant="caption" style={{ color: midnightEmber.map.text.tertiary, textAlign: 'center' }}>
               {t('onboarding.switch_account', { defaultValue: 'Cambiar de cuenta' })}
             </Text>
           </Pressable>

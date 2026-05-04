@@ -12,7 +12,7 @@ import { Card } from '@tricigo/ui/Card';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, CUBA_PROVINCES, CUBA_MUNICIPALITIES } from '@tricigo/utils';
@@ -54,19 +54,22 @@ function SelectField({
       </Text>
       <Pressable
         onPress={() => setExpanded(!expanded)}
-        className="flex-row items-center justify-between bg-[#1a1a2e] border border-white/6 rounded-xl px-4 py-3.5"
-        style={error ? { borderColor: '#EF4444' } : undefined}
+        className="flex-row items-center justify-between border rounded-xl px-4 py-3.5"
+        style={{
+          backgroundColor: midnightEmber.map.bg.surface,
+          borderColor: error ? midnightEmber.state.danger : midnightEmber.map.line.hairline,
+        }}
       >
         <Text
           variant="body"
-          style={{ color: selectedLabel ? '#FFFFFF' : '#6B7280' }}
+          style={{ color: selectedLabel ? midnightEmber.map.text.primary : midnightEmber.map.text.tertiary }}
         >
           {selectedLabel || placeholder}
         </Text>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={18}
-          color="#9CA3AF"
+          color={midnightEmber.map.text.tertiary}
         />
       </Pressable>
       {error && (
@@ -75,7 +78,13 @@ function SelectField({
         </Text>
       )}
       {expanded && (
-        <View className="bg-[#1a1a2e] border border-white/6 rounded-xl mt-1 max-h-48 overflow-hidden">
+        <View
+          className="border rounded-xl mt-1 max-h-48 overflow-hidden"
+          style={{
+            backgroundColor: midnightEmber.map.bg.surface,
+            borderColor: midnightEmber.map.line.hairline,
+          }}
+        >
           <ScrollView nestedScrollEnabled style={{ maxHeight: 192 }}>
             {options.map((opt) => (
               <Pressable
@@ -84,16 +93,19 @@ function SelectField({
                   onSelect(opt.value);
                   setExpanded(false);
                 }}
-                className="px-4 py-3 border-b border-white/6 active:bg-[#252540]"
-                style={opt.value === value ? { backgroundColor: 'rgba(255, 77, 0, 0.15)' } : undefined}
+                className="px-4 py-3 border-b"
+                style={{
+                  borderBottomColor: midnightEmber.map.line.hairline,
+                  backgroundColor: opt.value === value ? midnightEmber.accent.glow : undefined,
+                }}
               >
                 <View className="flex-row items-center">
                   {opt.value === value && (
-                    <Ionicons name="checkmark-circle" size={16} color={colors.brand.orange} style={{ marginRight: 8 }} />
+                    <Ionicons name="checkmark-circle" size={16} color={midnightEmber.accent[500]} style={{ marginRight: 8 }} />
                   )}
                   <Text
                     variant="bodySmall"
-                    style={{ color: opt.value === value ? colors.brand.orange : '#FFFFFF' }}
+                    style={{ color: opt.value === value ? midnightEmber.accent[500] : midnightEmber.map.text.primary }}
                   >
                     {opt.label}
                   </Text>
@@ -245,7 +257,7 @@ export default function PersonalInfoScreen() {
 
           {/* Orange accent line */}
           <LinearGradient
-            colors={['#FF4D00', '#FF6B2C']}
+            colors={[midnightEmber.accent[500], midnightEmber.accent[400]]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={{ height: 3 }}
@@ -258,8 +270,18 @@ export default function PersonalInfoScreen() {
             {/* ─── Section 1: Personal Data ─── */}
             <AnimatedCard delay={0} duration={400}>
               <View className="flex-row items-center mb-4">
-                <View className="w-10 h-10 rounded-full bg-[#252540] items-center justify-center mr-3">
-                  <Ionicons name="person" size={20} color={colors.brand.orange} />
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 9999,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                    backgroundColor: midnightEmber.accent[100],
+                  }}
+                >
+                  <Ionicons name="person" size={20} color={midnightEmber.accent[500]} />
                 </View>
                 <View>
                   <Text variant="h3" color="inverse">
@@ -273,7 +295,13 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={100} duration={400}>
-              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card
+                forceDark
+                variant="filled"
+                padding="lg"
+                className="mb-5"
+                style={{ backgroundColor: midnightEmber.map.bg.surface }}
+              >
                 <Input
                   label={t('onboarding.full_name')}
                   placeholder="Juan Pérez"
@@ -288,7 +316,13 @@ export default function PersonalInfoScreen() {
                     {t('onboarding.phone')}
                   </Text>
                   <View className="flex-row items-center gap-2">
-                    <View className="bg-[#1a1a2e] border border-white/6 rounded-xl px-3 py-3.5">
+                    <View
+                      className="border rounded-xl px-3 py-3.5"
+                      style={{
+                        backgroundColor: midnightEmber.map.bg.surface,
+                        borderColor: midnightEmber.map.line.hairline,
+                      }}
+                    >
                       <Text variant="body" color="inverse" className="font-semibold">+53</Text>
                     </View>
                     <View className="flex-1">
@@ -340,8 +374,18 @@ export default function PersonalInfoScreen() {
             {/* ─── Section 2: Location ─── */}
             <AnimatedCard delay={200} duration={400}>
               <View className="flex-row items-center mb-4">
-                <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center mr-3">
-                  <Ionicons name="location" size={20} color="#3B82F6" />
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 9999,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                    backgroundColor: midnightEmber.accent[100],
+                  }}
+                >
+                  <Ionicons name="location" size={20} color={midnightEmber.accent[500]} />
                 </View>
                 <Text variant="h3" color="inverse">
                   {t('onboarding.section_location')}
@@ -350,7 +394,13 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={300} duration={400}>
-              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card
+                forceDark
+                variant="filled"
+                padding="lg"
+                className="mb-5"
+                style={{ backgroundColor: midnightEmber.map.bg.surface }}
+              >
                 <SelectField
                   label={t('onboarding.province')}
                   value={province}
@@ -383,8 +433,18 @@ export default function PersonalInfoScreen() {
             {/* ─── Section 3: Background ─── */}
             <AnimatedCard delay={400} duration={400}>
               <View className="flex-row items-center mb-4">
-                <View className="w-10 h-10 rounded-full bg-green-500/20 items-center justify-center mr-3">
-                  <Ionicons name="shield-checkmark" size={20} color="#22C55E" />
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 9999,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                    backgroundColor: midnightEmber.accent[100],
+                  }}
+                >
+                  <Ionicons name="shield-checkmark" size={20} color={midnightEmber.accent[500]} />
                 </View>
                 <Text variant="h3" color="inverse">
                   {t('onboarding.section_background')}
@@ -393,7 +453,13 @@ export default function PersonalInfoScreen() {
             </AnimatedCard>
 
             <AnimatedCard delay={500} duration={400}>
-              <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+              <Card
+                forceDark
+                variant="filled"
+                padding="lg"
+                className="mb-5"
+                style={{ backgroundColor: midnightEmber.map.bg.surface }}
+              >
                 <View className="flex-row items-center justify-between mb-2">
                   <View className="flex-1 mr-3">
                     <Text variant="body" color="inverse">
@@ -412,8 +478,8 @@ export default function PersonalInfoScreen() {
                   <Switch
                     value={hasCriminalRecord}
                     onValueChange={setHasCriminalRecord}
-                    trackColor={{ false: '#252540', true: colors.brand.orange }}
-                    thumbColor="#FFFFFF"
+                    trackColor={{ false: midnightEmber.map.bg.elevated, true: midnightEmber.accent[500] }}
+                    thumbColor={midnightEmber.map.text.onAccent}
                     accessibilityLabel={t('onboarding.criminal_record')}
                   />
                 </View>

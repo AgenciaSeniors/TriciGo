@@ -12,7 +12,7 @@ import { Card } from '@tricigo/ui/Card';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { isValidPlateNumber, sanitizeText, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
@@ -193,7 +193,7 @@ export default function VehicleInfoScreen() {
 
           {/* Orange accent line */}
           <LinearGradient
-            colors={['#FF4D00', '#FF6B2C']}
+            colors={[midnightEmber.accent[500], midnightEmber.accent[400]]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={{ height: 3 }}
@@ -206,8 +206,18 @@ export default function VehicleInfoScreen() {
             {/* ─── Section: Vehicle Type ─── */}
             <AnimatedCard delay={0} duration={400}>
               <View className="flex-row items-center mb-5">
-                <View className="w-10 h-10 rounded-full bg-[#252540] items-center justify-center mr-3">
-                  <Ionicons name="car-sport" size={20} color={colors.brand.orange} />
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 9999,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12,
+                    backgroundColor: midnightEmber.accent[100],
+                  }}
+                >
+                  <Ionicons name="car-sport" size={20} color={midnightEmber.accent[500]} />
                 </View>
                 <View>
                   <Text variant="h3" color="inverse">
@@ -232,9 +242,9 @@ export default function VehicleInfoScreen() {
                       style={{
                         width: '47.5%',
                         borderWidth: 2,
-                        borderColor: isSelected ? config.accent : '#252540',
+                        borderColor: isSelected ? config.accent : midnightEmber.map.bg.elevated,
                         borderRadius: 16,
-                        backgroundColor: isSelected ? `${config.accent}15` : '#1a1a2e',
+                        backgroundColor: isSelected ? `${config.accent}15` : midnightEmber.map.bg.surface,
                         padding: 16,
                         alignItems: 'center',
                       }}
@@ -246,7 +256,7 @@ export default function VehicleInfoScreen() {
                       />
                       <Text
                         variant="body"
-                        style={{ color: isSelected ? config.accent : '#FFFFFF', fontWeight: '700', textAlign: 'center' }}
+                        style={{ color: isSelected ? config.accent : midnightEmber.map.text.primary, fontWeight: '700', textAlign: 'center' }}
                       >
                         {t(config.labelKey, { defaultValue: config.labelKey })}
                       </Text>
@@ -269,8 +279,18 @@ export default function VehicleInfoScreen() {
               <>
                 <AnimatedCard delay={200} duration={400}>
                   <View className="flex-row items-center mb-4">
-                    <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center mr-3">
-                      <Ionicons name="information-circle" size={20} color="#3B82F6" />
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 9999,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                        backgroundColor: midnightEmber.accent[100],
+                      }}
+                    >
+                      <Ionicons name="information-circle" size={20} color={midnightEmber.accent[500]} />
                     </View>
                     <Text variant="h3" color="inverse">
                       {t('onboarding.step_vehicle', { defaultValue: 'Detalles del vehículo' })}
@@ -279,7 +299,13 @@ export default function VehicleInfoScreen() {
                 </AnimatedCard>
 
                 <AnimatedCard delay={300} duration={400}>
-                  <Card forceDark variant="filled" padding="lg" className="bg-neutral-900 mb-5">
+                  <Card
+                    forceDark
+                    variant="filled"
+                    padding="lg"
+                    className="mb-5"
+                    style={{ backgroundColor: midnightEmber.map.bg.surface }}
+                  >
                     <Input label={t('onboarding.vehicle_make')} placeholder="Custom" value={make} onChangeText={setMake} error={errors.make} variant="dark" />
                     <Input label={t('onboarding.vehicle_model')} placeholder="Ej: YBR 125, Piaggio, Geely..." value={model} onChangeText={setModel} error={errors.model} variant="dark" />
                     <View className="flex-row gap-3">
@@ -307,7 +333,7 @@ export default function VehicleInfoScreen() {
                         />
                       </View>
                       <View className="items-center pt-4">
-                        <Ionicons name="people" size={24} color="#9CA3AF" />
+                        <Ionicons name="people" size={24} color={midnightEmber.map.text.tertiary} />
                       </View>
                     </View>
                   </Card>
@@ -318,8 +344,18 @@ export default function VehicleInfoScreen() {
                   <Card forceDark variant="surface" padding="lg" className="mb-5">
                     <View className="flex-row items-center justify-between mb-3">
                       <View className="flex-row items-center flex-1">
-                        <View className="w-8 h-8 rounded-full bg-[#252540] items-center justify-center mr-2">
-                          <Ionicons name="cube" size={16} color={colors.brand.orange} />
+                        <View
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 9999,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 8,
+                            backgroundColor: midnightEmber.accent[100],
+                          }}
+                        >
+                          <Ionicons name="cube" size={16} color={midnightEmber.accent[500]} />
                         </View>
                         <View className="flex-1">
                           <Text variant="body" color="inverse" className="font-semibold">
@@ -330,8 +366,8 @@ export default function VehicleInfoScreen() {
                       <Switch
                         value={acceptsCargo}
                         onValueChange={setAcceptsCargo}
-                        trackColor={{ false: '#252540', true: colors.brand.orange }}
-                        thumbColor="#FFFFFF"
+                        trackColor={{ false: midnightEmber.map.bg.elevated, true: midnightEmber.accent[500] }}
+                        thumbColor={midnightEmber.map.text.onAccent}
                         accessibilityLabel={t('onboarding.accepts_deliveries')}
                       />
                     </View>
@@ -382,13 +418,13 @@ export default function VehicleInfoScreen() {
                                   paddingVertical: 8,
                                   borderRadius: 20,
                                   borderWidth: 1,
-                                  borderColor: selected ? colors.brand.orange : '#252540',
-                                  backgroundColor: selected ? 'rgba(255,77,0,0.15)' : '#1a1a2e',
+                                  borderColor: selected ? midnightEmber.accent[500] : midnightEmber.map.bg.elevated,
+                                  backgroundColor: selected ? midnightEmber.accent.glow : midnightEmber.map.bg.surface,
                                 }}
                               >
                                 <Text
                                   variant="bodySmall"
-                                  style={{ color: selected ? colors.brand.orange : '#9CA3AF' }}
+                                  style={{ color: selected ? midnightEmber.accent[500] : midnightEmber.map.text.tertiary }}
                                 >
                                   {PACKAGE_CATEGORY_LABELS[cat]?.es ?? cat}
                                 </Text>
