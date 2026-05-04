@@ -1,39 +1,26 @@
 /**
- * DriverTripView — orchestrator (PR-A extraction landed).
+ * DriverTripView — orchestrator (PR-B Midnight Ember tokens landed).
  *
- * The previous monolith (1549 LOC) was split into focused subcomponents
- * under `apps/driver/src/components/trip/` and three hooks under
- * `apps/driver/src/hooks/`:
+ * The 1549-LOC monolith was split in PR-A into focused subcomponents
+ * under `apps/driver/src/components/trip/` plus three hooks under
+ * `apps/driver/src/hooks/`. PR-B replaces every inline hex literal,
+ * `<Card forceDark>` legacy and `bg-[#1a1a2e]` Tailwind class with
+ * `midnightEmber.*` tokens — the same system already adopted by
+ * IncomingRideCard (PR #90) and HomeBottomSheet (PR #91).
  *
- *   Subcomponents:
- *     - WaitTimer
- *     - LiveDistanceHint
- *     - GpsConsentBanner
- *     - TripStepper
- *     - RouteInfoCard
- *     - RiderPreferencesChips
- *     - DeliveryDetailsCard
- *     - TripActionToolbar
- *     - TripBadgesRow
- *     - TripCompleteView
+ * Key collapses applied here:
+ *   - The 5-hex `actionButtonColor` rainbow (blue / orange / green /
+ *     purple / red per status) becomes a clean intensity scale on the
+ *     accent family + `state.success` for `arrived_at_destination`.
+ *     The driver no longer has to learn 5 separate semantic colors
+ *     mid-ride.
+ *   - The 5-rgba `stepperTint` rainbow becomes a single uniform
+ *     `accent.glow` tint, since the active dot color already changes
+ *     by phase and conveys the position information.
+ *   - Inline banners (no-show, arriving-at-waypoint, scheduled,
+ *     chained) all migrate to the semantic state tokens.
  *
- *   Hooks:
- *     - useTripAutoNavigation (auto-start + auto-retarget)
- *     - useNearDropoffPulse (proximity-based pulse on the finish CTA)
- *     - useWaypointProximity (GPS-based auto-arrival at waypoints)
- *
- * This file owns the orchestration: it composes the subcomponents in
- * the right order, threads through the props, and keeps the cross-
- * cutting handlers (cancel, SOS, advance) here because they share
- * state with the bottom sheet and Alert.alert flows.
- *
- * PR-A is a pure refactor: zero visual changes, zero behavior changes.
- * Migration to `midnightEmber` tokens lands in PR-B; microcopy
- * unification in PR-C.
- *
- * `useActiveTripMapData` is also exported here because it has been the
- * stable API the parent (`apps/driver/app/(tabs)/index.tsx`) calls to
- * render the map behind the sheet — kept verbatim.
+ * Microcopy unification + redundancy trim land in PR-C.
  */
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { View, Pressable, Linking, Alert, Animated, Platform } from 'react-native';
@@ -69,6 +56,7 @@ import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverProximityAlert } from '@/hooks/useDriverProximityAlert';
+import { midnightEmber } from '@tricigo/theme';
 import { DeliveryPhotoSheet } from './DeliveryPhotoSheet';
 import { useTripAutoNavigation } from '@/hooks/useTripAutoNavigation';
 import { useNearDropoffPulse } from '@/hooks/useNearDropoffPulse';
@@ -424,30 +412,28 @@ export function DriverTripView() {
     rideStatus: activeTrip?.status ?? null,
   });
 
-  // DT-3: Color-coded action button by phase. Rainbow per status is
-  // preserved verbatim in PR-A; collapsed to a single accent intensity
-  // scale in PR-B.
+  // PR-B: action color per phase collapses from a 5-hue rainbow into a
+  // single accent-intensity scale. The progression `accent[300]` →
+  // `[500]` → `[600]` → `[700]` mirrors the trip's mounting urgency,
+  // and `arrived_at_destination` jumps to `state.success` because the
+  // driver is one tap from finishing — that's the only justified break
+  // out of the accent family.
   const actionButtonColor = (() => {
     switch (activeTrip?.status) {
-      case 'accepted': return '#3B82F6'; // blue
-      case 'driver_en_route': return '#FF4D00'; // brand orange
-      case 'arrived_at_pickup': return '#10B981'; // success green
-      case 'in_progress': return '#8B5CF6'; // purple — "Llegué al destino"
-      case 'arrived_at_destination': return '#EF4444'; // error red — "Finalizar viaje"
-      default: return '#FF4D00'; // brand orange fallback
+      case 'accepted': return midnightEmber.accent[300];
+      case 'driver_en_route': return midnightEmber.accent[500];
+      case 'arrived_at_pickup': return midnightEmber.accent[600];
+      case 'in_progress': return midnightEmber.accent[700];
+      case 'arrived_at_destination': return midnightEmber.state.success;
+      default: return midnightEmber.accent[500];
     }
   })();
 
-  const stepperTint = (() => {
-    switch (activeTrip?.status) {
-      case 'accepted': return 'rgba(59,130,246,0.1)';
-      case 'driver_en_route': return 'rgba(255,77,0,0.1)';
-      case 'arrived_at_pickup': return 'rgba(16,185,129,0.1)';
-      case 'in_progress': return 'rgba(168,85,247,0.1)';
-      case 'arrived_at_destination': return 'rgba(239,68,68,0.1)';
-      default: return 'transparent';
-    }
-  })();
+  // PR-B: the 5-rgba `stepperTint` rainbow collapses into one uniform
+  // accent glow. The stepper already conveys phase via the active dot
+  // color (which shares the same accent intensity scale), so the
+  // container background no longer needs to encode status.
+  const stepperTint = midnightEmber.accent.glow;
 
   if (!activeTrip) return null;
 
@@ -694,9 +680,26 @@ export function DriverTripView() {
 
       {/* Chained ride banner */}
       {activeTrip.next_ride_id && (
-        <View className="bg-info px-4 py-3 rounded-2xl mb-3 flex-row items-center border border-white/[0.06]" accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <Ionicons name="link-outline" size={18} color="white" />
-          <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
+        <View
+          style={{
+            backgroundColor: `${midnightEmber.state.info}1F`, // ~12% tint
+            borderColor: `${midnightEmber.state.info}66`, // ~40%
+            borderWidth: 1,
+            borderRadius: midnightEmber.radius.card,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            marginBottom: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
+          <Ionicons name="link-outline" size={18} color={midnightEmber.state.info} />
+          <Text
+            variant="bodySmall"
+            style={{ marginLeft: 8, flex: 1, color: midnightEmber.state.info }}
+          >
             {t('trip.next_ride_queued', { defaultValue: 'Proximo viaje asignado' })}
           </Text>
         </View>
@@ -738,8 +741,8 @@ export function DriverTripView() {
         Math.floor((Date.now() - new Date(activeTrip.driver_arrived_at).getTime()) / 60000) >= 5 && (
         <Pressable
           style={{
-            backgroundColor: '#F59E0B',
-            borderRadius: 16,
+            backgroundColor: midnightEmber.state.warning,
+            borderRadius: midnightEmber.radius.card,
             paddingVertical: 14,
             paddingHorizontal: 24,
             marginHorizontal: 16,
@@ -752,7 +755,10 @@ export function DriverTripView() {
           accessibilityRole="button"
           accessibilityLabel={`${t('trip.passenger_no_show')} — ${t('trip.cancel_no_show')}`}
         >
-          <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>
+          <Text
+            variant="body"
+            style={{ color: midnightEmber.map.text.onAccent, fontWeight: '700' }}
+          >
             {t('trip.passenger_no_show')} — {t('trip.cancel_no_show')}
           </Text>
         </Pressable>
@@ -760,8 +766,20 @@ export function DriverTripView() {
 
       {/* DE-2.1: Arriving at waypoint banner */}
       {nearWaypoint && nextWaypoint && (
-        <View style={{ backgroundColor: 'rgba(16,185,129,0.12)', padding: 8, borderRadius: 16, marginBottom: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
-          <Text variant="caption" style={{ color: '#10B981', textAlign: 'center' }}>
+        <View
+          style={{
+            backgroundColor: `${midnightEmber.state.success}1F`,
+            padding: 10,
+            borderRadius: midnightEmber.radius.input,
+            marginBottom: 6,
+            borderWidth: 1,
+            borderColor: midnightEmber.map.line.hairline,
+          }}
+        >
+          <Text
+            variant="caption"
+            style={{ color: midnightEmber.state.success, textAlign: 'center' }}
+          >
             {t('trip.arriving_waypoint', { n: nextWaypoint.sort_order })}
           </Text>
         </View>
@@ -778,9 +796,24 @@ export function DriverTripView() {
 
       {/* Scheduled ride banner */}
       {activeTrip.scheduled_at && (
-        <View className="flex-row items-center bg-blue-900/30 rounded-2xl py-2 px-3 mb-3 border border-white/[0.06]">
-          <Ionicons name="time-outline" size={16} color="#60A5FA" />
-          <Text variant="bodySmall" color="inverse" className="ml-2">
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: `${midnightEmber.state.info}1F`,
+            borderColor: midnightEmber.map.line.hairline,
+            borderWidth: 1,
+            borderRadius: midnightEmber.radius.card,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Ionicons name="time-outline" size={16} color={midnightEmber.state.info} />
+          <Text
+            variant="bodySmall"
+            style={{ marginLeft: 8, color: midnightEmber.state.info }}
+          >
             {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
           </Text>
         </View>
@@ -798,22 +831,38 @@ export function DriverTripView() {
         isCorporate={!!activeTrip.corporate_account_id}
       />
 
-      {/* Fare — only visible during accepted (hidden while driving; completed has its own view) */}
+      {/* Fare — only visible during accepted (hidden while driving;
+          completed has its own view) */}
       {activeTrip.status === 'accepted' && (
         <View
-          className="flex-row justify-between items-center mb-4 px-2"
-          accessible={true}
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+            paddingHorizontal: 8,
+          }}
+          accessible
           accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}
         >
-          <Text variant="bodySmall" color="inverse" className="opacity-50">
+          <Text
+            variant="bodySmall"
+            style={{ color: midnightEmber.map.text.tertiary }}
+          >
             {t('trip.earned', { defaultValue: 'Tarifa estimada' })}
           </Text>
-          <View className="items-end">
-            <Text variant="h4" color="accent">
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text
+              variant="h4"
+              style={{ color: midnightEmber.accent[500] }}
+            >
               {formatCUP(activeTrip.estimated_fare_cup)}
             </Text>
             {activeTrip.estimated_fare_trc != null && (
-              <Text variant="caption" color="inverse" className="opacity-50">
+              <Text
+                variant="caption"
+                style={{ color: midnightEmber.map.text.tertiary }}
+              >
                 ~{formatTRC(activeTrip.estimated_fare_trc)}
               </Text>
             )}
@@ -823,7 +872,14 @@ export function DriverTripView() {
 
       {/* Surge indicator */}
       {(activeTrip.surge_multiplier ?? 1) > 1 && (
-        <Text variant="caption" color="inverse" className="opacity-50 text-center mb-4">
+        <Text
+          variant="caption"
+          style={{
+            color: midnightEmber.map.text.tertiary,
+            textAlign: 'center',
+            marginBottom: 16,
+          }}
+        >
           {t('trip.surge_active', { multiplier: activeTrip.surge_multiplier, defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa` })}
         </Text>
       )}

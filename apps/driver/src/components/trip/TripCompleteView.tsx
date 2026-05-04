@@ -1,14 +1,23 @@
 /**
- * TripCompleteView — extracted from DriverTripView for PR-A.
+ * TripCompleteView — Midnight Ember edition (PR-B).
  *
- * Renders the post-trip experience: large earnings amount, trip summary,
- * commission breakdown, mixed-payment cobranza split if applicable, tip
- * received banner, surge indicator, optional receipt download (native
- * only), excess-distance justification (BUG-222), rider rating, and the
- * "Listo" CTA that returns the driver to the home/searching screen.
+ * Post-trip experience: large earnings amount, trip summary, commission
+ * breakdown, mixed-payment cobranza split, tip received banner, surge
+ * indicator, optional receipt download (native only), excess-distance
+ * justification (BUG-222), rider rating, and the "Listo" CTA.
  *
- * Behavior + visuals + i18n keys preserved verbatim. Migration to
- * `midnightEmber` tokens happens in PR-B; microcopy unification in PR-C.
+ * v2 tokenization:
+ *   - Hero earnings: `state.success` + `text.heroLg` (was raw `#22C55E`
+ *     + `variant="h2"`).
+ *   - Checkmark circle: `state.success` background (was `bg-success`
+ *     Tailwind class).
+ *   - Commission card: raw `<View>` + `map.bg.elevated` (was `<Card
+ *     forceDark>` + `bg-[#1a1a2e]`).
+ *   - Tip card: same migration.
+ *   - "Tarifa total" / "Comisión" labels: `text.secondary`.
+ *   - Commission deduction value: `state.danger`.
+ *   - Net earnings value: `accent[500]` to match the IncomingRideCard
+ *     hero color so "Ganás" reads consistently across screens.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Platform } from 'react-native';
@@ -17,7 +26,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import { formatCUP, formatTRC, generateReceiptHTML, triggerHaptic } from '@tricigo/utils';
@@ -27,6 +35,7 @@ import type { RideWithRider } from '@tricigo/types';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { useDriverStore } from '@/stores/driver.store';
+import { midnightEmber } from '@tricigo/theme';
 import { RiderRatingSheet } from '../RiderRatingSheet';
 import { ExcessDistanceSheet } from '../ExcessDistanceSheet';
 
@@ -63,9 +72,6 @@ export function TripCompleteView() {
       .catch(() => { /* best-effort: rating still works without rider info */ });
   }, [activeTrip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Driver must tap "Listo" manually to dismiss — no auto-advance.
-  // This ensures they have time to see earnings, rate the rider, and download receipt.
-
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;
@@ -96,6 +102,17 @@ export function TripCompleteView() {
     }
   };
 
+  // Reusable card style for the commission + tip sections.
+  const surfaceCard = {
+    width: '100%' as const,
+    backgroundColor: midnightEmber.map.bg.elevated,
+    borderColor: midnightEmber.map.line.hairline,
+    borderWidth: 1,
+    borderRadius: midnightEmber.radius.card,
+    padding: 14,
+    marginBottom: 16,
+  };
+
   return (
     <DraggableSheet
       snapPoints={['50%', '90%']}
@@ -103,74 +120,124 @@ export function TripCompleteView() {
       theme="dark"
       scrollable
     >
-      <View className="pt-8 items-center">
-        {/* DT-6: Earnings delta — large green amount at top */}
+      <View style={{ paddingTop: 24, alignItems: 'center' }}>
+        {/* Earnings hero — large success amount at top */}
         {activeTrip.final_fare_cup != null && (
-          <Text variant="h2" style={{
-            color: '#22C55E',
-            textAlign: 'center',
-            marginBottom: 8,
-          }}>
+          <Text
+            style={{
+              ...midnightEmber.text.heroLg,
+              color: midnightEmber.state.success,
+              textAlign: 'center',
+              marginBottom: 8,
+            }}
+          >
             {t('trip.earned_this_ride', {
               amount: `$${Math.round((activeTrip.final_fare_cup || 0) * 0.85).toLocaleString()}`,
             })}
           </Text>
         )}
 
-        <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
-          <Ionicons name="checkmark" size={40} color="white" />
+        {/* Checkmark circle */}
+        <View
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: midnightEmber.state.success,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <Ionicons name="checkmark" size={40} color={midnightEmber.map.text.onAccent} />
         </View>
 
-        <Text variant="h3" color="inverse" className="mb-2">
+        <Text
+          variant="h3"
+          style={{ color: midnightEmber.map.text.primary, marginBottom: 8 }}
+        >
           {t('trip.trip_completed')}
         </Text>
 
-        {/* DT-6: Compressed trip summary — single line */}
-        <Text variant="bodySmall" style={{ color: '#9CA3AF', textAlign: 'center', marginBottom: 8 }}>
+        {/* Compressed trip summary — single line */}
+        <Text
+          variant="bodySmall"
+          style={{
+            color: midnightEmber.map.text.secondary,
+            textAlign: 'center',
+            marginBottom: 12,
+          }}
+        >
           {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {((activeTrip.actual_distance_m ?? 0) / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
         </Text>
 
         {/* Commission breakdown */}
-        <Card forceDark variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
-          <View className="flex-row justify-between mb-2">
-            <Text variant="bodySmall" style={{ color: '#9CA3AF' }}>
+        <View style={surfaceCard}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text variant="bodySmall" style={{ color: midnightEmber.map.text.secondary }}>
               {t('trip.total_fare', { defaultValue: 'Tarifa total' })}
             </Text>
-            <Text variant="bodySmall" color="inverse">
+            <Text variant="bodySmall" style={{ color: midnightEmber.map.text.primary }}>
               {formatCUP(fare)}
             </Text>
           </View>
-          <View className="flex-row justify-between mb-2">
-            <Text variant="bodySmall" style={{ color: '#9CA3AF' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text variant="bodySmall" style={{ color: midnightEmber.map.text.secondary }}>
               {t('trip.platform_commission', { defaultValue: 'Comisión plataforma (15%)' })}
             </Text>
-            <Text variant="bodySmall" style={{ color: '#EF4444' }}>
+            <Text variant="bodySmall" style={{ color: midnightEmber.state.danger }}>
               -{formatCUP(commissionAmount)}
             </Text>
           </View>
-          <View className="h-px my-2" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <View className="flex-row justify-between">
-            <Text variant="body" color="inverse" className="font-bold">
+          <View style={{ height: 1, marginVertical: 6, backgroundColor: midnightEmber.map.line.hairline }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text
+              variant="body"
+              style={{ color: midnightEmber.map.text.primary, fontWeight: '700' }}
+            >
               {isCash ? t('trip.collect_cash', { defaultValue: 'Cobras en efectivo' }) : t('trip.net_earnings', { defaultValue: 'Ganancia neta' })}
             </Text>
-            <Text variant="body" color="accent" className="font-bold">
+            <Text
+              variant="body"
+              style={{ color: midnightEmber.accent[500], fontWeight: '700' }}
+            >
               {formatCUP(netEarnings)}
             </Text>
           </View>
           {isCash && (
-            <Text variant="caption" style={{ color: '#9CA3AF' }} className="mt-1">
+            <Text
+              variant="caption"
+              style={{ color: midnightEmber.map.text.tertiary, marginTop: 4 }}
+            >
               {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
             </Text>
           )}
           {activeTrip.payment_method === 'mixed' && (
-            <View className="mt-3 p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
-              <Text variant="body" color="inverse" className="font-bold mb-1">
+            <View
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: midnightEmber.radius.input,
+                backgroundColor: midnightEmber.map.bg.surface,
+              }}
+            >
+              <Text
+                variant="body"
+                style={{
+                  color: midnightEmber.map.text.primary,
+                  fontWeight: '700',
+                  marginBottom: 4,
+                }}
+              >
                 {t('trip.collect_cash_amount', {
                   amount: formatCUP((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)),
                   defaultValue: `Cobrar $${((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} en efectivo`,
                 })}
               </Text>
-              <Text variant="caption" style={{ color: '#9CA3AF' }}>
+              <Text
+                variant="caption"
+                style={{ color: midnightEmber.map.text.tertiary }}
+              >
                 {t('trip.wallet_portion', {
                   amount: formatCUP((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)),
                   defaultValue: `$${((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} del wallet del pasajero`,
@@ -178,33 +245,61 @@ export function TripCompleteView() {
               </Text>
             </View>
           )}
-        </Card>
+        </View>
 
         {/* Tip received */}
         {(activeTrip.tip_amount ?? 0) > 0 && (
-          <Card forceDark variant="filled" padding="md" className="w-full bg-[#1a1a2e] mb-6 rounded-2xl border border-white/[0.06]">
-            <View className="flex-row justify-between items-center" accessibilityRole="alert" accessibilityLiveRegion="polite">
-              <View className="flex-row items-center gap-1">
-                <Ionicons name="gift-outline" size={16} color="white" />
-                <Text variant="body" color="inverse">{t('trip.tip_received', { amount: formatTRC(activeTrip.tip_amount!), defaultValue: '¡Recibiste una propina!' })}</Text>
+          <View style={surfaceCard}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons
+                  name="gift-outline"
+                  size={16}
+                  color={midnightEmber.map.text.primary}
+                />
+                <Text variant="body" style={{ color: midnightEmber.map.text.primary }}>
+                  {t('trip.tip_received', {
+                    amount: formatTRC(activeTrip.tip_amount!),
+                    defaultValue: '¡Recibiste una propina!',
+                  })}
+                </Text>
               </View>
-              <Text variant="body" color="accent" className="font-bold">
+              <Text
+                variant="body"
+                style={{ color: midnightEmber.accent[500], fontWeight: '700' }}
+              >
                 +{formatTRC(activeTrip.tip_amount!)}
               </Text>
             </View>
-          </Card>
+          </View>
         )}
 
         {/* Surge indicator */}
         {(activeTrip.surge_multiplier ?? 1) > 1 && (
-          <Text variant="caption" color="inverse" className="opacity-50 text-center mb-4">
-            {t('trip.surge_active', { multiplier: activeTrip.surge_multiplier, defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa` })}
+          <Text
+            variant="caption"
+            style={{
+              color: midnightEmber.map.text.tertiary,
+              textAlign: 'center',
+              marginBottom: 16,
+            }}
+          >
+            {t('trip.surge_active', {
+              multiplier: activeTrip.surge_multiplier,
+              defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa`,
+            })}
           </Text>
         )}
 
-        {/* Receipt download: native-only. expo-print.printToFileAsync is not
-            implemented on web (returns undefined), so the button is hidden
-            there to avoid a destructure crash. Native APK keeps the feature. */}
+        {/* Receipt download: native-only */}
         {Platform.OS !== 'web' && (
           <Button
             title={t('trip.download_receipt', { defaultValue: 'Descargar recibo' })}
@@ -219,7 +314,7 @@ export function TripCompleteView() {
 
         {/* BUG-222: excess-distance justification (shown FIRST, blocks rating) */}
         {showExcessSheet && (
-          <View className="w-full mb-3">
+          <View style={{ width: '100%', marginBottom: 12 }}>
             <ExcessDistanceSheet
               rideId={activeTrip.id}
               excessMeters={excessMeters}
@@ -232,7 +327,7 @@ export function TripCompleteView() {
 
         {/* Rider rating (only after excess sheet dismissed) */}
         {!showExcessSheet && showRating && rideWithRider && driverProfile?.user_id && (
-          <View className="w-full mb-3">
+          <View style={{ width: '100%', marginBottom: 12 }}>
             <RiderRatingSheet
               rideId={activeTrip.id}
               reviewerId={driverProfile.user_id}

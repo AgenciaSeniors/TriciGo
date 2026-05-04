@@ -1,5 +1,5 @@
 /**
- * GpsConsentBanner — extracted from DriverTripView for PR-A.
+ * GpsConsentBanner — Midnight Ember edition (PR-B).
  *
  * BUG-246 flow: when the driver loses GPS, three states are possible:
  *   - `unavailable`         → driver reported GPS lost; rider hasn't decided yet
@@ -7,12 +7,12 @@
  *   - (initial / no status) → driver still hasn't notified rider; show CTA
  *
  * When GPS comes back while the ride was flagged `unavailable`, the
- * component fires a one-shot `reportGpsRecovered` ping. This used to be
- * an inline IIFE in DriverTripView render that triggered a side-effect
- * on every render — now properly fenced by useEffect deps so it only
- * fires once per recovery.
+ * component fires a one-shot `reportGpsRecovered` ping. (Latched behind
+ * `recoveredFiredRef`; see PR-A commit history for the bug fix.)
  *
- * Visual + tokens preserved verbatim. Migration to midnightEmber in PR-B.
+ * v2 tokenization: 3 ad-hoc colors (#10B981 / #F59E0B / #EF4444) and
+ * their 10%-tint backgrounds collapse onto the semantic state tokens.
+ * The "Avisarle al pasajero" CTA uses `state.danger` solid.
  */
 import React, { useEffect, useRef } from 'react';
 import { View, Pressable } from 'react-native';
@@ -20,6 +20,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
+import { midnightEmber } from '@tricigo/theme';
 
 interface GpsConsentBannerProps {
   rideId: string;
@@ -28,6 +29,11 @@ interface GpsConsentBannerProps {
   /** Server-side state machine: 'unavailable' | 'rider_consented' | etc. */
   driverGpsStatus: string | null | undefined;
   rideStatus: string;
+}
+
+/** Append `1F` (≈12% alpha) to a hex color so it reads as a tint. */
+function tinted(color: string): string {
+  return `${color}1F`;
 }
 
 export function GpsConsentBanner({
@@ -59,30 +65,45 @@ export function GpsConsentBanner({
   // Only render when GPS is broken on a non-canceled ride.
   if (driverLocation || rideStatus === 'canceled') return null;
 
+  const consented = driverGpsStatus === 'rider_consented';
+  const waiting = driverGpsStatus === 'unavailable';
+  const accent = consented
+    ? midnightEmber.state.success
+    : waiting
+      ? midnightEmber.state.warning
+      : midnightEmber.state.danger;
+
   return (
-    <View style={{
-      marginBottom: 8,
-      padding: 10,
-      borderRadius: 10,
-      backgroundColor: driverGpsStatus === 'rider_consented'
-        ? 'rgba(16,185,129,0.1)'
-        : 'rgba(239,68,68,0.1)',
-      borderWidth: 1,
-      borderColor: driverGpsStatus === 'rider_consented'
-        ? 'rgba(16,185,129,0.4)'
-        : 'rgba(239,68,68,0.4)',
-    }}>
-      {driverGpsStatus === 'rider_consented' ? (
-        <Text variant="caption" style={{ color: '#10B981', fontWeight: '600', textAlign: 'center' }}>
+    <View
+      style={{
+        marginBottom: 8,
+        padding: 10,
+        borderRadius: 10,
+        backgroundColor: tinted(accent),
+        borderWidth: 1,
+        borderColor: `${accent}66`, // ~40%
+      }}
+    >
+      {consented ? (
+        <Text
+          variant="caption"
+          style={{ color: accent, fontWeight: '600', textAlign: 'center' }}
+        >
           {t('trip.gps_consented', { defaultValue: '✓ El pasajero aceptó continuar sin GPS' })}
         </Text>
-      ) : driverGpsStatus === 'unavailable' ? (
-        <Text variant="caption" style={{ color: '#F59E0B', fontWeight: '600', textAlign: 'center' }}>
+      ) : waiting ? (
+        <Text
+          variant="caption"
+          style={{ color: accent, fontWeight: '600', textAlign: 'center' }}
+        >
           {t('trip.gps_waiting_rider', { defaultValue: '⏳ Esperando respuesta del pasajero…' })}
         </Text>
       ) : (
         <View>
-          <Text variant="caption" style={{ color: '#EF4444', fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+          <Text
+            variant="caption"
+            style={{ color: accent, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}
+          >
             {t('trip.gps_unavailable_warning', { defaultValue: '⚠️ GPS no disponible' })}
           </Text>
           <Pressable
@@ -102,11 +123,14 @@ export function GpsConsentBanner({
               alignSelf: 'center',
               paddingHorizontal: 14,
               paddingVertical: 8,
-              borderRadius: 8,
-              backgroundColor: '#EF4444',
+              borderRadius: midnightEmber.radius.input,
+              backgroundColor: midnightEmber.state.danger,
             }}
           >
-            <Text variant="caption" style={{ color: '#fff', fontWeight: '700' }}>
+            <Text
+              variant="caption"
+              style={{ color: midnightEmber.map.text.onAccent, fontWeight: '700' }}
+            >
               {t('trip.gps_notify_rider', { defaultValue: 'Avisarle al pasajero' })}
             </Text>
           </Pressable>

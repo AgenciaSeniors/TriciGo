@@ -1,5 +1,5 @@
 /**
- * TripActionToolbar — extracted from DriverTripView for PR-A.
+ * TripActionToolbar — Midnight Ember edition (PR-B).
  *
  * Bottom row of icon-with-caption actions during the trip:
  *   - Maps   → opens external (Google/Apple) navigation
@@ -10,7 +10,12 @@
  * Maps + Guía are hidden when in-app navigation is already active
  * (they would just restart what's running).
  *
- * Behavior + visuals preserved verbatim. Tokens migrated in PR-B.
+ * v2 tokenization: collapsed 4 distinct ad-hoc colors into a clean
+ * semantic palette.
+ *   - Maps: `state.info` (blue, signals "external link / different app")
+ *   - Guía: `accent[500]` (active brand action)
+ *   - Chat: `map.text.secondary` (neutral, supportive)
+ *   - SOS:  `state.danger` (only place danger is allowed)
  */
 import React from 'react';
 import { View, Pressable } from 'react-native';
@@ -20,6 +25,7 @@ import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { openNavigation } from '@/utils/navigation';
+import { midnightEmber } from '@tricigo/theme';
 
 interface TripActionToolbarProps {
   navTarget: { latitude: number; longitude: number } | null;
@@ -27,6 +33,45 @@ interface TripActionToolbarProps {
   onStartInAppNav: (target: { latitude: number; longitude: number }) => void;
   onSOS: () => void;
   rideId: string;
+}
+
+interface ToolbarButtonProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+}
+
+function ToolbarButton({
+  icon,
+  label,
+  color,
+  onPress,
+  accessibilityLabel,
+  accessibilityHint,
+}: ToolbarButtonProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        padding: 10,
+        minHeight: 56,
+        minWidth: 56,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+    >
+      <Ionicons name={icon} size={22} color={color} />
+      <Text variant="caption" style={{ color, fontSize: 10, marginTop: 2 }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 export function TripActionToolbar({
@@ -39,67 +84,53 @@ export function TripActionToolbar({
   const { t } = useTranslation('driver');
 
   return (
-    <View style={{
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      marginBottom: 8,
-      marginTop: 4,
-    }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 8,
+        marginTop: 4,
+      }}
+    >
       {navTarget && !inAppNavActive && (
-        <Pressable
+        <ToolbarButton
+          icon="navigate"
+          label={t('trip.toolbar_maps', { defaultValue: 'Maps' })}
+          color={midnightEmber.state.info}
           onPress={() => {
             AsyncStorage.setItem('preferred_nav', 'external');
             openNavigation(navTarget.latitude, navTarget.longitude);
           }}
-          style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
-          accessibilityRole="button"
           accessibilityLabel={t('trip.navigate', { defaultValue: 'Navegar' })}
-        >
-          <Ionicons name="navigate" size={22} color="#60A5FA" />
-          <Text variant="caption" style={{ color: '#60A5FA', fontSize: 10, marginTop: 2 }}>
-            {t('trip.toolbar_maps', { defaultValue: 'Maps' })}
-          </Text>
-        </Pressable>
+        />
       )}
       {navTarget && !inAppNavActive && (
-        <Pressable
+        <ToolbarButton
+          icon="compass"
+          label={t('trip.toolbar_guide', { defaultValue: 'Guía' })}
+          color={midnightEmber.accent[500]}
           onPress={() => {
             AsyncStorage.setItem('preferred_nav', 'inapp');
             onStartInAppNav(navTarget);
           }}
-          style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
-          accessibilityRole="button"
           accessibilityLabel={t('trip.restart_nav', { defaultValue: 'Restart navigation' })}
-        >
-          <Ionicons name="compass" size={22} color="#FF4D00" />
-          <Text variant="caption" style={{ color: '#FF4D00', fontSize: 10, marginTop: 2 }}>
-            {t('trip.toolbar_guide', { defaultValue: 'Guía' })}
-          </Text>
-        </Pressable>
+        />
       )}
-      <Pressable
+      <ToolbarButton
+        icon="chatbubble"
+        label={t('trip.toolbar_chat', { defaultValue: 'Chat' })}
+        color={midnightEmber.map.text.secondary}
         onPress={() => router.push(`/chat/${rideId}`)}
-        style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
-        accessibilityRole="button"
         accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
-      >
-        <Ionicons name="chatbubble" size={22} color="#9CA3AF" />
-        <Text variant="caption" style={{ color: '#9CA3AF', fontSize: 10, marginTop: 2 }}>
-          {t('trip.toolbar_chat', { defaultValue: 'Chat' })}
-        </Text>
-      </Pressable>
-      <Pressable
+      />
+      <ToolbarButton
+        icon="alert-circle"
+        label="SOS"
+        color={midnightEmber.state.danger}
         onPress={onSOS}
-        style={{ padding: 10, minHeight: 56, minWidth: 56, alignItems: 'center', justifyContent: 'center' }}
-        accessibilityRole="button"
         accessibilityLabel="SOS"
         accessibilityHint={t('trip.sos_body')}
-      >
-        <Ionicons name="alert-circle" size={22} color="#EF4444" />
-        <Text variant="caption" style={{ color: '#EF4444', fontSize: 10, marginTop: 2 }}>
-          SOS
-        </Text>
-      </Pressable>
+      />
     </View>
   );
 }
