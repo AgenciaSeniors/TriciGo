@@ -225,12 +225,12 @@ function NativeEarningsScreen() {
               icon="wallet-outline"
               title={
                 period === 'day'
-                  ? t('earnings.no_earnings_today_title', { defaultValue: 'Sin ganancias hoy' })
+                  ? t('earnings.no_earnings_today_title', { defaultValue: 'Aún sin ganancias hoy' })
                   : period === 'week'
-                    ? t('earnings.no_earnings_week_title', { defaultValue: 'Sin ganancias esta semana' })
-                    : t('earnings.no_earnings_month_title', { defaultValue: 'Sin ganancias este mes' })
+                    ? t('earnings.no_earnings_week_title', { defaultValue: 'Aún sin ganancias esta semana' })
+                    : t('earnings.no_earnings_month_title', { defaultValue: 'Aún sin ganancias este mes' })
               }
-              description={t('earnings.no_earnings_cta_description', { defaultValue: 'Conectate en Inicio para empezar a recibir ofertas. Tus ganancias aparecerán aquí al completar el primer viaje.' })}
+              description={t('earnings.no_earnings_cta_description', { defaultValue: 'Conectate para empezar a recibir ofertas. Tus ganancias aparecen acá al completar el primer viaje.' })}
               action={{
                 label: t('earnings.go_online_cta', { defaultValue: 'Ir a Inicio' }),
                 onPress: () => router.push('/(tabs)'),
@@ -243,12 +243,13 @@ function NativeEarningsScreen() {
             <EarningsBarChart data={chartData} theme="light" />
           )}
 
-          {/* 6 stat cards */}
+          {/* PR-C: hero earnings + collapsible "Más métricas" */}
           <EarningsStatsCards
             stats={periodStats}
             trendPct={trendPct}
             avgRating={avgRating}
             totalReviews={totalReviews}
+            period={period}
           />
 
           {/* Hourly Heatmap */}
