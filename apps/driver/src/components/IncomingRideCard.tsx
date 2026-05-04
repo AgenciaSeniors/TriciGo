@@ -696,7 +696,17 @@ function IncomingRideCardInner({
                 ...midnightEmber.text.caption,
                 color: midnightEmber.map.text.tertiary,
               }}>·</RNText>
-              <Pressable onPress={toggleAutoAccept} hitSlop={8}>
+              {/* V2 — hitSlop bumped 8 → 14: caption text is ~16pt; the
+                   16+14×2 = 44pt effective tap zone clears HIG. The user
+                   may need to disable mid-countdown (8-15s window) so a
+                   reliable tap is critical. Visual stays as a discreet
+                   underline link. */}
+              <Pressable
+                onPress={toggleAutoAccept}
+                hitSlop={14}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.disable_auto_accept', { defaultValue: 'Desactivar' })}
+              >
                 <RNText style={{
                   ...midnightEmber.text.caption,
                   color: midnightEmber.map.text.secondary,
@@ -707,9 +717,13 @@ function IncomingRideCardInner({
               </Pressable>
             </>
           ) : (
+            // V2 — hitSlop bumped 8 → 14 to clear the HIG 44pt minimum
+            // (icon 13pt + caption text ~16pt; the surrounding 14pt
+            // hitSlop expands the effective hit area on all sides).
             <Pressable
               onPress={toggleAutoAccept}
-              hitSlop={8}
+              hitSlop={14}
+              accessibilityRole="button"
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',

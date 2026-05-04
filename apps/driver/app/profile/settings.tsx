@@ -445,9 +445,15 @@ export default function DriverSettingsScreen() {
                   {t('profile.notif_section_title')}
                 </Text>
                 {NOTIF_CATEGORIES.map((cat) => (
+                  // V2 — row height enforced to ≥44pt (HIG). Previously
+                  // py-2.5 + a 0.85-scaled Switch produced ~37pt rows which
+                  // are easy to mis-tap, especially on cramped category
+                  // lists like this one. Removed the scale so the Switch
+                  // tracks render at full size.
                   <View
                     key={cat.key}
-                    className="flex-row items-center justify-between py-2.5"
+                    className="flex-row items-center justify-between py-3"
+                    style={{ minHeight: 44 }}
                   >
                     <View className="flex-row items-center">
                       <Ionicons
@@ -463,7 +469,6 @@ export default function DriverSettingsScreen() {
                       value={categoryPrefs[cat.key] !== false}
                       onValueChange={(v) => handleCategoryToggle(cat.key, v)}
                       trackColor={SWITCH_TRACK}
-                      style={{ transform: [{ scale: 0.85 }] }}
                       accessibilityLabel={t(cat.labelKey)}
                     />
                   </View>
