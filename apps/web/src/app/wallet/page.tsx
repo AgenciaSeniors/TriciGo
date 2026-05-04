@@ -153,7 +153,18 @@ function StripeCheckoutForm({
           </div>
         </div>
 
-        <PaymentElement options={{ layout: 'tabs' }} />
+        {/*
+          Stripe Payment Element with Apple Pay + Google Pay surfaced as
+          first-class options when supported. Mobile already gets these
+          automatically via @stripe/stripe-react-native PaymentSheet (see
+          apps/client/src/lib/stripe-bootstrap.tsx — `merchant.app.tricigo.client`);
+          web previously only exposed card. Setting `wallets: 'auto'` lets
+          Stripe show the device-native wallet button when the browser
+          supports it (Safari → Apple Pay, Chrome → Google Pay) and falls
+          back to card otherwise. Requires Apple Pay domain registration
+          on the Stripe dashboard for production.
+        */}
+        <PaymentElement options={{ layout: 'tabs', wallets: { applePay: 'auto', googlePay: 'auto' } }} />
       </div>
 
       <button
@@ -417,14 +428,22 @@ export default function WalletPage() {
   }
 
   async function handleTransfer() {
-    const amount = parseInt(transferAmount, 10);
-    if (!userId || !transferRecipient || isNaN(amount) || amount <= 0) return;
+    // The user types the amount in TRC (whole units), same as mobile —
+    // we convert to cents (the unit the wallet ledger stores) right
+    // before the API call. Mobile mirrors this in
+    // apps/client/app/(tabs)/wallet.tsx:345 / :1031 (`amountNum * 100`).
+    // Previously web passed `parseInt(transferAmount)` directly, which
+    // would have been read by the backend as cents — meaning the user
+    // would have to type "1000" to send 10 TRC, very awkward UX.
+    const amountTrc = parseFloat(transferAmount);
+    if (!userId || !transferRecipient || isNaN(amountTrc) || amountTrc <= 0) return;
+    const amountCents = Math.round(amountTrc * 100);
     setTransferSending(true);
     setTransferSuccess(null);
     setTransferError(null);
     try {
-      await walletService.transferP2P(userId, transferRecipient.id, amount, transferNote || undefined);
-      setTransferSuccess(`Transferencia de ${formatTRC(amount)} enviada a ${transferRecipient.full_name}.`);
+      await walletService.transferP2P(userId, transferRecipient.id, amountCents, transferNote || undefined);
+      setTransferSuccess(`Transferencia de ${formatTRC(amountCents)} enviada a ${transferRecipient.full_name}.`);
       setTransferPhone('');
       setTransferAmount('');
       setTransferNote('');
@@ -665,18 +684,22 @@ export default function WalletPage() {
 
           {transferRecipient && (
             <>
+              {/* User types whole TRC (e.g. 10 → 10 TRC). The handler
+                  converts to cents before the API call (mirrors mobile). */}
               <input
                 type="number"
-                placeholder="Monto en centavos TRC"
-                aria-label="Monto de transferencia en centavos TRC"
+                step="0.01"
+                min="0.01"
+                placeholder="Monto en TRC"
+                aria-label="Monto de transferencia en TRC"
                 value={transferAmount}
                 onChange={(e) => setTransferAmount(e.target.value)}
                 className="input-base"
                 style={{ marginBottom: '0.5rem' }}
               />
-              {transferAmount && !isNaN(parseInt(transferAmount)) && parseInt(transferAmount) > 0 && (
+              {transferAmount && !isNaN(parseFloat(transferAmount)) && parseFloat(transferAmount) > 0 && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  = {formatTRC(parseInt(transferAmount))} (~{formatTRCasUSD(parseInt(transferAmount), exchangeRate)})
+                  = {formatTRC(Math.round(parseFloat(transferAmount) * 100))} (~{formatTRCasUSD(Math.round(parseFloat(transferAmount) * 100), exchangeRate)})
                 </p>
               )}
               <input

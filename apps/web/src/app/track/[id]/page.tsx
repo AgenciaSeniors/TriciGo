@@ -184,24 +184,41 @@ export default function TrackRidePage() {
     // BUG-277-web: subscribeToRide is now a no-op that returns { unsubscribe }
     // (the realtime websocket was disabled to free OkHttp pool slots in mobile;
     // web inherits the no-op via the shared `@tricigo/api` package). The
-    // 10-second polling interval below is the sole source of ride state
-    // updates now. We keep the call so future re-enabling is a one-line flip.
+    // polling interval below is the sole source of ride state updates now.
+    // We keep the call so future re-enabling is a one-line flip.
     const channel = rideService.subscribeToRide(rideId, (updated) => {
       setRide((prev) => {
         if (!prev) return null;
         return { ...prev, ...updated, pickup_location: prev.pickup_location, dropoff_location: prev.dropoff_location };
       });
     });
+    // Match mobile (apps/client/src/hooks/useRide.ts:241): 3s polling.
+    // Web was at 10s — that's 3.3x slower at detecting completed status,
+    // so the user spent up to 10s on the in-progress screen before the
+    // rating screen appeared. Same network cost as mobile, identical UX.
+    const TERMINAL = ['completed', 'canceled', 'failed', 'no_driver_found', 'disputed'];
     const interval = setInterval(() => {
-      // Stop polling when ride reaches a terminal status (read from ref to avoid stale closure)
-      const TERMINAL = ['completed', 'canceled', 'failed', 'no_driver_found', 'disputed'];
       if (TERMINAL.includes(rideStatusRef.current ?? '')) {
         clearInterval(interval);
         return;
       }
       fetchRide();
-    }, 10_000);
-    return () => { channel.unsubscribe(); clearInterval(interval); };
+    }, 3_000);
+    // Re-fetch immediately when the tab/window comes back into focus —
+    // mirrors the AppState 'foreground' listener in mobile useRide.ts:244-248.
+    // Without this, a user who switched tabs for 30s would see stale ride
+    // state until the next polling tick.
+    const onVisible = () => {
+      if (!document.hidden && !TERMINAL.includes(rideStatusRef.current ?? '')) {
+        fetchRide();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      channel.unsubscribe();
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, fetchRide]);
 

@@ -4,34 +4,37 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, customerService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
+// Use the shared types from @tricigo/types instead of redefining locally —
+// this is what mobile (apps/client/app/profile/ride-preferences.tsx:14)
+// imports, so both apps now read/write the same shape and stay in sync
+// when the type evolves.
+import type { RidePreferences, AccessibilityNeed } from '@tricigo/types';
 
-type TemperaturePref = 'cool' | 'warm' | 'no_preference';
-type AccessibilityNeed = 'wheelchair' | 'hearing_impaired' | 'visual_impaired' | 'service_animal' | 'extra_space';
-
-interface RidePreferences {
-  quiet_mode?: boolean;
-  conversation_ok?: boolean;
-  temperature?: TemperaturePref;
-  luggage_trunk?: boolean;
-  accessibility_needs?: AccessibilityNeed[];
-}
-
-const TEMP_OPTIONS: { value: TemperaturePref; label: string }[] = [
-  { value: 'cool', label: 'Frio' },
-  { value: 'warm', label: 'Calido' },
-  { value: 'no_preference', label: 'Sin preferencia' },
-];
-
-const ACCESSIBILITY_OPTIONS: { value: AccessibilityNeed; label: string; desc: string }[] = [
-  { value: 'wheelchair', label: 'Silla de ruedas', desc: 'Necesito un vehiculo accesible para silla de ruedas' },
-  { value: 'hearing_impaired', label: 'Discapacidad auditiva', desc: 'Tengo discapacidad auditiva' },
-  { value: 'visual_impaired', label: 'Discapacidad visual', desc: 'Tengo discapacidad visual' },
-  { value: 'service_animal', label: 'Animal de servicio', desc: 'Viajo con un animal de servicio' },
-  { value: 'extra_space', label: 'Espacio extra', desc: 'Necesito espacio adicional' },
-];
+type TemperaturePref = NonNullable<RidePreferences['temperature']>;
 
 export default function RidePreferencesPage() {
   const router = useRouter();
+  const { t } = useTranslation('web');
+
+  // i18n-aware option lists — labels now resolve through the shared i18n
+  // namespace so es/en/pt all stay in sync (mobile uses the same keys
+  // under the 'rider' namespace; we keep the defaultValue copy identical
+  // to mobile so untranslated builds still render Spanish gracefully).
+  const TEMP_OPTIONS: { value: TemperaturePref; label: string }[] = [
+    { value: 'cool', label: t('preferences.temperature_cool', { defaultValue: 'Frío' }) },
+    { value: 'warm', label: t('preferences.temperature_warm', { defaultValue: 'Cálido' }) },
+    { value: 'no_preference', label: t('preferences.temperature_none', { defaultValue: 'Sin preferencia' }) },
+  ];
+
+  const ACCESSIBILITY_OPTIONS: { value: AccessibilityNeed; label: string; desc: string }[] = [
+    { value: 'wheelchair', label: t('preferences.access_wheelchair', { defaultValue: 'Silla de ruedas' }), desc: t('preferences.access_wheelchair_desc', { defaultValue: 'Necesito un vehículo accesible para silla de ruedas' }) },
+    { value: 'hearing_impaired', label: t('preferences.access_hearing', { defaultValue: 'Discapacidad auditiva' }), desc: t('preferences.access_hearing_desc', { defaultValue: 'Tengo discapacidad auditiva' }) },
+    { value: 'visual_impaired', label: t('preferences.access_visual', { defaultValue: 'Discapacidad visual' }), desc: t('preferences.access_visual_desc', { defaultValue: 'Tengo discapacidad visual' }) },
+    { value: 'service_animal', label: t('preferences.access_animal', { defaultValue: 'Animal de servicio' }), desc: t('preferences.access_animal_desc', { defaultValue: 'Viajo con un animal de servicio' }) },
+    { value: 'extra_space', label: t('preferences.access_space', { defaultValue: 'Espacio extra' }), desc: t('preferences.access_space_desc', { defaultValue: 'Necesito espacio adicional' }) },
+  ];
+
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
