@@ -11,6 +11,21 @@ import { WebEmptyState } from '@/components/WebEmptyState';
 
 const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
+const SERVICE_LABELS: Record<string, string> = {
+  triciclo_basico: 'Triciclo',
+  moto_standard: 'Moto',
+  auto_standard: 'Auto',
+  auto_confort: 'Confort',
+  mensajeria: 'Delivery',
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  tricicoin: 'TriciCoin',
+  cash: 'Efectivo',
+  mixed: 'Mixto',
+  corporate: 'Corporativo',
+};
+
 function formatNextOccurrence(dateStr: string | null): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -94,13 +109,34 @@ export default function RecurringRidesPage() {
   return (
     <main style={{ maxWidth: 600, margin: '0 auto', padding: '2rem 1rem', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" aria-label={t('web.back_to_profile', { defaultValue: 'Volver al perfil' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.recurring_title', { defaultValue: 'Viajes recurrentes' })}</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Link href="/profile" aria-label={t('web.back_to_profile', { defaultValue: 'Volver al perfil' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </Link>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.recurring_title', { defaultValue: 'Viajes recurrentes' })}</h1>
+        </div>
+        {/* Create CTA — only when there's at least one ride. The empty
+            state already exposes a primary action, so showing the
+            button there too would duplicate the affordance. */}
+        {!loading && rides.length > 0 && (
+          <Link
+            href="/profile/recurring-rides/create"
+            style={{
+              padding: '0.5rem 0.875rem',
+              borderRadius: '0.5rem',
+              background: 'var(--primary)',
+              color: 'white',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            + {t('recurring.create_short', { defaultValue: 'Nuevo' })}
+          </Link>
+        )}
       </div>
 
       {error && (
@@ -119,7 +155,10 @@ export default function RecurringRidesPage() {
           icon="🔄"
           title={t('web.recurring_empty_title', { defaultValue: 'No tienes viajes recurrentes' })}
           description={t('web.recurring_empty_desc', { defaultValue: 'Configura viajes que se repiten para ahorrar tiempo.' })}
-          action={{ label: t('web.recurring_request_ride', { defaultValue: 'Solicitar un viaje' }), href: '/book' }}
+          action={{
+            label: t('recurring.create', { defaultValue: 'Crear viaje recurrente' }),
+            href: '/profile/recurring-rides/create',
+          }}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -167,6 +206,27 @@ export default function RecurringRidesPage() {
                 <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{ride.time_of_day}</span>
               </div>
 
+              {/* Service type + payment method badges — antes solo se
+                  veían en el sheet de edit. Mostrarlos en la card hace
+                  que el usuario pueda revisar la config sin tener que
+                  abrir editar. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem',
+                  borderRadius: '999px', background: 'var(--bg-page)',
+                  border: '1px solid var(--border-light)', color: 'var(--text-secondary)',
+                }}>
+                  {SERVICE_LABELS[ride.service_type] ?? ride.service_type}
+                </span>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem',
+                  borderRadius: '999px', background: 'var(--bg-page)',
+                  border: '1px solid var(--border-light)', color: 'var(--text-secondary)',
+                }}>
+                  {PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method}
+                </span>
+              </div>
+
               {/* Next occurrence */}
               {ride.next_occurrence_at && (
                 <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
@@ -180,6 +240,17 @@ export default function RecurringRidesPage() {
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{t('web.recurring_processing', { defaultValue: 'Procesando...' })}</span>
                 ) : (
                   <>
+                    <Link
+                      href={`/profile/recurring-rides/${ride.id}/edit`}
+                      aria-label={t('recurring.edit', { defaultValue: 'Editar viaje recurrente' })}
+                      style={{
+                        padding: '0.4rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 500,
+                        background: 'var(--bg-page)', color: 'var(--text-primary)',
+                        border: '1px solid var(--border)', textDecoration: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      {t('recurring.edit_short', { defaultValue: 'Editar' })}
+                    </Link>
                     <button
                       onClick={() => ride.status === 'active' ? handlePause(ride.id) : handleResume(ride.id)}
                       aria-label={ride.status === 'active' ? t('web.recurring_pause_label', { defaultValue: 'Pausar viaje recurrente' }) : t('web.recurring_resume_label', { defaultValue: 'Reanudar viaje recurrente' })}
