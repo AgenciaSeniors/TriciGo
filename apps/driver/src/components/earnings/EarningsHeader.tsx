@@ -1,14 +1,14 @@
 /**
- * EarningsHeader — extracted from apps/driver/app/(tabs)/earnings.tsx
- * for PR-A.
+ * EarningsHeader — Midnight Ember edition (PR-B).
  *
- * Renders the screen title plus the current `driver_cash` balance with a
- * pressable affordance that navigates to the full Wallet screen.
+ * Title + driver_cash balance + Wallet CTA chevron. Pressable affordance
+ * navigates to the full Wallet screen.
  *
- * The `<BalanceBadge>` + AnimatedCard wrapper is kept verbatim so the
- * mount animation timing (delay=0) matches the original.
- *
- * Visual + tokens preserved verbatim from the inline version.
+ * v2 tokenization:
+ *   - Title color via `midnightEmber.screen.text.primary`.
+ *   - Wallet CTA icon + label via `midnightEmber.accent[500]`. The
+ *     existing `<BalanceBadge>` and `<AnimatedCard>` shared components
+ *     keep their internals.
  */
 import React from 'react';
 import { View, Pressable } from 'react-native';
@@ -18,9 +18,7 @@ import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
-
-const lt = driverStandardLightColors;
+import { midnightEmber } from '@tricigo/theme';
 
 interface EarningsHeaderProps {
   balance: number;
@@ -31,7 +29,11 @@ export function EarningsHeader({ balance }: EarningsHeaderProps) {
 
   return (
     <>
-      <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
+      <Text
+        variant="h3"
+        style={{ color: midnightEmber.screen.text.primary }}
+        className="mb-4"
+      >
         {t('earnings.title')}
       </Text>
 
@@ -47,11 +49,22 @@ export function EarningsHeader({ balance }: EarningsHeaderProps) {
             className="mb-2"
           />
           <View className="flex-row items-center justify-center mb-4">
-            <Ionicons name="wallet-outline" size={14} color={colors.brand.orange} />
-            <Text variant="caption" color="accent" className="ml-1">
+            <Ionicons
+              name="wallet-outline"
+              size={14}
+              color={midnightEmber.accent[500]}
+            />
+            <Text
+              variant="caption"
+              style={{ color: midnightEmber.accent[500], marginLeft: 4 }}
+            >
               {t('wallet.open', { defaultValue: 'Ver Wallet' })}
             </Text>
-            <Ionicons name="chevron-forward" size={12} color={colors.brand.orange} />
+            <Ionicons
+              name="chevron-forward"
+              size={12}
+              color={midnightEmber.accent[500]}
+            />
           </View>
         </Pressable>
       </AnimatedCard>

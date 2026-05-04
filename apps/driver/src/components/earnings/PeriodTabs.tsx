@@ -1,21 +1,19 @@
 /**
- * PeriodTabs — extracted from apps/driver/app/(tabs)/earnings.tsx
- * for PR-A.
+ * PeriodTabs — Midnight Ember edition (PR-B).
  *
- * Pill-shaped tab row: `Hoy / Semana / Mes`. Triggers the parent's
- * `period` state change which in turn refetches data via the
- * earnings hook.
+ * Pill-shaped tab row: `Hoy / Semana / Mes`.
  *
- * Visual + tokens preserved verbatim. Migration to midnightEmber
- * happens in PR-B.
+ * v2 tokenization: active tab background swapped from a raw `#FF4D00`
+ * to `midnightEmber.accent[500]`; the inactive background uses
+ * `screen.bg.sunken` and the inactive label uses
+ * `screen.text.secondary` so the interactive contrast follows the
+ * system instead of a hard-coded hex pair.
  */
 import React from 'react';
 import { View, Pressable } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { driverStandardLightColors } from '@tricigo/theme';
-
-const lt = driverStandardLightColors;
+import { midnightEmber } from '@tricigo/theme';
 
 export type Period = 'day' | 'week' | 'month';
 
@@ -34,29 +32,40 @@ export function PeriodTabs({ period, onChange }: PeriodTabsProps) {
   };
 
   return (
-    <View className="flex-row gap-2 mb-4" accessibilityRole="tablist">
-      {(['day', 'week', 'month'] as Period[]).map((p) => (
-        <Pressable
-          key={p}
-          onPress={() => onChange(p)}
-          className="flex-1 min-h-[48px] justify-center rounded-full items-center"
-          style={period === p
-            ? { backgroundColor: '#FF4D00' }
-            : { backgroundColor: lt.background.tertiary }
-          }
-          accessibilityRole="tab"
-          accessibilityState={{ selected: period === p }}
-          accessibilityLabel={labels[p]}
-        >
-          <Text
-            variant="bodySmall"
-            className="font-semibold"
-            style={{ color: period === p ? '#FFFFFF' : lt.text.secondary }}
+    <View
+      className="flex-row gap-2 mb-4"
+      accessibilityRole="tablist"
+    >
+      {(['day', 'week', 'month'] as Period[]).map((p) => {
+        const active = period === p;
+        return (
+          <Pressable
+            key={p}
+            onPress={() => onChange(p)}
+            className="flex-1 min-h-[48px] justify-center rounded-full items-center"
+            style={{
+              backgroundColor: active
+                ? midnightEmber.accent[500]
+                : midnightEmber.screen.bg.sunken,
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={labels[p]}
           >
-            {labels[p]}
-          </Text>
-        </Pressable>
-      ))}
+            <Text
+              variant="bodySmall"
+              className="font-semibold"
+              style={{
+                color: active
+                  ? midnightEmber.screen.text.inverse
+                  : midnightEmber.screen.text.secondary,
+              }}
+            >
+              {labels[p]}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

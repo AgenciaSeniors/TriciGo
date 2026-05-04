@@ -1,10 +1,20 @@
+/**
+ * EarningsByZoneChart — Midnight Ember edition (PR-B).
+ *
+ * Horizontal-bar mini-chart showing the driver's top zones by earnings
+ * for the selected period. Pure View + width% — no SVG dependency.
+ *
+ * v2 tokenization: card surface, bar track, and accent fill all migrate
+ * from raw hex to `midnightEmber` tokens. The skeleton state shares the
+ * bar-track color with the actual bars for visual continuity.
+ */
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { formatCUP } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import type { DriverEarningsByZone } from '@tricigo/types';
 
 interface Props {
@@ -13,9 +23,6 @@ interface Props {
 }
 
 const BAR_HEIGHT = 10;
-const CARD_BG = '#ffffff';
-const BORDER_SUBTLE = 'rgba(15, 23, 42, 0.06)';
-const BAR_TRACK = 'rgba(15, 23, 42, 0.05)';
 
 /**
  * Horizontal-bar mini-chart showing the driver's top zones by
@@ -40,7 +47,13 @@ export function EarningsByZoneChart({ data, loading }: Props) {
       <Card
         variant="filled"
         padding="md"
-        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16 }}
+        style={{
+          backgroundColor: midnightEmber.screen.bg.surface,
+          borderWidth: 1,
+          borderColor: midnightEmber.screen.line.default,
+          borderRadius: midnightEmber.radius.card,
+          ...midnightEmber.shadow.card,
+        }}
       >
         {loading ? (
           <View className="py-2">
@@ -51,7 +64,7 @@ export function EarningsByZoneChart({ data, loading }: Props) {
                     height: 10,
                     width: '60%',
                     borderRadius: 4,
-                    backgroundColor: BAR_TRACK,
+                    backgroundColor: midnightEmber.screen.line.hairline,
                     marginBottom: 8,
                   }}
                 />
@@ -60,7 +73,7 @@ export function EarningsByZoneChart({ data, loading }: Props) {
                     height: BAR_HEIGHT,
                     width: `${90 - i * 20}%`,
                     borderRadius: BAR_HEIGHT / 2,
-                    backgroundColor: BAR_TRACK,
+                    backgroundColor: midnightEmber.screen.line.hairline,
                   }}
                 />
               </View>
@@ -78,10 +91,19 @@ export function EarningsByZoneChart({ data, loading }: Props) {
             return (
               <View key={row.zone_id} className="mb-3 last:mb-0">
                 <View className="flex-row justify-between mb-1">
-                  <Text variant="bodySmall" className="font-medium flex-1" numberOfLines={1}>
+                  <Text
+                    variant="bodySmall"
+                    className="font-medium flex-1"
+                    numberOfLines={1}
+                    style={{ color: midnightEmber.screen.text.primary }}
+                  >
                     {row.zone_name}
                   </Text>
-                  <Text variant="bodySmall" className="font-semibold tabular-nums ml-2">
+                  <Text
+                    variant="bodySmall"
+                    className="font-semibold tabular-nums ml-2"
+                    style={{ color: midnightEmber.screen.text.primary }}
+                  >
                     {formatCUP(row.total_earnings_cup)}
                   </Text>
                 </View>
@@ -89,7 +111,7 @@ export function EarningsByZoneChart({ data, loading }: Props) {
                   style={{
                     height: BAR_HEIGHT,
                     borderRadius: BAR_HEIGHT / 2,
-                    backgroundColor: BAR_TRACK,
+                    backgroundColor: midnightEmber.screen.line.hairline,
                     overflow: 'hidden',
                   }}
                 >
@@ -97,12 +119,16 @@ export function EarningsByZoneChart({ data, loading }: Props) {
                     style={{
                       height: '100%',
                       width: `${pct}%`,
-                      backgroundColor: colors.brand.orange,
+                      backgroundColor: midnightEmber.accent[500],
                       borderRadius: BAR_HEIGHT / 2,
                     }}
                   />
                 </View>
-                <Text variant="caption" color="secondary" className="mt-0.5">
+                <Text
+                  variant="caption"
+                  className="mt-0.5"
+                  style={{ color: midnightEmber.screen.text.secondary }}
+                >
                   {t('earnings.by_zone_trips', {
                     count: row.trip_count,
                     defaultValue: `${row.trip_count} viaje${row.trip_count === 1 ? '' : 's'}`,

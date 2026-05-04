@@ -1,22 +1,25 @@
 /**
- * EarningsGoalCard — extracted from apps/driver/app/(tabs)/earnings.tsx
- * for PR-A.
+ * EarningsGoalCard — Midnight Ember edition (PR-B).
  *
  * Three internal states:
- *   1. No goal yet (goal === 0 && !editing) → minimal "Establecer meta
- *      del día" CTA card.
+ *   1. No goal yet → minimal "Establecer meta del día" CTA card.
  *   2. Editing → input + Save / Cancel buttons.
  *   3. Goal set → progress bar + percentage + milestone label.
  *
- * Behaviour preserved verbatim:
- *   - Goal persisted in AsyncStorage at @tricigo/earnings_goal.
- *   - Milestone toasts (25 / 50 / 75 / 100 %) fire once per day,
- *     persisted under @tricigo/milestone_shown_<YYYY-MM-DD>.
- *   - BUG-079 day-rollover reset is preserved.
- *   - HF-3 goal validation (1..999999) is preserved.
+ * v2 tokenization:
+ *   - Card surface: `screen.bg.surface` + `screen.line.default` border
+ *     + `radius.card` + `shadow.card`.
+ *   - Progress threshold rainbow (success / yellow / red) collapsed to
+ *     the system semantics: `state.success` (≥75%), `state.warning`
+ *     (≥50%), `state.danger` (<50%).
+ *   - Save CTA uses `accent[500]` solid fill.
+ *   - Input uses `screen.bg.sunken` + `screen.line.default` border —
+ *     the same pattern as other input affordances in the dashboard.
+ *   - Change-goal link uses `accent[500]` text affordance instead of
+ *     the legacy `text-primary-400` Tailwind class.
  *
- * Visual + tokens preserved verbatim from the inline version. Migration
- * to midnightEmber happens in PR-B.
+ * Behaviour preserved verbatim — same AsyncStorage persistence,
+ * milestone toasts, BUG-079 day-rollover reset, HF-3 validation.
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Pressable, TextInput } from 'react-native';
@@ -25,18 +28,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { formatCUP } from '@tricigo/utils';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
-
-const lt = driverStandardLightColors;
-const CARD_BG = lt.card;
-const BORDER_SUBTLE = lt.border.default;
-const CARD_SHADOW = {
-  shadowColor: '#000',
-  shadowOpacity: 0.04,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
-};
+import { midnightEmber } from '@tricigo/theme';
 
 const GOAL_STORAGE_KEY = '@tricigo/earnings_goal';
 const MILESTONE_STORAGE_PREFIX = '@tricigo/milestone_shown_';
@@ -132,7 +124,14 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
   }, [inputValue]);
 
   const pct = goal > 0 ? Math.min((currentEarnings / goal) * 100, 100) : 0;
-  const progressColor = pct >= 75 ? colors.success.DEFAULT : pct >= 50 ? '#eab308' : '#ef4444';
+
+  // PR-B: collapse the 3-hex progress rainbow onto semantic state tokens.
+  const progressColor =
+    pct >= 75
+      ? midnightEmber.state.success
+      : pct >= 50
+        ? midnightEmber.state.warning
+        : midnightEmber.state.danger;
 
   const milestoneLabel = pct >= 100
     ? t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' })
@@ -144,22 +143,39 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
           ? t('earnings.milestone_25', { defaultValue: 'Buen inicio!' })
           : null;
 
+  // Reusable card surface — every internal state shares this look.
+  const cardStyle = {
+    backgroundColor: midnightEmber.screen.bg.surface,
+    borderWidth: 1,
+    borderColor: midnightEmber.screen.line.default,
+    borderRadius: midnightEmber.radius.card,
+    padding: 14,
+    marginBottom: 16,
+    ...midnightEmber.shadow.card,
+  };
+
   if (goal <= 0 && !editing) {
     return (
       <Pressable
         onPress={() => { setEditing(true); setInputValue(''); }}
-        className="rounded-2xl p-4 mb-4"
-        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, ...CARD_SHADOW }}
+        style={cardStyle}
         accessibilityRole="button"
         accessibilityLabel={t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
       >
         <View className="flex-row items-center">
           <Text style={{ fontSize: 20, marginRight: 8 }}>🎯</Text>
-          <Text variant="body" className="font-semibold" style={{ color: lt.text.primary }}>
+          <Text
+            variant="body"
+            className="font-semibold"
+            style={{ color: midnightEmber.screen.text.primary }}
+          >
             {t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
           </Text>
         </View>
-        <Text variant="badge" style={{ color: lt.text.secondary }} className="mt-1">
+        <Text
+          variant="badge"
+          style={{ color: midnightEmber.screen.text.secondary, marginTop: 4 }}
+        >
           {t('earnings.set_goal_hint', { defaultValue: 'Define cuanto quieres ganar hoy' })}
         </Text>
       </Pressable>
@@ -168,21 +184,31 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
 
   if (editing) {
     return (
-      <View
-        className="rounded-2xl p-4 mb-4"
-        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, ...CARD_SHADOW }}
-      >
-        <Text variant="body" className="font-semibold mb-3" style={{ color: lt.text.primary }}>
+      <View style={cardStyle}>
+        <Text
+          variant="body"
+          className="font-semibold mb-3"
+          style={{ color: midnightEmber.screen.text.primary }}
+        >
           🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })} (CUP)
         </Text>
         <View className="flex-row items-center gap-3">
           <TextInput
-            className="flex-1 rounded-xl px-4 py-3 text-lg"
-            style={{ backgroundColor: lt.background.tertiary, color: lt.text.primary, fontSize: 18, borderWidth: 1, borderColor: lt.border.default }}
+            style={{
+              flex: 1,
+              borderRadius: midnightEmber.radius.input,
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              fontSize: 18,
+              backgroundColor: midnightEmber.screen.bg.sunken,
+              color: midnightEmber.screen.text.primary,
+              borderWidth: 1,
+              borderColor: midnightEmber.screen.line.default,
+            }}
             value={inputValue}
             onChangeText={setInputValue}
             placeholder={goal > 0 ? String(goal) : '5000'}
-            placeholderTextColor={lt.text.tertiary}
+            placeholderTextColor={midnightEmber.screen.text.tertiary}
             keyboardType="numeric"
             autoFocus
             onSubmitEditing={saveGoal}
@@ -190,11 +216,23 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
           />
           <Pressable
             onPress={saveGoal}
-            className="bg-primary-500 rounded-xl px-5 min-h-[48px] justify-center"
+            style={{
+              backgroundColor: midnightEmber.accent[500],
+              borderRadius: midnightEmber.radius.input,
+              paddingHorizontal: 20,
+              minHeight: 48,
+              justifyContent: 'center',
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('earnings.save_goal', { defaultValue: 'Guardar meta' })}
           >
-            <Text variant="body" color="inverse" className="font-semibold">OK</Text>
+            <Text
+              variant="body"
+              className="font-semibold"
+              style={{ color: midnightEmber.screen.text.inverse }}
+            >
+              OK
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => setEditing(false)}
@@ -202,7 +240,9 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
             accessibilityRole="button"
             accessibilityLabel={t('earnings.cancel', { defaultValue: 'Cancelar' })}
           >
-            <Text variant="body" style={{ color: lt.text.tertiary }}>✕</Text>
+            <Text variant="body" style={{ color: midnightEmber.screen.text.tertiary }}>
+              ✕
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -210,12 +250,13 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
   }
 
   return (
-    <View
-      className="rounded-2xl p-4 mb-4"
-      style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, ...CARD_SHADOW }}
-    >
+    <View style={cardStyle}>
       <View className="flex-row items-center justify-between mb-2">
-        <Text variant="body" className="font-semibold" style={{ color: lt.text.primary }}>
+        <Text
+          variant="body"
+          className="font-semibold"
+          style={{ color: midnightEmber.screen.text.primary }}
+        >
           🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })}: {formatCUP(goal)}
         </Text>
         {pct >= 100 && <Text style={{ fontSize: 18 }}>🎉</Text>}
@@ -223,25 +264,40 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
 
       {/* Progress bar */}
       <View
-        className="h-3 rounded-full overflow-hidden mb-2"
-        style={{ backgroundColor: lt.border.subtle }}
+        style={{
+          height: 12,
+          borderRadius: 9999,
+          overflow: 'hidden',
+          marginBottom: 8,
+          backgroundColor: midnightEmber.screen.line.hairline,
+        }}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: goal, now: Math.min(currentEarnings, goal) }}
       >
         <View
-          className="h-full rounded-full"
-          style={{ width: `${Math.round(pct)}%`, backgroundColor: progressColor }}
+          style={{
+            height: '100%',
+            borderRadius: 9999,
+            width: `${Math.round(pct)}%`,
+            backgroundColor: progressColor,
+          }}
         />
       </View>
 
       <View className="flex-row items-center justify-between">
-        <Text variant="bodySmall" style={{ color: lt.text.secondary }}>
+        <Text
+          variant="bodySmall"
+          style={{ color: midnightEmber.screen.text.secondary }}
+        >
           {formatCUP(currentEarnings)} / {formatCUP(goal)} — {Math.round(pct)}% {t('earnings.completed', { defaultValue: 'completado' })}
         </Text>
       </View>
 
       {milestoneLabel && (
-        <Text variant="badge" style={{ color: progressColor, marginTop: 4, fontWeight: '600' }}>
+        <Text
+          variant="badge"
+          style={{ color: progressColor, marginTop: 4, fontWeight: '600' }}
+        >
           {milestoneLabel}
         </Text>
       )}
@@ -252,7 +308,7 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
         accessibilityRole="button"
         accessibilityLabel={t('earnings.change_goal', { defaultValue: 'Cambiar meta' })}
       >
-        <Text variant="caption" className="text-primary-400">
+        <Text variant="caption" style={{ color: midnightEmber.accent[500] }}>
           {t('earnings.change_goal', { defaultValue: 'Cambiar meta' })}
         </Text>
       </Pressable>
