@@ -42,6 +42,7 @@ import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import * as Location from 'expo-location';
 import { useDemandHotspots } from '@/hooks/useDemandHotspots';
+import { usePopularLocations } from '@/hooks/usePopularLocations';
 import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useSurgeZones } from '@/hooks/useSurgeZones';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
@@ -507,6 +508,15 @@ function NativeDriverHomeScreen() {
     enabled: isOnline,
   });
 
+  // N5 — popular pickup/dropoff clusters (90-day historical aggregate).
+  // Toggle gated; off by default to avoid overloading the map for
+  // drivers who don't ask for it.
+  const [popularLocationsEnabled, setPopularLocationsEnabled] = useState(false);
+  const popularLocations = usePopularLocations({
+    center: mapCenter,
+    enabled: isOnline && popularLocationsEnabled,
+  });
+
   // Peer online drivers (top-down markers on the map).
   const nearbyDrivers = useNearbyDrivers({
     center: mapCenter,
@@ -784,6 +794,7 @@ function NativeDriverHomeScreen() {
           surgeZones={surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))}
           nearbyDrivers={nearbyDrivers}
           demandHotspots={demandHotspots}
+          popularLocations={popularLocations}
           height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
@@ -799,6 +810,48 @@ function NativeDriverHomeScreen() {
       <View style={[styles.floatingHeaderContainer, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
         <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
       </View>
+
+      {/* N5 — popular pickup/dropoff clusters toggle. Floats on the
+           right edge below the recenter button (which lives inside
+           RideMapView). Only visible while online — when offline the
+           map overlay is hidden anyway, so the toggle would be
+           pointless context. */}
+      {isOnline && (
+        <Pressable
+          onPress={() => setPopularLocationsEnabled((p) => !p)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: popularLocationsEnabled }}
+          accessibilityLabel={t('home.popular_zones_toggle', { defaultValue: 'Mostrar zonas populares' })}
+          style={{
+            position: 'absolute',
+            top: insets.top + 64,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: popularLocationsEnabled
+              ? '#FF4D00'
+              : 'rgba(8, 8, 12, 0.7)',
+            borderWidth: 1,
+            borderColor: popularLocationsEnabled
+              ? '#FF4D00'
+              : 'rgba(255, 255, 255, 0.12)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+          }}
+        >
+          <Ionicons
+            name={popularLocationsEnabled ? 'pin' : 'pin-outline'}
+            size={20}
+            color="#FFFFFF"
+          />
+        </Pressable>
+      )}
 
       {/* Top floating badges.
            UX: the old "Alta demanda" chip was vague — drivers couldn't tell

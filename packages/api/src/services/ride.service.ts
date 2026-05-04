@@ -17,6 +17,7 @@ import type {
   SurgeZone,
   SurgeType,
   DemandHotspot,
+  PopularLocation,
   RideOfferStats,
   TripInsuranceConfig,
   RidePreferences,
@@ -1553,6 +1554,32 @@ export const rideService = {
     });
     if (error) throw error;
     return (data as DemandHotspot[] | null) ?? [];
+  },
+
+  /**
+   * Fetch popular pickup/dropoff clusters around a point. Sourced
+   * from the `popular_locations` materialized view (migration 00083),
+   * which aggregates the last 90 days of completed rides via
+   * ST_ClusterDBSCAN. Refreshed daily at 04:00 UTC. Different
+   * semantics from `getDemandHotspots`: that one combines a live
+   * boost with the matching hour-of-week pattern; this one is the
+   * pure historical "where do trips usually start/end" view.
+   */
+  async getPopularLocations(params: {
+    lat: number;
+    lng: number;
+    radiusM?: number;
+    limit?: number;
+  }): Promise<PopularLocation[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_popular_locations', {
+      p_lat: params.lat,
+      p_lng: params.lng,
+      p_radius_m: params.radiusM ?? 5000,
+      p_limit: params.limit ?? 20,
+    });
+    if (error) throw error;
+    return (data as PopularLocation[] | null) ?? [];
   },
 
   /**
