@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
@@ -98,7 +98,16 @@ export default function NotificationsPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Filter mirrors mobile (apps/client/app/notifications/index.tsx:51):
+  // 'all' shows everything, 'unread' shows only unread = true.
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  // Infinite scroll state. PAGE_SIZE matches the mobile default of 20
+  // (notification.service.ts:489) so both apps fetch the same shape.
+  const [hasMore, setHasMore] = useState(true);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -107,31 +116,70 @@ export default function NotificationsPage() {
     });
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
+  // Fetch a page. `reset=true` discards the current list (used when
+  // toggling the filter or on first load); `reset=false` appends to
+  // implement infinite scroll.
+  const fetchNotifications = useCallback(async (reset: boolean = true) => {
     if (!userId) return;
-    setLoading(true);
+    if (reset) {
+      setLoading(true);
+      setNotifications([]);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
     setError(null);
     try {
-      const data = await notificationService.getInboxNotifications(userId, { limit: 50 });
-      setNotifications(data);
+      const offset = reset ? 0 : notifications.length;
+      const data = await notificationService.getInboxNotifications(userId, {
+        unreadOnly: filter === 'unread',
+        limit: PAGE_SIZE,
+        offset,
+      });
+      // Page exhausted when the API returned less than we asked for.
+      setHasMore(data.length >= PAGE_SIZE);
+      setNotifications((prev) => (reset ? data : [...prev, ...data]));
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
       setError(t('notifications.error_loading'));
     } finally {
-      setLoading(false);
+      if (reset) setLoading(false);
+      else setLoadingMore(false);
     }
-  }, [userId, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, t, filter]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !userId) router.replace('/login');
   }, [authLoading, userId, router]);
 
+  // Re-fetch from page 1 whenever userId becomes available or the
+  // filter changes — both invalidate the current list.
   useEffect(() => {
     if (userId) {
-      fetchNotifications();
+      fetchNotifications(true);
     }
-  }, [userId, fetchNotifications]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, filter]);
+
+  // IntersectionObserver-based infinite scroll. When the sentinel div
+  // (placed below the last group) enters the viewport, fetch the next
+  // page. Mirrors the FlatList onEndReached pattern from mobile
+  // (apps/client/app/notifications/index.tsx:132-139) but using the web
+  // primitive that doesn't require a virtualised list to detect proximity
+  // to the bottom.
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore || loading || loadingMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        fetchNotifications(false);
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, fetchNotifications]);
 
   // Realtime subscription for new notifications
   useEffect(() => {
@@ -242,6 +290,35 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Filter chips — mirror mobile's all/unread toggle
+          (apps/client/app/notifications/index.tsx:202-220). Tapping a
+          chip resets the list and re-fetches with the new filter. */}
+      <div role="tablist" aria-label={t('notifications.filter_label', { defaultValue: 'Filtrar notificaciones' })} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        {(['all', 'unread'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={filter === option}
+            onClick={() => setFilter(option)}
+            style={{
+              padding: '0.4rem 0.875rem',
+              borderRadius: '999px',
+              border: '1px solid var(--border)',
+              background: filter === option ? 'var(--primary)' : 'var(--bg-page)',
+              color: filter === option ? 'white' : 'var(--text-primary)',
+              fontSize: '0.8rem',
+              fontWeight: filter === option ? 600 : 500,
+              cursor: 'pointer',
+            }}
+          >
+            {option === 'all'
+              ? t('notifications.filter_all', { defaultValue: 'Todas' })
+              : t('notifications.filter_unread', { defaultValue: 'No leídas' })}
+          </button>
+        ))}
+      </div>
+
       {/* Loading */}
       {loading && <WebSkeletonList count={4} />}
 
@@ -282,7 +359,7 @@ export default function NotificationsPage() {
       )}
 
       {/* Notification Groups */}
-      {!loading && !error && Object.entries(grouped).map(([dateLabel, items]) => (
+      {!loading && !error && notifications.length > 0 && Object.entries(grouped).map(([dateLabel, items]) => (
         <div key={dateLabel} style={{ marginBottom: '1.5rem' }}>
           <h2 style={{
             fontSize: '0.8rem',
@@ -375,6 +452,20 @@ export default function NotificationsPage() {
           </div>
         </div>
       ))}
+
+      {/* Infinite-scroll sentinel + loading-more indicator. The empty
+          div is what the IntersectionObserver watches; when it scrolls
+          into view (with a 200px rootMargin) we kick off the next page.
+          The `hasMore` flag stops the loop once the API returns less
+          than PAGE_SIZE. */}
+      {!loading && !error && notifications.length > 0 && hasMore && (
+        <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />
+      )}
+      {loadingMore && (
+        <div style={{ textAlign: 'center', padding: '0.75rem', color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+          {t('notifications.loading_more', { defaultValue: 'Cargando más…' })}
+        </div>
+      )}
     </main>
   );
 }
