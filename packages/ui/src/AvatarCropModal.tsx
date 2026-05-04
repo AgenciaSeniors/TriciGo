@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { Text } from '@tricigo/ui/Text';
+import { Text } from './Text';
 import { colors } from '@tricigo/theme';
 import { triggerHaptic } from '@tricigo/utils';
 

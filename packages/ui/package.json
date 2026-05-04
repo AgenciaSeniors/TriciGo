@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./Avatar": "./src/Avatar.tsx",
+    "./AvatarCropModal": "./src/AvatarCropModal.tsx",
     "./BalanceBadge": "./src/BalanceBadge.tsx",
     "./BottomSheet": "./src/BottomSheet.tsx",
     "./Button": "./src/Button.tsx",
@@ -47,6 +48,7 @@
     "@gorhom/bottom-sheet": ">=5",
     "react": "^18.2.0",
     "expo-image": ">=55.0.0",
+    "expo-image-manipulator": ">=12",
     "react-native": ">=0.74",
     "nativewind": ">=4"
   }

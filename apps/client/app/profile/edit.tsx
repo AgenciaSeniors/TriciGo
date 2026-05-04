@@ -13,7 +13,7 @@ import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { triggerHaptic } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
-import { AvatarCropModal } from '@/components/AvatarCropModal';
+import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 
 interface PendingCrop {
   uri: string;
