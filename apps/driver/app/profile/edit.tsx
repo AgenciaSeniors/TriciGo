@@ -12,7 +12,7 @@ import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
 import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -292,7 +292,7 @@ export default function EditProfileScreen() {
           variant="light"
         />
         {emailError ? (
-          <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{emailError}</Text>
+          <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2 ml-1">{emailError}</Text>
         ) : null}
 
         {/* Phone with validation */}
@@ -304,12 +304,12 @@ export default function EditProfileScreen() {
           variant="light"
         />
         {phoneError ? (
-          <Text variant="caption" className="text-red-400 -mt-2 mb-2 ml-1">{phoneError}</Text>
+          <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2 ml-1">{phoneError}</Text>
         ) : null}
 
         {/* OTP input */}
         {otpStep && (
-          <View className="mb-4 p-4 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] border border-primary-500/30">
+          <View className="mb-4 p-4 rounded-xl border" style={{ backgroundColor: midnightEmber.screen.bg.sunken, borderColor: `${midnightEmber.accent[500]}4D` }}>
             <Text variant="bodySmall" color="primary" className="mb-2">
               {td('profile.otp_sent', { phone: phone.trim(), defaultValue: 'Código enviado' })}
             </Text>
@@ -327,7 +327,8 @@ export default function EditProfileScreen() {
 
         {/* ── Driver Stats ──────────────────────────────────────────────────── */}
         {driverProfile && (
-          <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white border border-[#E2E8F0]">
+          <Card theme="light" variant="filled" padding="md" className="mb-4 border"
+            style={{ backgroundColor: midnightEmber.screen.bg.surface, borderColor: midnightEmber.screen.line.default }}>
             <View className="flex-row justify-between">
               <View className="items-center flex-1">
                 <Text variant="h4" color="accent">
@@ -357,7 +358,8 @@ export default function EditProfileScreen() {
 
         {/* ── Vehicle Card ──────────────────────────────────────────────────── */}
         {vehicle && (
-          <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white border border-[#E2E8F0]">
+          <Card theme="light" variant="filled" padding="md" className="mb-4 border"
+            style={{ backgroundColor: midnightEmber.screen.bg.surface, borderColor: midnightEmber.screen.line.default }}>
             {/* Header with edit link */}
             <View className="flex-row items-center justify-between mb-3">
               <Text variant="label" color="primary" className="opacity-70">
@@ -391,14 +393,14 @@ export default function EditProfileScreen() {
 
             {/* Badges: color, placa, capacidad */}
             <View className="flex-row flex-wrap gap-2 mb-2">
-              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full">
+              <View className="px-3 py-1.5 rounded-full" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
                 <Text variant="caption" color="primary">{vehicle.color}</Text>
               </View>
-              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full">
+              <View className="px-3 py-1.5 rounded-full" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
                 <Text variant="caption" color="primary">{vehicle.plate_number}</Text>
               </View>
-              <View className="bg-[#F1F5F9] px-3 py-1.5 rounded-full flex-row items-center gap-1">
-                <Ionicons name="people" size={12} color="#A3A3A3" />
+              <View className="px-3 py-1.5 rounded-full flex-row items-center gap-1" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="people" size={12} color={midnightEmber.screen.text.tertiary} />
                 <Text variant="caption" color="primary">{vehicle.capacity} pasajeros</Text>
               </View>
             </View>
@@ -406,9 +408,9 @@ export default function EditProfileScreen() {
             {/* Cargo details */}
             {vehicle.accepts_cargo && (
               <>
-                <View className="flex-row items-center bg-orange-900/30 rounded-lg px-3 py-2 mt-1">
-                  <Ionicons name="cube" size={14} color="#FF8A5C" />
-                  <Text variant="caption" className="ml-2" style={{ color: '#FF8A5C' }}>
+                <View className="flex-row items-center rounded-lg px-3 py-2 mt-1" style={{ backgroundColor: `${midnightEmber.accent[500]}1A` }}>
+                  <Ionicons name="cube" size={14} color={midnightEmber.accent[300]} />
+                  <Text variant="caption" className="ml-2" style={{ color: midnightEmber.accent[300] }}>
                     {td('onboarding.accepts_deliveries', { defaultValue: 'Acepta envíos' })} — Max {vehicle.max_cargo_weight_kg} kg
                   </Text>
                 </View>
@@ -420,7 +422,7 @@ export default function EditProfileScreen() {
                 {vehicle.accepted_cargo_categories?.length > 0 && (
                   <View className="flex-row flex-wrap gap-1 mt-2">
                     {vehicle.accepted_cargo_categories.map((cat) => (
-                      <View key={cat} className="bg-[#F1F5F9] px-2 py-1 rounded-full">
+                      <View key={cat} className="px-2 py-1 rounded-full" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
                         <Text variant="caption" color="primary" className="opacity-60">
                           {PACKAGE_CATEGORY_LABELS[cat]?.[lang] ?? cat}
                         </Text>
@@ -434,7 +436,7 @@ export default function EditProfileScreen() {
         )}
 
         {/* ── Accepts deliveries toggle ─────────────────────────────────────── */}
-        <View className="flex-row items-center justify-between py-4 px-1 mb-4 border-t border-[#E2E8F0]">
+        <View className="flex-row items-center justify-between py-4 px-1 mb-4 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
           <View className="flex-1 mr-4">
             <Text variant="body" color="primary">
               {td('onboarding.accepts_deliveries', { defaultValue: 'Acepta envíos' })}
@@ -446,8 +448,8 @@ export default function EditProfileScreen() {
           <Switch
             value={acceptsCargo}
             onValueChange={handleCargoToggle}
-            trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
-            thumbColor="#FFFFFF"
+            trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
+            thumbColor={midnightEmber.screen.bg.surface}
             accessibilityLabel={td('onboarding.accepts_deliveries', { defaultValue: 'Acepta envíos' })}
           />
         </View>

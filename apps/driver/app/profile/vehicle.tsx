@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -71,7 +71,7 @@ export default function VehicleScreen() {
         />
 
         {loading ? (
-          <ActivityIndicator color="#22C55E" className="mt-8" />
+          <ActivityIndicator color={midnightEmber.state.success} className="mt-8" />
         ) : !vehicle ? (
           <Text variant="body" color="secondary" className="text-center mt-8">
             No hay vehículo registrado
@@ -93,7 +93,8 @@ export default function VehicleScreen() {
             {infoRows.map((row) => (
               <View
                 key={row.label}
-                className="flex-row justify-between py-3 border-b border-[#E2E8F0]"
+                className="flex-row justify-between py-3 border-b"
+                style={{ borderBottomColor: midnightEmber.screen.line.default }}
               >
                 <Text variant="body" color="secondary">
                   {row.label}

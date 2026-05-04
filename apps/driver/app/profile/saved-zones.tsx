@@ -7,7 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -93,29 +93,29 @@ export default function SavedZonesScreen() {
                 onPress={() => togglePrimary(zone.id)}
                 className="rounded-2xl p-4 mb-3 flex-row items-center"
                 style={{
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: midnightEmber.screen.bg.surface,
                   borderWidth: 1,
-                  borderColor: zone.is_primary ? colors.brand.orange : '#E2E8F0',
+                  borderColor: zone.is_primary ? midnightEmber.accent[500] : midnightEmber.screen.line.default,
                 }}
               >
                 <View
                   className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-                  style={{ backgroundColor: zone.is_primary ? `${colors.brand.orange}20` : colors.neutral[100] }}
+                  style={{ backgroundColor: zone.is_primary ? `${midnightEmber.accent[500]}20` : midnightEmber.screen.bg.sunken }}
                 >
                   <Ionicons
                     name={zone.is_primary ? 'location' : 'location-outline'}
                     size={20}
-                    color={zone.is_primary ? colors.brand.orange : colors.neutral[500]}
+                    color={zone.is_primary ? midnightEmber.accent[500] : midnightEmber.screen.text.tertiary}
                   />
                 </View>
                 <View className="flex-1">
                   <Text variant="body" color="primary" className="font-semibold">{zone.name}</Text>
-                  <Text variant="caption" style={{ color: colors.neutral[500] }}>
+                  <Text variant="caption" style={{ color: midnightEmber.screen.text.tertiary }}>
                     {t('profile.zone_radius', { defaultValue: 'Radio' })}: {zone.radius_km} km
                   </Text>
                 </View>
                 {zone.is_primary && (
-                  <View className="px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.brand.orange}20` }}>
+                  <View className="px-2 py-1 rounded-full" style={{ backgroundColor: `${midnightEmber.accent[500]}20` }}>
                     <Text variant="caption" color="accent">
                       {t('profile.zone_primary', { defaultValue: 'Principal' })}
                     </Text>

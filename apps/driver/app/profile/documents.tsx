@@ -14,7 +14,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -197,7 +197,7 @@ export default function DocumentsScreen() {
 
         {loading ? (
           <View className="items-center py-20">
-            <ActivityIndicator size="large" color={colors.brand.orange} />
+            <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
           </View>
         ) : documents.length === 0 ? (
           <EmptyState
@@ -215,11 +215,11 @@ export default function DocumentsScreen() {
               return (
                 <Card theme="light" key={doc.id} variant="surface" padding="md" className="mb-3">
                   <View className="flex-row items-center">
-                    <View className="w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
+                    <View className="w-10 h-10 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
                       <Ionicons
                         name={isPdf ? 'document-text' : doc.is_verified ? 'checkmark-circle' : isRejected ? 'close-circle' : 'document-text'}
                         size={20}
-                        color={doc.is_verified ? colors.status.verified : isRejected ? colors.error.DEFAULT : colors.brand.orange}
+                        color={doc.is_verified ? midnightEmber.state.success : isRejected ? midnightEmber.state.danger : midnightEmber.accent[500]}
                       />
                     </View>
                     <View className="flex-1">
@@ -231,7 +231,7 @@ export default function DocumentsScreen() {
                       </Text>
                       {isRejected && doc.rejection_reason && (
                         <View className="flex-row items-start mt-1.5">
-                          <Ionicons name="alert-circle" size={12} color={colors.error.DEFAULT} style={{ marginTop: 2, marginRight: 4 }} />
+                          <Ionicons name="alert-circle" size={12} color={midnightEmber.state.danger} style={{ marginTop: 2, marginRight: 4 }} />
                           <Text variant="caption" color="error" className="flex-1">
                             {t('verification.rejection_reason', { reason: doc.rejection_reason })}
                           </Text>
@@ -258,12 +258,12 @@ export default function DocumentsScreen() {
                   )}
 
                   {doc.face_match_score != null && (
-                    <View className="flex-row items-center mt-3 bg-[#F1F5F9] rounded-lg px-3 py-2">
-                      <Ionicons name="scan-outline" size={14} color={colors.neutral[400]} />
+                    <View className="flex-row items-center mt-3 rounded-lg px-3 py-2" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                      <Ionicons name="scan-outline" size={14} color={midnightEmber.screen.text.tertiary} />
                       <Text variant="caption" color="secondary" className="ml-2 flex-1">
                         Face match
                       </Text>
-                      <View className="flex-1 h-1.5 bg-[#E2E8F0] rounded-full mx-2">
+                      <View className="flex-1 h-1.5 rounded-full mx-2" style={{ backgroundColor: midnightEmber.screen.line.default }}>
                         <View
                           className="h-1.5 rounded-full"
                           style={{
@@ -291,8 +291,8 @@ export default function DocumentsScreen() {
                   return (
                     <Card theme="light" key={check.id} variant="surface" padding="sm" className="mb-2">
                       <View className="flex-row items-center">
-                        <View className="w-8 h-8 rounded-lg bg-[#F1F5F9] items-center justify-center mr-3">
-                          <Ionicons name="camera-outline" size={16} color={colors.neutral[400]} />
+                        <View className="w-8 h-8 rounded-lg items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                          <Ionicons name="camera-outline" size={16} color={midnightEmber.screen.text.tertiary} />
                         </View>
                         <Text variant="caption" color="primary" className="flex-1">
                           {new Date(check.requested_at).toLocaleDateString('es-CU', {

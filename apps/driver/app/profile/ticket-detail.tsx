@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { colors, midnightEmber } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
@@ -73,19 +73,24 @@ export default function DriverTicketDetailScreen() {
 
   const renderMessage = ({ item }: { item: TicketMessage }) => {
     const isOwn = item.sender_id === userId;
+    const bubbleBg = isOwn
+      ? midnightEmber.accent[500]
+      : item.is_admin
+        ? `${midnightEmber.state.info}1F`
+        : midnightEmber.screen.bg.sunken;
+    const bodyColor = isOwn ? midnightEmber.screen.text.inverse : midnightEmber.screen.text.primary;
     return (
       <View className={`mb-3 ${isOwn ? 'items-end' : 'items-start'}`}>
         <View
-          className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-            isOwn ? 'bg-primary-500' : item.is_admin ? 'bg-blue-100' : 'bg-neutral-100'
-          }`}
+          className="max-w-[80%] rounded-2xl px-4 py-2.5"
+          style={{ backgroundColor: bubbleBg }}
         >
           {item.is_admin && (
-            <Text variant="caption" className="text-blue-600 font-semibold mb-0.5">
+            <Text variant="caption" className="font-semibold mb-0.5" style={{ color: midnightEmber.state.info }}>
               Soporte
             </Text>
           )}
-          <Text variant="bodySmall" className="text-neutral-900">
+          <Text variant="bodySmall" style={{ color: bodyColor }}>
             {item.message}
           </Text>
         </View>
@@ -151,11 +156,12 @@ export default function DriverTicketDetailScreen() {
 
           {/* Input bar */}
           {!isClosed ? (
-            <View className="flex-row items-end px-4 py-3 border-t border-[#E2E8F0] bg-white">
+            <View className="flex-row items-end px-4 py-3 border-t" style={{ borderTopColor: midnightEmber.screen.line.default, backgroundColor: midnightEmber.screen.bg.surface }}>
               <TextInput
-                className="flex-1 border border-[#E2E8F0] rounded-2xl px-4 py-2.5 mr-2 text-neutral-900 max-h-24"
+                className="flex-1 border rounded-2xl px-4 py-2.5 mr-2 max-h-24"
+                style={{ borderColor: midnightEmber.screen.line.default, color: midnightEmber.screen.text.primary }}
                 placeholder="Escribe un mensaje..."
-                placeholderTextColor="#737373"
+                placeholderTextColor={midnightEmber.screen.text.tertiary}
                 value={messageText}
                 onChangeText={setMessageText}
                 multiline
@@ -163,19 +169,18 @@ export default function DriverTicketDetailScreen() {
               <Pressable
                 onPress={handleSend}
                 disabled={!messageText.trim() || sending}
-                className={`w-10 h-10 rounded-full items-center justify-center ${
-                  messageText.trim() ? 'bg-primary-500' : 'bg-neutral-200'
-                }`}
+                className="w-10 h-10 rounded-full items-center justify-center"
+                style={{ backgroundColor: messageText.trim() ? midnightEmber.accent[500] : midnightEmber.screen.line.default }}
               >
                 <Ionicons
                   name="send"
                   size={18}
-                  color={messageText.trim() ? '#FFFFFF' : '#737373'}
+                  color={messageText.trim() ? midnightEmber.screen.text.inverse : midnightEmber.screen.text.tertiary}
                 />
               </Pressable>
             </View>
           ) : (
-            <View className="px-4 py-3 border-t border-[#E2E8F0] bg-white">
+            <View className="px-4 py-3 border-t" style={{ borderTopColor: midnightEmber.screen.line.default, backgroundColor: midnightEmber.screen.bg.surface }}>
               <Text variant="bodySmall" color="primary" className="text-center opacity-50">
                 Este ticket está {ticket?.status === 'resolved' ? 'resuelto' : 'cerrado'}
               </Text>

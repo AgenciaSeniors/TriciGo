@@ -12,7 +12,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { isValidPlateNumber } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
@@ -26,7 +26,7 @@ const VEHICLE_CONFIGS = [
     defaultCapacity: 3,
     maxCapacity: 8,
     image: require('../../assets/vehicles/selection/triciclo.png'),
-    accent: '#F97316',
+    accent: midnightEmber.accent[500],
   },
   {
     vehicleType: 'moto' as VehicleType,
@@ -34,7 +34,7 @@ const VEHICLE_CONFIGS = [
     defaultCapacity: 1,
     maxCapacity: 1,
     image: require('../../assets/vehicles/selection/moto.png'),
-    accent: '#3B82F6',
+    accent: midnightEmber.state.info,
   },
   {
     vehicleType: 'auto' as VehicleType,
@@ -42,7 +42,7 @@ const VEHICLE_CONFIGS = [
     defaultCapacity: 4,
     maxCapacity: 16,
     image: require('../../assets/vehicles/selection/auto.png'),
-    accent: '#22C55E',
+    accent: midnightEmber.state.success,
   },
 ];
 
@@ -241,7 +241,7 @@ export default function EditVehicleScreen() {
             {/* ── Vehicle Type Selector ── */}
             <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
-                <Ionicons name="car-sport" size={20} color={colors.brand.orange} />
+                <Ionicons name="car-sport" size={20} color={midnightEmber.accent[500]} />
                 <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.vehicle_type', { defaultValue: 'Tipo de vehículo' })}
                 </Text>
@@ -256,9 +256,9 @@ export default function EditVehicleScreen() {
                       style={{
                         width: '30%',
                         borderWidth: 2,
-                        borderColor: isSelected ? config.accent : '#E2E8F0',
+                        borderColor: isSelected ? config.accent : midnightEmber.screen.line.default,
                         borderRadius: 12,
-                        backgroundColor: isSelected ? `${config.accent}15` : '#F8FAFC',
+                        backgroundColor: isSelected ? `${config.accent}15` : midnightEmber.screen.bg.canvas,
                         padding: 12,
                         alignItems: 'center',
                       }}
@@ -270,7 +270,7 @@ export default function EditVehicleScreen() {
                       />
                       <Text
                         variant="caption"
-                        style={{ color: isSelected ? config.accent : '#0F172A', fontWeight: '700' }}
+                        style={{ color: isSelected ? config.accent : midnightEmber.screen.text.primary, fontWeight: '700' }}
                       >
                         {config.label}
                       </Text>
@@ -284,7 +284,7 @@ export default function EditVehicleScreen() {
                 })}
               </View>
               {errors.type ? (
-                <Text variant="caption" className="text-red-400 mt-2">{errors.type}</Text>
+                <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="mt-2">{errors.type}</Text>
               ) : null}
             </Card>
 
@@ -303,7 +303,7 @@ export default function EditVehicleScreen() {
                 placeholder="Custom"
                 variant="light"
               />
-              {errors.make ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.make}</Text> : null}
+              {errors.make ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.make}</Text> : null}
 
               <Input
                 label={t('onboarding.vehicle_model', { defaultValue: 'Modelo' })}
@@ -312,7 +312,7 @@ export default function EditVehicleScreen() {
                 placeholder="Triciclo Eléctrico"
                 variant="light"
               />
-              {errors.model ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.model}</Text> : null}
+              {errors.model ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.model}</Text> : null}
 
               <View className="flex-row gap-3">
                 <View className="flex-1">
@@ -324,7 +324,7 @@ export default function EditVehicleScreen() {
                     placeholder="2024"
                     variant="light"
                   />
-                  {errors.year ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.year}</Text> : null}
+                  {errors.year ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.year}</Text> : null}
                 </View>
                 <View className="flex-1">
                   <Input
@@ -334,7 +334,7 @@ export default function EditVehicleScreen() {
                     placeholder="Azul"
                     variant="light"
                   />
-                  {errors.color ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.color}</Text> : null}
+                  {errors.color ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.color}</Text> : null}
                 </View>
               </View>
 
@@ -346,7 +346,7 @@ export default function EditVehicleScreen() {
                 placeholder="P123456"
                 variant="light"
               />
-              {errors.plate ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.plate}</Text> : null}
+              {errors.plate ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.plate}</Text> : null}
 
               <Input
                 label={t('onboarding.max_passengers', { defaultValue: 'Capacidad de pasajeros' })}
@@ -357,13 +357,13 @@ export default function EditVehicleScreen() {
                 editable={vehicleType !== 'moto'}
                 variant="light"
               />
-              {errors.capacity ? <Text variant="caption" className="text-red-400 -mt-2 mb-2">{errors.capacity}</Text> : null}
+              {errors.capacity ? <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="-mt-2 mb-2">{errors.capacity}</Text> : null}
             </Card>
 
             {/* ── Verification Photos ── */}
             <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
               <View className="flex-row items-center mb-2">
-                <Ionicons name="camera-outline" size={20} color={colors.brand.orange} />
+                <Ionicons name="camera-outline" size={20} color={midnightEmber.accent[500]} />
                 <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('profile.verification_photos', { defaultValue: 'Fotos de verificación' })}
                 </Text>
@@ -376,7 +376,8 @@ export default function EditVehicleScreen() {
                 <Pressable
                   key={photo.type}
                   onPress={() => pickPhoto(index)}
-                  className="flex-row items-center p-3 rounded-xl bg-[#F1F5F9] mb-3"
+                  className="flex-row items-center p-3 rounded-xl mb-3"
+                  style={{ backgroundColor: midnightEmber.screen.bg.sunken }}
                 >
                   {photo.uri ? (
                     <Image
@@ -385,8 +386,8 @@ export default function EditVehicleScreen() {
                       resizeMode="cover"
                     />
                   ) : (
-                    <View className="w-12 h-12 rounded-lg bg-[#E2E8F0] items-center justify-center mr-3">
-                      <Ionicons name={photo.icon} size={20} color="#A3A3A3" />
+                    <View className="w-12 h-12 rounded-lg items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.line.default }}>
+                      <Ionicons name={photo.icon} size={20} color={midnightEmber.screen.text.tertiary} />
                     </View>
                   )}
                   <View className="flex-1">
@@ -403,19 +404,19 @@ export default function EditVehicleScreen() {
                             : t('profile.photo_required', { defaultValue: 'Foto requerida' })}
                     </Text>
                     {photo.error ? (
-                      <Text variant="caption" className="text-red-400">{photo.error}</Text>
+                      <Text variant="caption" style={{ color: midnightEmber.state.danger }}>{photo.error}</Text>
                     ) : null}
                   </View>
                   <Ionicons
                     name={photo.uri ? 'checkmark-circle' : 'add-circle-outline'}
                     size={24}
-                    color={photo.uri ? '#22C55E' : '#A3A3A3'}
+                    color={photo.uri ? midnightEmber.state.success : midnightEmber.screen.text.tertiary}
                   />
                 </Pressable>
               ))}
 
               {errors.photos ? (
-                <Text variant="caption" className="text-red-400 mt-1">{errors.photos}</Text>
+                <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="mt-1">{errors.photos}</Text>
               ) : null}
             </Card>
 

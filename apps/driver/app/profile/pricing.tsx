@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { formatCUP, triggerHaptic, validateDriverRate } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
@@ -138,7 +138,7 @@ export default function DriverPricingScreen() {
     return (
       <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
         <View className="flex-1 items-center justify-center pt-20">
-          <ActivityIndicator size="large" color={colors.brand.orange} />
+          <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
         </View>
       </Screen>
     );
@@ -214,18 +214,18 @@ export default function DriverPricingScreen() {
               onChangeText={handleInputChange}
               keyboardType="number-pad"
               placeholder={String(defaultRate)}
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={midnightEmber.screen.text.tertiary}
               style={{
                 flex: 1,
-                backgroundColor: '#F8FAFC',
-                color: '#0F172A',
+                backgroundColor: midnightEmber.screen.bg.canvas,
+                color: midnightEmber.screen.text.primary,
                 borderRadius: 12,
                 paddingHorizontal: 16,
                 paddingVertical: 14,
                 fontSize: 18,
                 fontWeight: '700',
                 borderWidth: 1,
-                borderColor: error ? '#ef4444' : '#E2E8F0',
+                borderColor: error ? midnightEmber.state.danger : midnightEmber.screen.line.default,
               }}
             />
             <Text variant="body" color="primary" className="opacity-50">
@@ -237,8 +237,8 @@ export default function DriverPricingScreen() {
                Helps the driver reason about the trade-off concretely. */}
           {previewFor10km !== null && !error && (
             <View className="flex-row items-center gap-1 mt-2">
-              <Ionicons name="analytics-outline" size={14} color="#64748B" />
-              <Text variant="caption" style={{ color: '#64748B' }}>
+              <Ionicons name="analytics-outline" size={14} color={midnightEmber.screen.text.secondary} />
+              <Text variant="caption" style={{ color: midnightEmber.screen.text.secondary }}>
                 {t('pricing.preview_10km', {
                   amount: formatCUP(previewFor10km),
                   defaultValue: `Un viaje de 10 km: ${formatCUP(previewFor10km)}`,
@@ -248,15 +248,15 @@ export default function DriverPricingScreen() {
           )}
 
           {error && (
-            <Text variant="caption" className="text-red-400 mt-2">
+            <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="mt-2">
               {error}
             </Text>
           )}
 
           {saved && (
             <View className="flex-row items-center gap-1 mt-2">
-              <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-              <Text variant="caption" className="text-green-400">
+              <Ionicons name="checkmark-circle" size={16} color={midnightEmber.state.success} />
+              <Text variant="caption" style={{ color: midnightEmber.state.success }}>
                 {t('pricing.saved')}
               </Text>
             </View>

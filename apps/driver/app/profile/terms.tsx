@@ -21,7 +21,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { cmsService } from '@tricigo/api/services/cms';
 
 const FALLBACK_URL = 'https://tricigo.com/terms';
@@ -75,7 +75,7 @@ export default function TermsScreen() {
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={colors.brand.orange} />
+          <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
         </View>
       ) : cmsBody ? (
         // CMS body available → render natively (no WebView at all).
@@ -89,7 +89,7 @@ export default function TermsScreen() {
             <Text
               key={idx}
               variant="body"
-              style={{ color: '#334155', lineHeight: 22, marginBottom: 16 }}
+              style={{ color: midnightEmber.screen.text.secondary, lineHeight: 22, marginBottom: 16 }}
             >
               {paragraph.trim()}
             </Text>
@@ -105,8 +105,8 @@ export default function TermsScreen() {
           style={{ flex: 1 }}
           startInLoadingState
           renderLoading={() => (
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
-              <ActivityIndicator size="large" color={colors.brand.orange} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: midnightEmber.screen.bg.canvas }}>
+              <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
             </View>
           )}
           onError={() => setWebviewError(true)}
@@ -114,7 +114,7 @@ export default function TermsScreen() {
         />
       ) : (
         <View className="flex-1 items-center justify-center px-6">
-          <Ionicons name="cloud-offline-outline" size={48} color={colors.neutral[500]} />
+          <Ionicons name="cloud-offline-outline" size={48} color={midnightEmber.screen.text.tertiary} />
           <Text variant="body" color="tertiary" className="mt-4 mb-4 text-center">
             {t('common.load_error', { defaultValue: 'No se pudo cargar el contenido. Verificá tu conexión.' })}
           </Text>
@@ -132,7 +132,7 @@ export default function TermsScreen() {
               }).catch(() => setFetchFailed(true)).finally(() => setLoading(false));
             }}
             className="px-6 py-3 rounded-xl"
-            style={{ backgroundColor: colors.brand.orange }}
+            style={{ backgroundColor: midnightEmber.accent[500] }}
           >
             <Text variant="body" color="primary" className="font-semibold">
               {t('common.retry', { defaultValue: 'Reintentar' })}

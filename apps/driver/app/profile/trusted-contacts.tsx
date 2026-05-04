@@ -11,7 +11,7 @@ import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
@@ -90,7 +90,7 @@ export default function TrustedContactsScreen() {
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={midnightEmber.accent[500]} />}
       >
         <View className="pt-4 pb-8">
           <ProfileScreenHeader
@@ -117,11 +117,11 @@ export default function TrustedContactsScreen() {
                 <View
                   key={contact.id}
                   className="rounded-2xl p-4 mb-3"
-                  style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
+                  style={{ backgroundColor: midnightEmber.screen.bg.surface, borderWidth: 1, borderColor: midnightEmber.screen.line.default }}
                 >
                   <View className="flex-row items-start">
-                    <View className="w-10 h-10 rounded-full items-center justify-center mr-3 mt-1" style={{ backgroundColor: `${colors.brand.orange}20` }}>
-                      <Ionicons name="person-outline" size={20} color={colors.brand.orange} />
+                    <View className="w-10 h-10 rounded-full items-center justify-center mr-3 mt-1" style={{ backgroundColor: `${midnightEmber.accent[500]}20` }}>
+                      <Ionicons name="person-outline" size={20} color={midnightEmber.accent[500]} />
                     </View>
                     <View className="flex-1">
                       <View className="flex-row items-center">
@@ -141,20 +141,20 @@ export default function TrustedContactsScreen() {
                         <Text variant="caption" color="secondary">{contact.relationship}</Text>
                       )}
 
-                      <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: '#E2E8F0' }}>
+                      <View className="flex-row items-center justify-between mt-2 pt-2 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
                         <Text variant="caption" color="secondary">
                           {t('trusted_contacts.auto_share')}
                         </Text>
                         <Switch
                           value={contact.auto_share}
                           onValueChange={() => handleToggleAutoShare(contact)}
-                          trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
+                          trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
                         />
                       </View>
                     </View>
 
                     <Pressable className="ml-2 p-2" onPress={() => handleDelete(contact)} hitSlop={8}>
-                      <Ionicons name="trash-outline" size={18} color={colors.neutral[500]} />
+                      <Ionicons name="trash-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                     </Pressable>
                   </View>
                 </View>

@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
@@ -179,24 +179,23 @@ export default function DriverSettingsScreen() {
         </Text>
         <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center mb-3">
-            <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-              <Ionicons name="color-palette-outline" size={18} color={colors.brand.orange} />
+            <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+              <Ionicons name="color-palette-outline" size={18} color={midnightEmber.accent[500]} />
             </View>
             <Text variant="body" color="primary">{t('profile.appearance', { defaultValue: 'Modo de pantalla' })}</Text>
           </View>
-          <View className="flex-row rounded-xl overflow-hidden border border-[#E2E8F0]">
+          <View className="flex-row rounded-xl overflow-hidden border" style={{ borderColor: midnightEmber.screen.line.default }}>
             {THEME_OPTIONS.map((option) => (
               <Pressable
                 key={option.value}
                 onPress={() => setThemeMode(option.value)}
-                className={`flex-1 py-3 items-center flex-row justify-center ${
-                  themeMode === option.value ? 'bg-primary-500' : 'bg-[#F8FAFC]'
-                }`}
+                className="flex-1 py-3 items-center flex-row justify-center"
+                style={{ backgroundColor: themeMode === option.value ? midnightEmber.accent[500] : midnightEmber.screen.bg.canvas }}
               >
                 <Ionicons
                   name={option.icon}
                   size={16}
-                  color={themeMode === option.value ? '#FFFFFF' : colors.neutral[500]}
+                  color={themeMode === option.value ? midnightEmber.screen.text.inverse : midnightEmber.screen.text.tertiary}
                 />
                 <Text
                   variant="caption"
@@ -233,8 +232,8 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="volume-high-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="volume-high-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <Text variant="body" color="primary">
                 {t('profile.sound_new_request', { defaultValue: 'Nueva solicitud' })}
@@ -243,13 +242,13 @@ export default function DriverSettingsScreen() {
             <Switch
               value={soundNewRequest}
               onValueChange={handleToggle(SOUND_NEW_REQUEST_KEY, setSoundNewRequest)}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
             />
           </View>
-          <View className="flex-row items-center justify-between min-h-[48px] mt-1 pt-2 border-t border-[#E2E8F0]">
+          <View className="flex-row items-center justify-between min-h-[48px] mt-1 pt-2 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="chatbubble-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="chatbubble-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <Text variant="body" color="primary">
                 {t('profile.sound_message', { defaultValue: 'Mensaje recibido' })}
@@ -258,7 +257,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={soundMessage}
               onValueChange={handleToggle(SOUND_MESSAGE_KEY, setSoundMessage)}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
             />
           </View>
         </Card>
@@ -270,8 +269,8 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="moon-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="moon-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <View className="flex-1">
                 <Text variant="body" color="primary">
@@ -285,7 +284,7 @@ export default function DriverSettingsScreen() {
             <Switch
               value={nightModeEnabled}
               onValueChange={handleToggle(NIGHT_MODE_KEY, setNightModeEnabled)}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
             />
           </View>
         </Card>
@@ -314,8 +313,8 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="volume-mute-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="volume-mute-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <View className="flex-1">
                 <Text variant="body" color="primary">
@@ -329,11 +328,11 @@ export default function DriverSettingsScreen() {
             <Switch
               value={silentModeEnabled}
               onValueChange={handleToggle(SILENT_MODE_KEY, setSilentModeEnabled)}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
             />
           </View>
           {silentModeEnabled && (
-            <View className="mt-2 pt-2 border-t border-[#E2E8F0]">
+            <View className="mt-2 pt-2 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
               <MenuRow
                 icon="timer-outline"
                 label={t('profile.silent_timer', { defaultValue: 'Duración' })}
@@ -353,21 +352,21 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-5">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="notifications-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="notifications-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <Text variant="body" color="primary">{t('profile.notifications_toggle')}</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={handleNotificationToggle}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
               accessibilityLabel={t('profile.notifications_toggle')}
             />
           </View>
 
           {notificationsEnabled && (
-            <View className="mt-3 pt-3 border-t border-[#E2E8F0]">
+            <View className="mt-3 pt-3 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
               <Text variant="caption" color="secondary" className="mb-2">
                 {t('profile.notif_section_title')}
               </Text>
@@ -377,7 +376,7 @@ export default function DriverSettingsScreen() {
                   className="flex-row items-center justify-between py-2.5"
                 >
                   <View className="flex-row items-center">
-                    <Ionicons name={cat.icon} size={16} color={colors.neutral[500]} />
+                    <Ionicons name={cat.icon} size={16} color={midnightEmber.screen.text.tertiary} />
                     <Text variant="bodySmall" color="primary" className="ml-2.5">
                       {t(cat.labelKey)}
                     </Text>
@@ -385,7 +384,7 @@ export default function DriverSettingsScreen() {
                   <Switch
                     value={categoryPrefs[cat.key] !== false}
                     onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                    trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+                    trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
                     style={{ transform: [{ scale: 0.85 }] }}
                     accessibilityLabel={t(cat.labelKey)}
                   />
@@ -404,8 +403,8 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-3">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="flash-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="flash-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <View className="flex-1">
                 <Text variant="body" color="primary">
@@ -439,7 +438,7 @@ export default function DriverSettingsScreen() {
                   setAutoAcceptLoading(false);
                 }
               }}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
               accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
             />
           </View>
@@ -449,8 +448,8 @@ export default function DriverSettingsScreen() {
         <Card theme="light" variant="surface" padding="md" className="mb-8">
           <View className="flex-row items-center justify-between min-h-[48px]">
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-[#F1F5F9] items-center justify-center mr-3">
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.brand.orange} />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={midnightEmber.accent[500]} />
               </View>
               <View className="flex-1">
                 <Text variant="body" color="primary">{t('profile.notif_sms')}</Text>
@@ -474,7 +473,7 @@ export default function DriverSettingsScreen() {
                   setSmsLoading(false);
                 }
               }}
-              trackColor={{ false: colors.neutral[300], true: colors.brand.orange }}
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
               accessibilityLabel={t('profile.notif_sms')}
             />
           </View>
@@ -557,12 +556,12 @@ export default function DriverSettingsScreen() {
                     );
               }}
               className="flex-row items-center justify-center py-3 rounded-xl"
-              style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', minHeight: 48 }}
+              style={{ backgroundColor: `${midnightEmber.state.danger}1F`, borderWidth: 1, borderColor: `${midnightEmber.state.danger}4D`, minHeight: 48 }}
               accessibilityRole="button"
               accessibilityLabel={t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
             >
-              <Ionicons name="trash-outline" size={18} color="#ef4444" />
-              <Text variant="body" style={{ color: '#ef4444', marginLeft: 8, fontWeight: '600' }}>
+              <Ionicons name="trash-outline" size={18} color={midnightEmber.state.danger} />
+              <Text variant="body" style={{ color: midnightEmber.state.danger, marginLeft: 8, fontWeight: '600' }}>
                 {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
               </Text>
             </Pressable>

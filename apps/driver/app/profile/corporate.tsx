@@ -18,7 +18,7 @@ import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { fleetService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -75,7 +75,7 @@ export default function CorporateScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={() => { setRefreshing(true); fetchData(); }}
-          tintColor={colors.brand.orange}
+          tintColor={midnightEmber.accent[500]}
         />
       }
     >
