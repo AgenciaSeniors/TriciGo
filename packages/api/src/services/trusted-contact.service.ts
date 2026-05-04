@@ -87,4 +87,48 @@ export const trustedContactService = {
     if (error) throw error;
     return (data ?? []) as TrustedContact[];
   },
+
+  /**
+   * Broadcast an emergency SOS to every trusted contact with
+   * `auto_share = true`. Calls the `broadcast-emergency` edge function
+   * which proxies to `send-sms` (service-role only) on the server side
+   * — the client never touches the service key directly.
+   *
+   * Rate-limited server-side at 1 broadcast / minute / user. Surfaces
+   * `contacts_notified` so the UI can confirm "X contactos avisados".
+   */
+  async broadcastEmergency(params: {
+    rideId?: string;
+    latitude: number;
+    longitude: number;
+    driverName?: string | null;
+    vehiclePlate?: string | null;
+    riderName?: string | null;
+    locale?: 'es' | 'en' | 'pt';
+  }): Promise<{
+    success: boolean;
+    contacts_notified: number;
+    contacts_total?: number;
+    message?: string;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('broadcast-emergency', {
+      body: {
+        ride_id: params.rideId,
+        latitude: params.latitude,
+        longitude: params.longitude,
+        driver_name: params.driverName,
+        vehicle_plate: params.vehiclePlate,
+        rider_name: params.riderName,
+        locale: params.locale ?? 'es',
+      },
+    });
+    if (error) throw error;
+    return data as {
+      success: boolean;
+      contacts_notified: number;
+      contacts_total?: number;
+      message?: string;
+    };
+  },
 };

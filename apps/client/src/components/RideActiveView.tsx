@@ -11,7 +11,7 @@ import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl,
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
-import { incidentService, rideService, customerService, getSupabaseClient } from '@tricigo/api';
+import { incidentService, rideService, customerService, trustedContactService, getSupabaseClient } from '@tricigo/api';
 import type { RideSplit } from '@tricigo/types';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
@@ -59,6 +59,7 @@ export function RideActiveView() {
   const updateSplit = useRideStore((s) => s.updateSplit);
   const setSplits = useRideStore((s) => s.setSplits);
   const userId = useAuthStore((s) => s.user?.id);
+  const userFullName = useAuthStore((s) => s.user?.full_name ?? null);
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
   const driverPosition = driverPosState.position;
@@ -666,6 +667,16 @@ export function RideActiveView() {
           style: 'destructive',
           onPress: async () => {
             if (userId) {
+              // Tres acciones SOS en paralelo:
+              //   1. createSOSReport      → registra el incidente en DB
+              //   2. broadcastEmergency   → SMS automático a trusted
+              //                              contacts con auto_share=true
+              //                              (vía edge function)
+              //   3. Linking.openURL(tel) → línea cubana 106 (policía)
+              // Antes solo se hacían (1) y (3) — los contactos de
+              // confianza nunca recibían alerta automática (BUG-273
+              // en safety roadmap). Ahora ambos lados (mobile + web)
+              // disparan la misma cascada.
               incidentService.createSOSReport({
                 ride_id: activeRide.id,
                 reported_by: userId,
@@ -674,6 +685,37 @@ export function RideActiveView() {
               }).catch((err) => {
                 logger.error('SOS report failed', { error: String(err) });
                 Toast.show({ type: 'error', text1: t('errors.sos_report_failed', { ns: 'common' }) });
+              });
+
+              // Broadcast a trusted contacts en paralelo. Best-effort:
+              // si falla NO bloquea la llamada al 106 — el botón rojo
+              // siempre llama a emergencias incluso si el SMS broadcast
+              // falla por red.
+              const driverPos = (rideWithDriver as { driver_lat?: number; driver_lng?: number } | null);
+              const lat = driverPos?.driver_lat ?? activeRide.pickup_location?.latitude ?? 0;
+              const lng = driverPos?.driver_lng ?? activeRide.pickup_location?.longitude ?? 0;
+              trustedContactService.broadcastEmergency({
+                rideId: activeRide.id,
+                latitude: lat,
+                longitude: lng,
+                driverName: rideWithDriver?.driver_name ?? null,
+                vehiclePlate: rideWithDriver?.vehicle_plate ?? null,
+                riderName: userFullName,
+              }).then((res) => {
+                if (res.contacts_notified > 0) {
+                  Toast.show({
+                    type: 'success',
+                    text1: t('ride.sos_contacts_notified', {
+                      count: res.contacts_notified,
+                      defaultValue: `${res.contacts_notified} contactos avisados`,
+                    }),
+                  });
+                }
+              }).catch((err) => {
+                logger.error('SOS broadcast failed', { error: String(err) });
+                // Sin toast de error — el usuario está en emergencia, no
+                // queremos asustar con un fail toast. El SMS fallido se
+                // ve después en logs; el tel:106 sigue funcionando.
               });
             }
             Linking.openURL('tel:106');
