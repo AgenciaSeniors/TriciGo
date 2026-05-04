@@ -101,6 +101,15 @@ export function SettingsRow({
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? title}
+        // V3 — press feedback within ~100ms (HIG/MD). Mirrors the pattern
+        // already in `@tricigo/ui/MenuRow`. Without this, every settings
+        // row that uses `onPress` (~8 call sites today) read as static
+        // text on tap. android_ripple gives a native feel on Android;
+        // iOS uses the opacity transition.
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.7 : 1,
+        })}
+        android_ripple={{ color: 'rgba(255, 77, 0, 0.08)' }}
       >
         {Body}
       </Pressable>
