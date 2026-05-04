@@ -1,25 +1,75 @@
-import React, { useRef, useEffect } from 'react';
+/**
+ * HomeBottomSheet v2 — Midnight Ember edition.
+ *
+ * Panel de control principal del driver. Reemplaza la implementación previa
+ * que renderizaba simultáneamente:
+ *   - Greeting "HOLA, RAÚL" 42pt 900 weight letterSpacing 4 uppercase
+ *     ("fitness app smell", anti-Linear)
+ *   - "Ignition Portal" CTA: 120pt circle + gradient + 3 anillos animados
+ *     concéntricos + 2 halos estáticos (5 capas de motion en una decisión
+ *     de toggle on/off)
+ *   - Radar sweep gradient pasando 80px → 280px en loop 2s
+ *   - Pulse animado en barra de address (orange stripe)
+ *   - 3 stat cards simétricos sin storytelling (Hoy / Viajes / Por hora)
+ *
+ * Decisiones de diseño confirmadas con el usuario:
+ *   A. Greeting → sentence-case + storytelling histórico ("Recogiste $X
+ *      ayer · N viajes") en vez de slogan motivacional.
+ *   B. CTA portal → botón rectangular ancho con shadow.glow. Sin rings
+ *      ni halos (motion.glowRing y motion.ignitionPortal en blacklist).
+ *   C. Radar sweep + "Buscando…" + wait time pasivo → smart suggestion
+ *      card accionable con data del hook `useDemandHotspots` ya existente.
+ *   D. 3 stat cards → 1 hero card con storytelling (`+18% vs ayer ·
+ *      N viajes · $X/h`).
+ *   E. Break + Disconnect → 2 botones discretos en footer (acciones
+ *      semánticamente distintas).
+ *   F. Eliminadas 6 animation props del componente y del padre
+ *      (ring1/2/3Anim, radarSweepAnim, searchPulseAnim, addressPulseAnim).
+ *      Solo queda ctaScaleAnim para press feedback.
+ *
+ * 3 estados visuales bien diferenciados:
+ *   - OFFLINE: greeting + banners + CTA primario + recap ayer
+ *   - ONLINE IDLE: status pill + hero earnings + search + suggestion +
+ *     footer (Pausar / Desconectar)
+ *   - ONLINE ON-BREAK: status pill warning + hero atenuado + Reanudar +
+ *     link Desconectar completamente
+ *
+ * Lógica preservada: snap points, desktop sidebar fallback, todos los
+ * callbacks, haptics, accessibility.
+ */
+import React, { useRef } from 'react';
 import {
   View,
   Pressable,
   Animated,
   StyleSheet,
-  Platform,
   Text as RNText,
 } from 'react-native';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import { AddressSearchBar } from '@/components/AddressSearchBar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/**
+ * Smart suggestion to pre-position the driver toward a high-demand zone.
+ * Computed by the parent from `useDemandHotspots` + driver location.
+ */
+export interface NearestHotspot {
+  lat: number;
+  lng: number;
+  /** Kilometers to the hotspot, rounded to 1 decimal. */
+  distance: number;
+  /** Live concurrent rides being requested in this hotspot. */
+  liveCount: number;
+}
+
 export interface HomeBottomSheetProps {
-  // State
+  // ── State ──
   isOnline: boolean;
   isOnBreak: boolean;
   isIneligible: boolean;
@@ -29,17 +79,21 @@ export interface HomeBottomSheetProps {
   isSelfieProcessing: boolean;
   selfieLoading: boolean;
 
-  // Data
+  // ── Data ──
   todayEarnings: { amount: number; trips: number };
+  /** Optional — only available when parent has fetched yesterday's totals. */
+  yesterdayEarnings: { amount: number; trips: number } | null;
   perHour: number;
   userName?: string;
-  estimatedWaitMinutes: number | null;
 
-  // Auto-nav
+  // ── Auto-nav (legacy, idle-≥-10min trigger) ──
   navCountdown: number | null;
   nearestHotZone: { lat: number; lng: number; distance: number } | null;
 
-  // Callbacks
+  // ── Smart suggestion (always available when online idle) ──
+  nearestHotspot: NearestHotspot | null;
+
+  // ── Callbacks ──
   onToggleOnline: () => void;
   onToggleBreak: () => void;
   onSubmitSelfie: () => void;
@@ -49,22 +103,47 @@ export interface HomeBottomSheetProps {
     longitude: number;
     address: string;
   }) => void;
+  /** Open turn-by-turn nav toward the suggested hotspot. */
+  onGoToSuggestion: (lat: number, lng: number) => void;
 
-  // Animations (pass the Animated.Values)
-  ring1Anim: any;
-  ring2Anim: any;
-  ring3Anim: any;
-  radarSweepAnim: any;
-  ctaScaleAnim: any;
+  // ── Animations (only press feedback survives v2) ──
+  ctaScaleAnim: Animated.Value;
   onCtaPressIn: () => void;
   onCtaPressOut: () => void;
-  searchPulseAnim: any;
 }
 
 // ─── Snap configuration ───────────────────────────────────────────────────────
 
 const SNAP_POINTS: [string, string, string] = ['18%', '45%', '85%'];
 const DEFAULT_SNAP_INDEX = 1;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the Spanish time-of-day greeting used by the offline state.
+ * Uses Havana wall-clock when possible (string is locale-dependent so the
+ * caller can localize via i18n).
+ */
+function getTimeOfDayKey(): 'morning' | 'afternoon' | 'evening' {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'morning';
+  if (h >= 12 && h < 19) return 'afternoon';
+  return 'evening';
+}
+
+/** Returns the comparison label for today vs yesterday earnings. */
+function compareEarnings(today: number, yesterday: number | null): {
+  delta: number | null;
+  symbol: '↑' | '↓' | '→' | null;
+  color: 'success' | 'warning' | 'neutral' | null;
+} {
+  if (yesterday == null || yesterday <= 0) return { delta: null, symbol: null, color: null };
+  const ratio = today / yesterday;
+  const pct = Math.round((ratio - 1) * 100);
+  if (Math.abs(pct) < 3) return { delta: 0, symbol: '→', color: 'neutral' };
+  if (pct > 0) return { delta: pct, symbol: '↑', color: 'success' };
+  return { delta: pct, symbol: '↓', color: 'warning' };
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -96,10 +175,10 @@ export function HomeBottomSheet(props: HomeBottomSheetProps) {
   );
 }
 
-// ─── Inner content (shared between sheet and sidebar) ─────────────────────────
+// ─── Inner content ─────────────────────────────────────────────────────────────
 
 interface SheetContentProps extends HomeBottomSheetProps {
-  t: (key: string, opts?: any) => string;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }
 
 function SheetContent({
@@ -112,425 +191,530 @@ function SheetContent({
   isSelfieProcessing,
   selfieLoading,
   todayEarnings,
+  yesterdayEarnings,
   perHour,
   userName,
-  estimatedWaitMinutes,
   navCountdown,
   nearestHotZone,
+  nearestHotspot,
   onToggleOnline,
   onToggleBreak,
   onSubmitSelfie,
   onCancelAutoNav,
   onAddressSelect,
-  ring1Anim,
-  ring2Anim,
-  ring3Anim,
-  radarSweepAnim,
+  onGoToSuggestion,
   ctaScaleAnim,
   onCtaPressIn,
   onCtaPressOut,
-  searchPulseAnim,
   t,
 }: SheetContentProps) {
-  // ── Address bar pulse animation ──
-  const addressPulseAnim = useRef(new Animated.Value(isOnline ? 0.3 : 1)).current;
-  useEffect(() => {
-    if (isOnline) {
-      addressPulseAnim.setValue(0.3);
+  // ── Status dot pulse (única motion sobreviviente del system) ──
+  const statusDotPulse = useRef(new Animated.Value(0.6)).current;
+  React.useEffect(() => {
+    if (isOnline && !isOnBreak) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(addressPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-          Animated.timing(addressPulseAnim, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+          Animated.timing(statusDotPulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(statusDotPulse, { toValue: 0.6, duration: 800, useNativeDriver: true }),
         ]),
       ).start();
     } else {
-      addressPulseAnim.stopAnimation();
-      addressPulseAnim.setValue(1);
+      statusDotPulse.stopAnimation();
+      statusDotPulse.setValue(1);
     }
-  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOnline, isOnBreak, statusDotPulse]);
 
-  // ── Earnings card press animations ──
-  const earningsScale1 = useRef(new Animated.Value(1)).current;
-  const earningsScale2 = useRef(new Animated.Value(1)).current;
-  const earningsScale3 = useRef(new Animated.Value(1)).current;
-  const earningsScales = [earningsScale1, earningsScale2, earningsScale3];
-  const handleEarningsPressIn = (index: number) => {
-    Animated.spring(earningsScales[index]!, { toValue: 0.98, damping: 15, stiffness: 300, useNativeDriver: true }).start();
-  };
-  const handleEarningsPressOut = (index: number) => {
-    Animated.spring(earningsScales[index]!, { toValue: 1, damping: 15, stiffness: 300, useNativeDriver: true }).start();
-  };
-
-  // ── 1. Alert banners ──────────────────────────────────────────────────────
-
-  const alertBanners = (
+  // ── Banners (alerts) ──────────────────────────────────────────
+  const banners = (
     <>
       {isIneligible && (
-        <View
-          style={styles.alertBanner}
-          accessibilityRole="alert"
-          accessibilityLiveRegion="polite"
-        >
-          <Ionicons
-            name="warning-outline"
-            size={16}
-            color="#fca5a5"
-            style={{ marginRight: 8 }}
-          />
-          <View style={{ flex: 1 }}>
-            <RNText style={styles.alertText}>
-              {t('home.ineligible_banner')}
-            </RNText>
-          </View>
-        </View>
+        <Banner
+          variant="danger"
+          icon="warning-outline"
+          message={t('home.ineligible_banner')}
+        />
       )}
-
       {(needsSelfieCheck || isSelfieProcessing) && (
-        <View
-          style={[
-            styles.alertBanner,
-            { borderColor: '#f59e0b40', backgroundColor: '#1a1300' },
-          ]}
-          accessibilityRole="alert"
-        >
-          <Ionicons
-            name="camera-outline"
-            size={16}
-            color="#f59e0b"
-            style={{ marginRight: 8 }}
-          />
-          <View style={{ flex: 1 }}>
-            <RNText style={[styles.alertText, { color: '#fcd34d' }]}>
-              {t('verification.selfie_required')}
-            </RNText>
-            {!isSelfieProcessing && (
-              <Pressable onPress={onSubmitSelfie} disabled={selfieLoading}>
-                <RNText style={[styles.alertLink, { color: '#f59e0b' }]}>
-                  {t('verification.take_selfie')}
-                </RNText>
-              </Pressable>
-            )}
-            {isSelfieProcessing && (
-              <RNText style={[styles.alertText, { opacity: 0.7 }]}>
-                {t('verification.processing')}
-              </RNText>
-            )}
-          </View>
-        </View>
+        <Banner
+          variant="warning"
+          icon="camera-outline"
+          message={t('verification.selfie_required')}
+          actionLabel={
+            !isSelfieProcessing
+              ? t('verification.take_selfie')
+              : t('verification.processing')
+          }
+          onActionPress={!isSelfieProcessing ? onSubmitSelfie : undefined}
+          actionDisabled={selfieLoading || isSelfieProcessing}
+        />
       )}
-
       {navCountdown !== null && nearestHotZone && (
-        <View style={styles.omegaBanner}>
-          <Ionicons name="navigate" size={16} color="#f59e0b" />
-          <View style={{ flex: 1, marginLeft: 8 }}>
-            <RNText style={styles.omegaBannerTitle}>
-              {t('home.high_demand_zone', {
-                seconds: navCountdown,
-                defaultValue: 'Navegando a zona en {{seconds}}s',
-              })}
-            </RNText>
-            <RNText style={styles.omegaBannerSub}>
-              {t('home.active_zone_nearby', {
-                distance: nearestHotZone.distance,
-              })}
-            </RNText>
-          </View>
-          <Pressable style={styles.omegaCancelBtn} onPress={onCancelAutoNav}>
-            <RNText style={styles.omegaCancelText}>
-              {t('home.stay_here', { defaultValue: 'Quedar' })}
-            </RNText>
-          </Pressable>
-        </View>
+        <Banner
+          variant="info"
+          icon="navigate"
+          message={t('home.high_demand_zone', {
+            seconds: navCountdown,
+            defaultValue: 'Navegando a zona en {{seconds}}s',
+          })}
+          subtitle={t('home.active_zone_nearby', {
+            distance: nearestHotZone.distance,
+          })}
+          actionLabel={t('home.stay_here', { defaultValue: 'Quedar' })}
+          onActionPress={onCancelAutoNav}
+        />
       )}
     </>
   );
 
-  // ── 2. Offline greeting ─────────────────────────────────────────────────
+  // ── State 1: OFFLINE ──────────────────────────────────────────
+  if (!isOnline) {
+    const tod = getTimeOfDayKey();
+    const greetingKey = `home.greeting_${tod}`;
+    const greetingDefault =
+      tod === 'morning' ? 'Buen día' :
+      tod === 'afternoon' ? 'Buenas tardes' :
+      'Buenas noches';
+    const firstName = userName ? (userName.split(' ')[0] ?? userName) : null;
+    const greetingFull = firstName
+      ? `${t(greetingKey, { defaultValue: greetingDefault })}, ${firstName}`
+      : t(greetingKey, { defaultValue: greetingDefault });
 
-  const offlineGreeting = !isOnline ? (
-    <View style={styles.offlineGreeting}>
-      {userName ? (
-        <>
-          <RNText style={styles.greetingPrefix}>HOLA,</RNText>
-          <RNText style={styles.greetingName}>
-            {(userName.split(' ')[0] ?? userName).toUpperCase()}
-          </RNText>
-        </>
-      ) : (
-        <RNText style={styles.greetingName}>
-          {t('home.greeting_generic', { defaultValue: '¡BIENVENIDO!' })}
+    return (
+      <View style={styles.sheetContent}>
+        {/* Greeting (sentence-case, no shouty uppercase) */}
+        <RNText style={[styles.greeting, { color: midnightEmber.map.text.primary }]}>
+          {greetingFull}
         </RNText>
-      )}
-      <RNText style={styles.greetingMotivation}>
-        {t('home.connect_to_earn', {
-          defaultValue: 'Conectate para empezar a ganar',
-        })}
-      </RNText>
-    </View>
-  ) : null;
 
-  // ── 3. Radar sweep searching indicator ──────────────────────────────────
+        {banners}
 
-  const radarIndicator = isOnline ? (
-    <Animated.View style={{ opacity: searchPulseAnim }}>
-      <View style={styles.radarContainer}>
-        <View style={styles.radarTrack}>
-          <Animated.View
+        {/* Primary CTA — ancho, con glow, sin portal */}
+        <Animated.View style={{ transform: [{ scale: ctaScaleAnim }] }}>
+          <Pressable
+            onPressIn={onCtaPressIn}
+            onPressOut={onCtaPressOut}
+            onPress={() => { triggerHaptic('heavy'); onToggleOnline(); }}
+            disabled={toggling || isIneligible}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: false, disabled: toggling || isIneligible }}
+            accessibilityLabel={t('home.go_online', { defaultValue: 'Conectarme' })}
             style={[
-              styles.radarSweep,
+              styles.ctaPrimary,
               {
-                transform: [
-                  {
-                    translateX: radarSweepAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-80, 280],
-                    }),
-                  },
-                ],
+                backgroundColor: midnightEmber.accent[500],
+                borderRadius: midnightEmber.radius.card,
+                ...midnightEmber.shadow.glow,
               },
+              (toggling || isIneligible) && styles.disabled,
             ]}
           >
-            <LinearGradient
-              colors={['transparent', '#22c55e', 'transparent']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.radarSweepGradient}
-            />
-          </Animated.View>
-        </View>
-        <RNText style={styles.searchingText}>
-          {t('home.searching_rides', {
-            defaultValue: 'Buscando viajes cerca de ti...',
-          })}
-        </RNText>
-        {/* UX: promote estimated wait time from an inline "· ~5 min" suffix
-             to a second line with stronger visual weight, so drivers parse
-             it at a glance instead of mixing it into the searching label. */}
-        {estimatedWaitMinutes ? (
-          <RNText style={{ color: '#FF4D00', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 4 }}>
-            ~{estimatedWaitMinutes} {t('home.wait_minutes', { defaultValue: 'min de espera estimado' })}
-          </RNText>
-        ) : null}
-      </View>
-    </Animated.View>
-  ) : null;
-
-  // ── 4. Address search bar ───────────────────────────────────────────────
-
-  const addressSearchBar = isOnline ? (
-    <View style={styles.searchBarWrapper}>
-      <Animated.View style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 3,
-        backgroundColor: '#FF4D00',
-        borderTopLeftRadius: 12,
-        borderBottomLeftRadius: 12,
-        opacity: addressPulseAnim,
-      }} />
-      <AddressSearchBar
-        onSelect={onAddressSelect}
-        placeholder={t('home.search_placeholder', {
-          defaultValue: 'Buscar dirección o zona...',
-        })}
-      />
-    </View>
-  ) : null;
-
-  // ── 5. Earnings stat cards ──────────────────────────────────────────────
-
-  const earningsCards = isOnline ? (
-    <View style={styles.earningsCards}>
-      <Pressable
-        style={{ flex: 1 }}
-        onPressIn={() => handleEarningsPressIn(0)}
-        onPressOut={() => handleEarningsPressOut(0)}
-      >
-        <Animated.View style={[styles.statCard, { transform: [{ scale: earningsScale1 }] }]}>
-          <Ionicons name="trending-up" size={16} color="#FF8A5C" />
-          <RNText style={styles.statCardLabel}>
-            {t('home.today', { defaultValue: 'Hoy' })}
-          </RNText>
-          <RNText style={styles.statCardValue}>
-            ${todayEarnings.amount.toLocaleString()}
-          </RNText>
-        </Animated.View>
-      </Pressable>
-      <Pressable
-        style={{ flex: 1 }}
-        onPressIn={() => handleEarningsPressIn(1)}
-        onPressOut={() => handleEarningsPressOut(1)}
-      >
-        <Animated.View style={[styles.statCard, { transform: [{ scale: earningsScale2 }] }]}>
-          <Ionicons name="car-outline" size={16} color="#FF8A5C" />
-          <RNText style={styles.statCardLabel}>
-            {t('home.trips_label', { defaultValue: 'Viajes' })}
-          </RNText>
-          <RNText style={styles.statCardValue}>{todayEarnings.trips}</RNText>
-        </Animated.View>
-      </Pressable>
-      {perHour > 0 && (
-        <Pressable
-          style={{ flex: 1 }}
-          onPressIn={() => handleEarningsPressIn(2)}
-          onPressOut={() => handleEarningsPressOut(2)}
-        >
-          <Animated.View style={[styles.statCard, styles.statCardAccent, { transform: [{ scale: earningsScale3 }] }]}>
-            <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
-            <RNText style={styles.statCardLabel}>
-              {t('home.per_hour_label', { defaultValue: 'Por hora' })}
+            <Ionicons name="power" size={20} color={midnightEmber.map.text.onAccent} />
+            <RNText style={[
+              midnightEmber.text.buttonLg,
+              { color: midnightEmber.map.text.onAccent, marginLeft: 8 },
+            ]}>
+              {toggling
+                ? t('home.connecting', { defaultValue: 'Conectando…' })
+                : t('home.go_online', { defaultValue: 'Conectarme' })}
             </RNText>
-            <RNText style={[styles.statCardValue, { color: colors.brand.orange }]}>
-              ${perHour.toLocaleString()}
-            </RNText>
-          </Animated.View>
-        </Pressable>
-      )}
-    </View>
-  ) : null;
+          </Pressable>
+        </Animated.View>
 
-  // ── 6. Break banner ─────────────────────────────────────────────────────
-
-  const breakBanner =
-    isOnline && isOnBreak ? (
-      <View style={styles.breakBanner}>
-        <Ionicons name="cafe-outline" size={14} color="#f59e0b" />
-        <RNText style={styles.breakBannerText}>
-          {t('home.on_break_label', {
-            defaultValue: 'En descanso — no recibes solicitudes',
-          })}
-        </RNText>
+        {/* Yesterday recap — storytelling con data */}
+        {yesterdayEarnings && yesterdayEarnings.amount > 0 && (
+          <RNText style={[
+            styles.yesterdayRecap,
+            { color: midnightEmber.map.text.secondary },
+          ]}>
+            {t('home.yesterday_recap', {
+              amount: yesterdayEarnings.amount.toLocaleString(),
+              trips: yesterdayEarnings.trips,
+              defaultValue: 'Ayer ganaste ${{amount}} · {{trips}} viajes',
+            })}
+          </RNText>
+        )}
       </View>
-    ) : null;
+    );
+  }
 
-  // ── 7. CTA "Ignition Portal" ───────────────────────────────────────────
-
-  const ctaPortal = (
-    <View style={styles.ctaCircleContainer}>
-      {/* Static symmetric glow (always visible when offline) */}
-      {!isOnline && (
-        <>
-          <View style={styles.ctaGlow} />
-          <View style={styles.ctaGlowInner} />
-        </>
-      )}
-      {/* 3 concentric pulse rings (offline only, animated) */}
-      {!isOnline && (
-        <>
-          {[ring1Anim, ring2Anim, ring3Anim].map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.ctaRing,
-                {
-                  opacity: anim.interpolate({
-                    inputRange: [0, 0.2, 1],
-                    outputRange: [0, 0.5 - i * 0.12, 0],
-                  }),
-                  transform: [
-                    {
-                      scale: anim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 1.8 - i * 0.25],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-          ))}
-        </>
-      )}
-
-      <Animated.View style={{ transform: [{ scale: ctaScaleAnim }] }}>
-        <Pressable
-          onPressIn={onCtaPressIn}
-          onPressOut={onCtaPressOut}
-          onPress={() => { triggerHaptic(isOnline ? 'medium' : 'heavy'); onToggleOnline(); }}
-          disabled={toggling}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: isOnline, disabled: toggling }}
-          accessibilityLabel={
-            isOnline ? t('home.go_offline') : t('home.go_online')
-          }
-          style={toggling ? styles.toggleBtnDisabled : undefined}
-        >
-          {!isOnline ? (
-            <LinearGradient
-              colors={['#FF6B2C', '#FF4D00', '#CC3D00']}
-              style={styles.ctaCircle}
-            >
-              <Ionicons name="power" size={38} color="#fff" />
-            </LinearGradient>
-          ) : (
-            <View style={styles.ctaCircleOnline}>
-              <Ionicons name="power" size={24} color="#ef4444" />
-            </View>
-          )}
-        </Pressable>
-      </Animated.View>
-
-      <RNText style={[styles.ctaLabel, isOnline && styles.ctaLabelOnline]}>
-        {toggling
-          ? isOnline
-            ? t('home.disconnecting', { defaultValue: 'DESCONECTANDO...' })
-            : t('home.connecting', { defaultValue: 'CONECTANDO...' })
-          : isOnline
-            ? t('home.go_offline').toUpperCase()
-            : t('home.go_online').toUpperCase()}
-      </RNText>
-    </View>
-  );
-
-  // ── 8. Break toggle button ──────────────────────────────────────────────
-
-  const breakToggle = isOnline ? (
-    <Pressable
-      style={({ pressed }) => [
-        styles.breakBtn,
-        isOnBreak ? styles.breakBtnActive : styles.breakBtnInactive,
-        togglingBreak && styles.toggleBtnDisabled,
-        pressed && { opacity: 0.85 },
-      ]}
-      onPress={onToggleBreak}
-      disabled={togglingBreak}
-    >
-      <Ionicons
-        name={isOnBreak ? 'arrow-forward-outline' : 'cafe-outline'}
-        size={16}
-        color={isOnBreak ? '#fff' : '#9ca3af'}
-        style={{ marginRight: 6 }}
-      />
-      <RNText style={[styles.breakBtnText, isOnBreak && { color: '#fff' }]}>
-        {isOnBreak
-          ? t('home.end_break', { defaultValue: 'Terminar descanso' })
-          : t('home.start_break', { defaultValue: 'Tomar descanso' })}
-      </RNText>
-    </Pressable>
-  ) : null;
-
-  // ── Render all sections ─────────────────────────────────────────────────
+  // ── State 2 & 3: ONLINE (IDLE or ON-BREAK) ─────────────────────
+  const cmp = compareEarnings(todayEarnings.amount, yesterdayEarnings?.amount ?? null);
 
   return (
     <View style={styles.sheetContent}>
-      {alertBanners}
-      {offlineGreeting}
-      {radarIndicator}
-      {addressSearchBar}
-      {earningsCards}
-      {breakBanner}
-      {ctaPortal}
-      {breakToggle}
+      {banners}
+
+      {/* Status pill */}
+      <StatusPill
+        variant={isOnBreak ? 'break' : 'online'}
+        pulseAnim={!isOnBreak ? statusDotPulse : undefined}
+        label={
+          isOnBreak
+            ? t('home.break_status', { defaultValue: 'En descanso · No recibís solicitudes' })
+            : t('home.idle_status', { defaultValue: 'En línea · Buscando viajes' })
+        }
+      />
+
+      {/* Hero earnings card */}
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: midnightEmber.map.bg.elevated,
+            borderColor: midnightEmber.map.line.default,
+            borderRadius: midnightEmber.radius.card,
+          },
+          isOnBreak && { opacity: 0.6 },
+        ]}
+      >
+        <RNText style={[
+          midnightEmber.text.meta,
+          { color: midnightEmber.map.text.tertiary, marginBottom: 4 },
+        ]}>
+          {t('home.earnings_today_label', { defaultValue: 'HOY' })}
+        </RNText>
+        <RNText style={[
+          midnightEmber.text.heroLg,
+          { color: midnightEmber.map.text.primary },
+        ]}>
+          ${todayEarnings.amount.toLocaleString()}
+        </RNText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 8, gap: 6 }}>
+          {cmp.symbol && cmp.delta !== null && (
+            <RNText style={[
+              midnightEmber.text.bodyDense,
+              {
+                color:
+                  cmp.color === 'success' ? midnightEmber.state.success :
+                  cmp.color === 'warning' ? midnightEmber.state.warning :
+                  midnightEmber.map.text.secondary,
+                fontWeight: '600',
+              },
+            ]}>
+              {cmp.symbol} {Math.abs(cmp.delta)}% {t('home.compare_yesterday', { defaultValue: 'vs ayer' })}
+            </RNText>
+          )}
+          {cmp.symbol && (
+            <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.tertiary }]}>·</RNText>
+          )}
+          <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.secondary }]}>
+            {t('home.trips_count', { count: todayEarnings.trips, defaultValue: '{{count}} viajes' })}
+          </RNText>
+          {perHour > 0 && (
+            <>
+              <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.tertiary }]}>·</RNText>
+              <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.secondary }]}>
+                ${perHour.toLocaleString()}{t('home.per_hour_short', { defaultValue: '/h' })}
+              </RNText>
+            </>
+          )}
+        </View>
+      </View>
+
+      {/* On-break: simplified controls (no search, no suggestion, just resume) */}
+      {isOnBreak ? (
+        <>
+          <Animated.View style={{ transform: [{ scale: ctaScaleAnim }], marginTop: 12 }}>
+            <Pressable
+              onPressIn={onCtaPressIn}
+              onPressOut={onCtaPressOut}
+              onPress={() => { triggerHaptic('medium'); onToggleBreak(); }}
+              disabled={togglingBreak}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.resume_work', { defaultValue: 'Reanudar trabajo' })}
+              style={[
+                styles.ctaPrimary,
+                {
+                  backgroundColor: midnightEmber.accent[500],
+                  borderRadius: midnightEmber.radius.card,
+                  ...midnightEmber.shadow.glow,
+                },
+                togglingBreak && styles.disabled,
+              ]}
+            >
+              <Ionicons name="play" size={18} color={midnightEmber.map.text.onAccent} />
+              <RNText style={[
+                midnightEmber.text.buttonLg,
+                { color: midnightEmber.map.text.onAccent, marginLeft: 8 },
+              ]}>
+                {togglingBreak
+                  ? t('home.resuming', { defaultValue: 'Reanudando…' })
+                  : t('home.resume_work', { defaultValue: 'Reanudar trabajo' })}
+              </RNText>
+            </Pressable>
+          </Animated.View>
+
+          <Pressable
+            onPress={() => { triggerHaptic('light'); onToggleOnline(); }}
+            disabled={toggling}
+            style={{ marginTop: 14, alignItems: 'center', paddingVertical: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.disconnect_full', { defaultValue: 'Desconectar completamente' })}
+          >
+            <RNText style={[
+              midnightEmber.text.bodyDense,
+              {
+                color: midnightEmber.map.text.tertiary,
+                textDecorationLine: 'underline',
+              },
+            ]}>
+              {t('home.disconnect_full', { defaultValue: 'Desconectar completamente' })}
+            </RNText>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          {/* Search bar — sin pulse animado */}
+          <View style={{ marginTop: 12 }}>
+            <AddressSearchBar
+              onSelect={onAddressSelect}
+              placeholder={t('home.search_placeholder', {
+                defaultValue: 'Buscar dirección o zona…',
+              })}
+            />
+          </View>
+
+          {/* Smart suggestion card (solo cuando hay hotspot real) */}
+          {nearestHotspot && nearestHotspot.liveCount > 0 && (
+            <Pressable
+              onPress={() => {
+                triggerHaptic('medium');
+                onGoToSuggestion(nearestHotspot.lat, nearestHotspot.lng);
+              }}
+              style={[
+                styles.suggestionCard,
+                {
+                  backgroundColor: midnightEmber.map.bg.elevated,
+                  borderColor: midnightEmber.accent[800],
+                  borderRadius: midnightEmber.radius.card,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.suggestion_a11y', {
+                distance: nearestHotspot.distance,
+                count: nearestHotspot.liveCount,
+                defaultValue: 'Ir a zona caliente a {{distance}} km con {{count}} viajes esperando',
+              })}
+            >
+              <RNText style={[
+                midnightEmber.text.meta,
+                { color: midnightEmber.accent[400], marginBottom: 4 },
+              ]}>
+                {t('home.suggestion_label', { defaultValue: 'SUGERENCIA' })}
+              </RNText>
+              <RNText style={[
+                midnightEmber.text.body,
+                { color: midnightEmber.map.text.primary, fontWeight: '600' },
+              ]}>
+                {t('home.suggestion_body', {
+                  distance: nearestHotspot.distance,
+                  count: nearestHotspot.liveCount,
+                  defaultValue: 'Hotspot a {{distance}} km · {{count}} viajes activos',
+                })}
+              </RNText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                <Ionicons
+                  name="arrow-forward"
+                  size={13}
+                  color={midnightEmber.accent[500]}
+                />
+                <RNText style={[
+                  midnightEmber.text.caption,
+                  { color: midnightEmber.accent[500], fontWeight: '600' },
+                ]}>
+                  {t('home.suggestion_go', { defaultValue: 'Ir hacia allá' })}
+                </RNText>
+              </View>
+            </Pressable>
+          )}
+
+          {/* Footer: Pausar + Desconectar (acciones discretas) */}
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            <Pressable
+              onPress={() => { triggerHaptic('light'); onToggleBreak(); }}
+              disabled={togglingBreak}
+              style={[
+                styles.footerActionSecondary,
+                {
+                  borderColor: midnightEmber.map.line.default,
+                  borderRadius: midnightEmber.radius.card,
+                },
+                togglingBreak && styles.disabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.pause', { defaultValue: 'Pausar' })}
+            >
+              <Ionicons
+                name="pause"
+                size={16}
+                color={midnightEmber.map.text.secondary}
+              />
+              <RNText style={[
+                midnightEmber.text.buttonMd,
+                { color: midnightEmber.map.text.secondary, marginLeft: 6 },
+              ]}>
+                {t('home.pause', { defaultValue: 'Pausar' })}
+              </RNText>
+            </Pressable>
+            <Pressable
+              onPress={() => { triggerHaptic('medium'); onToggleOnline(); }}
+              disabled={toggling}
+              style={[
+                styles.footerActionDisconnect,
+                {
+                  backgroundColor: midnightEmber.map.bg.elevated,
+                  borderRadius: midnightEmber.radius.card,
+                },
+                toggling && styles.disabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.disconnect', { defaultValue: 'Desconectar' })}
+            >
+              <Ionicons
+                name="power"
+                size={16}
+                color={midnightEmber.state.danger}
+              />
+              <RNText style={[
+                midnightEmber.text.buttonMd,
+                { color: midnightEmber.state.danger, marginLeft: 6 },
+              ]}>
+                {toggling
+                  ? t('home.disconnecting', { defaultValue: 'Desconectando…' })
+                  : t('home.disconnect', { defaultValue: 'Desconectar' })}
+              </RNText>
+            </Pressable>
+          </View>
+        </>
+      )}
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Subcomponents ─────────────────────────────────────────────────────────────
+
+interface BannerProps {
+  variant: 'danger' | 'warning' | 'info';
+  icon: keyof typeof Ionicons.glyphMap;
+  message: string;
+  subtitle?: string;
+  actionLabel?: string;
+  onActionPress?: () => void;
+  actionDisabled?: boolean;
+}
+
+function Banner({
+  variant,
+  icon,
+  message,
+  subtitle,
+  actionLabel,
+  onActionPress,
+  actionDisabled,
+}: BannerProps) {
+  const accent =
+    variant === 'danger' ? midnightEmber.state.danger :
+    variant === 'warning' ? midnightEmber.state.warning :
+    midnightEmber.state.info;
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: midnightEmber.map.bg.surface,
+        borderWidth: 1,
+        borderColor: accent + '4D', // 30% alpha
+        borderRadius: midnightEmber.radius.input,
+        padding: 12,
+        marginBottom: 10,
+        gap: 8,
+      }}
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
+    >
+      <Ionicons name={icon} size={16} color={accent} style={{ marginTop: 1 }} />
+      <View style={{ flex: 1 }}>
+        <RNText style={[midnightEmber.text.bodyDense, { color: accent }]}>
+          {message}
+        </RNText>
+        {subtitle && (
+          <RNText style={[
+            midnightEmber.text.caption,
+            { color: midnightEmber.map.text.secondary, marginTop: 2 },
+          ]}>
+            {subtitle}
+          </RNText>
+        )}
+        {actionLabel && onActionPress && (
+          <Pressable onPress={onActionPress} disabled={actionDisabled} hitSlop={6}>
+            <RNText style={[
+              midnightEmber.text.caption,
+              {
+                color: accent,
+                fontWeight: '700',
+                textDecorationLine: 'underline',
+                marginTop: 4,
+                opacity: actionDisabled ? 0.5 : 1,
+              },
+            ]}>
+              {actionLabel}
+            </RNText>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+interface StatusPillProps {
+  variant: 'online' | 'break';
+  label: string;
+  pulseAnim?: Animated.Value;
+}
+
+function StatusPill({ variant, label, pulseAnim }: StatusPillProps) {
+  const dotColor =
+    variant === 'online' ? midnightEmber.state.success : midnightEmber.state.warning;
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        alignSelf: 'flex-start',
+        backgroundColor: midnightEmber.map.bg.elevated,
+        borderWidth: 1,
+        borderColor: midnightEmber.map.line.default,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: midnightEmber.radius.pill,
+        marginBottom: 12,
+      }}
+      accessibilityRole="text"
+      accessibilityLabel={label}
+    >
+      <Animated.View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: dotColor,
+          opacity: pulseAnim ?? 1,
+        }}
+      />
+      <RNText style={[
+        midnightEmber.text.label,
+        { color: midnightEmber.map.text.primary },
+      ]}>
+        {label}
+      </RNText>
+    </View>
+  );
+}
+
+// ─── Styles (layout only — no colors/fonts; those come from tokens) ────────────
 
 const styles = StyleSheet.create({
-  // ── Desktop sidebar ──
   desktopSidebar: {
     position: 'absolute',
     top: 0,
@@ -541,303 +725,62 @@ const styles = StyleSheet.create({
   },
   desktopSidebarInner: {
     flex: 1,
-    backgroundColor: '#141418',
+    backgroundColor: midnightEmber.map.bg.surface,
     borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255,255,255,0.08)',
+    borderLeftColor: midnightEmber.map.line.hairline,
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 24,
   },
-
-  // ── Sheet content wrapper ──
   sheetContent: {
     paddingTop: 4,
   },
-
-  // ── Banners ──
-  alertBanner: {
+  greeting: {
+    ...midnightEmber.text.h1,
+    marginBottom: 16,
+  },
+  ctaPrimary: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(26,5,5,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  yesterdayRecap: {
+    ...midnightEmber.text.bodyDense,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  heroCard: {
+    padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
   },
-  alertText: {
-    color: '#fca5a5',
-    fontSize: 13,
-    fontFamily: 'Inter',
-    lineHeight: 18,
-  },
-  alertLink: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'Inter',
-    marginTop: 4,
-  },
-  omegaBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(26,17,0,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-  omegaBannerTitle: {
-    color: '#fcd34d',
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: 'Inter',
-  },
-  omegaBannerSub: {
-    color: '#9ca3af',
-    fontSize: 11,
-    fontFamily: 'Inter',
-    marginTop: 2,
-  },
-  omegaCancelBtn: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  omegaCancelText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'Inter',
-  },
-
-  // ── Offline greeting (dramatic typography) ──
-  offlineGreeting: {
-    alignItems: 'center',
-    marginBottom: 10,
-    paddingTop: 8,
-  },
-  greetingPrefix: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#FF8A5C',
-    fontFamily: 'Inter',
-    letterSpacing: 6,
-    textTransform: 'uppercase',
-  },
-  greetingName: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#ffffff',
-    fontFamily: 'Inter',
-    letterSpacing: 4,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  greetingMotivation: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: 'rgba(255,255,255,0.4)',
-    fontFamily: 'Inter',
-    letterSpacing: 1,
-  },
-
-  // ── Radar sweep searching indicator ──
-  radarContainer: {
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  radarTrack: {
-    width: '80%',
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 1,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  radarSweep: {
-    position: 'absolute',
-    width: 80,
-    height: 2,
-  },
-  radarSweepGradient: {
-    flex: 1,
-    borderRadius: 1,
-  },
-  searchingText: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 13,
-    fontFamily: 'Inter',
-  },
-
-  // ── Search bar wrapper (orange accent) ──
-  searchBarWrapper: {
-    marginBottom: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative' as const,
-  },
-
-  // ── Stat cards (earnings) ──
-  earningsCards: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#1c1c24',
-    borderRadius: 14,
+  suggestionCard: {
     padding: 14,
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    marginTop: 10,
   },
-  statCardAccent: {
-    borderColor: 'rgba(255,77,0,0.25)',
-  },
-  statCardLabel: {
-    fontSize: 11,
-    color: '#6b7280',
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    marginTop: 6,
-    marginBottom: 3,
-  },
-  statCardValue: {
-    fontSize: 20,
-    color: '#fff',
-    fontFamily: 'Inter',
-    fontWeight: '700',
-  },
-
-  // ── Break banner ──
-  breakBanner: {
+  footerActionSecondary: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(245,158,11,0.1)',
-    borderRadius: 12,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    marginBottom: 10,
+    height: 48,
+    minHeight: 48,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
-  breakBannerText: {
-    color: '#fbbf24',
-    fontSize: 12,
-    fontFamily: 'Inter',
-    fontWeight: '500',
-  },
-
-  // ── CTA "The Ignition Portal" ──
-  ctaCircleContainer: {
+  footerActionDisconnect: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 6,
-    paddingVertical: 10,
+    height: 48,
+    minHeight: 48,
   },
-  ctaRing: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 1.5,
-    borderColor: '#FF4D00',
-  },
-  ctaCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow:
-          '0 0 40px rgba(255,77,0,0.5), 0 0 80px rgba(255,77,0,0.2), inset 0 0 30px rgba(255,140,92,0.15)',
-      } as any,
-      ios: {
-        shadowColor: '#FF4D00',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.6,
-        shadowRadius: 30,
-      },
-      // Android: omit `elevation` — Android renders elevation shadows
-      // as an asymmetric drop (light source top) which makes the glow
-      // look vertically offset. The static `ctaGlow` View below
-      // provides a symmetric halo via a centered semi-transparent ring.
-      android: {},
-    }),
-  },
-  // Static symmetric glow behind the CTA button (Android + iOS)
-  // — positioned absolutely inside ctaCircleContainer, same center.
-  ctaGlow: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,77,0,0.12)',
-  },
-  ctaGlowInner: {
-    position: 'absolute',
-    width: 148,
-    height: 148,
-    borderRadius: 74,
-    backgroundColor: 'rgba(255,77,0,0.18)',
-  },
-  ctaCircleOnline: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15,15,25,0.95)',
-    borderWidth: 2,
-    borderColor: 'rgba(239,68,68,0.5)',
-  },
-  ctaLabel: {
-    color: '#FF8A5C',
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Inter',
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    marginTop: 20,
-  },
-  ctaLabelOnline: {
-    color: '#ef4444',
-    letterSpacing: 2,
-    fontSize: 11,
-    marginTop: 12,
-  },
-  toggleBtnDisabled: {
+  disabled: {
     opacity: 0.5,
-  },
-
-  // ── Break button ──
-  breakBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    paddingVertical: 11,
-    marginBottom: 4,
-  },
-  breakBtnActive: {
-    backgroundColor: colors.brand.orange,
-  },
-  breakBtnInactive: {
-    backgroundColor: 'rgba(20,20,30,0.6)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  breakBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'Inter',
-    color: '#9ca3af',
   },
 });

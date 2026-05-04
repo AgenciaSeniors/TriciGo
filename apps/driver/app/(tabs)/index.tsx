@@ -161,19 +161,20 @@ function NativeDriverHomeScreen() {
 
   // DT-2: Today's earnings state
   const [todayEarnings, setTodayEarnings] = useState({ amount: 0, trips: 0 });
+  // V2: Yesterday's earnings — fed into HomeBottomSheet for storytelling
+  // ("Ayer ganaste $X · N viajes" + "+18% vs ayer" comparison).
+  const [yesterdayEarnings, setYesterdayEarnings] = useState<
+    { amount: number; trips: number } | null
+  >(null);
 
   // DT-2: Crossfade animation for trip transitions
   const tripFadeAnim = useRef(new Animated.Value(1)).current;
   const prevHadTrip = useRef(!!activeTrip);
 
-  // Pulsing "searching" signal during idle
-  const searchPulseAnim = useRef(new Animated.Value(1)).current;
-
-  // ── Midnight Ember animations ──
-  const ring1Anim = useRef(new Animated.Value(0)).current;
-  const ring2Anim = useRef(new Animated.Value(0)).current;
-  const ring3Anim = useRef(new Animated.Value(0)).current;
-  const radarSweepAnim = useRef(new Animated.Value(0)).current;
+  // ── HomeBottomSheet animations ──
+  // V2: ring1/2/3, radarSweep and searchPulse refs were dropped together with
+  // the "Ignition Portal" CTA, the radar sweep gradient, and the address-bar
+  // pulse. The new HomeBottomSheet only needs ctaScaleAnim for press feedback.
   const ctaScaleAnim = useRef(new Animated.Value(1)).current;
 
   // Map ref for imperative camera control
@@ -313,6 +314,69 @@ function NativeDriverHomeScreen() {
     return () => clearInterval(interval);
   }, [profile?.id, activeTrip?.id]);
 
+  // V2 — Fetch yesterday's earnings (Havana wall-clock day) so the
+  // HomeBottomSheet can show "Ayer ganaste $X · N viajes" + the
+  // "+18% vs ayer" comparison badge. Cached once per driver+day; we
+  // re-fetch when profile or app comes back to foreground so the day
+  // boundary re-computes after midnight.
+  useEffect(() => {
+    if (!profile?.id) return;
+    const COMMISSION_RATE = 0.15;
+    const fetchYesterday = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const havanaOffsetHrs = (() => {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Havana',
+            timeZoneName: 'shortOffset',
+          });
+          const parts = fmt.formatToParts(new Date());
+          const tzn = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT-5';
+          const m = tzn.match(/GMT([+-]?\d+)/);
+          return m && m[1] ? parseInt(m[1], 10) : -5;
+        })();
+        const nowUtcMs = Date.now();
+        const havanaNowMs = nowUtcMs + havanaOffsetHrs * 3600_000;
+        const havanaTodayMidnightWall = new Date(havanaNowMs);
+        havanaTodayMidnightWall.setUTCHours(0, 0, 0, 0);
+        const havanaYesterdayMidnightWall = new Date(havanaTodayMidnightWall.getTime() - 86_400_000);
+        const yesterdayStartUtc = new Date(
+          havanaYesterdayMidnightWall.getTime() - havanaOffsetHrs * 3600_000,
+        );
+        const todayStartUtc = new Date(
+          havanaTodayMidnightWall.getTime() - havanaOffsetHrs * 3600_000,
+        );
+        const { data, error } = await supabase
+          .from('rides')
+          .select('final_fare_cup, completed_at')
+          .eq('driver_id', profile.id)
+          .eq('status', 'completed')
+          .gte('completed_at', yesterdayStartUtc.toISOString())
+          .lt('completed_at', todayStartUtc.toISOString());
+        if (error) {
+          console.warn('[home/earnings/yesterday] query error', error.message);
+          return;
+        }
+        const rows = data ?? [];
+        const trips = rows.length;
+        const gross = rows.reduce(
+          (sum: number, r: { final_fare_cup: number | null }) => sum + (r.final_fare_cup ?? 0),
+          0,
+        );
+        const amount = Math.round(gross * (1 - COMMISSION_RATE));
+        setYesterdayEarnings({ amount, trips });
+      } catch (err) {
+        console.warn('[home/earnings/yesterday] exception', String(err));
+      }
+    };
+    fetchYesterday();
+    // Re-check every 30 min — the day boundary only matters around
+    // midnight; this is mostly to handle the app being left open
+    // overnight.
+    const interval = setInterval(fetchYesterday, 30 * 60_000);
+    return () => clearInterval(interval);
+  }, [profile?.id]);
+
   // DT-2: Crossfade animation when activeTrip changes
   useEffect(() => {
     const hasTrip = !!activeTrip;
@@ -324,53 +388,12 @@ function NativeDriverHomeScreen() {
     }
   }, [activeTrip, tripFadeAnim]);
 
-  // Pulsing search animation when idle
-  useEffect(() => {
-    if (isOnline && !activeTrip && incomingRequests.length === 0) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(searchPulseAnim, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
-          Animated.timing(searchPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      searchPulseAnim.setValue(1);
-    }
-  }, [isOnline, activeTrip, incomingRequests.length]);
+  // V2: search pulse, ignition portal rings (3) and radar sweep effects
+  // were removed together with the corresponding visuals in HomeBottomSheet.
+  // The motion vocabulary is now closed by `midnightEmber.motion` and these
+  // patterns are explicitly out-of-system (theatrical, anti-Linear).
 
-  // ── Ignition Portal: Staggered 3-ring pulse (offline) ──
-  useEffect(() => {
-    if (!isOnline) {
-      const createRing = (anim: Animated.Value, delay: number) =>
-        Animated.loop(Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ]));
-      const a1 = createRing(ring1Anim, 0);
-      const a2 = createRing(ring2Anim, 600);
-      const a3 = createRing(ring3Anim, 1200);
-      a1.start(); a2.start(); a3.start();
-      return () => { a1.stop(); a2.stop(); a3.stop(); };
-    } else {
-      ring1Anim.setValue(0);
-      ring2Anim.setValue(0);
-      ring3Anim.setValue(0);
-    }
-  }, [isOnline]);
-
-  // ── Midnight Ember: Radar sweep (online idle) ──
-  useEffect(() => {
-    if (isOnline && !activeTrip && incomingRequests.length === 0) {
-      Animated.loop(
-        Animated.timing(radarSweepAnim, { toValue: 1, duration: 2000, useNativeDriver: true })
-      ).start();
-    } else {
-      radarSweepAnim.setValue(0);
-    }
-  }, [isOnline, activeTrip, incomingRequests.length]);
-
-  // ── Midnight Ember: CTA press spring ──
+  // ── HomeBottomSheet: CTA press spring ──
   const onCtaPressIn = useCallback(() => {
     Animated.spring(ctaScaleAnim, { toValue: 0.95, useNativeDriver: true, tension: 300, friction: 10 }).start();
   }, []);
@@ -554,23 +577,41 @@ function NativeDriverHomeScreen() {
     navCancelledRef.current = true;
   }, [nearestHotZone?.distance, idleMinutes]);
 
-  // OMEGA: Wait time estimate based on demand-hotspot proximity
-  const estimatedWaitMinutes = useMemo(() => {
+  // V2 — `estimatedWaitMinutes` was removed: the new HomeBottomSheet
+  // replaces the passive "~5 min wait" line with an actionable
+  // suggestion card (see `nearestHotspot` below).
+
+  // V2 — Smart suggestion target for HomeBottomSheet. The single best
+  // hotspot (highest intensity * proximity, with at least one live ride
+  // requested) within 5 km. Used to render the "Hotspot a 3 km · 6
+  // viajes activos → Ir hacia allá" card. null → card hides.
+  const nearestHotspot = useMemo(() => {
     if (!demandHotspots.length || !driverLat || !driverLng) return null;
-    const nearest = demandHotspots
-      .map((p) => ({
-        ...p,
-        dist: haversineDistance(
+    const candidates = demandHotspots
+      .filter((p) => p.live_rides_count > 0 && p.intensity >= 0.4)
+      .map((p) => {
+        const distM = haversineDistance(
           { latitude: driverLat, longitude: driverLng },
           { latitude: p.lat, longitude: p.lng },
-        ),
-      }))
-      .sort((a, b) => a.dist - b.dist)[0];
-    if (!nearest || nearest.dist > 2000) return null;
-    if (nearest.intensity > 0.8) return 3;
-    if (nearest.intensity > 0.5) return 8;
-    if (nearest.intensity > 0.2) return 15;
-    return null;
+        );
+        return {
+          lat: p.lat,
+          lng: p.lng,
+          distance: Math.round(distM / 100) / 10,
+          liveCount: p.live_rides_count,
+          score: p.intensity * (1 / Math.max(distM, 100)),
+        };
+      })
+      .filter((p) => p.distance <= 5);
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0]!;
+    return {
+      lat: best.lat,
+      lng: best.lng,
+      distance: best.distance,
+      liveCount: best.liveCount,
+    };
   }, [demandHotspots, driverLat, driverLng]);
 
   // OMEGA: Online time tracking for earnings per hour
@@ -840,7 +881,7 @@ function NativeDriverHomeScreen() {
         </View>
       )}
 
-      {/* ── Layer 3: HomeBottomSheet (replaces gradient panel) ── */}
+      {/* ── Layer 3: HomeBottomSheet (Midnight Ember v2) ── */}
       <HomeBottomSheet
         isOnline={isOnline}
         isOnBreak={isOnBreak}
@@ -851,24 +892,27 @@ function NativeDriverHomeScreen() {
         isSelfieProcessing={isProcessing}
         selfieLoading={selfieLoading}
         todayEarnings={todayEarnings}
+        yesterdayEarnings={yesterdayEarnings}
         perHour={perHour}
         userName={user?.full_name?.split(' ')[0] ?? user?.full_name}
-        estimatedWaitMinutes={estimatedWaitMinutes}
         navCountdown={navCountdown}
         nearestHotZone={nearestHotZone}
+        nearestHotspot={nearestHotspot}
         onToggleOnline={handleToggleOnline}
         onToggleBreak={handleToggleBreak}
         onSubmitSelfie={submitSelfie}
         onCancelAutoNav={cancelAutoNav}
         onAddressSelect={handleAddressSelect}
-        ring1Anim={ring1Anim}
-        ring2Anim={ring2Anim}
-        ring3Anim={ring3Anim}
-        radarSweepAnim={radarSweepAnim}
+        onGoToSuggestion={(lat, lng) => {
+          trackValidationEvent('driver_suggestion_followed', {
+            distance_km: nearestHotspot?.distance,
+            live_count: nearestHotspot?.liveCount,
+          });
+          openNavigation(lat, lng);
+        }}
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}
         onCtaPressOut={onCtaPressOut}
-        searchPulseAnim={searchPulseAnim}
       />
 
       {/* ── Layer 4: Incoming ride modal overlay ── */}
