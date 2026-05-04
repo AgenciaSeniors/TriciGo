@@ -626,8 +626,42 @@ function NativeDriverHomeScreen() {
     }
   }, [isOnline]);
 
-  const hoursOnline = onlineSince ? Math.max((Date.now() - onlineSince) / 3600000, 0.1) : 0;
-  const perHour = hoursOnline >= 0.5 ? Math.round(todayEarnings.amount / hoursOnline) : 0;
+  // Phase 2 N6 — anti-fatigue. `sessionHours` is state-backed so the
+  // banner threshold transitions (none → soft at 6h, soft → firm at 10h)
+  // re-render the screen even though `onlineSince` itself doesn't change
+  // mid-session. Re-evaluated every minute, cleared when offline.
+  const [sessionHours, setSessionHours] = useState(0);
+  useEffect(() => {
+    if (!onlineSince || !isOnline) {
+      setSessionHours(0);
+      return;
+    }
+    const update = () => {
+      setSessionHours(Math.max((Date.now() - onlineSince) / 3600000, 0));
+    };
+    update();
+    const interval = setInterval(update, 60_000);
+    return () => clearInterval(interval);
+  }, [onlineSince, isOnline]);
+
+  const fatigueLevel: 'none' | 'soft' | 'firm' =
+    sessionHours >= 10 ? 'firm' : sessionHours >= 6 ? 'soft' : 'none';
+
+  // Track first-show transitions per session so we can measure both
+  // surfacing and follow-through (the break action wires straight to
+  // `handleToggleBreak`, which already fires `driver_break_started`).
+  const prevFatigueLevelRef = useRef<'none' | 'soft' | 'firm'>('none');
+  useEffect(() => {
+    if (fatigueLevel !== 'none' && fatigueLevel !== prevFatigueLevelRef.current) {
+      trackValidationEvent('driver_fatigue_warning_shown', {
+        level: fatigueLevel,
+        session_hours: Math.round(sessionHours * 10) / 10,
+      });
+    }
+    prevFatigueLevelRef.current = fatigueLevel;
+  }, [fatigueLevel, sessionHours]);
+
+  const perHour = sessionHours >= 0.5 ? Math.round(todayEarnings.amount / sessionHours) : 0;
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleToggleOnline = useCallback(async () => {
@@ -933,6 +967,8 @@ function NativeDriverHomeScreen() {
         navCountdown={navCountdown}
         nearestHotZone={nearestHotZone}
         nearestHotspot={nearestHotspot}
+        fatigueLevel={fatigueLevel}
+        sessionHours={sessionHours}
         onToggleOnline={handleToggleOnline}
         onToggleBreak={handleToggleBreak}
         onSubmitSelfie={submitSelfie}
