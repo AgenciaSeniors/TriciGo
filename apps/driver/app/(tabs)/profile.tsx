@@ -10,7 +10,7 @@ import { StatCard } from '@tricigo/ui/StatCard';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { authService, driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -118,11 +118,11 @@ function NativeDriverProfileScreen() {
         </Text>
 
         {/* ── Profile header card ── */}
-        <Card variant="surface" padding="md" className="mb-4 bg-white" style={{ borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}>
+        <Card variant="surface" padding="md" className="mb-4" style={{ backgroundColor: midnightEmber.screen.bg.surface, borderWidth: 1, borderColor: midnightEmber.screen.line.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}>
           <View className="flex-row items-center">
             <View
               className="w-16 h-16 rounded-full items-center justify-center mr-4"
-              style={{ backgroundColor: colors.brand.orange }}
+              style={{ backgroundColor: midnightEmber.accent[500] }}
               accessible
               accessibilityLabel={`Avatar de ${user?.full_name ?? td('common.driver_label')}`}
             >
@@ -131,8 +131,8 @@ function NativeDriverProfileScreen() {
               </Text>
             </View>
             <View className="flex-1">
-              <Text variant="h4" style={{ color: '#0F172A' }}>{user?.full_name ?? td('common.driver_label')}</Text>
-              <Text variant="bodySmall" style={{ color: '#64748B' }} className="mt-0.5">
+              <Text variant="h4" style={{ color: midnightEmber.screen.text.primary }}>{user?.full_name ?? td('common.driver_label')}</Text>
+              <Text variant="bodySmall" style={{ color: midnightEmber.screen.text.secondary }} className="mt-0.5">
                 {user?.phone ?? '+53 5XXXXXXX'}
               </Text>
               {driverProfile?.status && (
@@ -149,11 +149,11 @@ function NativeDriverProfileScreen() {
               onPress={() => router.push('/profile/edit')}
               hitSlop={4}
               className="w-11 h-11 rounded-xl items-center justify-center"
-              style={{ backgroundColor: '#F1F5F9' }}
+              style={{ backgroundColor: midnightEmber.screen.bg.sunken }}
               accessibilityRole="button"
               accessibilityLabel={t('profile.edit_profile')}
             >
-              <Ionicons name="pencil" size={16} color="#64748B" />
+              <Ionicons name="pencil" size={16} color={midnightEmber.screen.text.secondary} />
             </Pressable>
           </View>
         </Card>
@@ -197,10 +197,10 @@ function NativeDriverProfileScreen() {
         <StaggeredList staggerDelay={60}>
           {menuSections.map((section) => (
             <View key={section.title} className="mb-4">
-              <Text variant="caption" style={{ color: '#64748B' }} className="mb-2 ml-1 uppercase tracking-wider font-semibold">
+              <Text variant="caption" style={{ color: midnightEmber.screen.text.secondary }} className="mb-2 ml-1 uppercase tracking-wider font-semibold">
                 {section.title}
               </Text>
-              <Card variant="surface" padding="none" className="px-3 bg-white" style={{ borderWidth: 1, borderColor: '#E2E8F0' }}>
+              <Card variant="surface" padding="none" className="px-3" style={{ backgroundColor: midnightEmber.screen.bg.surface, borderWidth: 1, borderColor: midnightEmber.screen.line.default }}>
                 {section.items.map((item, index) => (
                   <MenuRow
                     key={item.label}
@@ -217,7 +217,7 @@ function NativeDriverProfileScreen() {
         </StaggeredList>
 
         {/* ── Logout ── */}
-        <View className="mt-2 mb-8 px-3 rounded-xl" style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }}>
+        <View className="mt-2 mb-8 px-3 rounded-xl" style={{ backgroundColor: `${midnightEmber.state.danger}1F`, borderWidth: 1, borderColor: `${midnightEmber.state.danger}4D` }}>
           <MenuRow
             icon="log-out-outline"
             label={loggingOut ? t('auth.logging_out') : t('auth.logout')}

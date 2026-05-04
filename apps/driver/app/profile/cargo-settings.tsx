@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { PACKAGE_CATEGORIES } from '@tricigo/types';
@@ -106,7 +106,7 @@ export default function CargoSettingsScreen() {
             {/* Max weight */}
             <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
-                <Ionicons name="scale-outline" size={20} color={colors.brand.orange} />
+                <Ionicons name="scale-outline" size={20} color={midnightEmber.accent[500]} />
                 <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.max_cargo_weight', { defaultValue: 'Peso máximo de carga (kg)' })}
                 </Text>
@@ -119,14 +119,14 @@ export default function CargoSettingsScreen() {
                 variant="light"
               />
               {weightError ? (
-                <Text variant="caption" className="text-red-400 mt-1">{weightError}</Text>
+                <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="mt-1">{weightError}</Text>
               ) : null}
             </Card>
 
             {/* Dimensions */}
             <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">
               <View className="flex-row items-center mb-3">
-                <Ionicons name="cube-outline" size={20} color={colors.brand.orange} />
+                <Ionicons name="cube-outline" size={20} color={midnightEmber.accent[500]} />
                 <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.cargo_dimensions', { defaultValue: 'Dimensiones máx. carga (cm)' })}
                 </Text>
@@ -168,7 +168,7 @@ export default function CargoSettingsScreen() {
             {/* Categories */}
             <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
               <View className="flex-row items-center mb-3">
-                <Ionicons name="pricetags-outline" size={20} color={colors.brand.orange} />
+                <Ionicons name="pricetags-outline" size={20} color={midnightEmber.accent[500]} />
                 <Text variant="body" color="primary" className="ml-2 font-semibold">
                   {t('onboarding.cargo_categories', { defaultValue: 'Categorías de carga aceptadas' })}
                 </Text>
@@ -181,15 +181,15 @@ export default function CargoSettingsScreen() {
                     <Pressable
                       key={cat}
                       onPress={() => toggleCategory(cat)}
-                      className={`px-4 py-2 rounded-full border ${
-                        selected
-                          ? 'border-primary-500 bg-primary-500/10'
-                          : 'border-neutral-600 bg-transparent'
-                      }`}
+                      className="px-4 py-2 rounded-full border"
+                      style={{
+                        borderColor: selected ? midnightEmber.accent[500] : midnightEmber.screen.line.default,
+                        backgroundColor: selected ? `${midnightEmber.accent[500]}1A` : 'transparent',
+                      }}
                     >
                       <Text
                         variant="bodySmall"
-                        className={selected ? 'text-primary-500' : 'text-neutral-400'}
+                        style={{ color: selected ? midnightEmber.accent[500] : midnightEmber.screen.text.tertiary }}
                       >
                         {label}
                       </Text>
@@ -198,7 +198,7 @@ export default function CargoSettingsScreen() {
                 })}
               </View>
               {categoriesError ? (
-                <Text variant="caption" className="text-red-400 mt-2">{categoriesError}</Text>
+                <Text variant="caption" style={{ color: midnightEmber.state.danger }} className="mt-2">{categoriesError}</Text>
               ) : null}
             </Card>
 

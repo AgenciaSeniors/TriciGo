@@ -7,13 +7,16 @@ import { Text } from '@tricigo/ui/Text';
 import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 
 const APP_VERSION = '1.0.0';
+
+type RoutePath = Parameters<typeof router.push>[0];
 
 export default function AboutScreen() {
   const { t } = useTranslation('common');
 
-  const links: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; route: string; iconBg: 'primary' | 'info' | 'success' }[] = [
+  const links: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; route: RoutePath; iconBg: 'primary' | 'info' | 'success' }[] = [
     { label: t('profile.terms_of_service'), icon: 'document-text-outline', route: '/profile/terms', iconBg: 'primary' },
     { label: t('profile.privacy_policy'), icon: 'shield-outline', route: '/profile/privacy', iconBg: 'info' },
     { label: t('profile.blog', { defaultValue: 'Blog' }), icon: 'newspaper-outline', route: '/profile/blog', iconBg: 'success' },
@@ -44,7 +47,7 @@ export default function AboutScreen() {
 
         <View
           className="rounded-2xl p-4 mb-6"
-          style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
+          style={{ backgroundColor: midnightEmber.screen.bg.surface, borderWidth: 1, borderColor: midnightEmber.screen.line.default }}
         >
           <Text variant="bodySmall" color="secondary" className="text-center">
             {t('profile.about_description', { defaultValue: 'TriciGo es la plataforma de movilidad urbana para conductores en la Tríplice Fronteira.' })}
@@ -53,11 +56,11 @@ export default function AboutScreen() {
 
         {links.map((link, i) => (
           <MenuRow
-            key={link.route}
+            key={String(link.route)}
             icon={link.icon}
             label={link.label}
             iconBg={link.iconBg}
-            onPress={() => router.push(link.route as never)}
+            onPress={() => router.push(link.route)}
             showBorder={i < links.length - 1}
 
           />

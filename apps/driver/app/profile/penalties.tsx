@@ -9,7 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CancellationPenalty } from '@tricigo/types';
@@ -66,7 +66,7 @@ export default function PenaltiesScreen() {
             })}
           </Text>
         </View>
-        <Text variant="body" className="text-red-400 font-semibold">
+        <Text variant="body" className="font-semibold" style={{ color: midnightEmber.state.danger }}>
           -{formatCUP(item.amount)}
         </Text>
       </View>
@@ -85,14 +85,14 @@ export default function PenaltiesScreen() {
 
         {/* Summary */}
         {penalties.length > 0 && (
-          <Card theme="light" variant="filled" padding="md" className="bg-red-50 mb-4 mt-2">
+          <Card theme="light" variant="filled" padding="md" className="mb-4 mt-2" style={{ backgroundColor: `${midnightEmber.state.danger}1F` }}>
             <View className="flex-row items-center gap-2">
-              <Ionicons name="warning-outline" size={20} color="#EF4444" />
+              <Ionicons name="warning-outline" size={20} color={midnightEmber.state.danger} />
               <View>
                 <Text variant="bodySmall" color="primary">
                   {t('penalties.total', { defaultValue: 'Total penalidades' })}
                 </Text>
-                <Text variant="h4" className="text-red-400">
+                <Text variant="h4" style={{ color: midnightEmber.state.danger }}>
                   -{formatCUP(totalAmount)}
                 </Text>
               </View>
@@ -108,12 +108,12 @@ export default function PenaltiesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderPenalty}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={midnightEmber.screen.text.secondary} />
           }
           ListEmptyComponent={
             !loading ? (
               <View className="items-center py-12">
-                <Ionicons name="checkmark-circle-outline" size={48} color={colors.neutral[600]} />
+                <Ionicons name="checkmark-circle-outline" size={48} color={midnightEmber.screen.text.secondary} />
                 <Text variant="body" color="primary" className="opacity-30 mt-3">
                   {t('penalties.no_penalties', { defaultValue: 'No tienes penalidades' })}
                 </Text>

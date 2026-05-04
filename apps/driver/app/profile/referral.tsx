@@ -10,7 +10,7 @@ import { Input } from '@tricigo/ui/Input';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
@@ -175,7 +175,7 @@ export default function DriverReferralScreen() {
               {hasBeenReferred && (
                 <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
                   <View className="flex-row items-center">
-                    <Ionicons name="checkmark-circle" size={20} color={colors.success.DEFAULT} />
+                    <Ionicons name="checkmark-circle" size={20} color={midnightEmber.state.success} />
                     <Text variant="bodySmall" color="primary" className="ml-2 opacity-70">
                       {t('profile.referral_already_applied')}
                     </Text>

@@ -8,7 +8,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review } from '@tricigo/types';
 
@@ -21,7 +21,7 @@ function StarRow({ rating }: { rating: number }) {
         <Text
           key={star}
           variant="body"
-          style={{ color: star <= rating ? '#EAB308' : colors.neutral[600] }}
+          style={{ color: star <= rating ? midnightEmber.state.warning : midnightEmber.screen.text.tertiary }}
         >
           ★
         </Text>
@@ -105,7 +105,7 @@ export default function DriverReviewsScreen() {
       {item.tags && item.tags.length > 0 && (
         <View className="flex-row flex-wrap gap-1 mt-2">
           {item.tags.map((tag) => (
-            <View key={tag} className="px-2 py-0.5 rounded-full bg-[#F1F5F9]">
+            <View key={tag} className="px-2 py-0.5 rounded-full" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
               <Text variant="caption" color="primary" className="text-[10px] opacity-70">
                 {t(`review.tag_${tag}`, { defaultValue: tag.replace(/_/g, ' ') })}
               </Text>
@@ -148,12 +148,12 @@ export default function DriverReviewsScreen() {
                   return (
                     <View key={star} className="flex-row items-center mb-1">
                       <Text variant="caption" color="primary" className="w-3 opacity-50">{star}</Text>
-                      <View className="flex-1 h-2 bg-[#E2E8F0] rounded-full mx-2 overflow-hidden">
+                      <View className="flex-1 h-2 rounded-full mx-2 overflow-hidden" style={{ backgroundColor: midnightEmber.screen.line.default }}>
                         <View
                           className="h-full rounded-full"
                           style={{
                             width: `${pct}%`,
-                            backgroundColor: star >= 4 ? '#22c55e' : star === 3 ? '#EAB308' : '#EF4444',
+                            backgroundColor: star >= 4 ? midnightEmber.state.success : star === 3 ? midnightEmber.state.warning : midnightEmber.state.danger,
                           }}
                         />
                       </View>
@@ -174,7 +174,7 @@ export default function DriverReviewsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderReview}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={midnightEmber.screen.text.secondary} />
           }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}

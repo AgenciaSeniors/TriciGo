@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
@@ -26,11 +26,11 @@ const CATEGORY_KEYS: { value: TicketCategory; key: string }[] = [
 ];
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; key: string }> = {
-  open: { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' },
-  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', key: 'profile.help_status_in_progress' },
-  waiting_user: { bg: 'bg-orange-100', text: 'text-orange-700', key: 'profile.help_status_waiting_response' },
-  resolved: { bg: 'bg-green-100', text: 'text-green-700', key: 'profile.help_status_resolved' },
-  closed: { bg: 'bg-neutral-100', text: 'text-neutral-600', key: 'profile.help_status_closed' },
+  open: { bg: `${midnightEmber.state.warning}1F`, text: midnightEmber.state.warning, key: 'profile.help_status_open' },
+  in_progress: { bg: `${midnightEmber.state.info}1F`, text: midnightEmber.state.info, key: 'profile.help_status_in_progress' },
+  waiting_user: { bg: `${midnightEmber.accent[500]}1F`, text: midnightEmber.accent[600], key: 'profile.help_status_waiting_response' },
+  resolved: { bg: `${midnightEmber.state.success}1F`, text: midnightEmber.state.success, key: 'profile.help_status_resolved' },
+  closed: { bg: midnightEmber.screen.bg.sunken, text: midnightEmber.screen.text.secondary, key: 'profile.help_status_closed' },
 };
 
 export default function DriverHelpScreen() {
@@ -95,7 +95,7 @@ export default function DriverHelpScreen() {
   };
 
   const renderTicket = ({ item }: { item: SupportTicket }) => {
-    const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' };
+    const status = STATUS_COLORS[item.status] ?? { bg: `${midnightEmber.state.warning}1F`, text: midnightEmber.state.warning, key: 'profile.help_status_open' };
     return (
       <Pressable onPress={() => router.push(`/profile/ticket-detail?ticketId=${item.id}`)}>
         <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
@@ -111,8 +111,8 @@ export default function DriverHelpScreen() {
                 })}
               </Text>
             </View>
-            <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>
-              <Text className={`text-xs font-medium ${status.text}`}>
+            <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: status.bg }}>
+              <Text className="text-xs font-medium" style={{ color: status.text }}>
                 {t(status.key)}
               </Text>
             </View>
@@ -152,7 +152,7 @@ export default function DriverHelpScreen() {
                       <Ionicons
                         name={isExpanded ? 'chevron-up' : 'chevron-down'}
                         size={20}
-                        color={colors.neutral[500]}
+                        color={midnightEmber.screen.text.tertiary}
                       />
                     </Pressable>
                     {isExpanded && (
@@ -168,11 +168,11 @@ export default function DriverHelpScreen() {
               <Card theme="light" variant="filled" padding="md" className="mt-1 mb-6 bg-white">
                 <Text variant="body" color="primary" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
-                  <Ionicons name="mail-outline" size={18} color={colors.neutral[500]} />
+                  <Ionicons name="mail-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                   <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">soporte@tricigo.com</Text>
                 </View>
                 <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color={colors.neutral[500]} />
+                  <Ionicons name="call-outline" size={18} color={midnightEmber.screen.text.tertiary} />
                   <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">+53 5XXXXXXX</Text>
                 </View>
               </Card>
@@ -217,15 +217,13 @@ export default function DriverHelpScreen() {
               <Pressable
                 key={cat.value}
                 onPress={() => setCategory(cat.value)}
-                className={`px-3 py-1.5 rounded-full ${
-                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-100'
-                }`}
+                className="px-3 py-1.5 rounded-full"
+                style={{ backgroundColor: category === cat.value ? midnightEmber.accent[500] : midnightEmber.screen.bg.sunken }}
               >
                 <Text
                   variant="caption"
-                  className={`font-medium ${
-                    category === cat.value ? 'text-white' : 'text-neutral-600'
-                  }`}
+                  className="font-medium"
+                  style={{ color: category === cat.value ? midnightEmber.screen.text.inverse : midnightEmber.screen.text.secondary }}
                 >
                   {t(cat.key)}
                 </Text>

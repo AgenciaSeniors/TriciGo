@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { incidentService, trustedContactService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
@@ -188,7 +188,7 @@ export default function DriverSafetyCenterScreen() {
             onPress={() => router.push('/profile/help')}
           >
             <View className="w-10 h-10 rounded-full bg-neutral-100 items-center justify-center mr-3">
-              <Ionicons name="flag-outline" size={20} color={colors.neutral[400]} />
+              <Ionicons name="flag-outline" size={20} color={midnightEmber.screen.text.tertiary} />
             </View>
             <View className="flex-1">
               <Text variant="body" color="primary" className="font-semibold">
@@ -198,7 +198,7 @@ export default function DriverSafetyCenterScreen() {
                 {t('safety.report_desc')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.neutral[600]} />
+            <Ionicons name="chevron-forward" size={20} color={midnightEmber.screen.text.secondary} />
           </Pressable>
         </Card>
 
@@ -210,7 +210,7 @@ export default function DriverSafetyCenterScreen() {
           >
             <View className="flex-row items-center">
               <View className="w-10 h-10 rounded-full bg-neutral-100 items-center justify-center mr-3">
-                <Ionicons name="bulb-outline" size={20} color={colors.neutral[400]} />
+                <Ionicons name="bulb-outline" size={20} color={midnightEmber.screen.text.tertiary} />
               </View>
               <Text variant="body" color="primary" className="font-semibold">
                 {t('safety.tips_title')}
@@ -219,11 +219,11 @@ export default function DriverSafetyCenterScreen() {
             <Ionicons
               name={tipsExpanded ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color={colors.neutral[500]}
+              color={midnightEmber.screen.text.tertiary}
             />
           </Pressable>
           {tipsExpanded && (
-            <View className="mt-3 pt-3 border-t border-[#E2E8F0]">
+            <View className="mt-3 pt-3 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
               {DRIVER_TIPS.map((tipKey, idx) => (
                 <View key={tipKey} className="flex-row items-start mb-2">
                   <Text variant="caption" color="primary" className="mr-2 opacity-50">
@@ -242,7 +242,7 @@ export default function DriverSafetyCenterScreen() {
         <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
           <View className="flex-row items-center mb-3">
             <View className="w-10 h-10 rounded-full bg-neutral-100 items-center justify-center mr-3">
-              <Ionicons name="document-text-outline" size={20} color={colors.neutral[400]} />
+              <Ionicons name="document-text-outline" size={20} color={midnightEmber.screen.text.tertiary} />
             </View>
             <Text variant="body" color="primary" className="font-semibold">
               {t('safety.my_reports')}
@@ -254,7 +254,7 @@ export default function DriverSafetyCenterScreen() {
             </Text>
           ) : (
             incidents.slice(0, 5).map((incident) => (
-              <View key={incident.id} className="flex-row items-center justify-between py-2 border-t border-[#E2E8F0]">
+              <View key={incident.id} className="flex-row items-center justify-between py-2 border-t" style={{ borderTopColor: midnightEmber.screen.line.default }}>
                 <View className="flex-1">
                   <Text variant="bodySmall" color="primary">{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" color="primary" className="opacity-50">

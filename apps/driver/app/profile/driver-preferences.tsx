@@ -22,7 +22,7 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { triggerHaptic } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
@@ -154,8 +154,8 @@ export default function DriverPreferencesScreen() {
             <Switch
               value={prefs.accepts_long_trips}
               onValueChange={(v) => setPrefs({ ...prefs, accepts_long_trips: v })}
-              trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
-              thumbColor="#FFFFFF"
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
+              thumbColor={midnightEmber.screen.bg.surface}
             />
           </View>
         </Card>
@@ -177,13 +177,18 @@ export default function DriverPreferencesScreen() {
                 <Pressable
                   key={opt.value}
                   onPress={() => setPrefs({ ...prefs, music_preference: opt.value })}
-                  className={`flex-1 py-2.5 rounded-xl border ${active ? 'border-orange-500 bg-orange-50' : 'border-neutral-200 bg-neutral-50'}`}
+                  className="flex-1 py-2.5 rounded-xl border"
+                  style={{
+                    borderColor: active ? midnightEmber.accent[500] : midnightEmber.screen.line.default,
+                    backgroundColor: active ? midnightEmber.accent[50] : midnightEmber.screen.bg.sunken,
+                  }}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                 >
                   <Text
                     variant="caption"
-                    className={`text-center font-medium ${active ? 'text-orange-600' : 'text-neutral-600'}`}
+                    className="text-center font-medium"
+                    style={{ color: active ? midnightEmber.accent[600] : midnightEmber.screen.text.secondary }}
                   >
                     {t(`preferences.music_${opt.value}`, { defaultValue: opt.label })}
                   </Text>
@@ -211,8 +216,8 @@ export default function DriverPreferencesScreen() {
             <Switch
               value={prefs.accepts_minors_alone}
               onValueChange={(v) => setPrefs({ ...prefs, accepts_minors_alone: v })}
-              trackColor={{ false: '#E2E8F0', true: colors.brand.orange }}
-              thumbColor="#FFFFFF"
+              trackColor={{ false: midnightEmber.screen.line.default, true: midnightEmber.accent[500] }}
+              thumbColor={midnightEmber.screen.bg.surface}
             />
           </View>
         </Card>

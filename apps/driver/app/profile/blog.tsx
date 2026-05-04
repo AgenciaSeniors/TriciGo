@@ -7,7 +7,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -54,7 +54,7 @@ export default function BlogScreen() {
       bg="lightPrimary"
       statusBarStyle="dark-content"
       padded
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPosts(); }} tintColor={colors.brand.orange} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPosts(); }} tintColor={midnightEmber.accent[500]} />}
     >
       <View className="pt-4 pb-8">
         <ProfileScreenHeader
@@ -86,13 +86,13 @@ export default function BlogScreen() {
                 key={post.id}
                 onPress={() => Linking.openURL(post.url)}
                 className="rounded-2xl p-4 mb-3"
-                style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' }}
+                style={{ backgroundColor: midnightEmber.screen.bg.surface, borderWidth: 1, borderColor: midnightEmber.screen.line.default }}
               >
                 <View className="flex-row items-center mb-2">
-                  <View className="px-2 py-0.5 rounded-full mr-2" style={{ backgroundColor: `${colors.brand.orange}20` }}>
+                  <View className="px-2 py-0.5 rounded-full mr-2" style={{ backgroundColor: `${midnightEmber.accent[500]}20` }}>
                     <Text variant="caption" color="accent">{post.category}</Text>
                   </View>
-                  <Text variant="caption" style={{ color: colors.neutral[500] }}>
+                  <Text variant="caption" style={{ color: midnightEmber.screen.text.tertiary }}>
                     {new Date(post.published_at).toLocaleDateString()}
                   </Text>
                 </View>
