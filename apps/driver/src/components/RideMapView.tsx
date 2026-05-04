@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
-import type { NearbyVehicle, DemandHotspot } from '@tricigo/types';
+import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
+import { PopularLocationPin } from './PopularLocationPin';
 import { getMapFallbackCoordLngLat } from '../config/demo';
 
 // Native map (iOS/Android)
@@ -100,6 +101,13 @@ interface RideMapViewProps {
   nearbyDrivers?: NearbyVehicle[];
   /** Demand hotspots with pulse animation (top 8). */
   demandHotspots?: DemandHotspot[];
+  /**
+   * Popular pickup/dropoff clusters (90-day historical aggregate).
+   * Rendered as static pins differentiated from the live demand
+   * hotspots — see PopularLocationPin. Off by default; the home
+   * screen exposes a toggle.
+   */
+  popularLocations?: PopularLocation[];
 }
 
 const vehicleMarkerImages: Record<string, any> = {
@@ -166,6 +174,7 @@ function WebMapboxView({
   containerStyle,
   nearbyDrivers,
   demandHotspots,
+  popularLocations,
 }: RideMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -626,6 +635,7 @@ function RideMapViewInner(
     onUserInteraction,
     nearbyDrivers,
     demandHotspots,
+    popularLocations,
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
@@ -835,6 +845,7 @@ function RideMapViewInner(
           onUserInteraction={onUserInteraction}
           nearbyDrivers={nearbyDrivers}
           demandHotspots={demandHotspots}
+          popularLocations={popularLocations}
         />
       );
     }
@@ -1156,6 +1167,19 @@ function RideMapViewInner(
               intensity={h.intensity}
               label={h.live_rides_count > 0 ? String(h.live_rides_count) : undefined}
             />
+          </MapboxGL.PointAnnotation>
+        ))}
+        {/* Popular pickup/dropoff clusters — N5. Static pins, only
+            rendered when the home screen toggles them on. Different
+            visual contract from demand hotspots: these are stable
+            historical clusters, not live signals. */}
+        {popularLocations?.map((loc) => (
+          <MapboxGL.PointAnnotation
+            key={`popular-${loc.id}`}
+            id={`popular-${loc.id}`}
+            coordinate={[loc.longitude, loc.latitude]}
+          >
+            <PopularLocationPin type={loc.type} count={loc.ride_count} />
           </MapboxGL.PointAnnotation>
         ))}
       </MapboxGL.MapView>

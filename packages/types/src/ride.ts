@@ -211,6 +211,28 @@ export interface DemandHotspot {
   historical_rides_count: number;
 }
 
+/**
+ * Popular pickup/dropoff cluster from the `popular_locations`
+ * materialized view (migration 00083). 90-day historical aggregate
+ * of completed rides clustered by ST_ClusterDBSCAN. Refreshed daily.
+ *
+ * Different from `DemandHotspot`: that one folds a live boost into a
+ * matching hour-of-week pattern; this one is the pure historical
+ * "where trips usually start/end" view used for stable map markers
+ * the driver can keep on screen.
+ */
+export interface PopularLocation {
+  id: number;
+  latitude: number;
+  longitude: number;
+  address: string;
+  /** 'pickup' | 'dropoff' — clusters are split by direction. */
+  type: 'pickup' | 'dropoff';
+  ride_count: number;
+  /** Distance from the query point in metres. */
+  distance_m: number;
+}
+
 export interface Tip {
   id: string;
   ride_id: string;
