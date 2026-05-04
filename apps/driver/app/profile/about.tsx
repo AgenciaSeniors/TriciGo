@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Pressable, Image } from 'react-native';
+import { View, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { MenuRow } from '@tricigo/ui/MenuRow';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -22,20 +22,11 @@ export default function AboutScreen() {
   return (
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
-        {/* Header */}
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: colors.neutral[100] }}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.about_title')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.about_title')}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+        />
 
         {/* App info */}
         <View className="items-center mb-8">

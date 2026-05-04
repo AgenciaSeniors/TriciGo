@@ -10,6 +10,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
@@ -226,14 +227,10 @@ export default function EditVehicleScreen() {
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">
-            {t('profile.edit_vehicle_title', { defaultValue: 'Editar vehículo' })}
-          </Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.edit_vehicle_title', { defaultValue: 'Editar vehículo' })}
+          onBack={() => router.back()}
+        />
 
         {loading ? (
           <View className="items-center py-20">

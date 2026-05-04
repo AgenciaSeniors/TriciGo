@@ -12,6 +12,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
@@ -188,17 +189,11 @@ export default function DocumentsScreen() {
   return (
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
-          >
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.documents', { defaultValue: 'Documentos' })}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.documents', { defaultValue: 'Documentos' })}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
+        />
 
         {loading ? (
           <View className="items-center py-20">

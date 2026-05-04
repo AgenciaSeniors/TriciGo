@@ -9,6 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
@@ -92,19 +93,12 @@ export default function TrustedContactsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />}
       >
         <View className="pt-4 pb-8">
-          <View className="flex-row items-center mb-4">
-            <Pressable
-              onPress={() => router.back()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
-              className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-              style={{ backgroundColor: '#F1F5F9' }}
-            >
-              <Ionicons name="arrow-back" size={20} color="#0F172A" />
-            </Pressable>
-            <Text variant="h3" color="primary">{t('trusted_contacts.title')}</Text>
-          </View>
+          <ProfileScreenHeader
+            title={t('trusted_contacts.title')}
+            onBack={() => router.back()}
+            backAccessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+            className="mb-4"
+          />
 
           <Text variant="bodySmall" color="secondary" className="mb-4">
             {t('trusted_contacts.desc')}

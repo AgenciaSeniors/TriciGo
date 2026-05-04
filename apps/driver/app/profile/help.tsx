@@ -7,6 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
@@ -124,12 +125,10 @@ export default function DriverHelpScreen() {
   return (
     <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 flex-1">
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.help_title')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.help_title')}
+          onBack={() => router.back()}
+        />
 
         <FlatList
           data={tickets}

@@ -10,14 +10,14 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, RefreshControl } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { colors } from '@tricigo/theme';
 import { fleetService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
@@ -80,19 +80,11 @@ export default function CorporateScreen() {
       }
     >
       <View className="pt-4 pb-8">
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Atrás"
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: colors.neutral[100] }}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">Corporativo</Text>
-        </View>
+        <ProfileScreenHeader
+          title="Corporativo"
+          onBack={() => router.back()}
+          backAccessibilityLabel="Atrás"
+        />
 
         {loading && (
           <View className="gap-3">

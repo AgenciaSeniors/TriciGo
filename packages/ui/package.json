@@ -23,6 +23,7 @@
     "./RouteSummary": "./src/RouteSummary.tsx",
     "./Screen": "./src/Screen.tsx",
     "./ScreenHeader": "./src/ScreenHeader.tsx",
+    "./ProfileScreenHeader": "./src/ProfileScreenHeader.tsx",
     "./ServiceTypeCard": "./src/ServiceTypeCard.tsx",
     "./StatusBadge": "./src/StatusBadge.tsx",
     "./StatusStepper": "./src/StatusStepper.tsx",
