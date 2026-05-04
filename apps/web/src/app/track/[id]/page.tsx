@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService } from '@tricigo/api';
+import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import './track.css';
@@ -689,6 +689,88 @@ export default function TrackRidePage() {
                   }}
                 >
                   {canceling ? t('track.canceling', { defaultValue: 'Cancelando...' }) : <>{t('track.cancel_ride', { defaultValue: 'Cancelar viaje' })}</>}
+                </button>
+              )}
+
+              {/* SOS button — visible cuando hay un conductor asignado o
+                  el viaje está en marcha. Espejo del SOS de mobile
+                  (RideActiveView.tsx:handleSOS). Tres acciones cascada:
+                    1. createSOSReport      → registra incidente en DB
+                    2. broadcastEmergency   → SMS automático a contactos
+                                              de confianza con auto_share
+                    3. tel:106              → línea cubana (policía)
+
+                  Confirm dialog para evitar tap accidental. Best-effort
+                  en (1) y (2) — si fallan, (3) siempre se ejecuta. */}
+              {['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'].includes(ride.status) && (
+                <button
+                  type="button"
+                  className="track-action-btn track-action-btn--sos"
+                  style={{
+                    background: '#dc2626',
+                    color: 'white',
+                    fontWeight: 700,
+                    border: 0,
+                  }}
+                  onClick={async () => {
+                    if (!userId) return;
+                    if (!confirm(t('track.sos_confirm', {
+                      defaultValue: 'Vas a llamar a emergencias y avisar a tus contactos de confianza por SMS. ¿Confirmás?',
+                    }))) return;
+                    // Best-effort: run report + broadcast in parallel,
+                    // ignore failures, ALWAYS open tel:106 last so the
+                    // dialer launches even if the API calls hang.
+                    // Coords priority: live driver location (from realtime
+                    // channel) → pickup_location (always present on the
+                    // ride) → 0,0 fallback. Trusted contacts get the
+                    // most accurate coord we have at the moment of SOS.
+                    const pickupLatLive = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+                    const pickupLngLive = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+                    const lat = driverLocation?.lat ?? pickupLatLive;
+                    const lng = driverLocation?.lng ?? pickupLngLive;
+                    Promise.allSettled([
+                      incidentService.createSOSReport({
+                        ride_id: ride.id,
+                        reported_by: userId,
+                        against_user_id: ride.driver_id ?? undefined,
+                        description: 'SOS activado por pasajero (web) durante viaje',
+                      }),
+                      trustedContactService.broadcastEmergency({
+                        rideId: ride.id,
+                        latitude: lat,
+                        longitude: lng,
+                        driverName: ride.driver_name ?? null,
+                        vehiclePlate: ride.vehicle_plate ?? null,
+                        riderName: null,
+                      }).then((res) => {
+                        if (res.contacts_notified > 0) {
+                          // Surface confirmation via lightweight toast.
+                          if (typeof window !== 'undefined') {
+                            const toast = document.createElement('div');
+                            toast.textContent = t('track.sos_contacts_notified', {
+                              count: res.contacts_notified,
+                              defaultValue: `${res.contacts_notified} contactos avisados por SMS`,
+                            });
+                            Object.assign(toast.style, {
+                              position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
+                              background: '#16a34a', color: 'white', padding: '0.75rem 1.5rem',
+                              borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: '600',
+                              zIndex: '9999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                            });
+                            document.body.appendChild(toast);
+                            setTimeout(() => toast.remove(), 4000);
+                          }
+                        }
+                      }),
+                    ]).catch(() => { /* best-effort, swallow errors */ });
+                    // Open dialer last (always succeeds — even when
+                    // offline the dialer launches, user just sees no
+                    // signal indicator). Cuban emergency line is 106.
+                    window.location.href = 'tel:106';
+                  }}
+                  aria-label={t('track.sos_button_aria', { defaultValue: 'SOS — llamar a emergencias y avisar contactos' })}
+                >
+                  🚨 {t('track.sos_button', { defaultValue: 'SOS' })}
                 </button>
               )}
             </div>
