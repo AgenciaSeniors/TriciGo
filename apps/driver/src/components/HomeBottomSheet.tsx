@@ -106,6 +106,16 @@ export interface HomeBottomSheetProps {
   // ── Smart suggestion (always available when online idle) ──
   nearestHotspot: NearestHotspot | null;
 
+  /**
+   * Phase 2 N6 — anti-fatigue level derived from continuous online time.
+   * `none` = no warning. `soft` = ~6h+ (suggestion). `firm` = ~10h+
+   * (strong recommendation, encourages break). Drives the warning
+   * banner in the sheet; pure UX nudge — never blocks driving.
+   */
+  fatigueLevel: 'none' | 'soft' | 'firm';
+  /** Continuous online-session hours, rounded to 1 decimal. Surfaced in the banner copy. */
+  sessionHours: number;
+
   // ── Callbacks ──
   onToggleOnline: () => void;
   onToggleBreak: () => void;
@@ -210,6 +220,8 @@ function SheetContent({
   navCountdown,
   nearestHotZone,
   nearestHotspot,
+  fatigueLevel,
+  sessionHours,
   onToggleOnline,
   onToggleBreak,
   onSubmitSelfie,
@@ -274,6 +286,39 @@ function SheetContent({
           })}
           actionLabel={t('home.stay_here', { defaultValue: 'Quedar' })}
           onActionPress={onCancelAutoNav}
+        />
+      )}
+      {/* Phase 2 N6 — anti-fatigue prompt. Only renders while genuinely
+           online and not already on break (the warning would be tone-deaf
+           if the driver is currently resting). Soft level at ~6h, firm
+           at ~10h. Action wires straight to the existing break toggle
+           so the driver can act in one tap. */}
+      {fatigueLevel !== 'none' && isOnline && !isOnBreak && (
+        <Banner
+          variant={fatigueLevel === 'firm' ? 'danger' : 'warning'}
+          icon={fatigueLevel === 'firm' ? 'warning' : 'time-outline'}
+          message={
+            fatigueLevel === 'firm'
+              ? t('home.fatigue_firm_title', {
+                  hours: sessionHours.toFixed(1),
+                  defaultValue: '{{hours}}h seguidas — pará por seguridad',
+                })
+              : t('home.fatigue_soft_title', {
+                  hours: sessionHours.toFixed(1),
+                  defaultValue: 'Llevás {{hours}}h manejando — considerá un descanso',
+                })
+          }
+          subtitle={
+            fatigueLevel === 'firm'
+              ? t('home.fatigue_firm_subtitle', {
+                  defaultValue: 'Manejar fatigado es peligroso para vos y los pasajeros',
+                })
+              : t('home.fatigue_soft_subtitle', {
+                  defaultValue: 'Un descanso de 15 min mejora reflejos y humor con los riders',
+                })
+          }
+          actionLabel={t('home.fatigue_take_break', { defaultValue: 'Tomar descanso' })}
+          onActionPress={onToggleBreak}
         />
       )}
     </>
