@@ -5,6 +5,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
 import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport, tricigoCategoryEmoji, MAP_STYLE_LIGHT, ROUTE } from '@tricigo/utils';
+import { DEMO_MODE, getMapFallbackCoordLngLat } from '@/config/demo';
 import type { LocationPreset, ViewportPoi } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
@@ -290,9 +291,17 @@ export default function BookingMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const center = initialCenter
-      ? [initialCenter.longitude, initialCenter.latitude] as [number, number]
+    // When the user gives us a starting GPS coord, use it. Otherwise:
+    //   - Demo mode → center on the chosen demo city (São Paulo / Rio /
+    //     Brasília / La Habana) so QA inside Cuba with Lockito doesn't
+    //     end up pinning a real Habana coord by accident.
+    //   - Production → center on Cuba (CUBA_CENTER) like before.
+    const fallbackCenter = DEMO_MODE
+      ? getMapFallbackCoordLngLat()
       : [CUBA_CENTER.longitude, CUBA_CENTER.latitude] as [number, number];
+    const center: [number, number] = initialCenter
+      ? [initialCenter.longitude, initialCenter.latitude]
+      : fallbackCenter;
     const zoom = initialCenter ? 13 : CUBA_DEFAULT_ZOOM;
 
     const map = new mapboxgl.Map({
@@ -301,7 +310,10 @@ export default function BookingMap({
       center,
       zoom,
       attributionControl: false,
-      maxBounds: [[-85.5, 19.5], [-73.5, 23.8]], // All Cuba + padding
+      // Cuba bounds only in production. Demo mode disables the bound so
+      // the map can pan to São Paulo / Rio / Brasília / etc. without
+      // snapping back into the Cuban rectangle.
+      maxBounds: DEMO_MODE ? undefined : [[-85.5, 19.5], [-73.5, 23.8]],
     });
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');

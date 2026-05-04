@@ -5,6 +5,7 @@ import { I18nProvider } from './providers';
 import { WebHeader } from './web-header';
 import { WebFooter } from './web-footer';
 import { JsonLd } from '../components/JsonLd';
+import { DemoBanner } from '../components/DemoBanner';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -108,6 +109,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={localBusinessJsonLd} />
       </head>
       <body className="font-sans antialiased bg-white text-neutral-900">
+        {/* Demo-mode banner — fixed at top, only renders when
+            NEXT_PUBLIC_DEMO_MODE=true. Mirrors the mobile DemoBanner. */}
+        <DemoBanner />
         <I18nProvider>
           <WebHeader />
           {children}
