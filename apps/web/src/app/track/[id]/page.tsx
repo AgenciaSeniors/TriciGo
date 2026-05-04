@@ -514,27 +514,54 @@ export default function TrackRidePage() {
             </div>
           </div>
 
-          {/* Driver Card */}
+          {/* Driver Card — clickable when we have the driver_user_id, mirroring
+              the mobile app's tap-on-driver-card → /driver-profile/[userId] flow. */}
           {ride.driver_name && (
             <div className="track-card">
               <div className="track-route-label" style={{ marginBottom: 10 }}>{t('track.your_driver', { defaultValue: 'Tu conductor' })}</div>
-              <div className="track-driver">
-                <div className="track-driver-avatar">
-                  {ride.driver_name.charAt(0).toUpperCase()}
+              {ride.driver_user_id ? (
+                <Link
+                  href={`/driver-profile/${ride.driver_user_id}`}
+                  className="track-driver"
+                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  aria-label={t('track.view_driver_profile', { defaultValue: 'Ver perfil del conductor' })}
+                >
+                  <div className="track-driver-avatar">
+                    {ride.driver_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="track-driver-info">
+                    <div className="track-driver-name">{ride.driver_name}</div>
+                    {ride.vehicle_make && (
+                      <div className="track-driver-vehicle">
+                        {ride.vehicle_color} {ride.vehicle_make} {ride.vehicle_model}
+                      </div>
+                    )}
+                    {ride.driver_rating && <RatingStars rating={ride.driver_rating} />}
+                    {ride.vehicle_plate && (
+                      <div className="track-driver-plate">{ride.vehicle_plate}</div>
+                    )}
+                  </div>
+                  <span aria-hidden="true" style={{ marginLeft: 'auto', color: 'var(--text-tertiary)' }}>›</span>
+                </Link>
+              ) : (
+                <div className="track-driver">
+                  <div className="track-driver-avatar">
+                    {ride.driver_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="track-driver-info">
+                    <div className="track-driver-name">{ride.driver_name}</div>
+                    {ride.vehicle_make && (
+                      <div className="track-driver-vehicle">
+                        {ride.vehicle_color} {ride.vehicle_make} {ride.vehicle_model}
+                      </div>
+                    )}
+                    {ride.driver_rating && <RatingStars rating={ride.driver_rating} />}
+                    {ride.vehicle_plate && (
+                      <div className="track-driver-plate">{ride.vehicle_plate}</div>
+                    )}
+                  </div>
                 </div>
-                <div className="track-driver-info">
-                  <div className="track-driver-name">{ride.driver_name}</div>
-                  {ride.vehicle_make && (
-                    <div className="track-driver-vehicle">
-                      {ride.vehicle_color} {ride.vehicle_make} {ride.vehicle_model}
-                    </div>
-                  )}
-                  {ride.driver_rating && <RatingStars rating={ride.driver_rating} />}
-                  {ride.vehicle_plate && (
-                    <div className="track-driver-plate">{ride.vehicle_plate}</div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 
