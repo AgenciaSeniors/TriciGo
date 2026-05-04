@@ -64,7 +64,10 @@ export function LiveDistanceHint({
           variant="caption"
           style={{ color: midnightEmber.state.danger, marginLeft: 6, fontWeight: '600' }}
         >
-          {t('trip.gps_unavailable', { defaultValue: 'GPS no disponible. Reiniciá la ubicación o contactá soporte.' })}
+          {/* PR-C: shorter copy — the original sentence had two
+              instructions stacked; the row already lives in a small
+              banner where brevity reads better. */}
+          {t('trip.gps_unavailable', { defaultValue: 'Sin GPS · Reiniciá la ubicación' })}
         </Text>
       </View>
     );
@@ -116,9 +119,12 @@ export function LiveDistanceHint({
           fontWeight: '600',
         }}
       >
+        {/* PR-C: dropped the verb "Estás a…" prefix. The icon already
+            establishes "you are here"; reading "A 240m del pasajero" or
+            "Llegaste al pasajero" is faster while driving. */}
         {isClose
           ? t('trip.distance_at_target', { defaultValue: `Llegaste al ${targetLabel}`, target: targetLabel })
-          : t('trip.distance_to_target', { defaultValue: `Estás a ${distM < 1000 ? Math.round(distM) + 'm' : (distM/1000).toFixed(1) + 'km'} del ${targetLabel}`, distance: distM < 1000 ? `${Math.round(distM)}m` : `${(distM / 1000).toFixed(1)}km`, target: targetLabel })}
+          : t('trip.distance_to_target', { defaultValue: `A ${distM < 1000 ? Math.round(distM) + 'm' : (distM/1000).toFixed(1) + 'km'} del ${targetLabel}`, distance: distM < 1000 ? `${Math.round(distM)}m` : `${(distM / 1000).toFixed(1)}km`, target: targetLabel })}
       </Text>
     </View>
   );

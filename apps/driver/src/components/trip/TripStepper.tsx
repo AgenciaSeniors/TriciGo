@@ -77,20 +77,20 @@ export function TripStepper({
           );
         })}
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
-        <Text
-          variant="bodySmall"
-          style={{ color: midnightEmber.map.text.primary, fontWeight: '600' }}
-        >
-          {currentLabel}
-        </Text>
-        <Text
-          variant="caption"
-          style={{ color: midnightEmber.map.text.tertiary }}
-        >
-          · {currentIdx + 1}/{steps.length}
-        </Text>
-      </View>
+      {/* PR-C: dropped the redundant `· N/M` counter — the dot rail
+          above already encodes position visually (one wide active dot
+          + dimmer past dots + lightest future dots). The label below
+          stands alone. */}
+      <Text
+        variant="bodySmall"
+        style={{
+          color: midnightEmber.map.text.primary,
+          fontWeight: '600',
+          textAlign: 'center',
+        }}
+      >
+        {currentLabel}
+      </Text>
     </View>
   );
 }
