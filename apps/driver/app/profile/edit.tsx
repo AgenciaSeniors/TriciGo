@@ -3,12 +3,12 @@ import { View, Alert, Pressable, ActionSheetIOS, Platform, Switch, Image } from 
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
+import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
@@ -47,6 +47,9 @@ export default function EditProfileScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Pending crop — when the user picks a photo, we open the AvatarCropModal
+  // (parity D1 with client). Stays null until the modal confirms or cancels.
+  const [pendingCrop, setPendingCrop] = useState<{ uri: string; width: number; height: number } | null>(null);
 
   // Vehicle state (full object)
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -82,6 +85,10 @@ export default function EditProfileScreen() {
   );
 
   // ── Avatar ──────────────────────────────────────────────────────────────────
+  // Picker abre el sistema photo picker (Android 13+ no respeta allowsEditing,
+  // por eso lo quitamos y delegamos el crop al `<AvatarCropModal />` shared
+  // que tiene la misma UX cross-platform que el cliente. Output spec
+  // garantizado: 384×384 JPEG q=0.7).
   const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
     if (!user) return;
     try {
@@ -89,27 +96,36 @@ export default function EditProfileScreen() {
       const pickerResult = useGallery
         ? await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
+            quality: 1,
           })
         : await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
+            quality: 1,
           });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
 
-      setUploadingAvatar(true);
-      const manipulated = await ImageManipulator.manipulateAsync(
-        pickerResult.assets[0].uri,
-        [{ resize: { width: 300, height: 300 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
+      const asset = pickerResult.assets[0];
+      if (!asset.width || !asset.height) {
+        Alert.alert('Error', t('errors.generic'));
+        return;
+      }
+      // Open the shared crop modal — confirm dispara el upload real.
+      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+    } catch {
+      Alert.alert('Error', t('errors.generic'));
+    }
+  };
 
-      const publicUrl = await authService.uploadAvatar(user.id, manipulated.uri);
+  // Called when the user confirms the crop. Receives a 384×384 JPEG URI
+  // ready to upload (no resize needed — el AvatarCropModal output ya está
+  // dimensionado correctamente).
+  const handleCropConfirm = async (croppedUri: string) => {
+    if (!user) return;
+    setPendingCrop(null);
+    setUploadingAvatar(true);
+    try {
+      const publicUrl = await authService.uploadAvatar(user.id, croppedUri);
       setAvatarUrl(publicUrl);
       setUser({ ...user, avatar_url: publicUrl });
     } catch {
@@ -450,6 +466,17 @@ export default function EditProfileScreen() {
           size="lg"
         />
       </View>
+
+      {/* Shared avatar crop modal — same UX as client (parity D1).
+          Drag/zoom + circular guide + 384×384 JPEG q=0.7 output. */}
+      <AvatarCropModal
+        visible={pendingCrop !== null}
+        imageUri={pendingCrop?.uri ?? null}
+        imageWidth={pendingCrop?.width ?? 0}
+        imageHeight={pendingCrop?.height ?? 0}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={handleCropConfirm}
+      />
     </Screen>
   );
 }
