@@ -1,20 +1,19 @@
 /**
- * PerformanceMetricsSection — Midnight Ember edition (PR-B).
+ * PerformanceMetricsSection — Midnight Ember edition (PR-B) +
+ * cancellation-rate soft alert (Phase 2 N3).
  *
  * "Rendimiento" header + 6 driver metric cards (acceptance, completion,
  * cancellation→penalties, response time, rides_this_week, match_score).
- *
- * v2 tokenization:
- *   - Card surface: shared `surfaceStyle` (screen.bg.surface +
- *     line.default + radius.card + shadow.card).
- *   - Cancellation rate metric switches to `state.danger` when above
- *     the 15% policy threshold (was raw `#EF4444`).
- *   - "Ver penalidades →" link uses `accent[500]`.
- *   - Header + label colors via `midnightEmber.screen.text.*`.
+ * When the driver's cancellation_rate goes above the 15% policy
+ * threshold, a soft amber banner appears above the cards prompting
+ * them to review what's happening — this is the user-visible piece
+ * of N3. The deeper trigger-based snapshot column is deferred to a
+ * future PR with proper DB migration review.
  */
 import React from 'react';
 import { View, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
@@ -57,6 +56,64 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
       >
         {t('earnings.performance_title', { defaultValue: 'Cómo vas' })}
       </Text>
+
+      {/* N3 soft alert — cancellation rate over the 15% policy threshold.
+          Tapping opens the penalties screen so the driver can see which
+          specific rides drove the rate up. */}
+      {cancellationOverPolicy && (
+        <Pressable
+          onPress={() => router.push('/profile/penalties')}
+          accessibilityRole="button"
+          accessibilityLabel={t('earnings.cancellation_alert_label', {
+            defaultValue: 'Tu tasa de cancelación está alta — toca para ver detalles',
+          })}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            padding: 12,
+            marginBottom: 12,
+            borderRadius: midnightEmber.radius.card,
+            backgroundColor: `${midnightEmber.state.warning}1F`, // ~12% tint
+            borderWidth: 1,
+            borderColor: `${midnightEmber.state.warning}66`, // ~40%
+          }}
+        >
+          <Ionicons
+            name="alert-circle"
+            size={20}
+            color={midnightEmber.state.warning}
+          />
+          <View style={{ flex: 1 }}>
+            <Text
+              variant="bodySmall"
+              style={{
+                color: midnightEmber.state.warning,
+                fontWeight: '600',
+              }}
+            >
+              {t('earnings.cancellation_alert_title', {
+                pct: Math.round(stats.cancellationRate * 100),
+                defaultValue: `Cancelaste el ${Math.round(stats.cancellationRate * 100)}% de los viajes`,
+              })}
+            </Text>
+            <Text
+              variant="caption"
+              style={{ color: midnightEmber.screen.text.secondary, marginTop: 2 }}
+            >
+              {t('earnings.cancellation_alert_desc', {
+                defaultValue: 'Está sobre el 15% que pide la plataforma. Tocá para ver qué pasó.',
+              })}
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={midnightEmber.screen.text.tertiary}
+          />
+        </Pressable>
+      )}
+
       <View className="flex-row gap-3 mb-3">
         <Card
           variant="filled"
