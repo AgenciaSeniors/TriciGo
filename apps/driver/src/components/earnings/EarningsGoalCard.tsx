@@ -86,10 +86,10 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
     }
 
     const milestones: { threshold: number; message: string }[] = [
-      { threshold: 25, message: t('earnings.milestone_25', { defaultValue: 'Buen inicio!' }) },
-      { threshold: 50, message: t('earnings.milestone_50', { defaultValue: 'Mitad del camino!' }) },
-      { threshold: 75, message: t('earnings.milestone_75', { defaultValue: 'Casi llegas!' }) },
-      { threshold: 100, message: t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' }) },
+      { threshold: 25, message: t('earnings.milestone_25', { defaultValue: 'Arrancando bien' }) },
+      { threshold: 50, message: t('earnings.milestone_50', { defaultValue: 'Mitad de la meta' }) },
+      { threshold: 75, message: t('earnings.milestone_75', { defaultValue: 'Falta poco' }) },
+      { threshold: 100, message: t('earnings.milestone_100', { defaultValue: '¡Llegaste a la meta!' }) },
     ];
 
     for (const ms of milestones) {
@@ -134,13 +134,13 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
         : midnightEmber.state.danger;
 
   const milestoneLabel = pct >= 100
-    ? t('earnings.milestone_100', { defaultValue: 'Meta cumplida!' })
+    ? t('earnings.milestone_100', { defaultValue: '¡Llegaste a la meta!' })
     : pct >= 75
-      ? t('earnings.milestone_75', { defaultValue: 'Casi llegas!' })
+      ? t('earnings.milestone_75', { defaultValue: 'Falta poco' })
       : pct >= 50
-        ? t('earnings.milestone_50', { defaultValue: 'Mitad del camino!' })
+        ? t('earnings.milestone_50', { defaultValue: 'Mitad de la meta' })
         : pct >= 25
-          ? t('earnings.milestone_25', { defaultValue: 'Buen inicio!' })
+          ? t('earnings.milestone_25', { defaultValue: 'Arrancando bien' })
           : null;
 
   // Reusable card surface — every internal state shares this look.

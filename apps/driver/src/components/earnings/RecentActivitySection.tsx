@@ -76,7 +76,7 @@ export function RecentActivitySection({
           onPress={() => setExpanded((p) => !p)}
           className="flex-row items-center justify-between min-h-[48px]"
           accessibilityRole="button"
-          accessibilityLabel={t('earnings.recent_activity', { defaultValue: 'Actividad reciente' })}
+          accessibilityLabel={t('earnings.recent_activity', { defaultValue: 'Movimientos' })}
           accessibilityState={{ expanded }}
         >
           <View className="flex-row items-center">
@@ -90,7 +90,7 @@ export function RecentActivitySection({
               className="font-semibold"
               style={{ color: midnightEmber.screen.text.primary, marginLeft: 8 }}
             >
-              {t('earnings.recent_activity', { defaultValue: 'Actividad reciente' })}
+              {t('earnings.recent_activity', { defaultValue: 'Movimientos' })}
             </Text>
           </View>
           <Ionicons

@@ -36,23 +36,20 @@ export function QuestsSection({ quests }: QuestsSectionProps) {
   const { t } = useTranslation('driver');
   const langKey = i18next.language === 'en' ? 'en' : 'es';
 
+  // PR-C: hide the section entirely when there are no active challenges.
+  // Showing an empty header + "Sin retos activos" line was visual
+  // noise (the section's whole purpose is the list).
+  if (quests.length === 0) return null;
+
   return (
     <View className="mt-8">
       <Text
         variant="h4"
         style={{ color: midnightEmber.screen.text.primary, marginBottom: 12 }}
       >
-        {t('earnings.quests_title', { defaultValue: 'Misiones' })}
+        {t('earnings.quests_title', { defaultValue: 'Tus retos' })}
       </Text>
-      {quests.length === 0 ? (
-        <Text
-          variant="bodySmall"
-          style={{ color: midnightEmber.screen.text.tertiary }}
-        >
-          {t('earnings.no_quests', { defaultValue: 'No hay misiones activas' })}
-        </Text>
-      ) : (
-        quests.map((q) => {
+      {quests.map((q) => {
           const isCompleted = !!q.progress?.completed_at;
           const current = q.progress?.current_value ?? 0;
           const progress = Math.min(current / q.target_value, 1);
@@ -127,13 +124,12 @@ export function QuestsSection({ quests }: QuestsSectionProps) {
                 style={{ color: midnightEmber.screen.text.secondary }}
               >
                 {current} / {q.target_value} {isCompleted
-                  ? t('earnings.quest_completed', { defaultValue: '¡Completada!' })
+                  ? t('earnings.quest_completed', { defaultValue: '¡Completaste!' })
                   : t('earnings.quest_remaining', { defaultValue: 'restante' })}
               </Text>
             </Card>
           );
-        })
-      )}
+        })}
     </View>
   );
 }

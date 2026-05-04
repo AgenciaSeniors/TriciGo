@@ -55,7 +55,7 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
         variant="h4"
         style={{ color: midnightEmber.screen.text.primary, marginBottom: 12 }}
       >
-        {t('earnings.performance_title', { defaultValue: 'Rendimiento' })}
+        {t('earnings.performance_title', { defaultValue: 'Cómo vas' })}
       </Text>
       <View className="flex-row gap-3 mb-3">
         <Card
@@ -64,10 +64,10 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
           className="flex-1"
           style={surfaceStyle}
           accessible
-          accessibilityLabel={`${t('earnings.acceptance_rate', { defaultValue: 'Tasa aceptación' })}: ${Math.round(stats.acceptanceRate * 100)}%`}
+          accessibilityLabel={`${t('earnings.acceptance_rate', { defaultValue: 'Aceptás' })}: ${Math.round(stats.acceptanceRate * 100)}%`}
         >
           <Text variant="badge" style={{ color: midnightEmber.screen.text.secondary }}>
-            {t('earnings.acceptance_rate', { defaultValue: 'Tasa aceptación' })}
+            {t('earnings.acceptance_rate', { defaultValue: 'Aceptás' })}
           </Text>
           <Text
             variant="metric"
@@ -82,10 +82,10 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
           className="flex-1"
           style={surfaceStyle}
           accessible
-          accessibilityLabel={`${t('earnings.completion_rate', { defaultValue: 'Tasa completado' })}: ${Math.round(stats.completionRate * 100)}%`}
+          accessibilityLabel={`${t('earnings.completion_rate', { defaultValue: 'Completás' })}: ${Math.round(stats.completionRate * 100)}%`}
         >
           <Text variant="badge" style={{ color: midnightEmber.screen.text.secondary }}>
-            {t('earnings.completion_rate', { defaultValue: 'Tasa completado' })}
+            {t('earnings.completion_rate', { defaultValue: 'Completás' })}
           </Text>
           <Text
             variant="metric"
@@ -107,10 +107,10 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
             padding="md"
             style={surfaceStyle}
             accessible
-            accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}: ${Math.round(stats.cancellationRate * 100)}%`}
+            accessibilityLabel={`${t('earnings.cancellation_rate', { defaultValue: 'Cancelás' })}: ${Math.round(stats.cancellationRate * 100)}%`}
           >
             <Text variant="badge" style={{ color: midnightEmber.screen.text.secondary }}>
-              {t('earnings.cancellation_rate', { defaultValue: 'Tasa cancelación' })}
+              {t('earnings.cancellation_rate', { defaultValue: 'Cancelás' })}
             </Text>
             <Text
               variant="metric"
@@ -134,10 +134,10 @@ export function PerformanceMetricsSection({ stats }: PerformanceMetricsSectionPr
           className="flex-1"
           style={surfaceStyle}
           accessible
-          accessibilityLabel={`${t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}: ${stats.avgResponseTimeS != null ? `${stats.avgResponseTimeS}s` : '—'}`}
+          accessibilityLabel={`${t('earnings.avg_response_time', { defaultValue: 'Respondés en' })}: ${stats.avgResponseTimeS != null ? `${stats.avgResponseTimeS}s` : '—'}`}
         >
           <Text variant="badge" style={{ color: midnightEmber.screen.text.secondary }}>
-            {t('earnings.avg_response_time', { defaultValue: 'Tiempo respuesta' })}
+            {t('earnings.avg_response_time', { defaultValue: 'Respondés en' })}
           </Text>
           <Text
             variant="metric"
