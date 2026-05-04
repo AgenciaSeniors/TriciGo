@@ -6,6 +6,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { MenuRow } from '@tricigo/ui/MenuRow';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { ThemeMode } from '@tricigo/theme';
@@ -166,19 +167,11 @@ export default function DriverSettingsScreen() {
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4 pb-12">
         {/* Header */}
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: colors.neutral[100] }}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.settings_title')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.settings_title')}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
+        />
 
         {/* ── Appearance ── */}
         <Text variant="label" color="secondary" className="mb-2 ml-1">

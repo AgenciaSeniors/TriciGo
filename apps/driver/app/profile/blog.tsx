@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Pressable, RefreshControl, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
@@ -57,19 +57,11 @@ export default function BlogScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPosts(); }} tintColor={colors.brand.orange} />}
     >
       <View className="pt-4 pb-8">
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: colors.neutral[100] }}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.blog', { defaultValue: 'Blog' })}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.blog', { defaultValue: 'Blog' })}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+        />
 
         {loading && (
           <View className="gap-3">

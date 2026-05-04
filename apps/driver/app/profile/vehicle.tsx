@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, ActivityIndicator, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
@@ -64,19 +64,11 @@ export default function VehicleScreen() {
   return (
     <Screen scroll bg="lightPrimary" padded>
       <View className="pt-4">
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: '#F1F5F9' }}
-          >
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.vehicle_info')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.vehicle_info')}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+        />
 
         {loading ? (
           <ActivityIndicator color="#22C55E" className="mt-8" />

@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { cmsService } from '@tricigo/api/services/cms';
@@ -64,21 +65,12 @@ export default function TermsScreen() {
   return (
     <Screen bg="lightPrimary" statusBarStyle="dark-content" padded={false}>
       <View className="pt-4 px-4">
-        <View className="flex-row items-center mb-4">
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.back', { defaultValue: 'Atrás' })}
-            className="mr-3 w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: colors.neutral[100] }}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.neutral[800]} />
-          </Pressable>
-          <Text variant="h3" color="primary">
-            {cmsTitle ?? t('profile.terms', { defaultValue: 'Términos y condiciones' })}
-          </Text>
-        </View>
+        <ProfileScreenHeader
+          title={cmsTitle ?? t('profile.terms', { defaultValue: 'Términos y condiciones' })}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('common.back', { defaultValue: 'Atrás' })}
+          className="mb-4"
+        />
       </View>
 
       {loading ? (

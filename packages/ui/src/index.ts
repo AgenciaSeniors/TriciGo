@@ -40,6 +40,9 @@ export type { ErrorStateProps } from './ErrorState';
 export { ScreenHeader } from './ScreenHeader';
 export type { ScreenHeaderProps } from './ScreenHeader';
 
+export { ProfileScreenHeader } from './ProfileScreenHeader';
+export type { ProfileScreenHeaderProps } from './ProfileScreenHeader';
+
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 

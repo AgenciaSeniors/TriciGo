@@ -20,6 +20,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
@@ -104,19 +105,11 @@ export default function DriverPreferencesScreen() {
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel={t('back', { defaultValue: 'Volver' })}
-          >
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">
-            {t('preferences.driver_title', { defaultValue: 'Preferencias de viaje' })}
-          </Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('preferences.driver_title', { defaultValue: 'Preferencias de viaje' })}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('back', { defaultValue: 'Volver' })}
+        />
 
         <Text variant="bodySmall" color="primary" className="mb-4 opacity-60">
           {t('preferences.driver_desc', {

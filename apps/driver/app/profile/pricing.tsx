@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
 import { colors } from '@tricigo/theme';
@@ -147,12 +148,10 @@ export default function DriverPricingScreen() {
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
         {/* Header */}
-        <View className="flex-row items-center mb-6">
-          <Pressable onPress={() => router.back()} className="mr-3">
-            <Ionicons name="arrow-back" size={24} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('pricing.title')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('pricing.title')}
+          onBack={() => router.back()}
+        />
 
         {/* Explanation */}
         <Card theme="light" variant="filled" padding="md" className="mb-4 bg-white">

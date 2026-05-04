@@ -10,6 +10,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Card } from '@tricigo/ui/Card';
+import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
@@ -257,17 +258,11 @@ export default function EditProfileScreen() {
   return (
     <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
       <View className="pt-4">
-        <View className="flex-row items-center mb-6">
-          <Pressable
-            onPress={() => router.back()}
-            className="mr-3 w-10 h-10 rounded-xl bg-[#F1F5F9] items-center justify-center"
-            accessibilityRole="button"
-            accessibilityLabel={t('back')}
-          >
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          </Pressable>
-          <Text variant="h3" color="primary">{t('profile.edit_profile')}</Text>
-        </View>
+        <ProfileScreenHeader
+          title={t('profile.edit_profile')}
+          onBack={() => router.back()}
+          backAccessibilityLabel={t('back')}
+        />
 
         {/* Avatar */}
         <View className="items-center mb-6">
