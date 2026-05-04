@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { AvatarCropModal } from '@/components/AvatarCropModal';
 
 export default function EditProfilePage() {
   const { t } = useTranslation();
@@ -18,6 +19,20 @@ export default function EditProfilePage() {
   const [toast, setToast] = useState<string | null>(null);
   const [toastIsSuccess, setToastIsSuccess] = useState(false);
 
+  // ── Avatar upload + crop state ──
+  // The flow mirrors mobile (apps/client/app/profile/edit.tsx):
+  //   1. User clicks the avatar → hidden file input opens
+  //   2. On file pick we create an object URL and open the crop modal
+  //   3. The crop modal returns a JPEG blob (384×384, q=0.7 — same
+  //      output spec as mobile so the avatars bucket sees consistent
+  //      file sizes regardless of the upload source)
+  //   4. Upload to Supabase storage `avatars/<userId>/avatar.jpg`,
+  //      cache-bust the URL, persist on user_metadata + profiles row.
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [avatarUrlState, setAvatarUrlState] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
@@ -29,9 +44,75 @@ export default function EditProfilePage() {
         setPhone(session.user.phone || meta?.phone || '');
         setEmail(session.user.email || '');
         setOriginalEmail(session.user.email || '');
+        setAvatarUrlState((meta?.avatar_url as string | undefined) ?? null);
       }
     });
   }, []);
+
+  // Revoke the object URL when the modal closes — same lifecycle the
+  // browser would apply at GC, but we want it deterministic to avoid
+  // memory pressure if the user opens the picker repeatedly.
+  useEffect(() => {
+    return () => {
+      if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+    };
+  }, [pendingImageUrl]);
+
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setToastIsSuccess(false);
+      setToast(t('profile.avatar_not_image', { defaultValue: 'El archivo debe ser una imagen.' }));
+      e.target.value = '';
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPendingImageUrl(url);
+    // Reset the input so picking the same file again still fires onChange.
+    e.target.value = '';
+  };
+
+  const handleCropConfirm = async (blob: Blob) => {
+    if (!userId) return;
+    setUploadingAvatar(true);
+    try {
+      const supabase = getSupabaseClient();
+      const filePath = `${userId}/avatar.jpg`;
+      const { error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      // Persist on auth user_metadata so other clients (mobile) and
+      // RLS-aware queries see the new URL.
+      await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+      // Mirror to public.users.avatar_url so listings via
+      // authService.getUserById() return the new URL too.
+      try {
+        await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', userId);
+      } catch { /* RLS may block depending on policy; auth metadata is the primary source */ }
+
+      setAvatarUrlState(publicUrl);
+      setUser((prev: any) => prev ? { ...prev, user_metadata: { ...(prev.user_metadata ?? {}), avatar_url: publicUrl } } : prev);
+      setToastIsSuccess(true);
+      setToast(t('profile.photo_updated', { defaultValue: 'Foto actualizada' }));
+
+      // Close the modal + free the object URL.
+      if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+      setPendingImageUrl(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      setToastIsSuccess(false);
+      setToast(msg || t('profile.avatar_upload_failed', {
+        defaultValue: 'No se pudo subir la foto. Intentá con una imagen más pequeña.',
+      }));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   useEffect(() => {
     if (toast) {
@@ -95,7 +176,7 @@ export default function EditProfilePage() {
     );
   }
 
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  const avatarUrl = avatarUrlState ?? user?.user_metadata?.avatar_url ?? null;
 
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
@@ -129,28 +210,88 @@ export default function EditProfilePage() {
         <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.edit_profile', { defaultValue: 'Editar perfil' })}</h1>
       </div>
 
-      {/* Avatar */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
-        <div style={{
-          width: 96,
-          height: 96,
-          borderRadius: '50%',
-          overflow: 'hidden',
-          background: 'var(--border-light)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '3px solid var(--primary)',
-        }}>
+      {/* Avatar — clickable, opens hidden file input → crop modal flow.
+          Mirrors mobile profile/edit which surfaces an action sheet for
+          camera/gallery; web keeps it simple with the browser's native
+          file picker (no camera intent on most desktop browsers, and on
+          mobile browsers the picker exposes both options). */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '0.5rem' }}>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingAvatar}
+          aria-label={t('profile.change_photo', { defaultValue: 'Cambiar foto de perfil' })}
+          style={{
+            position: 'relative',
+            width: 96,
+            height: 96,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            background: 'var(--border-light)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '3px solid var(--primary)',
+            padding: 0,
+            cursor: uploadingAvatar ? 'wait' : 'pointer',
+          }}
+        >
           {avatarUrl ? (
-            <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="#ccc" stroke="none">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="#ccc" stroke="none" aria-hidden="true">
               <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
             </svg>
           )}
-        </div>
+          {/* Camera badge overlay — visual cue that the avatar is editable */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute', bottom: 0, right: 0,
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'var(--primary)', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.875rem', boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+          >
+            📷
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingAvatar}
+          style={{
+            background: 'transparent', border: 0,
+            color: uploadingAvatar ? 'var(--text-tertiary)' : 'var(--primary)',
+            fontSize: '0.85rem', fontWeight: 600,
+            cursor: uploadingAvatar ? 'wait' : 'pointer',
+          }}
+        >
+          {uploadingAvatar
+            ? t('profile.uploading_photo', { defaultValue: 'Subiendo…' })
+            : t('profile.change_photo', { defaultValue: 'Cambiar foto' })}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={onFilePicked}
+          style={{ display: 'none' }}
+        />
       </div>
+
+      {/* Crop modal — only mounts when an image is pending. */}
+      <AvatarCropModal
+        visible={!!pendingImageUrl}
+        imageUrl={pendingImageUrl}
+        onCancel={() => {
+          if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+          setPendingImageUrl(null);
+        }}
+        onConfirm={handleCropConfirm}
+      />
 
       {/* Form */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
