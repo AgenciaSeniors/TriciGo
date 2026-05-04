@@ -1,6 +1,7 @@
 import React from 'react';
 import { Stack } from 'expo-router';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 export default function OnboardingLayout() {
@@ -10,8 +11,8 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: true,
-        headerStyle: { backgroundColor: '#111111' },
-        headerTintColor: '#FFFFFF',
+        headerStyle: { backgroundColor: midnightEmber.map.bg.canvas },
+        headerTintColor: midnightEmber.map.text.primary,
         headerTitleStyle: { fontWeight: 'bold' },
         animation: 'slide_from_right',
         headerRight: () => <LanguageSwitcher variant="compact" />,
