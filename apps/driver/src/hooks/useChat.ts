@@ -1,7 +1,53 @@
 import { useEffect, useCallback, useRef } from 'react';
+import i18next from 'i18next';
+import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { chatService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
+
+// BUG-243 (parity D4 with client): outgoing chat queue persisted to
+// AsyncStorage. When the driver tipea sin red mientras maneja, el
+// mensaje queda en queue con flag `_pending: true`. On `online` event
+// (NetInfo) drainamos. Sin esto, mensajes enviados sin red se perdían
+// silenciosamente — riesgo alto en Cuba donde la red oscila mucho.
+//
+// Misma key que el client porque son apps separadas con AsyncStorage
+// separado per app (no hay collision).
+const QUEUE_KEY = '@tricigo/chat_outgoing_queue';
+
+type QueuedMessage = {
+  localId: string;
+  rideId: string;
+  senderId: string;
+  body: string;
+  attemptCount: number;
+  queuedAt: number;
+};
+
+async function readQueue(): Promise<QueuedMessage[]> {
+  try {
+    const raw = await AsyncStorage.getItem(QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+async function writeQueue(items: QueuedMessage[]): Promise<void> {
+  try { await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(items)); } catch { /* best effort */ }
+}
+
+async function enqueue(msg: QueuedMessage): Promise<void> {
+  const q = await readQueue();
+  q.push(msg);
+  await writeQueue(q);
+}
+
+async function removeFromQueue(localId: string): Promise<void> {
+  const q = await readQueue();
+  await writeQueue(q.filter((m) => m.localId !== localId));
+}
 
 const TYPING_TIMEOUT_MS = 3000;
 const TYPING_DEBOUNCE_MS = 2000;
@@ -88,15 +134,77 @@ export function useChatActions(rideId: string) {
   const sendMessage = useCallback(
     async (body: string) => {
       if (!user || !body.trim()) return;
+      const trimmed = body.trim();
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      // BUG-243 parity (D4): optimistic message FIRST so user sees it
+      // immediately, then attempt send. If send fails, the message stays
+      // in queue with visible "pending" indicator.
+      addMessage({
+        id: localId,
+        ride_id: rideId,
+        sender_id: user.id,
+        body: trimmed,
+        created_at: new Date().toISOString(),
+        _pending: true,
+      } as any);
+
       try {
-        const msg = await chatService.sendMessage(rideId, user.id, body.trim());
+        const msg = await chatService.sendMessage(rideId, user.id, trimmed);
+        // Replace local pending with server message
+        const cur = useChatStore.getState().messages;
+        useChatStore.getState().setMessages(cur.filter((m) => m.id !== localId));
         addMessage(msg);
       } catch {
-        // silent
+        // Queue locally + flag pending. Drained on NetInfo `connected` event.
+        await enqueue({
+          localId,
+          rideId,
+          senderId: user.id,
+          body: trimmed,
+          attemptCount: 1,
+          queuedAt: Date.now(),
+        });
+        // Update local store: mark as pending (already is, but explicit)
+        const cur = useChatStore.getState().messages;
+        useChatStore.getState().setMessages(
+          cur.map((m) => m.id === localId ? { ...m, _pending: true } as any : m),
+        );
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('driver:chat.queued', { defaultValue: 'Mensaje en cola' }),
+          text2: i18next.t('driver:chat.queued_hint', { defaultValue: 'Se enviará cuando vuelva la conexión' }),
+        });
       }
     },
-    [rideId, user],
+    [rideId, user, addMessage],
   );
+
+  // BUG-243 parity (D4): drain queue when network comes back. Same
+  // pattern as client useChat:166.
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(async (state) => {
+      if (!state.isConnected) return;
+      const q = await readQueue();
+      if (q.length === 0) return;
+      logger.info('[Chat] draining queue (driver)', { count: q.length });
+      for (const item of q) {
+        try {
+          const msg = await chatService.sendMessage(item.rideId, item.senderId, item.body);
+          // Remove from queue + replace local pending entry with real msg
+          await removeFromQueue(item.localId);
+          const cur = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
+          addMessage(msg);
+        } catch {
+          // Still failing; leave in queue, increment attempt count
+          const all = await readQueue();
+          await writeQueue(all.map((m) => m.localId === item.localId ? { ...m, attemptCount: m.attemptCount + 1 } : m));
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [addMessage]);
 
   /** Call on every keystroke — internally debounces broadcasts */
   const notifyTyping = useCallback(() => {
