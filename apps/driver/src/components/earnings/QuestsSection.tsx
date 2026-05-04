@@ -1,22 +1,17 @@
 /**
- * QuestsSection — extracted from apps/driver/app/(tabs)/earnings.tsx
- * for PR-A.
+ * QuestsSection — Midnight Ember edition (PR-B).
  *
- * Renders the "Misiones" header and a list of quests with progress.
- * If `quests` is empty, shows the "No hay misiones activas" tertiary
- * line — header still renders so the section's identity is consistent
- * across visits.
+ * "Misiones" header + quest progress list. Empty state shows the
+ * "No hay misiones activas" tertiary line.
  *
- * Each quest card shows:
- *   - Title (localised; falls back to es)
- *   - Description (localised)
- *   - Reward CUP chip
- *   - Progress bar (success colour when completed, brand orange while
- *     in progress)
- *   - "current / target ¡Completada! / restante" caption
- *
- * Visual + tokens preserved verbatim from the inline version.
- * Migration to midnightEmber happens in PR-B.
+ * v2 tokenization:
+ *   - Active quest card: `screen.bg.surface` + `line.default` border.
+ *   - Completed quest card: `state.success` family at ~12% tint background +
+ *     ~33% border (replaces `rgba(34,197,94,0.08)` / `rgba(34,197,94,0.2)`
+ *     literals).
+ *   - Reward chip + in-progress bar fill: `accent[500]`.
+ *   - Completed bar fill: `state.success`.
+ *   - Headers + labels via `screen.text.*`.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -25,22 +20,16 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { formatCUP } from '@tricigo/utils';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import type { QuestWithProgress } from '@tricigo/types';
-
-const lt = driverStandardLightColors;
-const CARD_BG = lt.card;
-const BORDER_SUBTLE = lt.border.default;
-const CARD_SHADOW = {
-  shadowColor: '#000',
-  shadowOpacity: 0.04,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
-};
 
 interface QuestsSectionProps {
   quests: QuestWithProgress[];
+}
+
+/** Append two hex digits (alpha) to a `#rrggbb` color. */
+function tinted(color: string, alphaHex: string): string {
+  return `${color}${alphaHex}`;
 }
 
 export function QuestsSection({ quests }: QuestsSectionProps) {
@@ -49,11 +38,17 @@ export function QuestsSection({ quests }: QuestsSectionProps) {
 
   return (
     <View className="mt-8">
-      <Text variant="h4" style={{ color: lt.text.primary }} className="mb-3">
+      <Text
+        variant="h4"
+        style={{ color: midnightEmber.screen.text.primary, marginBottom: 12 }}
+      >
         {t('earnings.quests_title', { defaultValue: 'Misiones' })}
       </Text>
       {quests.length === 0 ? (
-        <Text variant="bodySmall" style={{ color: lt.text.tertiary }}>
+        <Text
+          variant="bodySmall"
+          style={{ color: midnightEmber.screen.text.tertiary }}
+        >
           {t('earnings.no_quests', { defaultValue: 'No hay misiones activas' })}
         </Text>
       ) : (
@@ -72,40 +67,65 @@ export function QuestsSection({ quests }: QuestsSectionProps) {
               padding="md"
               className="mb-3"
               style={{
-                backgroundColor: isCompleted ? 'rgba(34,197,94,0.08)' : CARD_BG,
+                backgroundColor: isCompleted
+                  ? tinted(midnightEmber.state.success, '1F') // ~12%
+                  : midnightEmber.screen.bg.surface,
                 borderWidth: 1,
-                borderColor: isCompleted ? 'rgba(34,197,94,0.2)' : BORDER_SUBTLE,
-                borderRadius: 16,
-                ...CARD_SHADOW,
+                borderColor: isCompleted
+                  ? tinted(midnightEmber.state.success, '52') // ~32%
+                  : midnightEmber.screen.line.default,
+                borderRadius: midnightEmber.radius.card,
+                ...midnightEmber.shadow.card,
               }}
             >
               <View className="flex-row items-center justify-between mb-1">
-                <Text variant="body" className="font-semibold flex-1 mr-2" style={{ color: lt.text.primary }}>
+                <Text
+                  variant="body"
+                  className="font-semibold flex-1 mr-2"
+                  style={{ color: midnightEmber.screen.text.primary }}
+                >
                   {isCompleted ? '✅ ' : ''}{title}
                 </Text>
-                <Text variant="badge" style={{ color: colors.brand.orange, fontWeight: '700' }}>
+                <Text
+                  variant="badge"
+                  style={{ color: midnightEmber.accent[500], fontWeight: '700' }}
+                >
                   +{formatCUP(q.reward_cup)}
                 </Text>
               </View>
-              <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-2">
+              <Text
+                variant="caption"
+                style={{ color: midnightEmber.screen.text.secondary, marginBottom: 8 }}
+              >
                 {desc}
               </Text>
               {/* Progress bar */}
               <View
-                className="h-2 rounded-full overflow-hidden mb-1"
-                style={{ backgroundColor: lt.border.subtle }}
+                style={{
+                  height: 8,
+                  borderRadius: 9999,
+                  overflow: 'hidden',
+                  marginBottom: 4,
+                  backgroundColor: midnightEmber.screen.line.hairline,
+                }}
                 accessibilityRole="progressbar"
                 accessibilityValue={{ min: 0, max: q.target_value, now: current }}
               >
                 <View
-                  className="h-full rounded-full"
                   style={{
+                    height: '100%',
+                    borderRadius: 9999,
                     width: `${Math.round(progress * 100)}%`,
-                    backgroundColor: isCompleted ? colors.success.DEFAULT : colors.brand.orange,
+                    backgroundColor: isCompleted
+                      ? midnightEmber.state.success
+                      : midnightEmber.accent[500],
                   }}
                 />
               </View>
-              <Text variant="badge" style={{ color: lt.text.secondary }}>
+              <Text
+                variant="badge"
+                style={{ color: midnightEmber.screen.text.secondary }}
+              >
                 {current} / {q.target_value} {isCompleted
                   ? t('earnings.quest_completed', { defaultValue: '¡Completada!' })
                   : t('earnings.quest_remaining', { defaultValue: 'restante' })}

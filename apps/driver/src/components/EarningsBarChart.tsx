@@ -1,7 +1,17 @@
+/**
+ * EarningsBarChart — Midnight Ember edition (PR-B).
+ *
+ * SVG bar chart of earnings per day. Replaces the legacy
+ * inline `EarningsChart` from earnings.tsx that was already retired.
+ *
+ * v2 tokenization: today's bar uses `accent[500]`; the rest use
+ * `screen.line.default` (light) or a dimmer accent (dark). Grid lines
+ * + axis text use the appropriate `screen` / `map` text tokens.
+ */
 import React from 'react';
 import { View, Dimensions } from 'react-native';
 import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg';
-import { colors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import { formatCUP } from '@tricigo/utils';
 
 export interface BarChartDataPoint {
@@ -40,12 +50,44 @@ export function EarningsBarChart({ data, height = 160, theme = 'dark' }: Earning
     label: formatCUP(Math.round(maxValue * pct)).replace(' CUP', ''),
   }));
 
+  // Theme-resolved tokens. For the dark theme we lean on the map
+  // submode tokens; for the light theme we use the screen submode.
+  const surfaceBg = isLight
+    ? midnightEmber.screen.bg.surface
+    : midnightEmber.map.bg.elevated;
+  const surfaceBorder = isLight
+    ? midnightEmber.screen.line.default
+    : midnightEmber.map.line.hairline;
+  const gridStroke = isLight
+    ? midnightEmber.screen.line.hairline
+    : midnightEmber.map.line.hairline;
+  const axisText = isLight
+    ? midnightEmber.screen.text.tertiary
+    : midnightEmber.map.text.tertiary;
+  const labelText = isLight
+    ? midnightEmber.screen.text.tertiary
+    : midnightEmber.map.text.tertiary;
+  // Inactive bar fill on dark theme keeps the legacy translucent accent
+  // because we want the today/rest contrast to remain readable.
+  const inactiveBarFill = isLight
+    ? midnightEmber.screen.line.default
+    : `${midnightEmber.accent[500]}99`; // ~60% accent
+
   return (
     <View
       className="rounded-xl p-3 mb-4"
       style={isLight
-        ? { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 }
-        : { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }
+        ? {
+            backgroundColor: surfaceBg,
+            borderWidth: 1,
+            borderColor: surfaceBorder,
+            ...midnightEmber.shadow.card,
+          }
+        : {
+            backgroundColor: surfaceBg,
+            borderWidth: 1,
+            borderColor: surfaceBorder,
+          }
       }
     >
       <Svg width={chartWidth} height={height}>
@@ -57,13 +99,13 @@ export function EarningsBarChart({ data, height = 160, theme = 'dark' }: Earning
               y1={line.y}
               x2={chartWidth}
               y2={line.y}
-              stroke={isLight ? '#F1F5F9' : 'rgba(255,255,255,0.08)'}
+              stroke={gridStroke}
               strokeWidth={1}
             />
             <SvgText
               x={paddingLeft - 6}
               y={line.y + 4}
-              fill={isLight ? '#64748B' : 'rgba(255,255,255,0.35)'}
+              fill={axisText}
               fontSize={9}
               textAnchor="end"
             >
@@ -86,16 +128,13 @@ export function EarningsBarChart({ data, height = 160, theme = 'dark' }: Earning
                 width={barWidth}
                 height={barH}
                 rx={3}
-                fill={d.isToday
-                  ? colors.brand.orange
-                  : isLight ? '#E2E8F0' : 'rgba(249,115,22,0.6)'
-                }
+                fill={d.isToday ? midnightEmber.accent[500] : inactiveBarFill}
               />
               {/* Label */}
               <SvgText
                 x={x + barWidth / 2}
                 y={height - 4}
-                fill={isLight ? '#64748B' : 'rgba(255,255,255,0.45)'}
+                fill={labelText}
                 fontSize={data.length > 10 ? 7 : 9}
                 textAnchor="middle"
               >

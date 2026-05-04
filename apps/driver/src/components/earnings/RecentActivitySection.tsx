@@ -1,20 +1,17 @@
 /**
- * RecentActivitySection — extracted from
- * apps/driver/app/(tabs)/earnings.tsx for PR-A.
+ * RecentActivitySection — Midnight Ember edition (PR-B).
  *
- * Collapsible card listing recent driver wallet transactions. The
- * section header is always visible; tap to expand. While expanded:
- *   - Shows up to 10 transactions per page.
- *   - "Ver más" footer triggers `onLoadMore()` while `hasMore` is true.
- *   - Empty state if `transactions.length === 0` and not loading.
+ * Collapsible card listing recent driver wallet transactions.
  *
- * Owns the local `expanded` state (`txExpanded` in the original).
- * Notifies the parent of expansion via `onExpandedChange` so the
- * parent can trigger the initial fetch (mirrors the original
- * useEffect-on-`txExpanded` behaviour).
- *
- * Visual + tokens preserved verbatim from the inline version.
- * Migration to midnightEmber happens in PR-B.
+ * v2 tokenization:
+ *   - Card surface: `screen.bg.surface` + `line.default` + `radius.card`
+ *     + `shadow.card`.
+ *   - Tx list separator: `screen.line.hairline`.
+ *   - Header icon + "Ver mas" link: `accent[500]`.
+ *   - Tx amount + icon: `state.success` (credit) / `state.danger`
+ *     (debit). The single source of truth replaces three independent
+ *     hex literals (`#22C55E` and `#EF4444` repeated).
+ *   - Header chevron + secondary labels via `screen.text.*`.
  */
 import React, { useState, useEffect } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
@@ -23,19 +20,8 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { formatCUP } from '@tricigo/utils';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import type { LedgerTransaction } from '@tricigo/types';
-
-const lt = driverStandardLightColors;
-const CARD_BG = lt.card;
-const BORDER_SUBTLE = lt.border.default;
-const CARD_SHADOW = {
-  shadowColor: '#000',
-  shadowOpacity: 0.04,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
-};
 
 export type TransactionWithAmount = LedgerTransaction & {
   ledger_entries: { account_id: string; amount: number }[];
@@ -46,11 +32,6 @@ interface RecentActivitySectionProps {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  /**
-   * Notified when the user expands the section. Parent uses this to
-   * trigger the initial fetch (preserving the original useEffect
-   * gating on `txExpanded`).
-   */
   onExpandedChange?: (expanded: boolean) => void;
 }
 
@@ -83,7 +64,13 @@ export function RecentActivitySection({
       <Card
         variant="filled"
         padding="md"
-        style={{ backgroundColor: CARD_BG, borderWidth: 1, borderColor: BORDER_SUBTLE, borderRadius: 16, ...CARD_SHADOW }}
+        style={{
+          backgroundColor: midnightEmber.screen.bg.surface,
+          borderWidth: 1,
+          borderColor: midnightEmber.screen.line.default,
+          borderRadius: midnightEmber.radius.card,
+          ...midnightEmber.shadow.card,
+        }}
       >
         <Pressable
           onPress={() => setExpanded((p) => !p)}
@@ -93,45 +80,72 @@ export function RecentActivitySection({
           accessibilityState={{ expanded }}
         >
           <View className="flex-row items-center">
-            <Ionicons name="receipt-outline" size={18} color={colors.brand.orange} />
-            <Text variant="body" className="ml-2 font-semibold" style={{ color: lt.text.primary }}>
+            <Ionicons
+              name="receipt-outline"
+              size={18}
+              color={midnightEmber.accent[500]}
+            />
+            <Text
+              variant="body"
+              className="font-semibold"
+              style={{ color: midnightEmber.screen.text.primary, marginLeft: 8 }}
+            >
               {t('earnings.recent_activity', { defaultValue: 'Actividad reciente' })}
             </Text>
           </View>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={lt.text.secondary} />
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={midnightEmber.screen.text.secondary}
+          />
         </Pressable>
 
         {expanded && (
           <View className="mt-3">
             {transactions.length === 0 && !loading && (
-              <Text variant="bodySmall" style={{ color: lt.text.secondary }} className="text-center py-4">
+              <Text
+                variant="bodySmall"
+                className="text-center py-4"
+                style={{ color: midnightEmber.screen.text.secondary }}
+              >
                 {t('earnings.no_transactions', { defaultValue: 'No hay transacciones recientes' })}
               </Text>
             )}
             {transactions.map((tx) => {
               const amount = tx.ledger_entries?.[0]?.amount ?? 0;
               const isCredit = amount > 0;
+              const txColor = isCredit
+                ? midnightEmber.state.success
+                : midnightEmber.state.danger;
               const iconName = TX_ICONS[tx.type] ?? 'swap-horizontal';
               return (
                 <View
                   key={tx.id}
                   className="flex-row items-center py-2"
-                  style={{ borderBottomWidth: 1, borderBottomColor: BORDER_SUBTLE }}
+                  style={{
+                    borderBottomWidth: 1,
+                    borderBottomColor: midnightEmber.screen.line.hairline,
+                  }}
                 >
-                  <Ionicons
-                    name={iconName}
-                    size={16}
-                    color={isCredit ? colors.success.DEFAULT : '#EF4444'}
-                  />
+                  <Ionicons name={iconName} size={16} color={txColor} />
                   <View className="flex-1 ml-2">
-                    <Text variant="bodySmall" style={{ color: lt.text.primary }}>
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: midnightEmber.screen.text.primary }}
+                    >
                       {t(`earnings.tx_${tx.type}`, { defaultValue: tx.type })}
                     </Text>
-                    <Text variant="badge" style={{ color: lt.text.secondary }}>
+                    <Text
+                      variant="badge"
+                      style={{ color: midnightEmber.screen.text.secondary }}
+                    >
                       {new Date(tx.created_at).toLocaleDateString()}
                     </Text>
                   </View>
-                  <Text variant="bodySmall" style={{ color: isCredit ? colors.success.DEFAULT : '#EF4444', fontWeight: '600' }}>
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: txColor, fontWeight: '600' }}
+                  >
                     {isCredit ? '+' : ''}{formatCUP(amount)}
                   </Text>
                 </View>
@@ -144,13 +158,20 @@ export function RecentActivitySection({
                 accessibilityRole="button"
                 accessibilityLabel={t('earnings.view_more', { defaultValue: 'Ver mas' })}
               >
-                <Text variant="bodySmall" style={{ color: colors.brand.orange }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: midnightEmber.accent[500] }}
+                >
                   {loading ? '...' : t('earnings.view_more', { defaultValue: 'Ver mas' })}
                 </Text>
               </Pressable>
             )}
             {loading && transactions.length === 0 && (
-              <ActivityIndicator size="small" color={colors.brand.orange} className="py-4" />
+              <ActivityIndicator
+                size="small"
+                color={midnightEmber.accent[500]}
+                className="py-4"
+              />
             )}
           </View>
         )}

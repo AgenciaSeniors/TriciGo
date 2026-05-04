@@ -40,7 +40,7 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
+import { midnightEmber } from '@tricigo/theme';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -57,8 +57,6 @@ import { EarningsStatsCards } from '@/components/earnings/EarningsStatsCards';
 import { PerformanceMetricsSection } from '@/components/earnings/PerformanceMetricsSection';
 import { QuestsSection } from '@/components/earnings/QuestsSection';
 import { RecentActivitySection } from '@/components/earnings/RecentActivitySection';
-
-const lt = driverStandardLightColors;
 
 /**
  * Aggregate completed trips by their day-of-week label so the
@@ -194,7 +192,7 @@ function NativeEarningsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refetch}
-            tintColor={colors.brand.orange}
+            tintColor={midnightEmber.accent[500]}
             accessibilityLabel={t('earnings.refresh', { defaultValue: 'Actualizar ganancias' })}
           />
         }
@@ -284,11 +282,6 @@ function NativeEarningsScreen() {
     </Screen>
   );
 }
-
-// Re-export the lt token reference at module scope so this file's only
-// purpose stays clear in IDEs that fold the orchestrator: subcomponents
-// own their own token imports.
-void lt;
 
 export default function EarningsScreen() {
   return <NativeEarningsScreen />;
