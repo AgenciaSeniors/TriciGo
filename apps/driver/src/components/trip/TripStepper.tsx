@@ -1,18 +1,24 @@
 /**
- * TripStepper — extracted from DriverTripView for PR-A.
+ * TripStepper — Midnight Ember edition (PR-B).
  *
- * BUG-236 redesign: replaces the original 6-truncated-labels-in-a-row
- * stepper (occupied ~70pt) with 6 small dots + the current step label
- * prominently below. Driver instantly sees "where am I" instead of
- * having to read 6 labels.
+ * BUG-236 redesign: 6 small dots + the current step label. The wide
+ * "current" dot adopts the active phase color (orchestrator passes the
+ * `tripPhase[status]` value); past dots use `text.tertiary`; future
+ * dots use `line.default`.
  *
- * Behavior + visuals preserved verbatim. The "rainbow per status"
- * coloring (5 hex literals) is kept in this PR; collapse to a single
- * accent intensity scale happens in PR-B.
+ * v2 tokenization:
+ *   - Stepper container uses `radius.card` and a uniform tint passed in
+ *     by the orchestrator (formerly a 5-rgba rainbow); border consumes
+ *     `map.line.hairline`.
+ *   - Past dots: `text.tertiary` (was `rgba(255,255,255,0.4)`).
+ *   - Future dots: `line.default` (was `rgba(255,255,255,0.12)`).
+ *   - Label colors: `map.text.primary` + `map.text.tertiary` for the
+ *     `· N/M` counter.
  */
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
+import { midnightEmber } from '@tricigo/theme';
 
 export interface TripStep {
   key: string;
@@ -22,9 +28,9 @@ export interface TripStep {
 interface TripStepperProps {
   steps: TripStep[];
   currentStatus: string;
-  /** Active dot color — currently the legacy rainbow per status. */
+  /** Active dot color — orchestrator passes the tripPhase token for status. */
   activeDotColor: string;
-  /** Background tint of the stepper container — also legacy rainbow. */
+  /** Subtle tint background for the stepper container. */
   tintBackground: string;
 }
 
@@ -38,16 +44,18 @@ export function TripStepper({
   const currentLabel = steps.find((s) => s.key === currentStatus)?.label ?? '';
 
   return (
-    <View style={{
-      backgroundColor: tintBackground,
-      borderRadius: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      marginTop: 4,
-      marginBottom: 8,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.06)',
-    }}>
+    <View
+      style={{
+        backgroundColor: tintBackground,
+        borderRadius: midnightEmber.radius.card,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginTop: 4,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: midnightEmber.map.line.hairline,
+      }}
+    >
       <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 6 }}>
         {steps.map((step, idx) => {
           const isPast = idx < currentIdx;
@@ -62,18 +70,24 @@ export function TripStepper({
                 backgroundColor: isCurrent
                   ? activeDotColor
                   : isPast
-                    ? 'rgba(255,255,255,0.4)'
-                    : 'rgba(255,255,255,0.12)',
+                    ? midnightEmber.map.text.tertiary
+                    : midnightEmber.map.line.default,
               }}
             />
           );
         })}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
-        <Text variant="bodySmall" style={{ color: '#fff', fontWeight: '600' }}>
+        <Text
+          variant="bodySmall"
+          style={{ color: midnightEmber.map.text.primary, fontWeight: '600' }}
+        >
           {currentLabel}
         </Text>
-        <Text variant="caption" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <Text
+          variant="caption"
+          style={{ color: midnightEmber.map.text.tertiary }}
+        >
           · {currentIdx + 1}/{steps.length}
         </Text>
       </View>

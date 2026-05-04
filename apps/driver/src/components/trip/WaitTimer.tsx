@@ -1,18 +1,26 @@
 /**
- * WaitTimer — extracted from DriverTripView for PR-A.
+ * WaitTimer — Midnight Ember edition (PR-B).
  *
  * Renders the elapsed wait time once the driver has marked "arrived at
  * pickup". The first `freeMinutes` are shown as gratis; after that the
- * driver is "cobrando espera". Behavior unchanged from the inline
- * version: 1-second tick, guard against invalid `arrivedAt`.
+ * driver is "cobrando espera". 1-second tick, guard against invalid
+ * `arrivedAt`.
  *
- * Visual + tokens are preserved verbatim — PR-A is structural only.
- * Migration to `midnightEmber` happens in PR-B.
+ * v2 tokenization:
+ *   - Container bg follows `state.success` / `state.danger` family
+ *     instead of raw `bg-green-900/30` / `bg-red-900/30` Tailwind
+ *     literals.
+ *   - Border consumes `midnightEmber.map.line.hairline`.
+ *   - Free / charging text colors use `state.success` / `state.danger`
+ *     directly so the semantic intent is explicit.
+ *   - Numeric counter font uses `midnightEmber.text.dataLg` for the
+ *     tabular monospace style consistent with the IncomingRideCard.
  */
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 
 interface WaitTimerProps {
   arrivedAt: string;
@@ -41,20 +49,48 @@ export function WaitTimer({ arrivedAt, freeMinutes }: WaitTimerProps) {
   const isFree = elapsedMin < freeMinutes;
   const billableMin = Math.max(0, elapsedMin - freeMinutes);
 
+  // 12% alpha on the family color is enough to read as a tinted card on
+  // the dark map surface without competing with the timer numbers.
+  const containerBg = isFree
+    ? `${midnightEmber.state.success}1F` // ~12%
+    : `${midnightEmber.state.danger}1F`;
+
   return (
-    <View className={`rounded-2xl p-3 mb-3 items-center border border-white/[0.06] ${isFree ? 'bg-green-900/30' : 'bg-red-900/30'}`}>
+    <View
+      style={{
+        backgroundColor: containerBg,
+        borderColor: midnightEmber.map.line.hairline,
+        borderWidth: 1,
+        borderRadius: midnightEmber.radius.card,
+        padding: 12,
+        marginBottom: 12,
+        alignItems: 'center',
+      }}
+    >
       <Text variant="caption" color="inverse" className="opacity-60 mb-1">
         {t('trip.waiting_passenger', { defaultValue: 'Esperando al pasajero' })}
       </Text>
-      <Text variant="h3" color="inverse" className="font-mono">
+      <Text
+        style={{
+          ...midnightEmber.text.dataLg,
+          color: midnightEmber.map.text.primary,
+        }}
+      >
         {String(elapsedMin).padStart(2, '0')}:{String(elapsedSec).padStart(2, '0')}
       </Text>
       {isFree ? (
-        <Text variant="caption" style={{ color: '#10B981' }} className="mt-1">
+        <Text variant="caption" style={{ color: midnightEmber.state.success, marginTop: 4 }}>
           {t('trip.wait_free', { defaultValue: 'Gratis' })} ({freeMinutes - elapsedMin} min)
         </Text>
       ) : (
-        <Text variant="caption" style={{ color: '#EF4444' }} className="mt-1 font-semibold">
+        <Text
+          variant="caption"
+          style={{
+            color: midnightEmber.state.danger,
+            marginTop: 4,
+            fontWeight: '600',
+          }}
+        >
           {t('trip.wait_charging', { defaultValue: 'Cobrando espera' })} +{billableMin} min
         </Text>
       )}

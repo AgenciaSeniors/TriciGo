@@ -1,21 +1,56 @@
 /**
- * TripBadgesRow — extracted from DriverTripView for PR-A.
+ * TripBadgesRow — Midnight Ember edition (PR-B).
  *
- * Renders cargo and corporate ride badges. Each is independent — both
- * can be visible at the same time (corporate cargo trip).
+ * Renders cargo and corporate ride badges. Both can be visible at the
+ * same time (corporate cargo trip).
  *
- * Visual + tokens preserved verbatim. PR-C will collapse these two ad-hoc
- * styles into a single `<Chip>` rail consistent with the IncomingRideCard.
+ * v2 tokenization:
+ *   - Both badges now use a uniform pill style: `accent` family for
+ *     cargo (the brand-tied operation), `info` family for corporate.
+ *   - Replaces the previous mismatched solid `#FF4D00` + `bg-blue-600/80`.
+ *   - Centered row with consistent spacing for readability.
  */
 import React from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 
 interface TripBadgesRowProps {
   isCargo: boolean;
   isCorporate: boolean;
+}
+
+interface BadgeProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  bgColor: string;
+  fgColor: string;
+}
+
+function Badge({ icon, label, bgColor, fgColor }: BadgeProps) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: midnightEmber.radius.pill,
+        backgroundColor: bgColor,
+      }}
+    >
+      <Ionicons name={icon} size={14} color={fgColor} />
+      <Text
+        variant="caption"
+        style={{ color: fgColor, fontWeight: '700' }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 export function TripBadgesRow({ isCargo, isCorporate }: TripBadgesRowProps) {
@@ -24,24 +59,31 @@ export function TripBadgesRow({ isCargo, isCorporate }: TripBadgesRowProps) {
   if (!isCargo && !isCorporate) return null;
 
   return (
-    <>
+    <View
+      style={{
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 12,
+      }}
+    >
       {isCargo && (
-        <View
-          className="flex-row items-center justify-center mb-3 rounded-2xl py-2 px-4 border border-white/[0.06]"
-          style={{ backgroundColor: '#FF4D00' }}
-        >
-          <Ionicons name="cube" size={16} color="white" />
-          <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">CARGO</Text>
-        </View>
+        <Badge
+          icon="cube"
+          label="CARGO"
+          bgColor={midnightEmber.accent[500]}
+          fgColor={midnightEmber.map.text.onAccent}
+        />
       )}
       {isCorporate && (
-        <View className="flex-row items-center justify-center mb-3 bg-blue-600/80 rounded-2xl py-2 px-4 border border-white/[0.06]">
-          <Ionicons name="business" size={16} color="white" />
-          <Text variant="bodySmall" color="inverse" className="ml-2 font-bold">
-            {t('home.corporate_ride')}
-          </Text>
-        </View>
+        <Badge
+          icon="business"
+          label={t('home.corporate_ride')}
+          bgColor={midnightEmber.state.info}
+          fgColor={midnightEmber.map.text.onAccent}
+        />
       )}
-    </>
+    </View>
   );
 }

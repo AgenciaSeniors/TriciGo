@@ -1,5 +1,5 @@
 /**
- * RouteInfoCard — extracted from DriverTripView for PR-A.
+ * RouteInfoCard — Midnight Ember edition (PR-B).
  *
  * Two distinct presentations of pickup → waypoints → dropoff:
  *   - status === 'in_progress': show only the next target inline; the
@@ -7,19 +7,23 @@
  *   - other statuses: show the full collapsed summary (1 line per stop)
  *     with addresses ellipsized; tap expands into the full card.
  *
- * BUG-237: the collapsed summary intentionally truncates so the driver
- * doesn't try to read full addresses while driving — Maps already shows
- * turn-by-turn. The toggle is opt-in.
- *
- * State (`expanded`) lives inside the component since it's purely local.
- * Behavior + visuals preserved verbatim from the inline version.
+ * v2 tokenization:
+ *   - `<Card forceDark>` + `bg-[#1a1a2e]` legacy → raw `<View>` with
+ *     `map.bg.elevated` background and `radius.card`.
+ *   - Pickup dot: `accent[500]` (was `bg-primary-500`).
+ *   - Dropoff dot: `text.tertiary` (was `bg-neutral-400`).
+ *   - Waypoint dots: `state.success` (departed) / `state.warning`
+ *     (arrived) / `accent[400]` (pending) — semantic family preserved.
+ *   - Inline "next leg" pin icon: `accent[500]`.
+ *   - Captions / addresses use `map.text.tertiary` and
+ *     `map.text.primary`.
  */
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
+import { midnightEmber } from '@tricigo/theme';
 
 export interface RouteWaypoint {
   id: string;
@@ -38,6 +42,19 @@ interface RouteInfoCardProps {
   nextLegAddress: string | null;
 }
 
+function Dot({ color, size = 12 }: { color: string; size?: number }) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+      }}
+    />
+  );
+}
+
 export function RouteInfoCard({
   status,
   pickupAddress,
@@ -48,13 +65,45 @@ export function RouteInfoCard({
   const { t } = useTranslation('driver');
   const [expanded, setExpanded] = useState(false);
 
+  const expandedCardStyle = {
+    backgroundColor: midnightEmber.map.bg.elevated,
+    borderColor: midnightEmber.map.line.hairline,
+    borderWidth: 1,
+    borderRadius: midnightEmber.radius.card,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 16,
+  };
+
+  const collapsedCardStyle = {
+    backgroundColor: midnightEmber.map.bg.elevated,
+    borderColor: midnightEmber.map.line.hairline,
+    borderWidth: 1,
+    borderRadius: midnightEmber.radius.card,
+    padding: 14,
+    marginBottom: 16,
+  };
+
+  const dotPickup = midnightEmber.accent[500];
+  const dotDropoff = midnightEmber.map.text.tertiary;
+  const colorWaypoint = (wp: RouteWaypoint) =>
+    wp.departed_at
+      ? midnightEmber.state.success
+      : wp.arrived_at
+        ? midnightEmber.state.warning
+        : midnightEmber.accent[400];
+
   // ── In-progress: show only the next target + a toggle to expand ──
   if (status === 'in_progress') {
     return (
       <>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
-          <Ionicons name="location" size={16} color="#FF4D00" />
-          <Text variant="body" color="primary" style={{ marginLeft: 8, flex: 1 }} numberOfLines={1}>
+          <Ionicons name="location" size={16} color={midnightEmber.accent[500]} />
+          <Text
+            variant="body"
+            style={{ marginLeft: 8, flex: 1, color: midnightEmber.map.text.primary }}
+            numberOfLines={1}
+          >
             {nextLegAddress ?? dropoffAddress}
           </Text>
         </View>
@@ -64,56 +113,90 @@ export function RouteInfoCard({
           accessibilityRole="button"
           accessibilityLabel={expanded ? t('trip.hide_route') : t('trip.view_full_route')}
         >
-          <Text variant="caption" color="accent" style={{ textAlign: 'center' }}>
+          <Text
+            variant="caption"
+            style={{ textAlign: 'center', color: midnightEmber.accent[500] }}
+          >
             {expanded ? t('trip.hide_route') : t('trip.view_full_route')}
           </Text>
         </Pressable>
         {expanded && (
-          <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 mt-2 rounded-2xl border border-white/[0.06]">
-            <View className="flex-row items-start mb-3">
-              <View className="w-3 h-3 rounded-full bg-primary-500 mt-1 mr-3" />
-              <View className="flex-1">
-                <Text variant="caption" color="inverse" className="opacity-50">
+          <View style={expandedCardStyle}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+              <View style={{ marginTop: 4, marginRight: 12 }}>
+                <Dot color={dotPickup} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="caption"
+                  style={{ color: midnightEmber.map.text.tertiary }}
+                >
                   {t('trip.pickup_address')}
                 </Text>
-                <Text variant="bodySmall" color="inverse">
+                <Text
+                  variant="bodySmall"
+                  style={{ color: midnightEmber.map.text.primary }}
+                >
                   {pickupAddress}
                 </Text>
               </View>
             </View>
             {waypoints.map((wp) => (
-              <View key={wp.id} className="flex-row items-start mb-3">
-                <View className={`w-2.5 h-2.5 rounded-full mt-1 mr-3 ml-[1px] ${wp.departed_at ? 'bg-success' : wp.arrived_at ? 'bg-warning' : 'bg-primary-400'}`} />
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <Text variant="caption" color="accent" className="opacity-70">
+              <View
+                key={wp.id}
+                style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}
+              >
+                <View style={{ marginTop: 4, marginRight: 12, marginLeft: 1 }}>
+                  <Dot color={colorWaypoint(wp)} size={10} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text
+                      variant="caption"
+                      style={{ color: midnightEmber.accent[400] }}
+                    >
                       {t('trip.waypoint_n', { n: wp.sort_order, defaultValue: `Parada ${wp.sort_order}` })}
                     </Text>
                     {wp.departed_at && (
-                      <Text variant="caption" color="inverse" className="opacity-40">✅</Text>
+                      <Text variant="caption" style={{ color: midnightEmber.map.text.tertiary }}>
+                        ✅
+                      </Text>
                     )}
                     {wp.arrived_at && !wp.departed_at && (
-                      <Text variant="caption" color="inverse" className="opacity-40">📍</Text>
+                      <Text variant="caption" style={{ color: midnightEmber.map.text.tertiary }}>
+                        📍
+                      </Text>
                     )}
                   </View>
-                  <Text variant="bodySmall" color="inverse">
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: midnightEmber.map.text.primary }}
+                  >
                     {wp.address}
                   </Text>
                 </View>
               </View>
             ))}
-            <View className="flex-row items-start">
-              <View className="w-3 h-3 rounded-full bg-neutral-400 mt-1 mr-3" />
-              <View className="flex-1">
-                <Text variant="caption" color="inverse" className="opacity-50">
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+              <View style={{ marginTop: 4, marginRight: 12 }}>
+                <Dot color={dotDropoff} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="caption"
+                  style={{ color: midnightEmber.map.text.tertiary }}
+                >
                   {t('trip.dropoff_address')}
                 </Text>
-                <Text variant="bodySmall" color="inverse">
+                <Text
+                  variant="bodySmall"
+                  style={{ color: midnightEmber.map.text.primary }}
+                >
                   {dropoffAddress}
                 </Text>
               </View>
             </View>
-          </Card>
+          </View>
         )}
       </>
     );
@@ -122,37 +205,77 @@ export function RouteInfoCard({
   // ── Other statuses: collapsed 1-line summary; tap expands ──
   return (
     <Pressable onPress={() => setExpanded(true)}>
-      <Card forceDark variant="filled" padding="md" className="bg-[#1a1a2e] mb-4 rounded-2xl border border-white/[0.06]">
-        <View className="flex-row items-center mb-2">
-          <View className="w-2.5 h-2.5 rounded-full bg-primary-500 mr-2" />
-          <Text variant="caption" color="inverse" className="opacity-50 mr-2">
+      <View style={collapsedCardStyle}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <View style={{ marginRight: 8 }}>
+            <Dot color={dotPickup} size={10} />
+          </View>
+          <Text
+            variant="caption"
+            style={{ color: midnightEmber.map.text.tertiary, marginRight: 8 }}
+          >
             {t('trip.pickup_address')}
           </Text>
-          <Text variant="bodySmall" color="inverse" numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1 }}>
+          <Text
+            variant="bodySmall"
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{ flex: 1, color: midnightEmber.map.text.primary }}
+          >
             {pickupAddress}
           </Text>
         </View>
         {waypoints.length > 0 && (
-          <View className="flex-row items-center mb-2">
-            <View className={`w-2.5 h-2.5 rounded-full mr-2 ${waypoints.find((w) => !w.departed_at) ? 'bg-warning' : 'bg-success'}`} />
-            <Text variant="caption" color="accent" className="opacity-70 mr-2">
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <View style={{ marginRight: 8 }}>
+              <Dot
+                color={
+                  waypoints.find((w) => !w.departed_at)
+                    ? midnightEmber.state.warning
+                    : midnightEmber.state.success
+                }
+                size={10}
+              />
+            </View>
+            <Text
+              variant="caption"
+              style={{ color: midnightEmber.accent[400], marginRight: 8 }}
+            >
               {t('trip.stops_count', { count: waypoints.length, defaultValue: `${waypoints.length} parada(s)` })}
             </Text>
           </View>
         )}
-        <View className="flex-row items-center">
-          <View className="w-2.5 h-2.5 rounded-full bg-neutral-400 mr-2" />
-          <Text variant="caption" color="inverse" className="opacity-50 mr-2">
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ marginRight: 8 }}>
+            <Dot color={dotDropoff} size={10} />
+          </View>
+          <Text
+            variant="caption"
+            style={{ color: midnightEmber.map.text.tertiary, marginRight: 8 }}
+          >
             {t('trip.dropoff_address')}
           </Text>
-          <Text variant="bodySmall" color="inverse" numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1 }}>
+          <Text
+            variant="bodySmall"
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{ flex: 1, color: midnightEmber.map.text.primary }}
+          >
             {dropoffAddress}
           </Text>
         </View>
-        <Text variant="caption" color="accent" style={{ textAlign: 'center', marginTop: 8, opacity: 0.7 }}>
+        <Text
+          variant="caption"
+          style={{
+            textAlign: 'center',
+            marginTop: 8,
+            color: midnightEmber.accent[500],
+            opacity: 0.85,
+          }}
+        >
           {t('trip.tap_to_expand', { defaultValue: 'Tocá para ver direcciones completas' })}
         </Text>
-      </Card>
+      </View>
     </Pressable>
   );
 }
