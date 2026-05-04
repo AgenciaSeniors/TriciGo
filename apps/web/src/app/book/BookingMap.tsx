@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
-import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport, MAP_STYLE_LIGHT, ROUTE } from '@tricigo/utils';
+import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, fetchPoisInViewport, tricigoCategoryEmoji, MAP_STYLE_LIGHT, ROUTE } from '@tricigo/utils';
 import type { LocationPreset, ViewportPoi } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
@@ -187,8 +187,15 @@ function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
         name: p.name,
         category: p.category,
         subcategory: p.subcategory,
+        // Smart category-aware emoji from `tricigo_category` (matches mobile
+        // PR #70). Falls back to a pin glyph 📍 when the row has no
+        // tricigo_category (older OSM rows). Used by the emoji SymbolLayer.
+        tricigo_category: p.tricigo_category ?? '',
+        emoji: tricigoCategoryEmoji(p.tricigo_category),
+        is_admin: p.is_admin ? 1 : 0,
         address: p.address || '',
         importance: p.importance,
+        // Legacy color used by the small-dot CircleLayer (zoom 12-14).
         color: getPoiColor(p.subcategory),
       },
     })),
@@ -266,6 +273,18 @@ export default function BookingMap({
   const [mapReady, setMapReady] = useState(false);
   const [bounceKey, setBounceKey] = useState(0);
   const [isMapMoving, setIsMapMoving] = useState(false);
+  // Tapped POI from the map's emoji layer — drives the floating "Ir aquí"
+  // card (parity with mobile PR #70 — RideMapView). Q3=c logic: if pickup
+  // is already set, "Ir aquí" wires the POI as dropoff; otherwise as
+  // pickup. Closes the card when null.
+  const [selectedPoi, setSelectedPoi] = useState<{
+    id: number;
+    name: string;
+    tricigo_category: string | null;
+    lat: number;
+    lng: number;
+    address: string | null;
+  } | null>(null);
 
   /* ── Initialize map ── */
   useEffect(() => {
@@ -328,12 +347,16 @@ export default function BookingMap({
         paint: { 'text-color': '#333' },
       });
 
-      // Unclustered POI dots + labels
+      // Unclustered POI dots — visible at low zoom (12-14) before emoji
+      // takes over at zoom 15. Keeps the map readable when the user is
+      // zoomed out and emoji would crowd the screen. Mirrors RideMapView
+      // PR #70.
       map.addLayer({
         id: 'poi-unclustered',
         type: 'circle',
         source: 'pois',
         filter: ['!', ['has', 'point_count']],
+        maxzoom: 14.99,
         paint: {
           'circle-color': ['get', 'color'],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 7, 18, 10],
@@ -342,7 +365,30 @@ export default function BookingMap({
         },
       });
 
-      // POI name labels
+      // Category emoji — rendered as a SymbolLayer text glyph at zoom 15+
+      // (street-level). Native emoji rendering means no asset bundling
+      // and a single layer covers all 21 categories (mirrors RideMapView
+      // PR #70).
+      map.addLayer({
+        id: 'poi-emoji',
+        type: 'symbol',
+        source: 'pois',
+        filter: ['!', ['has', 'point_count']],
+        minzoom: 15,
+        layout: {
+          'text-field': ['get', 'emoji'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 15, 16, 18, 24],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-halo-color': 'rgba(255,255,255,0.85)',
+          'text-halo-width': 1.2,
+        },
+      });
+
+      // POI name labels — only at deep zoom (16+) to avoid cluttering
+      // the map. Sits below the emoji icon.
       map.addLayer({
         id: 'poi-labels',
         type: 'symbol',
@@ -350,20 +396,20 @@ export default function BookingMap({
         filter: ['!', ['has', 'point_count']],
         layout: {
           'text-field': ['get', 'name'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 13, 10, 16, 13],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 18, 12],
           'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, 1.2],
+          'text-offset': [0, 1.4],
           'text-anchor': 'top',
           'text-max-width': 8,
           'text-optional': true,
           'text-allow-overlap': false,
         },
         paint: {
-          'text-color': '#333',
+          'text-color': '#444',
           'text-halo-color': 'rgba(255,255,255,0.95)',
           'text-halo-width': 1.5,
         },
-        minzoom: 13,
+        minzoom: 16,
       });
 
       // Add route source (empty initially)
@@ -702,27 +748,27 @@ export default function BookingMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    // Click unclustered POI — show popup
+    // Click an unclustered POI (either the small dot at zoom 12-14 or the
+    // emoji at zoom 15+) → open the floating "Ir aquí" card. Mirrors the
+    // mobile RideMapView behavior (PR #70). Q3=c logic is in the card
+    // itself, not here.
     const onPoiClick = (e: mapboxgl.MapMouseEvent) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: ['poi-unclustered'] });
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['poi-unclustered', 'poi-emoji'],
+      });
       if (!features.length) return;
       e.originalEvent.stopPropagation();
       const f = features[0];
       const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       const props = f.properties!;
-      const subcategory = (props.subcategory || '').replace(/_/g, ' ');
-
-      if (poiPopupRef.current) poiPopupRef.current.remove();
-      poiPopupRef.current = new mapboxgl.Popup({ offset: 12, closeButton: true, maxWidth: '220px' })
-        .setLngLat(coords)
-        .setHTML(`
-          <div style="font-family:system-ui;font-size:13px;">
-            <strong style="display:block;margin-bottom:2px;">${props.name}</strong>
-            ${subcategory ? `<span style="color:#888;font-size:11px;text-transform:capitalize;">${subcategory}</span><br/>` : ''}
-            ${props.address ? `<span style="color:#666;font-size:11px;">${props.address}</span>` : ''}
-          </div>
-        `)
-        .addTo(map);
+      setSelectedPoi({
+        id: Number(props.id),
+        name: String(props.name ?? ''),
+        tricigo_category: (props.tricigo_category as string) || null,
+        lat: coords[1],
+        lng: coords[0],
+        address: (props.address as string) || null,
+      });
     };
 
     // Click cluster — zoom in
@@ -738,22 +784,28 @@ export default function BookingMap({
       });
     };
 
-    // Cursor changes
+    // Cursor changes — apply on the same set of layers we listen to.
     const onPoiEnter = () => { map.getCanvas().style.cursor = 'pointer'; };
     const onPoiLeave = () => { map.getCanvas().style.cursor = ''; };
 
     map.on('click', 'poi-unclustered', onPoiClick);
+    map.on('click', 'poi-emoji', onPoiClick);
     map.on('click', 'poi-clusters', onClusterClick);
     map.on('mouseenter', 'poi-unclustered', onPoiEnter);
     map.on('mouseleave', 'poi-unclustered', onPoiLeave);
+    map.on('mouseenter', 'poi-emoji', onPoiEnter);
+    map.on('mouseleave', 'poi-emoji', onPoiLeave);
     map.on('mouseenter', 'poi-clusters', onPoiEnter);
     map.on('mouseleave', 'poi-clusters', onPoiLeave);
 
     return () => {
       map.off('click', 'poi-unclustered', onPoiClick);
+      map.off('click', 'poi-emoji', onPoiClick);
       map.off('click', 'poi-clusters', onClusterClick);
       map.off('mouseenter', 'poi-unclustered', onPoiEnter);
       map.off('mouseleave', 'poi-unclustered', onPoiLeave);
+      map.off('mouseenter', 'poi-emoji', onPoiEnter);
+      map.off('mouseleave', 'poi-emoji', onPoiLeave);
       map.off('mouseenter', 'poi-clusters', onPoiEnter);
       map.off('mouseleave', 'poi-clusters', onPoiLeave);
       if (poiPopupRef.current) { poiPopupRef.current.remove(); poiPopupRef.current = null; }
@@ -874,6 +926,117 @@ export default function BookingMap({
               }}
             />
           </>
+        )}
+
+        {/*
+          Floating "Ir aquí" card — appears when the user taps a POI on the
+          map (parity with mobile RideMapView PR #70). Q3=c rule: when a
+          pickup already exists, the POI fills in dropoff; when there's no
+          pickup yet, the POI fills in pickup. One-tap planning, no full
+          search panel needed. Sits above the bottom address bar so both
+          can be visible simultaneously.
+        */}
+        {selectedPoi && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '0.75rem',
+              right: '0.75rem',
+              bottom: '5.5rem', // Above the bottom address bar
+              background: '#fff',
+              borderRadius: '0.75rem',
+              padding: '0.75rem 0.875rem',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
+              zIndex: 20,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
+              <span style={{ fontSize: '1.625rem', lineHeight: 1, marginTop: 2 }}>
+                {tricigoCategoryEmoji(selectedPoi.tricigo_category)}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: '#1a1a2e',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {selectedPoi.name}
+                </div>
+                {selectedPoi.address && (
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#888',
+                      marginTop: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {selectedPoi.address}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPoi(null)}
+                aria-label={t('book.close', { defaultValue: 'Cerrar' })}
+                style={{
+                  background: 'transparent',
+                  border: 0,
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#888',
+                  fontSize: '1rem',
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedPoi) return;
+                const addr = selectedPoi.address && selectedPoi.address.length > 0
+                  ? `${selectedPoi.name}, ${selectedPoi.address}`
+                  : selectedPoi.name;
+                const preset: LocationPreset = {
+                  label: selectedPoi.name,
+                  address: addr,
+                  latitude: selectedPoi.lat,
+                  longitude: selectedPoi.lng,
+                };
+                if (pickup) {
+                  onSetDropoff(preset);
+                } else {
+                  onSetPickup(preset);
+                }
+                setSelectedPoi(null);
+              }}
+              style={{
+                marginTop: '0.625rem',
+                width: '100%',
+                background: '#FF4D00',
+                color: 'white',
+                border: 0,
+                borderRadius: '0.625rem',
+                padding: '0.625rem',
+                fontSize: '0.875rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {pickup
+                ? t('book.go_here_dropoff', { defaultValue: 'Ir aquí (destino)' })
+                : t('book.go_here_pickup', { defaultValue: 'Ir aquí (origen)' })}
+            </button>
+          </div>
         )}
 
         {/* Bottom address bar + confirm button */}
