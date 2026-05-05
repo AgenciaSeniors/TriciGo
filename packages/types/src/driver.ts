@@ -142,6 +142,32 @@ export interface DriverStatusHistoryEntry {
 }
 
 /**
+ * Active (open) work session for a driver, returned by the RPC
+ * `get_active_work_session` (migration 00261). Returned shape is
+ * a single object or null (the home bottom-sheet hook normalizes
+ * the 0/1-row response). Used to derive `sessionHours` for the
+ * anti-fatigue banner with cross-device persistence.
+ */
+export interface DriverActiveWorkSession {
+  id: string;
+  started_at: string;
+  /** Live derived count from the RPC — re-fetch the RPC if you need a fresher value. */
+  minutes_online: number;
+}
+
+/**
+ * Per-day adherence row from `get_driver_work_adherence` (migration
+ * 00261). Compares actual online minutes vs planned minutes derived
+ * from active `driver_recurring_shifts` (D5). One row per day in the
+ * requested window; sessions spanning midnight are split.
+ */
+export interface DriverWorkAdherenceDay {
+  day: string;
+  actual_minutes_online: number;
+  planned_minutes: number;
+}
+
+/**
  * Per-driver per-day performance rollup, returned by the RPC
  * `get_driver_performance_trend` (migration 00260). Powers the 30-day
  * sparklines on `/profile/performance` (Phase 2 N3 deep slice).

@@ -8,6 +8,8 @@ import type {
   DriverDocument,
   DriverPeakHourCell,
   DriverPerformanceTrendDay,
+  DriverActiveWorkSession,
+  DriverWorkAdherenceDay,
   CancellationPenalty,
   Vehicle,
   VehicleType,
@@ -1078,6 +1080,62 @@ export const driverService = {
       throw error;
     }
     return (data as DriverPerformanceTrendDay[] | null) ?? [];
+  },
+
+  /**
+   * Phase 2 N6 DB-backed (00261) — returns the driver's open work
+   * session (`ended_at IS NULL`) or `null` if they're offline /
+   * the trigger hasn't opened one yet / 00261 isn't applied to prod.
+   *
+   * The home bottom-sheet uses this when available to drive the
+   * fatigue banner with a cross-device timestamp; it falls back to
+   * AsyncStorage `driver_online_since` when the RPC is missing or
+   * returns null (e.g. legacy session opened before 00261 deployed).
+   */
+  async getActiveWorkSession(driverId: string): Promise<DriverActiveWorkSession | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_active_work_session', {
+      p_driver_id: driverId,
+    });
+    if (error) {
+      if (
+        error.code === '42883' ||
+        error.message?.toLowerCase().includes('does not exist')
+      ) {
+        return null;
+      }
+      throw error;
+    }
+    const row = Array.isArray(data) ? data[0] : null;
+    return (row as DriverActiveWorkSession | null) ?? null;
+  },
+
+  /**
+   * Phase 2 N6 DB-backed (00261) — daily adherence: actual minutes
+   * online vs planned shift minutes (from D5 `driver_recurring_shifts`)
+   * for the last N days. Returns one row per day in the window. Used
+   * by the performance dashboard to surface "you worked 80% of your
+   * planned hours this week" insights.
+   */
+  async getWorkAdherence(
+    driverId: string,
+    days = 14,
+  ): Promise<DriverWorkAdherenceDay[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_work_adherence', {
+      p_driver_id: driverId,
+      p_days: days,
+    });
+    if (error) {
+      if (
+        error.code === '42883' ||
+        error.message?.toLowerCase().includes('does not exist')
+      ) {
+        return [];
+      }
+      throw error;
+    }
+    return (data as DriverWorkAdherenceDay[] | null) ?? [];
   },
 
   // ==================== IDENTITY VERIFICATION ====================
