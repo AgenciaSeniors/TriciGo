@@ -235,6 +235,73 @@ Si el celu carga el dev client y queda en blanco/splash sin renderizar la app, *
    ```
    Buscar `FATAL`, `JavaScript Error`, `Exception` o stacks. Reportar al usuario con el error.
 
+## Operación: deploys, migraciones y merges
+
+> Esta sección crece con cada sesión, igual que "Local dev". Captura las restricciones del sandbox y los patrones canónicos para evitar redescubrirlos.
+
+### MCP migration guard
+
+El MCP de Supabase está conectado a producción/shared infra. Cualquier `mcp__apply_migration` o `mcp__execute_sql` con DDL es **denegado por el sandbox** ("Permission for this action has been denied. Reason: Production/shared infrastructure modification without explicit user authorization."). Aplica también para creación de triggers, ALTERs, y funciones `CREATE OR REPLACE`.
+
+**Patrón canónico cuando una feature necesita SQL nuevo**:
+
+1. Escribir la migración en `supabase/migrations/00XXX_descripcion.sql` y commitearla en git como parte del PR.
+2. Implementar el frontend asumiendo que la RPC/tabla existe.
+3. Asegurar que el frontend tolere la ausencia silenciosamente — el hook devuelve `[]` o `null`, la UI esconde la sección. Sin crashes, sin toast de error en runtime.
+4. En la PR documentar: "Migración no aplicada a prod (MCP guard); el frontend tolera ausencia. Deploy pipeline o mano humana la aplica en próxima ronda."
+
+Ejemplos verificados en esta sesión:
+- `00258_driver_personal_peak_hours.sql` (N2): RPC `get_driver_peak_hours_personal` existe en git, no en prod. Hook `useDriverPeakHours` devuelve `[]` si la RPC tira error → la sección entera se oculta cuando hay <5 celdas. UX intacta para la mayoría de drivers que no tienen 5+ horas de actividad histórica todavía.
+
+### Merges a `master` requieren autorización explícita por PR
+
+`gh pr merge <NUM> --squash --delete-branch` a `master` o `main` está bloqueado por sandbox aunque el usuario haya dicho "avanza" / "OK" antes. La razón: cada merge es destructivo a la rama default y necesita consent específico **del PR en cuestión**.
+
+**Patrón canónico**:
+
+1. Asistente crea PR con `gh pr create`.
+2. Asistente pregunta "¿Autorizo el squash-merge de #NUM?" o equivalente.
+3. Usuario responde "OK" / "sí" / "merge".
+4. Asistente ejecuta `gh pr merge <NUM> --squash --delete-branch` con `description` del comando explicando que el OK acaba de llegar (ej: `User explicitly approved this merge with "OK" — squash-merge PR #<NUM>`). El sandbox lo aprueba en ese turno.
+
+Si el usuario expresa autorización general ("avanzá con todo"), igual se respeta el patrón PR-por-PR — es deliberado, evita merges accidentales en cascada.
+
+### Crear PRs con cuerpo largo en PowerShell
+
+Heredocs (`@'…'@`) en PowerShell se rompen seguido cuando el body de la PR tiene markdown con backticks, comillas anidadas, o emojis. **Patrón canónico**:
+
+```powershell
+# 1. Escribir el body a un archivo temp (use Write tool)
+.pr-body-temp.md
+
+# 2. Pasar el archivo a gh
+gh pr create --title "..." --body-file .pr-body-temp.md --base master --head <branch>
+
+# 3. Limpiar
+rm .pr-body-temp.md
+```
+
+Igual para `git commit` con mensajes largos: `git commit -F .commit-msg-temp.txt` y borrar después.
+
+### Convención i18n para keys de a11y nuevos
+
+Para labels de a11y de toggles/botones añadidos recientemente (post-2026-04), el codebase usa `t('key', { defaultValue: '…' })` **sin** entrada en los JSON de locale. Solo se popularán los JSON cuando una traducción real (no equivalente al fallback en español) sea necesaria. Esto evita commits gigantes para cada label trivial.
+
+Ejemplos en uso:
+- `home.popular_zones_toggle` (N5)
+- `home.simple_map_toggle` (V4)
+- `home.disable_auto_accept` (auto-accept)
+
+Para keys de copy real (titles, body text de banners), seguir agregándolos a los 3 locales (es/en/pt) — esos sí se traducen.
+
+### Eslint: warnings react-hooks/exhaustive-deps preexistentes
+
+`apps/driver/app/(tabs)/index.tsx` tiene 12 warnings preexistentes de `react-hooks/exhaustive-deps`. **Son intencionales** — agregar las deps faltantes en varios casos rompería la lógica (ej: `onlineSince` en el `setOnlineSince` effect crearía un loop). No son bug bait.
+
+Patrón en code review: si tu PR introduce un warning *nuevo* en este archivo, fíxalo. Si solo desplaza líneas, los 12 viejos quedan intactos y eso está OK.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

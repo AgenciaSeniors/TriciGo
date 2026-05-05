@@ -971,3 +971,37 @@ pnpm --filter @tricigo/driver check-types
 - **Web Technical Reference:** `docs/WEB_CLIENT_TECHNICAL_REFERENCE.md`
 - **Client App Guide:** `docs/CLIENT_APP_IMPL.md`
 - **Database schema & RLS:** `supabase/migrations/`
+
+---
+
+## Phase 2/3 Deltas (2026-05)
+
+Nine PRs (#104-#112) shipped Phase 2 driver-only features and Phase 3 visual polish. Summary:
+
+### Phase 2 — Driver Features (N1-N6)
+
+| Feature | Files | Status |
+|---------|-------|--------|
+| **N1: Smart Route Suggestions** (#108) | `src/hooks/useSmartSuggestion.ts` (compose hotspots + surge + popular) | Threaded into `HomeBottomSheet.tsx` via ranked target formula `(live_count × surge_boost) / sqrt(distance_km + 0.5)` |
+| **N2: Personal Peak Hours Heatmap** (#107) | `src/hooks/useDriverPeakHours.ts` + `src/components/earnings/PersonalPeakHours.tsx` (7×24 heatmap); `supabase/migrations/00258_driver_personal_peak_hours.sql` RPC | Frontend tolerates absent RPC gracefully (MCP guard prevents prod apply) |
+| **N3: Cancellation-Rate Alert** (#106) | `src/components/earnings/PerformanceMetricsSection.tsx` soft amber banner | Fires when `cancellation_rate > 15%` policy threshold; deep slice (DB trigger + `/profile/performance` dashboard) deferred |
+| **N4: Review Tag Breakdown** (#104) | `src/components/profile/ReviewTagsBreakdown.tsx` positive/negative chip rails | Uses `getTagDefinitions()` RPC (pre-existing) to join driver's top tags against sentiment definitions |
+| **N5: Popular Pickup Zones Overlay** (#105) | `src/hooks/usePopularLocations.ts` + `src/components/PopularLocationPin.tsx` (90-day clusters) | Toggle gated in `app/(tabs)/index.tsx`; pin type badges (pickup/dropoff arrows) |
+| **N6: Anti-Fatigue Banner MVP** (#109) | In `HomeBottomSheet.tsx` + `AsyncStorage driver_online_since` | Thresholds: 6h soft, 10h firm; analytics `driver_fatigue_warning_shown`; DB-backed `driver_work_sessions` can backfill later |
+
+### Phase 3 — Visual Polish (V1-V4)
+
+| Feature | Changes | Impact |
+|---------|---------|--------|
+| **V1: Token Consistency** | — | `midnightEmber` theme verified pre-existing in `@tricigo/theme` |
+| **V2: Touch Target Audit** (#110) | 5 fixes: Banner action (44pt), Desconectar link, SettingsRow Switch scale 0.85, IncomingRideCard toggles | All hit 44pt minimum; ripple + press feedback on Android |
+| **V3: State Clarity** (#111) | Press feedback (opacity 0.7) + ripple in `SettingsRow`; `accessibilityState` mirrors on Switches; theme tabs as `accessibilityRole="radio"` | Better keyboard nav + screen reader support |
+| **V4: Simple Map Mode Toggle** (#112) | `AsyncStorage driver_simple_map_mode` in `app/(tabs)/index.tsx` (lines 527-956) | Suppresses surge polygons, demand pulses, nearby drivers, top banners; analytics `driver_map_density_toggled` |
+
+### Files Added/Modified
+- **Hooks:** `useSmartSuggestion.ts`, `useDriverPeakHours.ts`, `usePopularLocations.ts`
+- **Components:** `PersonalPeakHours.tsx`, `PopularLocationPin.tsx`, `ReviewTagsBreakdown.tsx` + updates to `HomeBottomSheet.tsx`, `PerformanceMetricsSection.tsx`, `SettingsRow.tsx`, `index.tsx` (home screen)
+- **Migrations:** `00258_driver_personal_peak_hours.sql`
+- **Theme:** Confirmed `midnightEmber` exists; V2-V3 updates in-place to existing components
+
+**Last updated:** 2026-05-04
