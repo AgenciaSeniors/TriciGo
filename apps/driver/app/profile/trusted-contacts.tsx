@@ -16,6 +16,7 @@ import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { AddContactSheet } from '@/components/AddContactSheet';
 import type { TrustedContact } from '@tricigo/types';
 
 const MAX_CONTACTS = 5;
@@ -27,6 +28,7 @@ export default function TrustedContactsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showAddSheet, setShowAddSheet] = useState(false);
 
   const loadContacts = useCallback(async () => {
     if (!user) return;
@@ -176,14 +178,22 @@ export default function TrustedContactsScreen() {
               variant="outline"
               size="lg"
               fullWidth
-              onPress={() => {
-                // TODO: Open add contact sheet
-                Toast.show({ type: 'info', text1: t('common.coming_soon', { defaultValue: 'Próximamente' }) });
-              }}
+              onPress={() => setShowAddSheet(true)}
             />
           )}
         </View>
       </ScrollView>
+
+      {/* Parity port: same AddContactSheet shape as the rider's, themed
+          for Midnight Ember. Closes the "Próximamente" stub. */}
+      {user && (
+        <AddContactSheet
+          visible={showAddSheet}
+          onClose={() => setShowAddSheet(false)}
+          userId={user.id}
+          onAdded={loadContacts}
+        />
+      )}
     </Screen>
   );
 }
