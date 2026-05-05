@@ -518,6 +518,27 @@ function NativeDriverHomeScreen() {
     enabled: isOnline && popularLocationsEnabled,
   });
 
+  // Phase 3 V4 — simple map mode. When enabled, suppresses the noisier
+  // visual layers (surge polygons, demand-hotspot pulses, peer drivers,
+  // top-of-screen alta-demanda/surge banners) so the map reduces to the
+  // driver's own marker + active-trip context. Persisted in AsyncStorage
+  // so it survives app reload — drivers who prefer the calm view get it
+  // by default after the first toggle.
+  const [simpleMapMode, setSimpleMapMode] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem('driver_simple_map_mode').then((val) => {
+      if (val === '1') setSimpleMapMode(true);
+    }).catch(() => {});
+  }, []);
+  const toggleSimpleMapMode = useCallback(() => {
+    setSimpleMapMode((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem('driver_simple_map_mode', next ? '1' : '0').catch(() => {});
+      trackValidationEvent('driver_map_density_toggled', { simple_mode: next });
+      return next;
+    });
+  }, []);
+
   // Peer online drivers (top-down markers on the map).
   const nearbyDrivers = useNearbyDrivers({
     center: mapCenter,
@@ -801,15 +822,26 @@ function NativeDriverHomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ── Layer 1: Full-screen map ── */}
+      {/* ── Layer 1: Full-screen map ──
+           V4 — `simpleMapMode` short-circuits the noisier overlays
+           (surge polygons, demand-hotspot pulses, peer drivers). The
+           driver's own marker, popular_locations (already toggle-gated),
+           and active-trip context (when applicable) stay visible. We
+           keep the data hooks running in the background so toggling
+           back to full mode is instant — only the visual layers are
+           suppressed. */}
       <View style={StyleSheet.absoluteFillObject}>
         <RideMapView
           ref={mapRef}
           driverLocation={driverLocation}
           driverHeading={idleHeading}
-          surgeZones={surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))}
-          nearbyDrivers={nearbyDrivers}
-          demandHotspots={demandHotspots}
+          surgeZones={
+            simpleMapMode
+              ? []
+              : surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))
+          }
+          nearbyDrivers={simpleMapMode ? [] : nearbyDrivers}
+          demandHotspots={simpleMapMode ? [] : demandHotspots}
           popularLocations={popularLocations}
           height={SCREEN_HEIGHT}
           darkStyle
@@ -869,13 +901,59 @@ function NativeDriverHomeScreen() {
         </Pressable>
       )}
 
+      {/* V4 — simple map mode toggle. Stacks below the popular zones
+           toggle on the right edge. When ON, the busier overlays
+           (surge polygons, demand pulses, peer drivers) and their
+           top-of-screen banners are suppressed so the map reads as
+           a calm navigation surface. Visual mirrors the popular zones
+           toggle: filled icon when active, outline when off. */}
+      {isOnline && (
+        <Pressable
+          onPress={toggleSimpleMapMode}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: simpleMapMode }}
+          accessibilityLabel={t('home.simple_map_toggle', { defaultValue: 'Modo de mapa simple' })}
+          style={({ pressed }) => ({
+            position: 'absolute',
+            top: insets.top + 116,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: simpleMapMode
+              ? '#FF4D00'
+              : 'rgba(8, 8, 12, 0.7)',
+            borderWidth: 1,
+            borderColor: simpleMapMode
+              ? '#FF4D00'
+              : 'rgba(255, 255, 255, 0.12)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons
+            name={simpleMapMode ? 'eye-off' : 'eye-off-outline'}
+            size={20}
+            color="#FFFFFF"
+          />
+        </Pressable>
+      )}
+
       {/* Top floating badges.
            UX: the old "Alta demanda" chip was vague — drivers couldn't tell
            if there's 1 hotspot or 20, or how far the nearest was. Now the
            banner states the count and, when we know it, the distance to the
            closest zone — information that actually helps the driver decide
-           to move. Still non-interactive (map gestures). */}
-      {isOnline && demandHotspots.length > 0 && (
+           to move. Still non-interactive (map gestures).
+           V4 — hidden in simple map mode (the underlying layer is also
+           suppressed, so the banner would be lying about what's on screen). */}
+      {isOnline && !simpleMapMode && demandHotspots.length > 0 && (
         <View
           style={{
             position: 'absolute',
@@ -912,7 +990,8 @@ function NativeDriverHomeScreen() {
           </View>
         </View>
       )}
-      {isOnline && surgeZones.length > 0 && (
+      {/* V4 — same simple-mode gate as the demand banner above. */}
+      {isOnline && !simpleMapMode && surgeZones.length > 0 && (
         /* UX: surge is a real earning opportunity — make it a proper card
              instead of a tiny 11px badge. Bigger padding, 2 lines (headline
              + CTA context), flame icon. Still non-interactive so it doesn't
