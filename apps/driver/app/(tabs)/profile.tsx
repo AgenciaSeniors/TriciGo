@@ -95,13 +95,20 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        // D5 — recurring shifts. Sits in "Actividad" because it's about
-        // when the driver works, not how. Routes to /profile/recurring-shifts.
+        // D5 — recurring shifts. Driver pre-defines typical work shifts.
+        // Note: `td(` (driver locale) — `shifts.*` keys live in driver.json.
         {
           icon: 'calendar-outline' as const,
-          label: t('shifts.title', { defaultValue: 'Turnos recurrentes' }),
+          label: td('shifts.title', { defaultValue: 'Turnos recurrentes' }),
           onPress: () => router.push('/profile/recurring-shifts'),
           iconBg: 'info' as const,
+        },
+        // N3 deep — performance dashboard with 30-day sparklines + alerts.
+        {
+          icon: 'analytics-outline' as const,
+          label: td('performance.title', { defaultValue: 'Mi desempeño' }),
+          onPress: () => router.push('/profile/performance'),
+          iconBg: 'success' as const,
         },
         { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
         { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },

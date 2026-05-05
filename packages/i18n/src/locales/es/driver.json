@@ -246,6 +246,30 @@
     "stop_short": "Salir"
   },
 
+  "performance": {
+    "title": "Mi desempeño",
+    "no_profile": "Sin perfil de conductor",
+    "no_data": "Sin datos disponibles",
+    "acceptance_label": "Aceptación",
+    "acceptance_hint": "Últimos viajes ofrecidos",
+    "cancellation_label": "Cancelaciones",
+    "cancellation_hint": "Política: <15%",
+    "completion_label": "Completitud",
+    "rating_label": "Calificación",
+    "rating_hint": "Promedio últimos viajes",
+    "response_label": "Respuesta media",
+    "response_hint": "Tiempo a aceptar",
+    "total_rides_label": "Viajes totales",
+    "total_rides_hint": "{{offered}} ofrecidos",
+    "trend_acceptance": "Aceptación · 30 días",
+    "trend_cancellation": "Cancelación · 30 días",
+    "trend_unavailable": "Tendencia diaria no disponible aún. Volvé en unos días.",
+    "alert_cancellation_title": "Cancelaste {{pct}}% de tus viajes — sobre el límite del 15%",
+    "alert_cancellation_body": "Cancelaciones repetidas afectan tu match score y tus ofertas. Si pasó algo puntual, ignorá este aviso.",
+    "alert_acceptance_title": "Tu acceptance rate bajó {{pct}}% esta semana",
+    "alert_acceptance_body": "¿Algo cambió? Aceptar más viajes mejora tu posición en el matching."
+  },
+
   "earnings": {
     "title": "Tus ganancias",
     "today": "Hoy",
