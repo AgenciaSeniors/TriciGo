@@ -95,6 +95,14 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
+        // D5 — recurring shifts. Driver pre-defines typical work shifts.
+        // Note: `td(` (driver locale) — `shifts.*` keys live in driver.json.
+        {
+          icon: 'calendar-outline' as const,
+          label: td('shifts.title', { defaultValue: 'Turnos recurrentes' }),
+          onPress: () => router.push('/profile/recurring-shifts'),
+          iconBg: 'info' as const,
+        },
         // N3 deep — performance dashboard with 30-day sparklines + alerts.
         {
           icon: 'analytics-outline' as const,
