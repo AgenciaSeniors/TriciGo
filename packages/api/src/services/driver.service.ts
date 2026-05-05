@@ -7,6 +7,7 @@ import type {
   DriverProfile,
   DriverDocument,
   DriverPeakHourCell,
+  DriverPerformanceTrendDay,
   CancellationPenalty,
   Vehicle,
   VehicleType,
@@ -1041,6 +1042,42 @@ export const driverService = {
     });
     if (error) throw error;
     return (data as DriverPeakHourCell[] | null) ?? [];
+  },
+
+  /**
+   * Fetch a per-day rollup of completed/canceled/accepted rides + avg
+   * response time for the last N days. Powers the 30-day sparklines on
+   * `/profile/performance` (Phase 2 N3 deep slice). Backed by the RPC
+   * `get_driver_performance_trend` (migration 00260).
+   *
+   * Returns one row per day in the window — including zero-rows for
+   * days with no activity, so sparklines render contiguously.
+   * Tolerates the RPC being missing (empty array) so the UI shows
+   * "no data yet" instead of crashing when 00260 hasn't been applied
+   * to prod.
+   */
+  async getPerformanceTrend(
+    driverId: string,
+    days = 30,
+  ): Promise<DriverPerformanceTrendDay[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_driver_performance_trend', {
+      p_driver_id: driverId,
+      p_days: days,
+    });
+    if (error) {
+      // Function missing in prod (00260 not applied yet) — silent
+      // fallback. Other errors propagate so the caller can show a
+      // proper error state.
+      if (
+        error.code === '42883' || // undefined_function
+        error.message?.toLowerCase().includes('does not exist')
+      ) {
+        return [];
+      }
+      throw error;
+    }
+    return (data as DriverPerformanceTrendDay[] | null) ?? [];
   },
 
   // ==================== IDENTITY VERIFICATION ====================

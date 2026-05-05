@@ -246,6 +246,30 @@
     "stop_short": "Exit"
   },
 
+  "performance": {
+    "title": "My performance",
+    "no_profile": "No driver profile",
+    "no_data": "No data available",
+    "acceptance_label": "Acceptance",
+    "acceptance_hint": "Recent offered rides",
+    "cancellation_label": "Cancellations",
+    "cancellation_hint": "Policy: <15%",
+    "completion_label": "Completion",
+    "rating_label": "Rating",
+    "rating_hint": "Average recent rides",
+    "response_label": "Avg response",
+    "response_hint": "Time to accept",
+    "total_rides_label": "Total rides",
+    "total_rides_hint": "{{offered}} offered",
+    "trend_acceptance": "Acceptance · 30 days",
+    "trend_cancellation": "Cancellation · 30 days",
+    "trend_unavailable": "Daily trend not available yet. Check back in a few days.",
+    "alert_cancellation_title": "You canceled {{pct}}% of rides — over the 15% policy",
+    "alert_cancellation_body": "Repeated cancellations affect your match score and the offers you receive. Ignore this if it was a one-off.",
+    "alert_acceptance_title": "Your acceptance dropped {{pct}}% this week",
+    "alert_acceptance_body": "Did something change? Accepting more rides improves your matching position."
+  },
+
   "earnings": {
     "title": "Your earnings",
     "today": "Today",

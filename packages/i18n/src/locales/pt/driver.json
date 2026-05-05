@@ -243,6 +243,30 @@
     "stop_short": "Sair"
   },
 
+  "performance": {
+    "title": "Meu desempenho",
+    "no_profile": "Sem perfil de motorista",
+    "no_data": "Sem dados disponíveis",
+    "acceptance_label": "Aceitação",
+    "acceptance_hint": "Viagens oferecidas recentes",
+    "cancellation_label": "Cancelamentos",
+    "cancellation_hint": "Política: <15%",
+    "completion_label": "Conclusão",
+    "rating_label": "Avaliação",
+    "rating_hint": "Média viagens recentes",
+    "response_label": "Resposta média",
+    "response_hint": "Tempo para aceitar",
+    "total_rides_label": "Viagens totais",
+    "total_rides_hint": "{{offered}} oferecidas",
+    "trend_acceptance": "Aceitação · 30 dias",
+    "trend_cancellation": "Cancelamento · 30 dias",
+    "trend_unavailable": "Tendência diária ainda não disponível. Volte em alguns dias.",
+    "alert_cancellation_title": "Você cancelou {{pct}}% — acima do limite de 15%",
+    "alert_cancellation_body": "Cancelamentos repetidos afetam sua pontuação e as ofertas recebidas. Ignore se foi pontual.",
+    "alert_acceptance_title": "Sua aceitação caiu {{pct}}% esta semana",
+    "alert_acceptance_body": "Algo mudou? Aceitar mais viagens melhora sua posição no matching."
+  },
+
   "earnings": {
     "title": "Seus ganhos",
     "today": "Hoje",

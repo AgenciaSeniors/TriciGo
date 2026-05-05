@@ -142,6 +142,21 @@ export interface DriverStatusHistoryEntry {
 }
 
 /**
+ * Per-driver per-day performance rollup, returned by the RPC
+ * `get_driver_performance_trend` (migration 00260). Powers the 30-day
+ * sparklines on `/profile/performance` (Phase 2 N3 deep slice).
+ *
+ * `avg_response_time_s` is null when no rides were accepted that day.
+ */
+export interface DriverPerformanceTrendDay {
+  day: string;
+  completed_count: number;
+  canceled_count: number;
+  accepted_count: number;
+  avg_response_time_s: number | null;
+}
+
+/**
  * Per-driver earnings × hour-of-week cell, returned by the RPC
  * `get_driver_peak_hours_personal` (migration 00258). Used to render
  * the "Tus mejores horas" 7 × 24 heatmap on the earnings tab.

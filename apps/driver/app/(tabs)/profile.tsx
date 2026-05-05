@@ -95,6 +95,13 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
+        // N3 deep — performance dashboard with 30-day sparklines + alerts.
+        {
+          icon: 'analytics-outline' as const,
+          label: td('performance.title', { defaultValue: 'Mi desempeño' }),
+          onPress: () => router.push('/profile/performance'),
+          iconBg: 'success' as const,
+        },
         { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
         { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },
       ],
