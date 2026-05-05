@@ -95,6 +95,14 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
+        // D5 — recurring shifts. Sits in "Actividad" because it's about
+        // when the driver works, not how. Routes to /profile/recurring-shifts.
+        {
+          icon: 'calendar-outline' as const,
+          label: t('shifts.title', { defaultValue: 'Turnos recurrentes' }),
+          onPress: () => router.push('/profile/recurring-shifts'),
+          iconBg: 'info' as const,
+        },
         { icon: 'business-outline' as const, label: t('corporate.title', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
         { icon: 'gift-outline' as const, label: t('profile.referral_title'), onPress: () => router.push('/profile/referral'), iconBg: 'warning' as const },
       ],
