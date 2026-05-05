@@ -627,25 +627,63 @@ function NativeDriverHomeScreen() {
     popularLocations,
   });
 
-  // OMEGA: Online time tracking for earnings per hour
+  // OMEGA: Online time tracking for earnings per hour.
+  // N6 DB-backed (00261): prefer the DB session timestamp from
+  // `get_active_work_session` so the fatigue counter is cross-device.
+  // AsyncStorage `driver_online_since` stays as the fallback when the
+  // RPC is missing (00261 not applied) or the open session predates
+  // the migration. Order on online toggle:
+  //   1. Try DB → use started_at if present
+  //   2. Fallback: AsyncStorage cached value
+  //   3. Last resort: Date.now() (just-now session start)
   useEffect(() => {
     if (isOnline && !onlineSince) {
-      AsyncStorage.getItem('driver_online_since').then(val => {
-        if (val) {
-          const parsed = parseInt(val, 10);
-          if (!isNaN(parsed) && parsed > 0) setOnlineSince(parsed);
-          else setOnlineSince(Date.now());
-        } else {
-          setOnlineSince(Date.now());
+      let cancelled = false;
+      const resolve = async () => {
+        // 1. DB-first
+        if (profile?.id) {
+          try {
+            const session = await driverService.getActiveWorkSession(profile.id);
+            if (!cancelled && session?.started_at) {
+              const dbMs = new Date(session.started_at).getTime();
+              if (!isNaN(dbMs) && dbMs > 0) {
+                setOnlineSince(dbMs);
+                AsyncStorage.setItem('driver_online_since', String(dbMs)).catch(() => {});
+                return;
+              }
+            }
+          } catch {
+            /* swallow — fall through to AsyncStorage */
+          }
         }
-      }).catch(() => setOnlineSince(Date.now()));
+        // 2. AsyncStorage fallback
+        try {
+          const val = await AsyncStorage.getItem('driver_online_since');
+          if (cancelled) return;
+          if (val) {
+            const parsed = parseInt(val, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              setOnlineSince(parsed);
+              return;
+            }
+          }
+        } catch {
+          /* fall through */
+        }
+        // 3. Just-now
+        if (!cancelled) setOnlineSince(Date.now());
+      };
+      resolve();
+      return () => {
+        cancelled = true;
+      };
     } else if (isOnline && onlineSince) {
       AsyncStorage.setItem('driver_online_since', String(onlineSince)).catch(() => {});
     } else if (!isOnline) {
       setOnlineSince(null);
       AsyncStorage.removeItem('driver_online_since').catch(() => {});
     }
-  }, [isOnline]);
+  }, [isOnline, profile?.id]);
 
   // Phase 2 N6 — anti-fatigue. `sessionHours` is state-backed so the
   // banner threshold transitions (none → soft at 6h, soft → firm at 10h)
