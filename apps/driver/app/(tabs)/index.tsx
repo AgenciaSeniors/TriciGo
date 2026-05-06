@@ -775,8 +775,14 @@ function NativeDriverHomeScreen() {
           : t('driver.now_offline_sub', { defaultValue: 'No recibirás nuevas ofertas hasta que te conectes.' }),
         visibilityTime: 2200,
       });
-    } catch {
-      Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+    } catch (err) {
+      logger.error('[Toggle] Failed to set online status', err);
+      Toast.show({
+        type: 'error',
+        text1: t('common.status_change_failed'),
+        text2: getErrorMessage(err),
+        visibilityTime: 5000,
+      });
       triggerHaptic('error');
     } finally {
       setToggling(false);

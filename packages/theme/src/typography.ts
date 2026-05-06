@@ -36,6 +36,12 @@ export const fontSize = {
   '5xl': 48,
 } as const;
 
+/**
+ * Line-height multipliers — for reference / web CSS only.
+ * In React Native, `lineHeight` is an absolute pixel value, not a multiplier
+ * (unlike CSS web). textVariants below use precomputed absolute values
+ * (fontSize × multiplier, rounded). Keep these constants for documentation.
+ */
 export const lineHeight = {
   tight: 1.2,
   normal: 1.5,
@@ -46,75 +52,75 @@ export const textVariants = {
   display: {
     fontSize: fontSize['5xl'],
     fontWeight: fontWeight.extrabold,
-    lineHeight: 1.1,
+    lineHeight: 53, // 48 × 1.1
   },
   h1: {
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 36, // 30 × 1.2
   },
   h2: {
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 29, // 24 × 1.2
   },
   h3: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 24, // 20 × 1.2
   },
   h4: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 24, // 20 × 1.2
   },
   body: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.regular,
-    lineHeight: lineHeight.normal,
+    lineHeight: 24, // 16 × 1.5
   },
   bodySmall: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
-    lineHeight: lineHeight.normal,
+    lineHeight: 21, // 14 × 1.5
   },
   caption: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.normal,
+    lineHeight: 18, // 12 × 1.5
   },
   button: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.bold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 19, // 16 × 1.2
   },
   buttonSmall: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 17, // 14 × 1.2
   },
   label: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.tight,
+    lineHeight: 17, // 14 × 1.2
   },
   /** Large stat numbers (earnings totals, hero metrics) */
   stat: {
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.extrabold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 36, // 30 × 1.2
   },
   /** Medium metric values (dashboard cards) */
   metric: {
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 29, // 24 × 1.2
   },
   /** Small badge/pill text */
   badge: {
     fontSize: 11 as const,
     fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.tight,
+    lineHeight: 13, // 11 × 1.2
   },
 
   // ============================================================
@@ -127,7 +133,7 @@ export const textVariants = {
     fontFamily: fontFamily.display,
     fontSize: 42,
     fontWeight: fontWeight.bold,
-    lineHeight: 1.05,
+    lineHeight: 44, // 42 × 1.05
     letterSpacing: -0.5,
   },
   /** Display L — section headings (e.g., "Tu saldo"). Bricolage 28pt. */
@@ -135,7 +141,7 @@ export const textVariants = {
     fontFamily: fontFamily.displaySemibold,
     fontSize: 28,
     fontWeight: fontWeight.semibold,
-    lineHeight: 1.15,
+    lineHeight: 32, // 28 × 1.15
     letterSpacing: -0.25,
   },
   /** Display M — sub-headings. Bricolage 20pt. */
@@ -143,7 +149,7 @@ export const textVariants = {
     fontFamily: fontFamily.displaySemibold,
     fontSize: 20,
     fontWeight: fontWeight.semibold,
-    lineHeight: 1.2,
+    lineHeight: 24, // 20 × 1.2
     letterSpacing: -0.15,
   },
   /** Accent — Instrument Serif italic for emotional anchor ("¿A dónde vamos?"). */
@@ -151,7 +157,7 @@ export const textVariants = {
     fontFamily: fontFamily.accentItalic,
     fontSize: 28,
     fontWeight: fontWeight.regular,
-    lineHeight: 1.2,
+    lineHeight: 34, // 28 × 1.2
     fontStyle: 'italic' as const,
   },
   /** Caption mono — uppercase metadata labels (SALDO DISPONIBLE, RECIENTES). */
@@ -159,7 +165,7 @@ export const textVariants = {
     fontFamily: fontFamily.mono,
     fontSize: 11,
     fontWeight: fontWeight.medium,
-    lineHeight: 1.3,
+    lineHeight: 14, // 11 × 1.3
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
   },
@@ -168,6 +174,6 @@ export const textVariants = {
     fontFamily: fontFamily.mono,
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.tight,
+    lineHeight: 19, // 16 × 1.2
   },
 } as const;
