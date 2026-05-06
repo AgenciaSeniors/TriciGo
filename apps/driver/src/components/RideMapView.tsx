@@ -23,9 +23,6 @@ try {
 // and the first MapView mount — calling it here guarantees the token is
 // in place before React returns the MapView element to the native bridge.
 let _mapboxTokenApplied = false;
-function isMapboxTokenApplied() {
-  return _mapboxTokenApplied;
-}
 function ensureMapboxToken() {
   if (_mapboxTokenApplied || Platform.OS === 'web' || !MapboxGL) return;
   try {
@@ -644,6 +641,38 @@ function RideMapViewInner(
   // MapView element. Idempotent — guarded by module-scoped flag.
   ensureMapboxToken();
 
+  // BUG-209 v2: the module-scoped flag _mapboxTokenApplied does NOT
+  // trigger React re-renders when it flips. Previous version returned
+  // a "LA HABANA" grid placeholder when the flag was false at first
+  // render and stayed stuck on it forever (until the user killed the
+  // app and reopened — that re-mounted the component, picking up the
+  // now-applied flag).
+  //
+  // Now: track the flag in React state, and run a retry loop that
+  // polls every 250ms up to 2.5s. If the token is still not applied
+  // after 10 attempts, give up and let MapView render anyway — at
+  // worst a gray tile shows briefly until the next region change
+  // triggers a re-fetch (matches the client app behaviour, which
+  // never had this guard and works fine).
+  const [tokenApplied, setTokenApplied] = useState(_mapboxTokenApplied);
+  useEffect(() => {
+    if (tokenApplied || Platform.OS === 'web') return;
+    let attempts = 0;
+    const interval = setInterval(() => {
+      ensureMapboxToken();
+      if (_mapboxTokenApplied) {
+        setTokenApplied(true);
+        clearInterval(interval);
+      } else if (++attempts >= 10) {
+        // Exhausted: stop blocking the MapView render. Better a gray
+        // tile that auto-recovers than a permanently stuck placeholder.
+        setTokenApplied(true);
+        clearInterval(interval);
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [tokenApplied]);
+
   const { t } = useTranslation('driver');
   const cameraRef = useRef<any>(null);
   const [markerImageError, setMarkerImageError] = useState(false);
@@ -884,16 +913,12 @@ function RideMapViewInner(
   }
 
   // ── Native: Use @rnmapbox/maps ──────────────────────────────────────────────
-  // BUG-209 (6): on cold start (especially the very first launch after
-  // install), the Mapbox token can fail to apply if the JS module loaded
-  // before EXPO_PUBLIC_MAPBOX_TOKEN was hydrated. The MapView then
-  // instantiates with no token, the style fetch fails, and the user
-  // sees a blank gray rectangle. Detect that state and fall back to the
-  // stylized grid placeholder (same one used on web/offline) until the
-  // token can be applied. The `ensureMapboxToken()` call above is
-  // idempotent and will succeed on a subsequent render once the env
-  // var is in place.
-  if (!isMapboxTokenApplied()) {
+  // BUG-209 (6) v2: while the token-retry effect (above) is still trying,
+  // show the stylized grid placeholder so the user sees SOMETHING instead
+  // of a flash of gray Mapbox tile. The state-driven gate ensures we
+  // automatically swap to the real MapView the moment the token applies
+  // (or after the 2.5s retry budget is exhausted) — no app restart needed.
+  if (!tokenApplied) {
     return (
       <View style={[webFallbackStyles.container, { height }]}>
         <View style={webFallbackStyles.gradientBase} />
@@ -906,9 +931,6 @@ function RideMapViewInner(
             <View key={`v${i}`} style={[webFallbackStyles.gridLineV, { left: `${pos * 100}%` as any }]} />
           ))}
           <View style={webFallbackStyles.diagonalLine} />
-        </View>
-        <View style={webFallbackStyles.cityWatermark} pointerEvents="none">
-          <Text style={webFallbackStyles.cityText}>LA HABANA</Text>
         </View>
         <View style={webFallbackStyles.glowOrange} pointerEvents="none" />
         <View style={webFallbackStyles.glowOrange2} pointerEvents="none" />
