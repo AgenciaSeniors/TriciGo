@@ -801,8 +801,14 @@ function NativeDriverHomeScreen() {
       await driverService.setBreakStatus(profile.id, newBreakStatus);
       setIsOnBreak(newBreakStatus);
       trackEvent(newBreakStatus ? 'driver_break_started' : 'driver_break_ended');
-    } catch {
-      Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+    } catch (err) {
+      logger.error('[Toggle] Failed to set break status', err);
+      Toast.show({
+        type: 'error',
+        text1: t('common.status_change_failed'),
+        text2: getErrorMessage(err),
+        visibilityTime: 5000,
+      });
     } finally {
       setTogglingBreak(false);
     }
