@@ -1,14 +1,14 @@
 # TriciGo — Google Play Store Metadata (English)
 
 ## App Name
-TriciGo - Ride in Havana
+TriciGo - Urban Rides
 
 ## Short Description (80 characters max)
-Request a ride in Havana. Fast, safe, and affordable. Triciclos, motos & cars.
+Request a ride from your phone. Fast, safe, and affordable. Pedicabs, motos & cars.
 
 ## Full Description (4000 characters max)
 
-TriciGo is Cuba's first digital ride-hailing platform. We connect passengers with verified drivers of triciclos (pedicabs), motos, and cars across Havana.
+TriciGo is a digital ride-hailing platform that connects passengers with verified drivers of pedicabs (triciclos), motorcycles, and cars in your city.
 
 HOW IT WORKS
 1. Open the app and share your location
@@ -20,7 +20,7 @@ HOW IT WORKS
 
 KEY FEATURES
 
-- Instant rides: Request a triciclo, moto, or car with one tap. We connect you with the nearest driver in seconds.
+- Instant rides: Request a pedicab, moto, or car with one tap. We connect you with the nearest driver in seconds.
 
 - Transparent pricing: Know the cost before you confirm. Clear fares based on distance and time.
 
@@ -40,24 +40,24 @@ KEY FEATURES
 
 WHY TRICIGO?
 
-- Eco-friendly: Triciclos are 100% green transport with zero carbon emissions.
+- Eco-friendly: Pedicabs are 100% green transport with zero carbon emissions.
 - Affordable: Accessible prices for getting around the city.
 - Reliable: Drivers evaluated and rated by the community.
-- Local: Made in Cuba, for Cuba. We understand local needs.
+- Local: Built for everyday urban mobility.
 
 AVAILABILITY
-Currently available in Havana, with plans to expand to other Cuban cities.
+TriciGo is rolling out city by city. Check the app for available service zones.
 
 SUPPORT
 Questions or need help? Contact us from the app or email soporte@tricigo.app
 
-Download TriciGo and explore Havana like never before!
+Download TriciGo and move around the city with ease!
 
 ## Category
 Maps & Navigation (primary) / Travel & Local (secondary)
 
 ## Tags / Keywords
-taxi, cuba, havana, transport, ride, triciclo, pedicab, driver, trip, mobility
+taxi, transport, ride, pedicab, mobility, driver, trip, urban, rideshare, commute
 
 ## Privacy Policy URL
 https://tricigo.app/privacy

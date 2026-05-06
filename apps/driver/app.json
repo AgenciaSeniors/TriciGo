@@ -3,7 +3,7 @@
     "name": "TriciGo Conductor",
     "slug": "tricigo-driver",
     "version": "1.0.0",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -16,7 +16,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tricigo-driver",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.driver",
@@ -27,7 +27,6 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "TriciGo Conductor usa tu ubicación en segundo plano durante un viaje activo para que el pasajero pueda ver tu trayecto en tiempo real, incluso si la app está minimizada. Sin esto, el pasajero pierde tu ubicación cuando salís de la app.",
         "NSPhotoLibraryUsageDescription": "TriciGo Conductor usa tus fotos para subir documentos del vehículo y tu foto de perfil.",
         "NSCameraUsageDescription": "TriciGo Conductor usa la cámara para escanear documentos del vehículo y tomar tu foto de perfil.",
-        "NSUserTrackingUsageDescription": "Usamos identificadores agregados para entender cómo se usa la app y mejorar la experiencia. Nunca compartimos tu identidad.",
         "UIBackgroundModes": [
           "location",
           "remote-notification"
@@ -61,6 +60,20 @@
       ]
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "./plugins/with-privacy-manifest",
       "expo-router",
       "expo-localization",
       [

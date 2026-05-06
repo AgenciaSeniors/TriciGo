@@ -243,6 +243,30 @@ export default function ReviewScreen() {
           </View>
         </Card>
 
+        {/* OFAC defense disclaimer: clarify the legal nature of the
+            wallet so the relationship between the driver, the platform,
+            and Stripe is unambiguous. The driver is an independent
+            service provider; the wallet is internal account credit, not
+            an international monetary transfer. */}
+        <Card forceDark variant="surface" padding="md" className="mb-4">
+          <View className="flex-row items-start gap-2">
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={18}
+              color={midnightEmber.map.text.tertiary}
+              style={{ marginTop: 2 }}
+            />
+            <View className="flex-1">
+              <Text variant="caption" color="secondary">
+                {t('onboarding.legal_disclaimer', {
+                  defaultValue:
+                    'Al registrarte aceptas que TriciGo es una plataforma que conecta pasajeros y conductores independientes. Tu billetera es saldo interno canjeable por servicios de transporte físico — no es una transferencia internacional de dinero ni una cuenta bancaria.',
+                })}
+              </Text>
+            </View>
+          </View>
+        </Card>
+
         {error ? (
           <Text variant="bodySmall" color="error" className="mb-4 text-center">{error}</Text>
         ) : null}

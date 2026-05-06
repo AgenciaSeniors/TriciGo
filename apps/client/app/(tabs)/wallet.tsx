@@ -1585,6 +1585,14 @@ function NativeWalletScreen() {
               </Text>
             </View>
           )}
+          {/* Apple Guideline 3.1.1 defense: explicit disclaimer that wallet
+              credit redeems only for physical transportation services. This
+              keeps the wallet outside the "digital goods → IAP" requirement. */}
+          <Text variant="caption" color="tertiary" className="mb-3 text-center">
+            {t('wallet.physical_service_disclaimer', {
+              defaultValue: 'El saldo se canjea exclusivamente por viajes físicos. No desbloquea contenido digital ni funciones premium dentro de la app.',
+            })}
+          </Text>
           <Button
             title={
               stripeReady

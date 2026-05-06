@@ -4,11 +4,11 @@
 TriciGo Driver - Drive & Earn
 
 ## Short Description (80 characters max)
-Accept rides, navigate, and earn money as a driver in Havana.
+Accept rides, navigate, and earn money as a driver.
 
 ## Full Description (4000 characters max)
 
-TriciGo Driver is the app for transport drivers in Cuba. Receive ride requests, navigate to your passengers, and manage your earnings transparently.
+TriciGo Driver is the app for transport drivers. Receive ride requests, navigate to your passengers, and manage your earnings transparently.
 
 HOW IT WORKS
 1. Sign up and complete your driver profile
@@ -43,17 +43,17 @@ WHY DRIVE WITH TRICIGO?
 - More rides: Access a growing base of passengers looking for transport.
 - Transparent income: Know exactly how much you earn per ride.
 - Be your own boss: Work at your own pace. No schedules imposed.
-- Community: Join the most modern driver network in Cuba.
+- Community: Join a modern driver network.
 - Support: Dedicated support team for drivers.
 
 REQUIREMENTS
-- A vehicle in good condition (triciclo, moto, or car)
+- A vehicle in good condition (pedicab, moto, or car)
 - Valid driver's license
-- Phone with Android 6.0 or higher
+- Phone with Android 7.0 or higher
 - Complete the verification process
 
 AVAILABILITY
-Currently operating in Havana, with expansion plans to other Cuban cities.
+TriciGo Driver is rolling out city by city. Check the app for available service zones.
 
 DRIVER SUPPORT
 Need help? Contact us from the app or email conductores@tricigo.app
@@ -64,7 +64,7 @@ Join TriciGo Driver and start earning with your vehicle today!
 Maps & Navigation (primary) / Business (secondary)
 
 ## Tags / Keywords
-driver, taxi, cuba, havana, transport, earnings, ride, pedicab, employment, gig
+driver, taxi, transport, earnings, ride, pedicab, employment, gig, rideshare, urban
 
 ## Privacy Policy URL
 https://tricigo.app/privacy

@@ -776,7 +776,7 @@ function NativeDriverHomeScreen() {
         visibilityTime: 2200,
       });
     } catch (err) {
-      logger.error('[Toggle] Failed to set online status', err);
+      logger.error('[Toggle] Failed to set online status', { error: getErrorMessage(err) });
       Toast.show({
         type: 'error',
         text1: t('common.status_change_failed'),
@@ -802,7 +802,7 @@ function NativeDriverHomeScreen() {
       setIsOnBreak(newBreakStatus);
       trackEvent(newBreakStatus ? 'driver_break_started' : 'driver_break_ended');
     } catch (err) {
-      logger.error('[Toggle] Failed to set break status', err);
+      logger.error('[Toggle] Failed to set break status', { error: getErrorMessage(err) });
       Toast.show({
         type: 'error',
         text1: t('common.status_change_failed'),

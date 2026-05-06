@@ -3,7 +3,7 @@
     "name": "TriciGo",
     "slug": "tricigo-client",
     "version": "1.0.0",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -16,7 +16,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tricigo",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.tricigo.client",
@@ -28,8 +28,6 @@
         "NSLocationWhenInUseUsageDescription": "TriciGo usa tu ubicación para mostrar conductores cercanos, calcular el viaje y compartirla con tu conductor cuando aceptes el viaje.",
         "NSPhotoLibraryUsageDescription": "TriciGo necesita acceso a tus fotos para que puedas elegir una imagen de perfil.",
         "NSCameraUsageDescription": "TriciGo usa la cámara para que puedas tomar tu foto de perfil.",
-        "NSContactsUsageDescription": "TriciGo accede a tus contactos solo si elegís agregar contactos de confianza para tu seguridad durante el viaje.",
-        "NSUserTrackingUsageDescription": "Usamos identificadores agregados para entender cómo se usa la app y mejorar la experiencia. Nunca compartimos tu identidad.",
         "UIBackgroundModes": [
           "remote-notification"
         ],
@@ -59,6 +57,20 @@
       ]
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "./plugins/with-privacy-manifest",
       "expo-router",
       "expo-localization",
       [

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Blog | TriciGo',
-  description: 'Lee las últimas noticias y artículos sobre transporte en Cuba.',
+  description: 'Lee las últimas noticias y artículos sobre movilidad urbana y transporte.',
   alternates: {
     canonical: 'https://tricigo.com/blog',
   },
