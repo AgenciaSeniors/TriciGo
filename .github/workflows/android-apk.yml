@@ -248,7 +248,10 @@ jobs:
           cd apps/${{ steps.target.outputs.app }}/android/app/build/outputs/apk/release
           ls -la
           SRC=$(ls app-release.apk 2>/dev/null || ls app-release-unsigned.apk)
-          DEST=tricigo-${{ steps.target.outputs.app }}-${{ github.ref_name }}.apk
+          # Sanitize ref_name so branches with slashes (e.g. claude/foo)
+          # don't break `mv` by being parsed as a directory path.
+          SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/' '-')
+          DEST=tricigo-${{ steps.target.outputs.app }}-${SAFE_REF}.apk
           mv "$SRC" "$DEST"
           echo "dest=$DEST" >> "$GITHUB_OUTPUT"
 
