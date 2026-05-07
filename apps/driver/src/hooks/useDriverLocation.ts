@@ -121,6 +121,58 @@ export function useDriverLocationTracking(
         // this delivers a true real-time experience. Idle stays conservative
         // to preserve battery.
         const isActiveTrip = !!activeRideId;
+
+        // Post an INITIAL location fix immediately so the server has a
+        // fresh current_location even if the driver doesn't move.
+        // watchPositionAsync only invokes its callback when the user
+        // moves >distanceInterval, so without this seed the rider's
+        // find_best_drivers RPC may filter out a stationary driver
+        // whose current_location was stale (last update from a previous
+        // session). Affects:
+        //   - Real drivers waiting at a corner without moving
+        //   - QA with Lockito fixed-point (no movement)
+        //   - Drivers who reconnect after being offline in another city
+        try {
+          const initial =
+            (await Location.getLastKnownPositionAsync({
+              maxAge: 60_000,
+              requiredAccuracy: 200,
+            })) ??
+            (await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            }));
+          if (initial && !cancelled && getOnlineStatus()) {
+            const initPos: LocationState = {
+              latitude: initial.coords.latitude,
+              longitude: initial.coords.longitude,
+              heading: initial.coords.heading ?? 0,
+            };
+            setLocation(initPos);
+            useLocationStore.getState().setLocation(
+              initPos.latitude,
+              initPos.longitude,
+              initPos.heading,
+            );
+            await driverService.updateDriverPosition({
+              driverId: driverId!,
+              latitude: initPos.latitude,
+              longitude: initPos.longitude,
+              heading: initPos.heading ?? undefined,
+              rideId: activeRideId ?? undefined,
+            });
+            lastUploadRef.current = Date.now();
+            console.log('[GPS upload] initial fix posted', {
+              lat: initPos.latitude.toFixed(5),
+              lng: initPos.longitude.toFixed(5),
+            });
+          }
+        } catch (err) {
+          console.warn(
+            '[GPS upload] initial fix failed (will rely on watchPositionAsync)',
+            String((err as { message?: string })?.message ?? err),
+          );
+        }
+
         subscriptionRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
