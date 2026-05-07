@@ -133,14 +133,18 @@ export function useDriverLocationTracking(
         //   - QA with Lockito fixed-point (no movement)
         //   - Drivers who reconnect after being offline in another city
         try {
+          // Relaxed filters: matches _layout.tsx's bootstrap reader so we
+          // accept the same OS-cached fix it does. Tight filters (1 min /
+          // 200 m) reject Lockito's mock provider and stationary drivers
+          // whose only fix is from before they parked.
           const initial =
             (await Location.getLastKnownPositionAsync({
-              maxAge: 60_000,
-              requiredAccuracy: 200,
-            })) ??
+              maxAge: 60 * 60 * 1000, // 1 hour
+              requiredAccuracy: 1000, // 1 km
+            }).catch(() => null)) ??
             (await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-            }));
+              accuracy: Location.Accuracy.Lowest,
+            }).catch(() => null));
           if (initial && !cancelled && getOnlineStatus()) {
             const initPos: LocationState = {
               latitude: initial.coords.latitude,
