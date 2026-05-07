@@ -19,6 +19,17 @@ on:
         required: true
         type: choice
         options: [driver, client]
+      demo_mode:
+        description: 'Enable EXPO_PUBLIC_DEMO_MODE (relaxes geo bbox to global, useful for QA outside Cuba)'
+        required: false
+        type: boolean
+        default: false
+      demo_city:
+        description: 'Demo city center (when demo_mode=true)'
+        required: false
+        type: choice
+        options: [sao_paulo, rio, brasilia, havana]
+        default: sao_paulo
 
 jobs:
   build:
@@ -39,12 +50,20 @@ jobs:
           else
             echo "Unknown trigger" >&2 ; exit 1
           fi
-          # Tag suffix "-demo-apk" (e.g. client-v1.1.7-demo-apk) turns
-          # on EXPO_PUBLIC_DEMO_MODE for this build. See docs/DEMO_MODE.md.
-          if [[ "${{ github.ref }}" == *"-demo-apk" ]]; then
+          # Demo mode is enabled by either:
+          #  - workflow_dispatch input demo_mode=true, OR
+          #  - tag suffix "-demo-apk" (e.g. client-v1.1.7-demo-apk).
+          # See docs/DEMO_MODE.md.
+          DEMO_INPUT="${{ github.event.inputs.demo_mode }}"
+          DEMO_CITY_INPUT="${{ github.event.inputs.demo_city }}"
+          if [ "$DEMO_INPUT" = "true" ]; then
+            echo "demo=true" >> "$GITHUB_OUTPUT"
+            echo "demo_city=${DEMO_CITY_INPUT:-sao_paulo}" >> "$GITHUB_OUTPUT"
+            echo "✓ Demo mode ON via workflow_dispatch (city=${DEMO_CITY_INPUT:-sao_paulo})"
+          elif [[ "${{ github.ref }}" == *"-demo-apk" ]]; then
             echo "demo=true" >> "$GITHUB_OUTPUT"
             echo "demo_city=sao_paulo" >> "$GITHUB_OUTPUT"
-            echo "✓ Demo mode ON (city=sao_paulo)"
+            echo "✓ Demo mode ON via tag (city=sao_paulo)"
           else
             echo "demo=false" >> "$GITHUB_OUTPUT"
             echo "demo_city=havana" >> "$GITHUB_OUTPUT"
