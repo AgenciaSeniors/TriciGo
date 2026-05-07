@@ -259,13 +259,26 @@ function RideMapViewInner({
   // useAnimatedPosition layer was adding complexity (and a layer where
   // bugs could hide) without any visible benefit. The driver's marker
   // moves perfectly using the raw coordinate; the client now does too.
-  const animatedDriver = driverLocation
-    ? {
-        latitude: driverLocation.latitude,
-        longitude: driverLocation.longitude,
-        heading: driverHeading ?? (driverLocation as { heading?: number | null }).heading ?? 0,
-      }
-    : null;
+  // Only build animatedDriver when both lat and lng are finite numbers.
+  // When entering "viaje reciente" view a completed ride often has
+  // driverLocation with stale or partial coords (lat or lng undefined),
+  // and `.toFixed()` downstream blew up the whole map view via the
+  // ErrorBoundary. The Number.isFinite() gate filters those out.
+  const animatedDriver =
+    driverLocation &&
+    Number.isFinite(driverLocation.latitude) &&
+    Number.isFinite(driverLocation.longitude)
+      ? {
+          latitude: driverLocation.latitude,
+          longitude: driverLocation.longitude,
+          heading:
+            (Number.isFinite(driverHeading) ? (driverHeading as number) : null) ??
+            (Number.isFinite((driverLocation as { heading?: number | null }).heading)
+              ? ((driverLocation as { heading?: number | null }).heading as number)
+              : null) ??
+            0,
+        }
+      : null;
   // DEBUG-271: log every time the marker coordinate changes so we can
   // see in the rider's Metro log whether the prop chain is delivering
   // fresh positions to MarkerView.
@@ -399,12 +412,23 @@ function RideMapViewInner({
   const dropoffLng = dropoffLocation?.longitude;
   const driverLat = animatedDriver?.latitude;
   const driverLng = animatedDriver?.longitude;
+  // Coord-array keys: filter to entries with finite lat/lng before
+  // toFixed-ing them. Without the filter, a single undefined coord in
+  // routeCoordinates blows up the whole map render via ErrorBoundary.
   const routeKey = useMemo(
-    () => routeCoordinates?.map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`).join('|') ?? '',
+    () =>
+      routeCoordinates
+        ?.filter((c) => Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude))
+        .map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`)
+        .join('|') ?? '',
     [routeCoordinates],
   );
   const driverRouteKey = useMemo(
-    () => driverToPickupRoute?.map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`).join('|') ?? '',
+    () =>
+      driverToPickupRoute
+        ?.filter((c) => Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude))
+        .map((c) => `${c.latitude.toFixed(5)},${c.longitude.toFixed(5)}`)
+        .join('|') ?? '',
     [driverToPickupRoute],
   );
 
@@ -528,7 +552,13 @@ function RideMapViewInner({
             position. After that, activeBounds takes over once pickup/
             dropoff/driver are known and bounds are computed. */}
         <MapboxGL.Camera
-          key={`cam-${initialUserCenter ? `${initialUserCenter[0].toFixed(4)},${initialUserCenter[1].toFixed(4)}` : 'fallback'}`}
+          key={`cam-${
+            initialUserCenter &&
+            Number.isFinite(initialUserCenter[0]) &&
+            Number.isFinite(initialUserCenter[1])
+              ? `${initialUserCenter[0].toFixed(4)},${initialUserCenter[1].toFixed(4)}`
+              : 'fallback'
+          }`}
           defaultSettings={{
             centerCoordinate: initialUserCenter ?? HAVANA_CENTER,
             zoomLevel: 14,
@@ -783,7 +813,9 @@ function RideMapViewInner({
          *  picker, where the dropoff is already committed and shouldn't
          *  be dragged anyway. `onDropoffDrag` is therefore intentionally
          *  not wired up here. */}
-        {dropoffLocation && (
+        {dropoffLocation &&
+          Number.isFinite(dropoffLocation.latitude) &&
+          Number.isFinite(dropoffLocation.longitude) && (
           <MapboxGL.MarkerView
             id="dropoff"
             key={`dropoff-${dropoffLocation.latitude.toFixed(5)}-${dropoffLocation.longitude.toFixed(5)}`}
