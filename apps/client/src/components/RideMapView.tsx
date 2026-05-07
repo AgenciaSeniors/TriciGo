@@ -540,7 +540,14 @@ function RideMapViewInner({
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
+        // onMapIdle is the primary hook; it fires when the camera fully
+        // settles. But on some Android builds (new arch + 10.3.0) the idle
+        // event is delayed or never emitted on cold mount. onCameraChanged
+        // is more chatty (every animation frame) but the upstream hook
+        // (useViewportPois) debounces by 300 ms and skips if still inside
+        // the previous bounds, so it's safe to attach both.
         onMapIdle={handleCameraChanged}
+        onCameraChanged={handleCameraChanged}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to
             initialUserCenter (BUG-282) / Havana fallback.

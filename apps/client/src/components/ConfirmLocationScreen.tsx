@@ -91,8 +91,12 @@ export function ConfirmLocationScreen({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
 
-  // POIs
-  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
+  // POIs — seed immediately from initialLocation so they appear before
+  // the user pans the map. Without this, on cold mount the user can
+  // wait several seconds for onMapIdle to fire before any POI shows.
+  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois(
+    initialLocation ?? null,
+  );
   const poiGeoJSON = useMemo(() => {
     if (!pois || pois.length === 0) return null;
     return poisToGeoJSON(pois);
