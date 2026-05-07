@@ -963,6 +963,10 @@ function RideMapViewInner(
         <MapboxGL.Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
+          // minZoomLevel locks zoom-out during follow mode so the driver
+          // can't accidentally lose their position context (matches Uber
+          // driver navigation UX). Idle / no-follow leaves it unrestricted.
+          {...(followMode ? { minZoomLevel: 14 } : {})}
           {...(followMode && driverLocation
             ? {
                 centerCoordinate: toCoord(driverLocation),
