@@ -90,6 +90,13 @@ interface RideMapViewProps {
   driverHeading?: number | null;
   /** Callback when user interacts with map (disables follow mode) */
   onUserInteraction?: () => void;
+  /**
+   * When true, prevents zoom-out beyond level 14 regardless of follow mode.
+   * Set during active trips so the driver never loses position context, even
+   * after panning. Independent of followMode so the user can still pan/zoom
+   * within the locked range.
+   */
+  lockZoom?: boolean;
   /** Bottom padding offset to shift controls above bottom sheet */
   bottomOffset?: number;
   /** Additional style for the map container */
@@ -167,6 +174,7 @@ function WebMapboxView({
   followMode,
   driverHeading,
   onUserInteraction,
+  lockZoom,
   bottomOffset = 0,
   containerStyle,
   nearbyDrivers,
@@ -630,6 +638,7 @@ function RideMapViewInner(
     followMode,
     driverHeading,
     onUserInteraction,
+    lockZoom,
     nearbyDrivers,
     demandHotspots,
     popularLocations,
@@ -963,12 +972,15 @@ function RideMapViewInner(
         <MapboxGL.Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
-          // minZoomLevel locks zoom-out during follow mode so the driver
-          // can't accidentally lose their position context (matches Uber
-          // driver navigation UX). Idle / no-follow leaves it unrestricted.
-          {...(followMode ? { minZoomLevel: 14 } : {})}
+          // lockZoom (active trip) prevents zoom-out below level 14 so the
+          // driver never loses position context, even after panning. This
+          // is independent of followMode — locking applies even when the
+          // user is gesturing within the allowed range. Idle home leaves
+          // zoom unrestricted.
+          {...(lockZoom ? { minZoomLevel: 14 } : {})}
           {...(followMode && driverLocation
             ? {
+                // Follow path: heading-up navigation mode (Uber driver style)
                 centerCoordinate: toCoord(driverLocation),
                 zoomLevel: 16.5,
                 pitch: 45,
@@ -976,21 +988,25 @@ function RideMapViewInner(
                 animationDuration: 1000,
                 animationMode: 'easeTo',
               }
-            : bounds
+            : !driverLocation && bounds
               ? {
+                  // Initial fit while driverLocation is loading. Once we have
+                  // a driverLocation, we never go back to bounds — that was
+                  // the cause of the zoom-out oscillation: each Lockito coord
+                  // update triggered Mapbox to re-evaluate the camera with
+                  // bounds whenever followMode flipped to false transiently,
+                  // forcing a 16.5 → 12.8 zoom each time.
                   bounds: {
                     ne: bounds.ne,
                     sw: bounds.sw,
                     paddingTop: 80,
                     paddingRight: 60,
-                    // BUG-218: bottom sheet covers ~340px during active trip;
-                    // bounds need extra padding so pickup/dropoff stay visible.
                     paddingBottom: 360,
                     paddingLeft: 60,
                   },
                   animationDuration: 600,
                 }
-              : {}
+              : {} // followMode=false WITH driverLocation: leave camera where the user left it
           )}
         />
         {routeGeoJSON && (

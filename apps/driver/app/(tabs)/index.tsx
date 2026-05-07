@@ -68,6 +68,7 @@ function ActiveTripMap({
   screenHeight,
   followMode,
   onUserInteraction,
+  lockZoom,
 }: {
   mapRef: React.RefObject<RideMapViewRef | null>;
   driverLocation: { latitude: number; longitude: number } | null;
@@ -75,6 +76,7 @@ function ActiveTripMap({
   screenHeight: number;
   followMode: boolean;
   onUserInteraction: () => void;
+  lockZoom: boolean;
 }) {
   const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates } = useActiveTripMapData();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
@@ -109,6 +111,7 @@ function ActiveTripMap({
       vehicleType={vehicleType}
       followMode={followMode}
       onUserInteraction={onUserInteraction}
+      lockZoom={lockZoom}
     />
   );
 }
@@ -884,6 +887,7 @@ function NativeDriverHomeScreen() {
             screenHeight={SCREEN_HEIGHT}
             followMode={followMode}
             onUserInteraction={handleUserMapInteraction}
+            lockZoom={!!activeTrip}
           />
         </View>
 
