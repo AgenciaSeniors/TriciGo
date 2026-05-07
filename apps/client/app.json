@@ -3,7 +3,7 @@
     "name": "TriciGo",
     "slug": "tricigo-client",
     "version": "1.0.0",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "runtimeVersion": {
       "policy": "appVersion"
     },
