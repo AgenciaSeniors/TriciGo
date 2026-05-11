@@ -92,12 +92,10 @@ TriciGo Monorepo (Turborepo + pnpm)
 | `/profile/edit` | Edit name, phone, avatar |
 | `/profile/settings` | Language, notifications, theme |
 | `/profile/saved-locations` | Home, work, custom saved addresses |
-| `/profile/ride-preferences` | Quiet mode, temperature, accessibility |
 | `/profile/safety` | SOS, safety features |
 | `/profile/emergency-contact` | Emergency contact setup |
 | `/profile/trusted-contacts` | Trusted contact list |
 | `/profile/corporate` | Corporate account settings |
-| `/profile/recurring-rides` | Scheduled recurring rides |
 | `/profile/referral` | Referral program |
 | `/profile/help` | FAQ & support |
 | `/profile/about` | App info |
