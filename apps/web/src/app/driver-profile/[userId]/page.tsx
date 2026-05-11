@@ -133,9 +133,7 @@ export default function DriverProfilePage() {
     );
   }
 
-  const driverName = (user.first_name || user.last_name)
-    ? `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim()
-    : (user.phone ?? '—');
+  const driverName = user.full_name?.trim() || user.phone || '—';
   const avatarUrl = user.avatar_url;
   const initials = getInitials(driverName);
   const rating = summary?.average_rating ?? driverProfile?.rating_avg ?? 0;
