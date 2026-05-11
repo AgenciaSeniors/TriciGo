@@ -202,7 +202,7 @@ export default function BookPage() {
           }
         }
 
-        const closestPerType = (['triciclo', 'moto', 'auto'] as VehicleType[])
+        const closestPerType = (['triciclo', 'moto', 'auto', 'confort'] as VehicleType[])
           .map((vt) => typeGroups[vt])
           .filter(Boolean) as NearbyVehicle[];
 
@@ -217,7 +217,7 @@ export default function BookPage() {
             };
             const newEtas: Record<VehicleType, number | null> = { triciclo: null, moto: null, auto: null, confort: null };
             let idx = 0;
-            for (const vt of ['triciclo', 'moto', 'auto'] as VehicleType[]) {
+            for (const vt of ['triciclo', 'moto', 'auto', 'confort'] as VehicleType[]) {
               if (typeGroups[vt]) {
                 const etaResult = etas[idx];
                 if (etaResult) {
