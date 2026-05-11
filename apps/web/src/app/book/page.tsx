@@ -1204,7 +1204,7 @@ export default function BookPage() {
                         display: 'flex', alignItems: 'center', gap: '0.35rem',
                         padding: '0.45rem 0.7rem', borderRadius: '0.6rem', fontSize: '0.75rem', fontWeight: 600,
                         border: deliveryVehicle === v.slug ? '2px solid var(--primary)' : '1px solid var(--border)',
-                        background: deliveryVehicle === v.slug ? 'rgba(255,77,0,0.08)' : 'white',
+                        background: deliveryVehicle === v.slug ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
                         color: deliveryVehicle === v.slug ? 'var(--primary)' : 'var(--text-secondary)',
                         cursor: 'pointer', transition: 'all 0.15s',
                       }}
@@ -1249,7 +1249,7 @@ export default function BookPage() {
                           display: 'flex', alignItems: 'center', gap: '0.3rem',
                           padding: '0.4rem 0.7rem', borderRadius: '2rem', fontSize: '0.75rem', fontWeight: 600,
                           border: deliveryDetails.package_category === c.value ? '2px solid var(--primary)' : '1px solid var(--border)',
-                          background: deliveryDetails.package_category === c.value ? 'rgba(255,77,0,0.08)' : 'white',
+                          background: deliveryDetails.package_category === c.value ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
                           color: deliveryDetails.package_category === c.value ? 'var(--primary)' : 'var(--text-secondary)',
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -1292,7 +1292,7 @@ export default function BookPage() {
                     display: 'flex', alignItems: 'center', gap: '0.75rem',
                     padding: '0.75rem', borderRadius: '0.75rem', width: '100%',
                     border: deliveryDetails.client_accompanies ? '2px solid var(--primary)' : '1px solid var(--border)',
-                    background: deliveryDetails.client_accompanies ? 'rgba(255,77,0,0.06)' : 'white',
+                    background: deliveryDetails.client_accompanies ? 'rgba(255,77,0,0.06)' : 'var(--bg-card)',
                     cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
                   }}
                 >
@@ -1435,7 +1435,7 @@ export default function BookPage() {
                       style={{
                         flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
                         border: !selectedCorporateId ? '2px solid var(--primary)' : '1px solid var(--border)',
-                        background: !selectedCorporateId ? '#FFF5F0' : 'white',
+                        background: !selectedCorporateId ? '#FFF5F0' : 'var(--bg-card)',
                         cursor: 'pointer', fontSize: '0.8rem', fontWeight: !selectedCorporateId ? 700 : 400,
                       }}
                     >
@@ -1453,7 +1453,7 @@ export default function BookPage() {
                           style={{
                             flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
                             border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
-                            background: isSelected ? '#FFF5F0' : 'white',
+                            background: isSelected ? '#FFF5F0' : 'var(--bg-card)',
                             cursor: 'pointer', fontSize: '0.8rem', fontWeight: isSelected ? 700 : 400,
                             textAlign: 'center',
                           }}
@@ -1508,7 +1508,7 @@ export default function BookPage() {
                         paymentMethod === 'cash'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'cash' ? '#FFF5F0' : 'white',
+                      background: paymentMethod === 'cash' ? '#FFF5F0' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'cash' ? 700 : 400,
@@ -1529,7 +1529,7 @@ export default function BookPage() {
                         paymentMethod === 'tricicoin'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'tricicoin' ? '#FFF5F0' : 'white',
+                      background: paymentMethod === 'tricicoin' ? '#FFF5F0' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'tricicoin' ? 700 : 400,
@@ -1555,7 +1555,7 @@ export default function BookPage() {
                         paymentMethod === 'mixed'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'mixed' ? '#FFF5F0' : 'white',
+                      background: paymentMethod === 'mixed' ? '#FFF5F0' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'mixed' ? 700 : 400,

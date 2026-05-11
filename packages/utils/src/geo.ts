@@ -1197,7 +1197,11 @@ async function lookupNearestPoi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/nearest_poi`, {
+    // 00264: legacy nearest_poi was dropped in 00207. lookup_nearest_poi
+    // (00248) is its successor with a richer shape (id, category, address,
+    // source, distance_m) but accepts the same parameters. We only read
+    // .name here, so the migration is transparent.
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/lookup_nearest_poi`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

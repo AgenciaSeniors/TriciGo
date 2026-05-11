@@ -359,21 +359,25 @@ export default function BookingMap({
         paint: { 'text-color': '#333' },
       });
 
-      // Unclustered POI dots — visible at low zoom (12-14) before emoji
-      // takes over at zoom 15. Keeps the map readable when the user is
-      // zoomed out and emoji would crowd the screen. Mirrors RideMapView
-      // PR #70.
+      // Unclustered POI dots — visible at every zoom level. At low zoom
+      // (12-14) the dot is the only POI affordance; at zoom 15+ the dot
+      // sits *under* the emoji as a spatial anchor (visual hierarchy:
+      // the emoji conveys category, the dot conveys exact location).
+      // Opacity dampens at deep zoom so the emoji remains dominant.
+      // Web.docx 2026-05-08: a previous maxzoom: 14.99 hid dots entirely
+      // at street-level zoom, so users only saw floating emoji/labels
+      // and reported "no POI dots".
       map.addLayer({
         id: 'poi-unclustered',
         type: 'circle',
         source: 'pois',
         filter: ['!', ['has', 'point_count']],
-        maxzoom: 14.99,
         paint: {
           'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 7, 18, 10],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 6, 18, 7],
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgba(255,255,255,0.9)',
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 0.85, 18, 0.6],
         },
       });
 

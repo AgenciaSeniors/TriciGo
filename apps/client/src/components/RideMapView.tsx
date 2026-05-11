@@ -610,18 +610,24 @@ function RideMapViewInner({
                 textColor: '#333',
               }}
             />
-            {/* Small dots — visible at low zoom (12-14) before emoji
-                takes over. Keeps the map readable when the user is
-                zoomed out and emoji would crowd the screen. */}
+            {/* POI dots — visible at every zoom level. At low zoom
+                (12-14) the dot is the only POI affordance; at zoom 15+
+                the dot sits *under* the emoji as a spatial anchor (the
+                emoji conveys category, the dot conveys exact location).
+                Opacity dampens at deep zoom so the emoji stays dominant.
+                Mirrors apps/web BookingMap.tsx fix. Web.docx 2026-05-08:
+                a previous maxZoomLevel: 14.99 hid dots at street zoom
+                so users only saw floating emoji and reported "no POI
+                dots". */}
             <MapboxGL.CircleLayer
               id="poi-unclustered"
               filter={['!', ['has', 'point_count']]}
-              maxZoomLevel={14.99}
               style={{
                 circleColor: ['get', 'color'],
-                circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 7],
+                circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 6],
                 circleStrokeWidth: 1,
                 circleStrokeColor: 'rgba(255,255,255,0.9)',
+                circleOpacity: ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 0.85, 18, 0.6],
               }}
             />
             {/* Category emoji — rendered as a SymbolLayer text glyph.
