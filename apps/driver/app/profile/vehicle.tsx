@@ -16,7 +16,8 @@ import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo: require('../../assets/vehicles/selection/triciclo.png'),
   moto: require('../../assets/vehicles/selection/moto.png'),
-  auto: require('../../assets/vehicles/selection/auto.png'),
+  // Web.docx 2026-05-08: "auto es el almendrón cubano"
+  auto: require('../../assets/vehicles/markers/auto_clasico.png'),
   confort: require('../../assets/vehicles/selection/confort.png'),
 };
 

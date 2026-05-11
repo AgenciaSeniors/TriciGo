@@ -41,7 +41,10 @@ const VEHICLE_CONFIGS = [
     label: 'Auto',
     defaultCapacity: 4,
     maxCapacity: 16,
-    image: require('../../assets/vehicles/selection/auto.png'),
+    // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror
+    // onboarding/vehicle-info.tsx so the post-onboarding edit screen
+    // shows the same Auto image as the registration step.
+    image: require('../../assets/vehicles/markers/auto_clasico.png'),
     accent: midnightEmber.state.success,
   },
   {

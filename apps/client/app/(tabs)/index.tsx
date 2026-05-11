@@ -100,7 +100,7 @@ function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000
 const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: any }[] = [
   { name: 'Triciclo', desc: 'Económico', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
   { name: 'Moto', desc: 'Rápido', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
-  { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
+  { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/markers/auto_clasico.png') },
   { name: 'Confort', desc: 'Premium', slug: 'auto_confort', img: require('../../assets/vehicles/selection/confort.png') },
   { name: 'Envío', desc: 'Delivery', slug: 'mensajeria', img: require('../../assets/vehicles/selection/mensajeria.png') },
 ];
@@ -108,7 +108,7 @@ const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: an
 const DELIVERY_VEHICLES: { slug: ServiceTypeSlug; label: string; img: any }[] = [
   { slug: 'moto_standard', label: 'Moto', img: require('../../assets/vehicles/selection/moto.png') },
   { slug: 'triciclo_basico', label: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png') },
-  { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/selection/auto.png') },
+  { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/markers/auto_clasico.png') },
 ];
 
 const DELIVERY_CATS = [
@@ -2754,7 +2754,8 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
 const VEHICLE_ICONS: Record<string, any> = {
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
-  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  // Web.docx 2026-05-08: "auto es el almendrón cubano"
+  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
   mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
 };

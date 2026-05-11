@@ -12,7 +12,10 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
   triciclo_premium: require('../../assets/vehicles/selection/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
-  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror the
+  // marker choice (vehicleMarkerImages) so selection and map use the
+  // same Auto image — keeps the rider's mental model consistent.
+  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
   mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
 };
