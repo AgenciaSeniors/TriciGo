@@ -1197,6 +1197,13 @@ async function lookupNearestPoi(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
+    // 00264: nearest_poi was dropped in 00207's "dead RPC" sweep but the
+    // helper kept calling it (404s in console). The newer
+    // lookup_nearest_poi (00248) is NOT a transparent replacement: its
+    // category whitelist drops healthcare, sport, craft, aeroway and
+    // emergency — so hospitals, gyms, fire stations etc. would no
+    // longer surface as POI labels in reverse geocoding. 00264 restores
+    // the original nearest_poi function so we can keep using it here.
     const res = await fetch(`${supabaseUrl}/rest/v1/rpc/nearest_poi`, {
       method: 'POST',
       headers: {

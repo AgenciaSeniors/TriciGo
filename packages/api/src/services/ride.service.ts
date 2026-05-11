@@ -489,7 +489,15 @@ export const rideService = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      // PostgrestError from Supabase is a plain object, not an Error
+      // instance. If we throw it raw, callers that do `String(err)` or
+      // `err instanceof Error` get "[object Object]" / `false`. Wrap
+      // the most informative field in a real Error so the booking-page
+      // toast (apps/web/src/app/book/page.tsx) can render `err.message`.
+      const detail = error.message || error.details || error.hint || error.code || 'unknown error';
+      throw new Error(`createRide failed: ${detail}`);
+    }
 
     // Record promo usage if applicable (both ops must succeed or neither)
     if (validParams.promo_code_id && data) {
