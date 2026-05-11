@@ -28,7 +28,7 @@ export type PaymentMethod = 'tricicoin' | 'cash' | 'mixed' | 'stripe' | 'tropipa
 
 export type PaymentStatus = 'not_applicable' | 'pending' | 'created' | 'paid' | 'failed';
 
-export type VehicleType = 'triciclo' | 'moto' | 'auto';
+export type VehicleType = 'triciclo' | 'moto' | 'auto' | 'confort';
 
 export type ServiceTypeSlug =
   | 'triciclo_basico'

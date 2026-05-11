@@ -333,7 +333,7 @@ export default function NotificationsPage() {
         }}>
           <p style={{ color: '#e53e3e', fontSize: '0.9rem', margin: 0 }}>{error}</p>
           <button
-            onClick={() => fetchNotifications()}
+            onClick={() => fetchNotifications(true)}
             style={{
               marginTop: '0.5rem',
               background: 'none',

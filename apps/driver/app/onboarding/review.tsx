@@ -30,6 +30,7 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   triciclo: 'Triciclo',
   moto: 'Moto',
   auto: 'Auto',
+  confort: 'Confort',
 };
 
 const VEHICLE_IMAGES: Record<string, any> = {

@@ -44,6 +44,18 @@ const VEHICLE_CONFIGS = [
     image: require('../../assets/vehicles/selection/auto.png'),
     accent: midnightEmber.state.success,
   },
+  {
+    // 00263: 'confort' is now a first-class vehicle_type; this
+    // selector mirrors the onboarding screen so a driver can
+    // upgrade an existing 'auto' to 'confort' (or vice versa)
+    // post-onboarding without losing the slug.
+    vehicleType: 'confort' as VehicleType,
+    label: 'Confort',
+    defaultCapacity: 4,
+    maxCapacity: 16,
+    image: require('../../assets/vehicles/selection/confort.png'),
+    accent: '#A855F7',
+  },
 ];
 
 // ── Photo doc types ───────────────────────────────────────────────────────────

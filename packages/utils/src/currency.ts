@@ -303,12 +303,17 @@ export function validateDriverRate(
 
 /**
  * Map ServiceTypeSlug to VehicleType for filtering.
+ *
+ * 00263: 'auto_confort' resolves to 'confort' so the client UI
+ * (eta-by-vehicle, nearby filters) can distinguish premium from
+ * basic supply — matches the strict mapping in find_best_drivers.
  */
 export function serviceTypeToVehicleType(
   slug: string,
-): 'triciclo' | 'moto' | 'auto' | null {
+): 'triciclo' | 'moto' | 'auto' | 'confort' | null {
   if (slug.startsWith('triciclo')) return 'triciclo';
   if (slug.startsWith('moto')) return 'moto';
+  if (slug === 'auto_confort') return 'confort';
   if (slug.startsWith('auto')) return 'auto';
   return null;
 }
