@@ -36,7 +36,11 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
-  auto_standard: require('../../assets/vehicles/selection/auto.png'),
+  // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror the
+  // onboarding/vehicle-info.tsx choice (uses markers/auto_clasico.png
+  // for the Auto Standard tier instead of the generic sedan in
+  // selection/).
+  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
 };
 
