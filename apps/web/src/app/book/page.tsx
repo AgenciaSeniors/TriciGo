@@ -8,7 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService, walletService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, RidePreferences, CorporateAccount } from '@tricigo/types';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
@@ -59,9 +59,8 @@ export default function BookPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
-  /* ─── Saved locations, ride preferences & corporate accounts ─── */
+  /* ─── Saved locations & corporate accounts ─── */
   const [savedLocations, setSavedLocations] = useState<Array<{ label: string; address: string; latitude: number; longitude: number }>>([]);
-  const [ridePrefs, setRidePrefs] = useState<RidePreferences | null>(null);
   const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>([]);
   const [selectedCorporateId, setSelectedCorporateId] = useState<string | null>(null);
 
@@ -75,9 +74,6 @@ export default function BookPage() {
         const profile = await customerService.getProfile(user.id);
         if (profile?.saved_locations?.length) {
           setSavedLocations(profile.saved_locations.filter((l: any) => l.latitude && l.longitude));
-        }
-        if (profile?.ride_preferences) {
-          setRidePrefs(profile.ride_preferences);
         }
         corporateService.getMyAccounts(user.id).then(setCorporateAccounts).catch(() => {});
       } catch { /* ignore — saved locations are optional */ }
@@ -133,10 +129,6 @@ export default function BookPage() {
   /* ─── Waypoints state (W1.1) ─── */
   const [waypoints, setWaypoints] = useState<LocationPreset[]>([]);
   const [addingWaypoint, setAddingWaypoint] = useState(false);
-
-  /* ─── Scheduled ride state (W1.2) ─── */
-  const [isScheduled, setIsScheduled] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState('');
 
   /* ─── Promo code state (W1.3) ─── */
   const [promoCode, setPromoCode] = useState('');
@@ -448,8 +440,6 @@ export default function BookPage() {
     setRouteInfo(null);
     setSelectionStep('pickup');
     setWaypoints([]);
-    setIsScheduled(false);
-    setScheduleDate('');
     setPromoCode('');
     setPromoResult(null);
     setInsuranceSelected(false);
@@ -684,10 +674,6 @@ export default function BookPage() {
             address: wp.address || wp.label,
           })),
         }),
-        // W1.2: Scheduled ride
-        ...(isScheduled && scheduleDate && {
-          scheduled_at: new Date(scheduleDate).toISOString(),
-        }),
         // W1.3: Promo code
         ...(promoResult?.valid && promoResult.promoId && {
           promo_code_id: promoResult.promoId,
@@ -695,8 +681,6 @@ export default function BookPage() {
         }),
         // W1.4: Insurance
         insurance_selected: insuranceSelected,
-        // Ride preferences from profile
-        ...(ridePrefs && { rider_preferences: ridePrefs }),
         // Corporate account
         ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
         // Delivery details
@@ -1686,47 +1670,6 @@ export default function BookPage() {
             )}
           </div>
 
-
-          {/* ═══ Scheduled ride (W1.2) ═══ */}
-          <div style={{ marginTop: '0.75rem' }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isScheduled}
-                aria-label="Programar viaje para despues"
-                onChange={(e) => {
-                  setIsScheduled(e.target.checked);
-                  if (!e.target.checked) setScheduleDate('');
-                }}
-              />
-              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Programar viaje</span>
-            </label>
-            {isScheduled && (
-              <input
-                type="datetime-local"
-                value={scheduleDate}
-                onChange={(e) => setScheduleDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-                aria-label="Fecha y hora del viaje programado"
-                style={{
-                  width: '100%',
-                  marginTop: '0.5rem',
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid var(--border)',
-                  fontSize: '0.85rem',
-                  boxSizing: 'border-box',
-                }}
-              />
-            )}
-          </div>
 
           {/* Request button with price */}
             <button
