@@ -65,7 +65,11 @@ const VEHICLE_CONFIGS = [
     accent: '#22C55E',
   },
   {
-    vehicleType: 'auto' as VehicleType,
+    // 00263: 'confort' is now a first-class vehicle_type. The
+    // driver's row in vehicles.type persists as 'confort', and
+    // find_best_drivers matches it exclusively against
+    // ServiceTypeSlug='auto_confort' bookings.
+    vehicleType: 'confort' as VehicleType,
     serviceSlug: 'auto_confort' as ServiceTypeSlug,
     labelKey: 'onboarding.vehicle_confort',
     descKey: 'onboarding.vehicle_confort_desc',
@@ -82,9 +86,20 @@ export default function VehicleInfoScreen() {
   const { isPhone } = useResponsive();
   const { vehicle, setVehicle } = useOnboardingStore();
 
-  // Use serviceSlug to distinguish auto vs confort
+  // Rebuild the selected slug when returning to this screen.
+  // service_type_slug is preferred (set on first selection), but
+  // for legacy in-memory state we fall back to vehicle.type.
   const [selectedSlug, setSelectedSlug] = useState<ServiceTypeSlug | null>(
-    vehicle.type === 'auto' ? (vehicle.service_type_slug || 'auto_standard') : vehicle.type ? `${vehicle.type === 'triciclo' ? 'triciclo_basico' : vehicle.type === 'moto' ? 'moto_standard' : 'auto_standard'}` as ServiceTypeSlug : null,
+    (() => {
+      if (vehicle.service_type_slug) return vehicle.service_type_slug;
+      switch (vehicle.type) {
+        case 'triciclo': return 'triciclo_basico';
+        case 'moto':     return 'moto_standard';
+        case 'auto':     return 'auto_standard';
+        case 'confort':  return 'auto_confort';
+        default:         return null;
+      }
+    })(),
   );
   const selectedConfig = VEHICLE_CONFIGS.find((c) => c.serviceSlug === selectedSlug) || null;
   const vehicleType = selectedConfig?.vehicleType || null;

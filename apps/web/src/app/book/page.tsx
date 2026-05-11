@@ -167,13 +167,14 @@ export default function BookPage() {
     triciclo: null,
     moto: null,
     auto: null,
+    confort: null,
   });
 
   /* ─── Fetch nearby vehicles when pickup changes ─── */
   useEffect(() => {
     if (!pickup) {
       setNearbyVehicles([]);
-      setEtaByType({ triciclo: null, moto: null, auto: null });
+      setEtaByType({ triciclo: null, moto: null, auto: null, confort: null });
       return;
     }
 
@@ -193,7 +194,7 @@ export default function BookPage() {
         setNearbyVehicles(vehicles);
 
         // Calculate ETA per vehicle type (closest driver of each type)
-        const typeGroups: Record<VehicleType, NearbyVehicle | null> = { triciclo: null, moto: null, auto: null };
+        const typeGroups: Record<VehicleType, NearbyVehicle | null> = { triciclo: null, moto: null, auto: null, confort: null };
         for (const v of vehicles) {
           const vt = v.vehicle_type as VehicleType;
           if (vt && !typeGroups[vt]) {
@@ -212,9 +213,9 @@ export default function BookPage() {
 
           if (!cancelled) {
             const VT_TO_SERVICE: Record<VehicleType, ServiceTypeSlug> = {
-              triciclo: 'triciclo_basico', moto: 'moto_standard', auto: 'auto_standard',
+              triciclo: 'triciclo_basico', moto: 'moto_standard', auto: 'auto_standard', confort: 'auto_confort',
             };
-            const newEtas: Record<VehicleType, number | null> = { triciclo: null, moto: null, auto: null };
+            const newEtas: Record<VehicleType, number | null> = { triciclo: null, moto: null, auto: null, confort: null };
             let idx = 0;
             for (const vt of ['triciclo', 'moto', 'auto'] as VehicleType[]) {
               if (typeGroups[vt]) {
@@ -229,13 +230,13 @@ export default function BookPage() {
             setEtaByType(newEtas);
           }
         } else if (!cancelled) {
-          setEtaByType({ triciclo: null, moto: null, auto: null });
+          setEtaByType({ triciclo: null, moto: null, auto: null, confort: null });
         }
       } catch (err) {
         console.warn('Failed to fetch nearby vehicles:', err);
         if (!cancelled) {
           setNearbyVehicles([]);
-          setEtaByType({ triciclo: null, moto: null, auto: null });
+          setEtaByType({ triciclo: null, moto: null, auto: null, confort: null });
         }
       } finally {
         if (!cancelled) setVehiclesLoading(false);

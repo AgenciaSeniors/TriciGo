@@ -23,12 +23,14 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
   triciclo: 'Triciclo',
   moto: 'Moto',
   auto: 'Auto',
+  confort: 'Confort',
 };
 
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo: require('../../assets/vehicles/selection/triciclo.png'),
   moto: require('../../assets/vehicles/selection/moto.png'),
   auto: require('../../assets/vehicles/selection/auto.png'),
+  confort: require('../../assets/vehicles/selection/confort.png'),
 };
 
 export default function EditProfileScreen() {
