@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00263: fix driver_work_sessions trigger RLS regression
+-- Migration 00265: fix driver_work_sessions trigger RLS regression
 --
 -- Bug reported on the field: drivers tapping the online/offline
 -- toggle saw "no se pudo cambiar el estado" (common.status_change_failed)
