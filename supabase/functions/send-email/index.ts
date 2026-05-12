@@ -7,8 +7,12 @@
 // via pg_net) already use service_role.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import {
+  isTemplateKey,
+  renderTemplate as renderRegistryTemplate,
+  type TemplateKey,
+} from '../_shared/email-templates/index.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -22,21 +26,46 @@ function getCorsHeaders(req: Request) {
 }
 
 interface EmailRequest {
+  /**
+   * Either a registered template key (e.g. "welcome") OR a raw HTML
+   * string with {{placeholder}} markers. Keys win — see resolveTemplate.
+   */
   template: string;
   data: Record<string, unknown>;
   recipient_email: string;
-  subject: string;
+  /**
+   * Subject line. For registered templates this acts as an override;
+   * if omitted, the template's default subject is used.
+   */
+  subject?: string;
   locale?: 'en' | 'es';
 }
 
-function renderTemplate(template: string, data: Record<string, unknown>, _locale: string): string {
-  // Minimal template rendering. Full template engine lives elsewhere.
+/**
+ * Decide between rendering via the typed template registry
+ * (preferred — used for welcome / win_back / wallet_receipt) and
+ * the legacy "template is the HTML string" path that older callers
+ * (DB triggers, ad-hoc admin tools) still rely on.
+ */
+function resolveTemplate(
+  template: string,
+  data: Record<string, unknown>,
+  subjectOverride: string | undefined,
+): { subject: string; html: string } {
+  if (isTemplateKey(template)) {
+    return renderRegistryTemplate(template as TemplateKey, data, subjectOverride);
+  }
+
+  // Legacy path: template IS the HTML body. Substitute {{vars}}.
   let html = template;
   for (const [key, value] of Object.entries(data)) {
     const placeholder = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
     html = html.replace(placeholder, String(value ?? ''));
   }
-  return html;
+  // The legacy path always required `subject`; the registry path
+  // tolerates missing subject. We keep the requirement for legacy
+  // callers in the request handler below.
+  return { subject: subjectOverride ?? '', html };
 }
 
 Deno.serve(async (req) => {
@@ -58,11 +87,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { template, data, recipient_email, subject, locale } = (await req.json()) as EmailRequest;
+    const { template, data, recipient_email, subject } = (await req.json()) as EmailRequest;
 
-    if (!recipient_email || !subject || !template) {
+    if (!recipient_email || !template) {
       return new Response(
-        JSON.stringify({ error: 'recipient_email, subject, and template are required' }),
+        JSON.stringify({ error: 'recipient_email and template are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -83,7 +112,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    const html = renderTemplate(template, data, locale ?? 'es');
+    const rendered = resolveTemplate(template, data ?? {}, subject);
+
+    // Legacy callers must supply `subject` — registry templates have
+    // their own default. Catch the gap explicitly.
+    if (!rendered.subject) {
+      return new Response(
+        JSON.stringify({ error: 'subject is required for non-registry templates' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -91,8 +129,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: 'TriciGo <noreply@tricigo.com>',
         to: recipient_email,
-        subject,
-        html,
+        subject: rendered.subject,
+        html: rendered.html,
       }),
     });
 

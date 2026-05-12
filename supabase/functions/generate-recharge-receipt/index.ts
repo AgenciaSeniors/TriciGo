@@ -25,6 +25,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import {
+  walletReceiptHtml,
+  walletReceiptSubject,
+} from '../_shared/email-templates/index.ts';
 
 // ── Constants from spec §10 ──
 const FEE_PCT = 0.03;
@@ -224,11 +228,19 @@ Deno.serve(async (req) => {
     const pdfBase64 = encodeBase64(pdfBytes);
     const adminEmail = Deno.env.get('ADMIN_RECEIPT_EMAIL') ?? ADMIN_EMAIL_FALLBACK;
 
+    const dateLabel = formatDate(dateISO);
+
     const userEmailResult = userRow.email && !existingRow?.email_sent_at_user
       ? await sendResend({
           to: userRow.email,
-          subject: `Tu comprobante TriciGo · ${receiptNo}`,
-          html: buildUserEmailHtml({ user: userRow, receiptNo, amounts, dateISO }),
+          subject: walletReceiptSubject(receiptNo, 'user'),
+          html: walletReceiptHtml({
+            audience: 'user',
+            receiptNo,
+            dateLabel,
+            user: { full_name: userRow.full_name, email: userRow.email, id: userRow.id },
+            amounts,
+          }),
           attachmentBase64: pdfBase64,
           attachmentFilename: `${receiptNo}.pdf`,
         })
@@ -237,8 +249,15 @@ Deno.serve(async (req) => {
     const adminEmailResult = !existingRow?.email_sent_at_admin
       ? await sendResend({
           to: adminEmail,
-          subject: `[TriciGo] Recarga procesada — ${receiptNo} — $${amounts.usdCharged.toFixed(2)} USD`,
-          html: buildAdminEmailHtml({ user: userRow, receiptNo, amounts, dateISO, paymentIntent: piRow }),
+          subject: `${walletReceiptSubject(receiptNo, 'admin')} — $${amounts.usdCharged.toFixed(2)} USD`,
+          html: walletReceiptHtml({
+            audience: 'admin',
+            receiptNo,
+            dateLabel,
+            user: { full_name: userRow.full_name, email: userRow.email, id: userRow.id },
+            amounts,
+            stripePaymentIntentId: piRow.stripe_payment_intent_id,
+          }),
           attachmentBase64: pdfBase64,
           attachmentFilename: `${receiptNo}.pdf`,
         })
@@ -430,62 +449,9 @@ function capitalize(s: string): string {
   return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// ── Email helpers ──
-
-interface EmailArgs {
-  user: UserRow;
-  receiptNo: string;
-  amounts: ComputedAmounts;
-  dateISO: string;
-}
-
-interface AdminEmailArgs extends EmailArgs {
-  paymentIntent: PaymentIntentRow;
-}
-
-function buildUserEmailHtml(args: EmailArgs): string {
-  const { user, receiptNo, amounts, dateISO } = args;
-  const dateStr = formatDate(dateISO);
-  return `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#1a1a1a;">
-    <h1 style="color:#F97316;margin:0;">TriciGo</h1>
-    <h2 style="margin:10px 0 6px;">Tu comprobante de recarga</h2>
-    <p style="margin:0;color:#666;">Hola ${escapeHtml(user.full_name ?? 'pasajero')}, recibimos tu pago.</p>
-    <table style="width:100%;border-collapse:collapse;margin-top:18px;font-size:14px;">
-      <tr><td style="padding:6px 0;color:#888;">Comprobante</td><td style="text-align:right;font-family:monospace;font-weight:bold;">${receiptNo}</td></tr>
-      <tr><td style="padding:6px 0;color:#888;">Fecha</td><td style="text-align:right;">${escapeHtml(dateStr)}</td></tr>
-      <tr><td style="padding:6px 0;color:#888;">Importe cobrado</td><td style="text-align:right;">$${amounts.usdCharged.toFixed(2)} USD</td></tr>
-      <tr><td style="padding:6px 0;color:#888;">Comisión</td><td style="text-align:right;">-$${amounts.feeUsd.toFixed(2)} USD</td></tr>
-      <tr><td style="padding:6px 0;color:#888;border-top:2px solid #F97316;">TriciCoin acreditados</td>
-          <td style="text-align:right;border-top:2px solid #F97316;color:#F97316;font-weight:bold;font-size:18px;">${amounts.tcCredited.toFixed(2)} TC</td></tr>
-    </table>
-    <p style="margin-top:18px;color:#666;font-size:13px;">Adjuntamos el comprobante en PDF (${receiptNo}.pdf). También podés descargarlo desde tu billetera en la app.</p>
-    <p style="margin-top:24px;color:#bbb;font-size:11px;text-align:center;">TriciGo · Cuba · contacto@tricigo.com</p>
-  </body></html>`;
-}
-
-function buildAdminEmailHtml(args: AdminEmailArgs): string {
-  const { user, receiptNo, amounts, dateISO, paymentIntent } = args;
-  return `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1a1a1a;">
-    <h2 style="margin:0;">[TriciGo] Recarga procesada</h2>
-    <p style="margin:6px 0 18px;color:#666;">Notificación interna — comprobante adjunto.</p>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <tr><td style="padding:4px 0;color:#888;">Comprobante</td><td style="font-family:monospace;font-weight:bold;">${receiptNo}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Usuario</td><td>${escapeHtml(user.full_name ?? '—')} (${escapeHtml(user.email ?? '—')})</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">User ID</td><td style="font-family:monospace;">${user.id}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Fecha</td><td>${escapeHtml(formatDate(dateISO))}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">USD cobrado</td><td>$${amounts.usdCharged.toFixed(2)}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Comisión</td><td>$${amounts.feeUsd.toFixed(2)}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">TC acreditados</td><td><b>${amounts.tcCredited.toFixed(2)} TC</b></td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Tasa USD/CUP</td><td>${amounts.exchangeRate.toFixed(2)}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Equivalente CUP</td><td>${formatCup(amounts.cupEquivalent)}</td></tr>
-      <tr><td style="padding:4px 0;color:#888;">Stripe PI</td><td style="font-family:monospace;font-size:11px;">${paymentIntent.stripe_payment_intent_id ?? '—'}</td></tr>
-    </table>
-  </body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
+// ── Email rendering moved to ../_shared/email-templates/wallet_receipt.ts ──
+// (was inline buildUserEmailHtml / buildAdminEmailHtml — superseded by the
+// branded templates so all transactional emails share the same wrapper.)
 
 // ── Resend direct (with attachment support) ──
 
