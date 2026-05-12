@@ -58,10 +58,23 @@ export const BRAND_RGB = {
 
 // ── Asset URLs ───────────────────────────────────────────────────
 
+// Logo strategy:
+//   - LOGO_URL: the wordmark PNG, used by the *PDF* (where we have full
+//     control of the canvas color so contrast is fine).
+//   - LOGO_ICON_URL: square icon (192×192 source, displayed at 48×48 =
+//     retina-4x). Used in *email* headers because Gmail Android force-
+//     applies dark mode and the wordmark's black "Trici" disappears
+//     against the dark background. The icon is single-color (orange on
+//     white pin) and reads correctly on every theme.
 const DEFAULT_LOGO_URL = 'https://tricigo.com/logo-wordmark.png';
 export const LOGO_URL =
   (typeof Deno !== 'undefined' ? Deno.env.get('EMAIL_LOGO_URL') : undefined) ??
   DEFAULT_LOGO_URL;
+
+const DEFAULT_LOGO_ICON_URL = 'https://tricigo.com/icon-192.png';
+export const LOGO_ICON_URL =
+  (typeof Deno !== 'undefined' ? Deno.env.get('EMAIL_LOGO_ICON_URL') : undefined) ??
+  DEFAULT_LOGO_ICON_URL;
 
 const DEFAULT_WEB_ORIGIN = 'https://tricigo.com';
 export const WEB_ORIGIN =

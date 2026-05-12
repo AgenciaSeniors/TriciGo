@@ -5,6 +5,21 @@
 // and any recipient_email — phishing vector. Now service_role
 // only. All legitimate callers (behavioral-emails EF, DB triggers
 // via pg_net) already use service_role.
+//
+// 2026-05-12 fixup:
+//   - Auth: accept either `apikey` header OR `Authorization: Bearer`
+//     and exact-match against SUPABASE_SERVICE_ROLE_KEY. Supabase
+//     Gateway can strip `apikey` in some configs; the Authorization
+//     fallback prevents false 401s without weakening the gate. (An
+//     earlier draft also accepted any token whose JWT payload claimed
+//     role=service_role without verifying the signature — Codex flagged
+//     it as a phishing vector and the JWT path was removed.)
+//   - Subject: RFC 2047 encoded-word for non-ASCII chars so Subject
+//     headers don't show as garbage in older mail clients.
+//   - Attachments: optional `attachments: [{filename, content_base64}]`
+//     forwarded to Resend (used by ad-hoc preview tooling; the real
+//     receipt flow keeps using Resend direct in
+//     generate-recharge-receipt because it owns the PDF generation).
 // ============================================================
 
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
@@ -25,6 +40,11 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+interface EmailAttachment {
+  filename: string;
+  content_base64: string;
+}
+
 interface EmailRequest {
   /**
    * Either a registered template key (e.g. "welcome") OR a raw HTML
@@ -39,13 +59,16 @@ interface EmailRequest {
    */
   subject?: string;
   locale?: 'en' | 'es';
+  /** Optional attachments (PDF, image, etc) forwarded to Resend. */
+  attachments?: EmailAttachment[];
 }
 
 /**
  * Decide between rendering via the typed template registry
- * (preferred — used for welcome / win_back / wallet_receipt) and
- * the legacy "template is the HTML string" path that older callers
- * (DB triggers, ad-hoc admin tools) still rely on.
+ * (preferred — used for welcome / win_back / wallet_receipt /
+ * ride_receipt / driver_under_review) and the legacy
+ * "template is the HTML string" path that older callers still
+ * rely on.
  */
 function resolveTemplate(
   template: string,
@@ -55,17 +78,47 @@ function resolveTemplate(
   if (isTemplateKey(template)) {
     return renderRegistryTemplate(template as TemplateKey, data, subjectOverride);
   }
-
-  // Legacy path: template IS the HTML body. Substitute {{vars}}.
   let html = template;
   for (const [key, value] of Object.entries(data)) {
     const placeholder = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
     html = html.replace(placeholder, String(value ?? ''));
   }
-  // The legacy path always required `subject`; the registry path
-  // tolerates missing subject. We keep the requirement for legacy
-  // callers in the request handler below.
   return { subject: subjectOverride ?? '', html };
+}
+
+/**
+ * Read the caller-supplied service-role key from either header.
+ * Supabase Gateway sometimes strips `apikey` (especially when the
+ * function is called through pg_net DB triggers), so we also accept
+ * `Authorization: Bearer <token>` and compare both against the
+ * exact env-var value.
+ *
+ * Security note: we used to fall back to a JWT-decode that trusted
+ * a `role: service_role` claim WITHOUT verifying the signature.
+ * Codex review on PR #130 caught that: anyone could forge a JWT
+ * (sign with garbage), claim service_role, and send mail as
+ * TriciGo to arbitrary recipients — a phishing vector and a
+ * regression of the BUG-191 fix this function exists for. The
+ * decode fallback is gone; only exact match wins.
+ */
+function extractCallerKey(req: Request): string {
+  const apikey = req.headers.get('apikey') ?? '';
+  if (apikey) return apikey;
+  const auth = req.headers.get('authorization') ?? '';
+  return auth.replace(/^Bearer\s+/i, '').trim();
+}
+
+/**
+ * RFC 2047 encoded-word for Subject lines with non-ASCII chars.
+ * Mail clients that don't honor charset declarations on the Subject
+ * header would otherwise render tildes/ñ/em-dashes as garbage.
+ */
+function encodeSubject(s: string): string {
+  if (/^[\x00-\x7F]*$/.test(s)) return s;
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return `=?UTF-8?B?${btoa(binary)}?=`;
 }
 
 Deno.serve(async (req) => {
@@ -77,17 +130,16 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
-    // BUG-191: service_role only.
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const apiKey = req.headers.get('apikey') ?? '';
-    if (apiKey !== serviceRoleKey) {
+    const callerKey = extractCallerKey(req);
+    if (callerKey !== serviceRoleKey) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: send-email is internal-only' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const { template, data, recipient_email, subject } = (await req.json()) as EmailRequest;
+    const { template, data, recipient_email, subject, attachments } = (await req.json()) as EmailRequest;
 
     if (!recipient_email || !template) {
       return new Response(
@@ -114,8 +166,6 @@ Deno.serve(async (req) => {
 
     const rendered = resolveTemplate(template, data ?? {}, subject);
 
-    // Legacy callers must supply `subject` — registry templates have
-    // their own default. Catch the gap explicitly.
     if (!rendered.subject) {
       return new Response(
         JSON.stringify({ error: 'subject is required for non-registry templates' }),
@@ -123,15 +173,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    const resendBody: Record<string, unknown> = {
+      from: 'TriciGo <noreply@tricigo.com>',
+      to: recipient_email,
+      subject: encodeSubject(rendered.subject),
+      html: rendered.html,
+    };
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      resendBody.attachments = attachments.map(a => ({
+        filename: a.filename,
+        content: a.content_base64,
+      }));
+    }
+
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
-      body: JSON.stringify({
-        from: 'TriciGo <noreply@tricigo.com>',
-        to: recipient_email,
-        subject: rendered.subject,
-        html: rendered.html,
-      }),
+      body: JSON.stringify(resendBody),
     });
 
     const result = await r.json();
