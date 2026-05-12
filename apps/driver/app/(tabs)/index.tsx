@@ -1202,9 +1202,16 @@ const styles = StyleSheet.create({
   },
 
   // ── Offline dim overlay ──
+  // PR E (2026-05-12): reduced from 0.45 → 0.18 because at 45% combined
+  // with `darkStyle={true}` (navigation-night-v1) the offline map looked
+  // almost pure black, especially on first install when the style/tiles
+  // had not yet streamed in. Driver-Offline state is already communicated
+  // by the bottom-sheet "CONECTARSE" CTA and the "Fuera de servicio"
+  // header pill, so the dim is purely a "tonally calmer than online"
+  // hint — 18% is enough to read it without hiding the map.
   offlineDimOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
 
   // ── Header ──
