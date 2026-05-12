@@ -82,8 +82,13 @@ export function isTemplateKey(key: string): key is TemplateKey {
   return key === 'welcome' || key === 'win_back' || key === 'wallet_receipt';
 }
 
-// Re-exports for callers that need the subject line independently
-// (e.g. behavioral-emails passes its own subject for backwards
-// compat with the existing tracking in email_sends).
-export { welcomeSubject, winBackSubject, walletReceiptSubject };
+// Re-exports for callers that need the renderers/subjects directly
+// without going through the registry (e.g. generate-recharge-receipt
+// renders wallet_receipt inline because it also needs to attach the
+// PDF and goes to Resend bypassing send-email; behavioral-emails
+// passes its own subject string for backwards compat with the
+// tracking in email_sends).
+export { welcomeHtml, welcomeSubject };
+export { winBackHtml, winBackSubject };
+export { walletReceiptHtml, walletReceiptSubject };
 export type { WelcomeData, WinBackData, WalletReceiptData };
