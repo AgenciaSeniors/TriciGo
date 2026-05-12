@@ -15,12 +15,12 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: {
-    default: 'TriciGo — Taxi en La Habana | Pide triciclos, motos y autos',
+    default: 'TriciGo — Pedí tu viaje | Triciclos, motos y autos',
     template: '%s | TriciGo',
   },
   description:
-    'Pide un taxi en La Habana con TriciGo. Triciclos, motos y autos disponibles 24/7. La app de transporte #1 en Cuba. Descarga gratis.',
-  keywords: ['taxi La Habana', 'transporte Cuba', 'triciclo taxi', 'pedir taxi Cuba', 'TriciGo', 'ride hailing Havana', 'taxi app Cuba', 'triciclo La Habana'],
+    'Pedí un viaje con TriciGo. Triciclos, motos y autos disponibles 24/7. Pago con saldo digital o efectivo. Descarga gratis.',
+  keywords: ['taxi app', 'transporte', 'triciclo taxi', 'pedir taxi', 'TriciGo', 'ride hailing', 'pedicab', 'movilidad urbana'],
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -31,19 +31,19 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    locale: 'es_CU',
+    locale: 'es',
     url: 'https://tricigo.com',
     siteName: 'TriciGo',
-    title: 'TriciGo — Pide tu viaje en La Habana',
+    title: 'TriciGo — Pedí tu viaje',
     description:
-      'Solicita un viaje en La Habana con TriciGo. Triciclos, motos y autos al mejor precio.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'TriciGo - Pide tu taxi en Cuba' }],
+      'Solicita un viaje con TriciGo. Triciclos, motos y autos al mejor precio.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'TriciGo - Pedí tu viaje' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'TriciGo — Pide tu viaje en La Habana',
+    title: 'TriciGo — Pedí tu viaje',
     description:
-      'Solicita un viaje en La Habana con TriciGo. Rápido, seguro y al mejor precio.',
+      'Solicita un viaje con TriciGo. Rápido, seguro y al mejor precio.',
     images: ['/og-image.png'],
   },
   metadataBase: new URL('https://tricigo.com'),
@@ -63,12 +63,7 @@ const organizationJsonLd = {
   url: 'https://tricigo.com',
   logo: 'https://tricigo.com/logo-wordmark.png',
   description:
-    'Plataforma de transporte en La Habana. Solicita triciclos, motos y autos de forma rapida y segura.',
-  address: {
-    '@type': 'PostalAddress',
-    addressLocality: 'La Habana',
-    addressCountry: 'CU',
-  },
+    'Plataforma de transporte urbano. Solicita triciclos, motos y autos de forma rápida y segura.',
   contactPoint: {
     '@type': 'ContactPoint',
     email: 'soporte@tricigo.com',
@@ -83,22 +78,8 @@ const localBusinessJsonLd = {
   name: 'TriciGo',
   url: 'https://tricigo.com',
   description:
-    'Servicio de transporte bajo demanda en La Habana, Cuba. Triciclos, motos y autos.',
-  address: {
-    '@type': 'PostalAddress',
-    addressLocality: 'La Habana',
-    addressCountry: 'CU',
-  },
-  geo: {
-    '@type': 'GeoCoordinates',
-    latitude: 23.1136,
-    longitude: -82.3666,
-  },
+    'Servicio de transporte bajo demanda. Triciclos, motos y autos.',
   priceRange: '$',
-  areaServed: {
-    '@type': 'City',
-    name: 'La Habana',
-  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

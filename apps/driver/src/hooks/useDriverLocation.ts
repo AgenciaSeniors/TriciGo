@@ -17,6 +17,49 @@ interface LocationState {
   heading: number | null;
 }
 
+// Bearing between two lat/lng pairs in degrees (0=N, 90=E, 180=S, 270=W).
+// Spherical-law-of-cosines fallback for when expo-location's coords.heading
+// is unreliable (Lockito Journey emits 0, Android sometimes -1, indoor GPS
+// has no compass lock). Computed from two consecutive coords whenever the
+// hardware reading isn't trustworthy.
+function bearingBetween(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const dLambda = ((lng2 - lng1) * Math.PI) / 180;
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const theta = Math.atan2(y, x);
+  return ((theta * 180) / Math.PI + 360) % 360;
+}
+
+// Haversine distance in meters between two lat/lng pairs. Used to gate the
+// bearing recomputation: ignore movements <5m so GPS noise on a stationary
+// driver doesn't produce random bearings.
+function distanceMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const dPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const dLambda = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export function useDriverLocationTracking(
   driverId: string | null,
   isOnline: boolean,
@@ -32,6 +75,11 @@ export function useDriverLocationTracking(
   // fires the watchPositionAsync callback (it can fire 5+x/sec at high
   // distanceInterval+timeInterval combinations).
   const lastUploadRef = useRef<number | null>(null);
+  // Last coord we processed in the watcher, used to compute a bearing fallback
+  // when coords.heading from expo-location is 0/null/-1 (Lockito Journey,
+  // Android stationary, etc). Without this, the driver marker never rotates
+  // and the camera stays north-up despite followMode being on.
+  const lastCoordRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
@@ -121,6 +169,62 @@ export function useDriverLocationTracking(
         // this delivers a true real-time experience. Idle stays conservative
         // to preserve battery.
         const isActiveTrip = !!activeRideId;
+
+        // Post an INITIAL location fix immediately so the server has a
+        // fresh current_location even if the driver doesn't move.
+        // watchPositionAsync only invokes its callback when the user
+        // moves >distanceInterval, so without this seed the rider's
+        // find_best_drivers RPC may filter out a stationary driver
+        // whose current_location was stale (last update from a previous
+        // session). Affects:
+        //   - Real drivers waiting at a corner without moving
+        //   - QA with Lockito fixed-point (no movement)
+        //   - Drivers who reconnect after being offline in another city
+        try {
+          // Relaxed filters: matches _layout.tsx's bootstrap reader so we
+          // accept the same OS-cached fix it does. Tight filters (1 min /
+          // 200 m) reject Lockito's mock provider and stationary drivers
+          // whose only fix is from before they parked.
+          const initial =
+            (await Location.getLastKnownPositionAsync({
+              maxAge: 60 * 60 * 1000, // 1 hour
+              requiredAccuracy: 1000, // 1 km
+            }).catch(() => null)) ??
+            (await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Lowest,
+            }).catch(() => null));
+          if (initial && !cancelled && getOnlineStatus()) {
+            const initPos: LocationState = {
+              latitude: initial.coords.latitude,
+              longitude: initial.coords.longitude,
+              heading: initial.coords.heading ?? 0,
+            };
+            setLocation(initPos);
+            useLocationStore.getState().setLocation(
+              initPos.latitude,
+              initPos.longitude,
+              initPos.heading,
+            );
+            await driverService.updateDriverPosition({
+              driverId: driverId!,
+              latitude: initPos.latitude,
+              longitude: initPos.longitude,
+              heading: initPos.heading ?? undefined,
+              rideId: activeRideId ?? undefined,
+            });
+            lastUploadRef.current = Date.now();
+            console.log('[GPS upload] initial fix posted', {
+              lat: initPos.latitude.toFixed(5),
+              lng: initPos.longitude.toFixed(5),
+            });
+          }
+        } catch (err) {
+          console.warn(
+            '[GPS upload] initial fix failed (will rely on watchPositionAsync)',
+            String((err as { message?: string })?.message ?? err),
+          );
+        }
+
         subscriptionRef.current = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
@@ -134,19 +238,50 @@ export function useDriverLocationTracking(
             const locationAge = Date.now() - loc.timestamp;
             if (locationAge > 90000) return;
 
-            // BUG-267: heading is unreliable when the device is stationary
-            // — Android often returns -1, iOS returns null, and Lockito in
-            // joystick mode emits 0 even when the simulated vehicle was
-            // facing a specific direction. Treat any of these as "no
-            // heading update" and KEEP the last known good heading instead
-            // of overwriting it with null. The marker stays oriented in the
-            // last direction of travel until GPS confirms a new bearing,
-            // which is the perceptually correct behavior.
+            // BUG-267 v2: expo-location's coords.heading is unreliable on
+            // stationary devices (Android -1, iOS null) AND on Lockito mock
+            // providers (Journey/joystick emit 0 regardless of direction).
+            // We keep the previous logic of preserving last known when the
+            // hardware reading is invalid, but ADD a bearing-from-deltas
+            // fallback: if we moved >5m since the last sample, compute the
+            // bearing between the two coords ourselves. That gives us
+            // accurate heading-up rotation even without compass-grade GPS.
             const rawHeading = loc.coords.heading;
-            const isValidHeading =
-              typeof rawHeading === 'number' && Number.isFinite(rawHeading) && rawHeading >= 0 && rawHeading <= 360;
             const previousHeading = useLocationStore.getState().heading;
-            const heading = isValidHeading ? rawHeading : previousHeading;
+            const isValidRaw =
+              typeof rawHeading === 'number' &&
+              Number.isFinite(rawHeading) &&
+              rawHeading > 0 && // exclude 0 (Lockito) and negatives (Android)
+              rawHeading <= 360;
+
+            let heading: number | null;
+            if (isValidRaw) {
+              heading = rawHeading;
+            } else {
+              const last = lastCoordRef.current;
+              if (
+                last &&
+                distanceMeters(
+                  last.lat,
+                  last.lng,
+                  loc.coords.latitude,
+                  loc.coords.longitude,
+                ) > 5
+              ) {
+                heading = bearingBetween(
+                  last.lat,
+                  last.lng,
+                  loc.coords.latitude,
+                  loc.coords.longitude,
+                );
+              } else {
+                heading = previousHeading;
+              }
+            }
+            lastCoordRef.current = {
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            };
 
             const pos: LocationState = {
               latitude: loc.coords.latitude,

@@ -4,9 +4,9 @@ import HomeClient from './HomeClient';
 import { JsonLd } from '../components/JsonLd';
 
 export const metadata: Metadata = {
-  title: 'TriciGo — Pide tu taxi en Cuba | Triciclos, Motos y Autos',
+  title: 'TriciGo — Pedí tu viaje | Triciclos, Motos y Autos',
   description:
-    'Solicita un taxi en Cuba con TriciGo. Triciclos, motos y autos disponibles 24/7 en La Habana y 15 ciudades. Rápido, seguro y económico.',
+    'Solicita un viaje con TriciGo. Triciclos, motos y autos disponibles 24/7. Rápido, seguro y económico.',
   alternates: {
     canonical: 'https://tricigo.com',
   },
@@ -31,7 +31,7 @@ const faqJsonLd = {
       name: '¿En qué ciudades opera TriciGo?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'TriciGo opera en La Habana y 14 ciudades más de Cuba, incluyendo Santiago de Cuba, Camagüey, Holguín, Santa Clara y más.',
+        text: 'TriciGo se despliega ciudad por ciudad. Revisa la app o nuestra web para ver las zonas de servicio disponibles en cada momento.',
       },
     },
     {
@@ -39,7 +39,7 @@ const faqJsonLd = {
       name: '¿Cómo pago mi viaje?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'Puedes pagar en efectivo (CUP), con TriciCoin (monedero digital), con tarjeta de crédito/débito o con métodos mixtos.',
+        text: 'Puedes pagar en efectivo, con TriciCoin (monedero digital), con tarjeta de crédito/débito o con métodos mixtos.',
       },
     },
     {
@@ -71,14 +71,9 @@ const serviceJsonLd = {
     name: 'TriciGo',
     url: 'https://tricigo.com',
   },
-  areaServed: {
-    '@type': 'Country',
-    name: 'Cuba',
-  },
-  description: 'Servicio de transporte bajo demanda en Cuba. Triciclos, motos y autos disponibles 24/7.',
+  description: 'Servicio de transporte bajo demanda. Triciclos, motos y autos disponibles 24/7.',
   offers: {
     '@type': 'Offer',
-    priceCurrency: 'CUP',
     availability: 'https://schema.org/InStock',
   },
 };
@@ -97,10 +92,10 @@ export default function HomePage() {
         aria-hidden="true"
         style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}
       >
-        <h1>Pide tu taxi en Cuba con TriciGo</h1>
+        <h1>Pedí tu viaje con TriciGo</h1>
         <p>
-          TriciGo es la app de transporte #1 en Cuba. Solicita triciclos, motos y autos
-          disponibles 24/7 en La Habana y 15 ciudades. Rápido, seguro y económico.
+          TriciGo es la app de transporte urbano. Solicita triciclos, motos y autos
+          disponibles 24/7. Rápido, seguro y económico.
         </p>
 
         <section>
@@ -126,7 +121,7 @@ export default function HomePage() {
           <ul>
             <li>
               <strong>Triciclo</strong> — Económico y ecológico. Perfecto para distancias
-              cortas en La Habana.
+              cortas en la ciudad.
             </li>
             <li>
               <strong>Moto</strong> — Rápido y ágil. Ideal para moverte sin tráfico por
@@ -144,11 +139,10 @@ export default function HomePage() {
         </section>
 
         <section>
-          <h2>Ciudades disponibles</h2>
+          <h2>Disponibilidad</h2>
           <p>
-            La Habana, Santiago de Cuba, Camagüey, Holguín, Santa Clara, Guantánamo,
-            Bayamo, Las Tunas, Pinar del Río, Cienfuegos, Matanzas, Sancti Spíritus,
-            Ciego de Ávila, Villa Clara y Trinidad.
+            TriciGo se despliega ciudad por ciudad. Revisa la app para conocer las zonas
+            de servicio disponibles en este momento.
           </p>
         </section>
 

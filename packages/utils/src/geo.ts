@@ -2778,11 +2778,40 @@ export async function fetchPoisInViewport(
     });
     clearTimeout(timeout);
 
-    if (!res.ok) return [];
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn('[fetchPoisInViewport] non-OK response', {
+        status: res.status,
+        bounds,
+        zoom: Math.floor(zoom),
+      });
+      return [];
+    }
     const data = await res.json();
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data)) {
+      // eslint-disable-next-line no-console
+      console.warn('[fetchPoisInViewport] response is not an array', { data });
+      return [];
+    }
+    // eslint-disable-next-line no-console
+    console.log('[fetchPoisInViewport] OK', {
+      count: data.length,
+      zoom: Math.floor(zoom),
+    });
     return data as ViewportPoi[];
-  } catch {
+  } catch (err) {
+    // Aborted requests are intentional (next call cancels the previous one);
+    // don't pollute logs with them. Anything else surfaces as a warn so the
+    // empty-array silent failure mode is no longer invisible.
+    const e = err as { name?: string; message?: string } | undefined;
+    if (e?.name !== 'AbortError') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[fetchPoisInViewport] threw',
+        e?.name ?? 'Error',
+        e?.message ?? String(err),
+      );
+    }
     return [];
   }
 }

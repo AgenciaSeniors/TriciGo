@@ -167,14 +167,14 @@ export const driverText = {
     fontFamily: 'BricolageGrotesque_700Bold',
     fontSize: 36,
     fontWeight: '700' as const,
-    lineHeight: 1.05,
+    lineHeight: 38, // 36 × 1.05 — RN lineHeight is absolute px, not multiplier
     letterSpacing: -0.5,
   },
   heroLg: {
     fontFamily: 'BricolageGrotesque_700Bold',
     fontSize: 48,
     fontWeight: '700' as const,
-    lineHeight: 1.0,
+    lineHeight: 48, // 48 × 1.0
     letterSpacing: -0.75,
   },
 
@@ -183,20 +183,20 @@ export const driverText = {
     fontFamily: 'Inter',
     fontSize: 24,
     fontWeight: '700' as const,
-    lineHeight: 1.15,
+    lineHeight: 28, // 24 × 1.15
     letterSpacing: -0.3,
   },
   h2: {
     fontFamily: 'Inter',
     fontSize: 20,
     fontWeight: '600' as const,
-    lineHeight: 1.2,
+    lineHeight: 24, // 20 × 1.2
   },
   h3: {
     fontFamily: 'Inter',
     fontSize: 17,
     fontWeight: '600' as const,
-    lineHeight: 1.25,
+    lineHeight: 21, // 17 × 1.25
   },
 
   // ── Body (data-dense vs cliente) ──────────
@@ -204,13 +204,13 @@ export const driverText = {
     fontFamily: 'Inter',
     fontSize: 15,
     fontWeight: '400' as const,
-    lineHeight: 1.4,
+    lineHeight: 21, // 15 × 1.4
   },
   bodyDense: {
     fontFamily: 'Inter',
     fontSize: 14,
     fontWeight: '400' as const,
-    lineHeight: 1.35,
+    lineHeight: 19, // 14 × 1.35
   },
 
   // ── Data (números, mono, tabular) ──────────
@@ -219,21 +219,21 @@ export const driverText = {
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 16,
     fontWeight: '500' as const,
-    lineHeight: 1.2,
+    lineHeight: 19, // 16 × 1.2
   },
   /** Para ETAs prominentes, totales secundarios. */
   dataLg: {
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 22,
     fontWeight: '500' as const,
-    lineHeight: 1.15,
+    lineHeight: 25, // 22 × 1.15
   },
   /** Para meta inline (rating, fee adicional). */
   dataSm: {
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 13,
     fontWeight: '500' as const,
-    lineHeight: 1.2,
+    lineHeight: 16, // 13 × 1.2
   },
 
   // ── Meta (uppercase, separators) ──────────
@@ -242,7 +242,7 @@ export const driverText = {
     fontFamily: 'JetBrainsMono_400Regular',
     fontSize: 11,
     fontWeight: '500' as const,
-    lineHeight: 1.3,
+    lineHeight: 14, // 11 × 1.3
     letterSpacing: 1.5,
     textTransform: 'uppercase' as const,
   },
@@ -252,13 +252,13 @@ export const driverText = {
     fontFamily: 'Inter',
     fontSize: 13,
     fontWeight: '500' as const,
-    lineHeight: 1.3,
+    lineHeight: 17, // 13 × 1.3
   },
   caption: {
     fontFamily: 'Inter',
     fontSize: 12,
     fontWeight: '500' as const,
-    lineHeight: 1.3,
+    lineHeight: 16, // 12 × 1.3
   },
 
   // ── Buttons ───────────────────────────────
@@ -266,14 +266,14 @@ export const driverText = {
     fontFamily: 'Inter',
     fontSize: 16,
     fontWeight: '600' as const,
-    lineHeight: 1.0,
+    lineHeight: 16, // 16 × 1.0
     letterSpacing: 0.2,
   },
   buttonMd: {
     fontFamily: 'Inter',
     fontSize: 14,
     fontWeight: '600' as const,
-    lineHeight: 1.0,
+    lineHeight: 14, // 14 × 1.0
     letterSpacing: 0.2,
   },
 } as const;

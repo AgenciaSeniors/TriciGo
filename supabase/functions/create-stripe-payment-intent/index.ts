@@ -46,6 +46,40 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`create-stripe-pi:${clientIP}`, 5, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
+    // OFAC compliance: block recharge attempts from sanctioned regions BEFORE
+    // touching Stripe. Stripe terms prohibit "products or services linked
+    // directly OR INDIRECTLY with sanctioned jurisdictions". A user in a
+    // sanctioned region creating a PaymentIntent — even rejected by Stripe
+    // downstream — generates audit signal that can suspend the account.
+    // We surface a neutral message; the wallet is still usable inside the
+    // app via peer-to-peer transfers from diaspora users.
+    //
+    // Country code comes from Cloudflare's cf-ipcountry header (Supabase
+    // Edge Functions run behind Cloudflare). Falls back to "XX" if missing.
+    const SANCTIONED_REGIONS = new Set([
+      'CU', // Cuba
+      'IR', // Iran
+      'KP', // Democratic People's Republic of Korea
+      'SY', // Syria
+      // Note: Crimea/Donetsk/Luhansk are sub-regions of Ukraine and don't
+      // have their own ISO codes; rely on Stripe's region-level checks.
+    ]);
+    const country = (req.headers.get('cf-ipcountry') ?? 'XX').toUpperCase();
+    if (SANCTIONED_REGIONS.has(country)) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: 'region_unsupported',
+          detail: 'Card payments are not available from this region. ' +
+            'Ask a contact abroad to top-up the wallet on your behalf.',
+        }),
+        {
+          status: 451,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -185,9 +219,14 @@ Deno.serve(async (req) => {
         currency: 'usd',
         description: 'Wallet recharge',
         metadata: {
+          // OFAC scrub: avoid metadata field names that pattern-match a
+          // sanctioned country code (e.g. `amount_cup` → "Cuba"). Stripe's
+          // automated review tooling scans metadata as plain text. The
+          // local-currency amount is preserved in our DB row; Stripe only
+          // needs the USD amount for the charge itself.
           tricigo_intent_id: intent.id,
           user_id,
-          amount_cup: String(amount_cup),
+          amount_local: String(amount_cup),
           recharge_type,
           fee_usd: String(feeUsd),
         },

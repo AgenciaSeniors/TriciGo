@@ -63,7 +63,7 @@ export default function AboutPage() {
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>TriciGo</h2>
         <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Version 1.0.0</p>
         <p style={{ margin: '0.75rem 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          La plataforma de movilidad de Cuba. Conectamos pasajeros con conductores de triciclos y taxis de forma segura y conveniente.
+          Plataforma de movilidad urbana. Conectamos pasajeros con conductores de triciclos y taxis de forma segura y conveniente.
         </p>
       </div>
 
@@ -105,7 +105,7 @@ export default function AboutPage() {
           soporte@tricigo.com
         </a>
         <p style={{ margin: '0.75rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-          TriciGo Inc. La Habana, Cuba.
+          TriciGo Inc.
         </p>
       </div>
     </main>

@@ -8,12 +8,24 @@ interface ViewportBounds {
   maxLat: number;
 }
 
+interface UserCenter {
+  latitude: number;
+  longitude: number;
+}
+
 /**
  * Fetches POIs within the current map viewport, debounced on camera changes.
  * Mirrors the web BookingMap POI loading pattern with 20% bounds padding
  * and skip-if-still-within-last-bounds optimization.
+ *
+ * Pass `initialCenter` so the hook can prime POIs immediately (with bounds
+ * synthesized from a ~0.02° box around that point) instead of waiting for
+ * the first onMapIdle event from the map. Without this seed, on cold mount
+ * the user may see a blank map for several seconds — or forever if the
+ * Mapbox SDK never emits onMapIdle with valid visibleBounds (observed with
+ * the new arch + 10.3.0 combo on Android).
  */
-export function useViewportPois() {
+export function useViewportPois(initialCenter?: UserCenter | null) {
   const [pois, setPois] = useState<ViewportPoi[]>([]);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -22,6 +34,8 @@ export function useViewportPois() {
   const loadPois = useCallback((bounds: ViewportBounds, zoom: number) => {
     // Too zoomed out — clear POIs
     if (zoom < 10) {
+      // eslint-disable-next-line no-console
+      console.log('[useViewportPois] zoom too low, clearing', { zoom: Math.floor(zoom) });
       setPois([]);
       lastBoundsRef.current = null;
       return;
@@ -69,6 +83,30 @@ export function useViewportPois() {
     },
     [loadPois],
   );
+
+  // Initial seed when we have a known user center: synthesize bounds from
+  // a ~0.02° box (≈ 2 km square at La Habana's latitude) and zoom 14, then
+  // fire loadPois directly. This guarantees POIs appear on cold mount even
+  // when onMapIdle never emits a usable visibleBounds (intermittent on the
+  // new arch + 10.3.0 combo). Re-runs only when initialCenter coords change
+  // by more than ~0.005° (~500 m) to avoid thrashing on micro-updates.
+  const lastSeedKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!initialCenter) return;
+    const seedKey = `${initialCenter.latitude.toFixed(2)},${initialCenter.longitude.toFixed(2)}`;
+    if (lastSeedKeyRef.current === seedKey) return;
+    lastSeedKeyRef.current = seedKey;
+    const HALF = 0.01; // ~1.1 km half-side at the equator, less near 23°N
+    const seedBounds: ViewportBounds = {
+      minLng: initialCenter.longitude - HALF,
+      minLat: initialCenter.latitude - HALF,
+      maxLng: initialCenter.longitude + HALF,
+      maxLat: initialCenter.latitude + HALF,
+    };
+    // eslint-disable-next-line no-console
+    console.log('[useViewportPois] seeding from initialCenter', { seedKey });
+    loadPois(seedBounds, 14);
+  }, [initialCenter, loadPois]);
 
   // Cleanup on unmount
   useEffect(() => {

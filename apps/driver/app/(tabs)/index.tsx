@@ -66,11 +66,17 @@ function ActiveTripMap({
   driverLocation,
   onRecenter,
   screenHeight,
+  followMode,
+  onUserInteraction,
+  lockZoom,
 }: {
   mapRef: React.RefObject<RideMapViewRef | null>;
   driverLocation: { latitude: number; longitude: number } | null;
   onRecenter: () => void;
   screenHeight: number;
+  followMode: boolean;
+  onUserInteraction: () => void;
+  lockZoom: boolean;
 }) {
   const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates } = useActiveTripMapData();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
@@ -103,6 +109,9 @@ function ActiveTripMap({
       darkStyle
       onRecenter={onRecenter}
       vehicleType={vehicleType}
+      followMode={followMode}
+      onUserInteraction={onUserInteraction}
+      lockZoom={lockZoom}
     />
   );
 }
@@ -775,8 +784,14 @@ function NativeDriverHomeScreen() {
           : t('driver.now_offline_sub', { defaultValue: 'No recibirás nuevas ofertas hasta que te conectes.' }),
         visibilityTime: 2200,
       });
-    } catch {
-      Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+    } catch (err) {
+      logger.error('[Toggle] Failed to set online status', { error: getErrorMessage(err) });
+      Toast.show({
+        type: 'error',
+        text1: t('common.status_change_failed'),
+        text2: getErrorMessage(err),
+        visibilityTime: 5000,
+      });
       triggerHaptic('error');
     } finally {
       setToggling(false);
@@ -795,8 +810,14 @@ function NativeDriverHomeScreen() {
       await driverService.setBreakStatus(profile.id, newBreakStatus);
       setIsOnBreak(newBreakStatus);
       trackEvent(newBreakStatus ? 'driver_break_started' : 'driver_break_ended');
-    } catch {
-      Toast.show({ type: 'error', text1: t('common.status_change_failed') });
+    } catch (err) {
+      logger.error('[Toggle] Failed to set break status', { error: getErrorMessage(err) });
+      Toast.show({
+        type: 'error',
+        text1: t('common.status_change_failed'),
+        text2: getErrorMessage(err),
+        visibilityTime: 5000,
+      });
     } finally {
       setTogglingBreak(false);
     }
@@ -805,10 +826,28 @@ function NativeDriverHomeScreen() {
   const handleAccept = useCallback((rideId: string) => acceptRide(rideId), [acceptRide]);
   const handleReject = useCallback((rideId: string) => removeRequest(rideId), [removeRequest]);
 
+  // Navigation mode (Uber-driver style): heading-up rotation, 3D tilt,
+  // zoom-out lock, auto-center on driver. Re-engages every time a new
+  // active trip starts. User pan/zoom flips it OFF and reveals the
+  // floating recenter button; tapping that button or the home recenter
+  // flips it back ON.
+  const [followMode, setFollowMode] = useState<boolean>(true);
+  useEffect(() => {
+    // Engage navigation mode whenever a fresh activeTrip arrives
+    // (accept, status transitions). Disengage when no active trip.
+    setFollowMode(!!activeTrip);
+  }, [activeTrip?.id]);
+
+  const handleUserMapInteraction = useCallback(() => {
+    setFollowMode(false);
+  }, []);
+
   const handleRecenter = useCallback(() => {
     if (driverLocation) {
       mapRef.current?.flyTo(driverLocation.latitude, driverLocation.longitude, 15);
     }
+    // Re-engage navigation mode so the camera follows + rotates again.
+    setFollowMode(true);
   }, [driverLocation]);
 
   const handleAddressSelect = useCallback(({ latitude, longitude }: { latitude: number; longitude: number; address: string }) => {
@@ -841,7 +880,15 @@ function NativeDriverHomeScreen() {
             imported at the top of this file) — it was just never wired
             into the RideMapView props for the active-trip render path. */}
         <View style={StyleSheet.absoluteFillObject}>
-          <ActiveTripMap mapRef={mapRef} driverLocation={driverLocation} onRecenter={handleRecenter} screenHeight={SCREEN_HEIGHT} />
+          <ActiveTripMap
+            mapRef={mapRef}
+            driverLocation={driverLocation}
+            onRecenter={handleRecenter}
+            screenHeight={SCREEN_HEIGHT}
+            followMode={followMode}
+            onUserInteraction={handleUserMapInteraction}
+            lockZoom={!!activeTrip}
+          />
         </View>
 
         {/* Layer 2: Floating header */}

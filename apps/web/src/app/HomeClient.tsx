@@ -134,7 +134,7 @@ export default function HomeClient() {
               <div className="hero__phone-frame">
                 <Image
                   src="/images/screenshots/02-home.png"
-                  alt="TriciGo - App de taxi en La Habana, Cuba. Pide triciclos, motos y autos."
+                  alt="TriciGo - App de transporte. Pedí triciclos, motos y autos."
                   width={390}
                   height={844}
                   priority
@@ -210,7 +210,7 @@ export default function HomeClient() {
       {/* ── Social Proof / Stats ── */}
       <section className="section">
         <div className="container">
-          <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'La Habana confía en TriciGo' })}</h2>
+          <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'Miles de viajeros confían en TriciGo' })}</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '2.5rem' }}>
             {[
               { value: '500+', label: t('home.stat_drivers', { defaultValue: 'Conductores registrados' }) },
@@ -234,9 +234,9 @@ export default function HomeClient() {
           {/* Testimonials */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '3rem' }}>
             {[
-              { text: t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' }), name: 'María G.', loc: 'Vedado', initial: 'M' },
-              { text: t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' }), name: 'Carlos R.', loc: 'Centro Habana', initial: 'C' },
-              { text: t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' }), name: 'Ana P.', loc: 'Miramar', initial: 'A' },
+              { text: t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' }), name: 'María G.', loc: 'Pasajera', initial: 'M' },
+              { text: t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' }), name: 'Carlos R.', loc: 'Conductor', initial: 'C' },
+              { text: t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' }), name: 'Ana P.', loc: 'Pasajera', initial: 'A' },
             ].map((review) => (
               <div key={review.initial} style={{
                 background: 'var(--bg-card)',

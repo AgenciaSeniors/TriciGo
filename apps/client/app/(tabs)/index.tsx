@@ -2863,7 +2863,14 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     [draft.waypoints],
   );
   const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, waypointPoints);
-  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois();
+  // Pass userCenter so the hook seeds POIs immediately instead of waiting
+  // for the first onMapIdle event (which can be silent for several seconds
+  // — or forever — on fresh installs of the new arch + 10.3.0 combo).
+  const userCenterLatLng = useMemo(
+    () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
+    [userCenter],
+  );
+  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois(userCenterLatLng);
 
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
