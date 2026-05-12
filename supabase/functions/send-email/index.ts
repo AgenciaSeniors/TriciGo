@@ -7,10 +7,13 @@
 // via pg_net) already use service_role.
 //
 // 2026-05-12 fixup:
-//   - Auth: accept either `apikey` header OR `Authorization: Bearer`,
-//     and validate via exact match OR JWT decode (role=service_role).
-//     Supabase Gateway can normalize/strip `apikey` in some configs;
-//     the Authorization fallback prevents false 401s.
+//   - Auth: accept either `apikey` header OR `Authorization: Bearer`
+//     and exact-match against SUPABASE_SERVICE_ROLE_KEY. Supabase
+//     Gateway can strip `apikey` in some configs; the Authorization
+//     fallback prevents false 401s without weakening the gate. (An
+//     earlier draft also accepted any token whose JWT payload claimed
+//     role=service_role without verifying the signature — Codex flagged
+//     it as a phishing vector and the JWT path was removed.)
 //   - Subject: RFC 2047 encoded-word for non-ASCII chars so Subject
 //     headers don't show as garbage in older mail clients.
 //   - Attachments: optional `attachments: [{filename, content_base64}]`
@@ -85,32 +88,24 @@ function resolveTemplate(
 
 /**
  * Read the caller-supplied service-role key from either header.
- * Supabase Gateway sometimes strips `apikey`, leaving the key only
- * in `Authorization: Bearer <token>`.
+ * Supabase Gateway sometimes strips `apikey` (especially when the
+ * function is called through pg_net DB triggers), so we also accept
+ * `Authorization: Bearer <token>` and compare both against the
+ * exact env-var value.
+ *
+ * Security note: we used to fall back to a JWT-decode that trusted
+ * a `role: service_role` claim WITHOUT verifying the signature.
+ * Codex review on PR #130 caught that: anyone could forge a JWT
+ * (sign with garbage), claim service_role, and send mail as
+ * TriciGo to arbitrary recipients — a phishing vector and a
+ * regression of the BUG-191 fix this function exists for. The
+ * decode fallback is gone; only exact match wins.
  */
 function extractCallerKey(req: Request): string {
   const apikey = req.headers.get('apikey') ?? '';
   if (apikey) return apikey;
   const auth = req.headers.get('authorization') ?? '';
   return auth.replace(/^Bearer\s+/i, '').trim();
-}
-
-/**
- * Decode a JWT and return true if the role claim is service_role.
- * Used as a fallback when the env-var compare fails (key rotation,
- * whitespace, etc) so legitimate callers still pass.
- */
-function isServiceRoleJwt(token: string): boolean {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    const b64 = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
-    const payload = JSON.parse(atob(padded));
-    return payload.role === 'service_role';
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -137,8 +132,7 @@ Deno.serve(async (req) => {
 
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const callerKey = extractCallerKey(req);
-    const authorized = callerKey === serviceRoleKey || isServiceRoleJwt(callerKey);
-    if (!authorized) {
+    if (callerKey !== serviceRoleKey) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: send-email is internal-only' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
