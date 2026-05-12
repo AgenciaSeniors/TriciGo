@@ -1,16 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, referralService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
 
 type Step = 'phone' | 'otp';
 
+// sessionStorage key shared with /refer/[code] so a rider who clicks
+// a referral link, then signs in via OAuth (Google/Apple) round-trips
+// off-page, still applies the code on return.
+const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // 'common' namespace — auth keys are shared across web/client/driver
   // so the rider sees the same OTP/login copy whichever surface they
   // sign in from. Web.docx 2026-05-08: "que el mensaje de registro se
@@ -22,6 +28,46 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingReferralCode, setPendingReferralCode] = useState<string | null>(null);
+
+  // Capture ?ref=CODE on mount and persist it. The query param goes
+  // first; if absent, fall back to whatever was already stashed
+  // (e.g. from a prior /refer/[code] visit). Codes survive an OAuth
+  // round-trip because sessionStorage persists across same-origin
+  // redirects within the tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const fromQuery = searchParams.get('ref')?.trim().toUpperCase() ?? null;
+    if (fromQuery) {
+      try {
+        sessionStorage.setItem(PENDING_REFERRAL_KEY, fromQuery);
+      } catch { /* private mode / quota — non-fatal */ }
+      setPendingReferralCode(fromQuery);
+      return;
+    }
+    try {
+      setPendingReferralCode(sessionStorage.getItem(PENDING_REFERRAL_KEY));
+    } catch { /* ignore */ }
+  }, [searchParams]);
+
+  // Apply a pending referral once the user has a session. Best-effort:
+  // failure (invalid code, self-referral, already-applied) is logged
+  // and the redirect proceeds anyway, so a bad code never blocks
+  // login. The stored value is cleared either way.
+  async function applyPendingReferralIfAny(uid: string) {
+    let code: string | null = null;
+    try {
+      code = sessionStorage.getItem(PENDING_REFERRAL_KEY);
+    } catch { return; }
+    if (!code) return;
+    try {
+      await referralService.applyReferralCode(uid, code);
+    } catch (err) {
+      console.warn('[login] applyReferralCode failed:', err);
+    } finally {
+      try { sessionStorage.removeItem(PENDING_REFERRAL_KEY); } catch { /* ignore */ }
+    }
+  }
 
   // Redirect to /book if already logged in
   useEffect(() => {
@@ -73,6 +119,12 @@ export default function LoginPage() {
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
+        // Apply the pending referral code (if any) before routing.
+        // Fire-and-forget would race with /book's data load, so we
+        // await — the call is best-effort and capped at one network
+        // round trip.
+        const uid = data.session.user?.id;
+        if (uid) await applyPendingReferralIfAny(uid);
       }
       router.push('/book');
     } catch (err) {
