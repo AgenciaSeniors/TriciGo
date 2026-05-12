@@ -16,37 +16,14 @@
 // - Hosted PNG logo (CIDs and base64 fail on iOS Mail dark mode)
 // ============================================================
 
-// ── Design tokens (TriciGo brand) ────────────────────────────────
-export const COLORS = {
-  primary: '#F97316',       // Orange-500
-  primaryDark: '#EA580C',   // Orange-600 (button hover/border)
-  primaryLight: '#FFF7ED',  // Orange-50 (subtle highlight bg)
-  ink: '#0F172A',           // Slate-900
-  text: '#334155',          // Slate-700 (body text)
-  muted: '#64748B',         // Slate-500
-  mutedLight: '#94A3B8',    // Slate-400 (footer)
-  border: '#E2E8F0',        // Slate-200
-  bgPage: '#F8FAFC',        // Slate-50 (outer canvas)
-  bgCard: '#FFFFFF',        // White (email body)
-  success: '#16A34A',       // Green-600
-  error: '#DC2626',         // Red-600
-} as const;
+// ── Design tokens — re-exported from the shared brand module so
+// PDF and HTML emit from a single source of truth. ───────────────
+import { BRAND_HEX, FONT_STACK as SHARED_FONT_STACK, LOGO_URL as SHARED_LOGO_URL, WEB_ORIGIN as SHARED_WEB_ORIGIN } from '../brand.ts';
 
-export const FONT_STACK =
-  "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
-
-// Logo URL: served from the web app's public folder. Override with
-// EMAIL_LOGO_URL when previewing from a non-prod environment.
-const DEFAULT_LOGO_URL = 'https://tricigo.com/logo-wordmark.png';
-export const LOGO_URL =
-  (typeof Deno !== 'undefined' ? Deno.env.get('EMAIL_LOGO_URL') : undefined) ??
-  DEFAULT_LOGO_URL;
-
-// Public web origin for CTA links. Same override pattern.
-const DEFAULT_WEB_ORIGIN = 'https://tricigo.com';
-export const WEB_ORIGIN =
-  (typeof Deno !== 'undefined' ? Deno.env.get('EMAIL_WEB_ORIGIN') : undefined) ??
-  DEFAULT_WEB_ORIGIN;
+export const COLORS = BRAND_HEX;
+export const FONT_STACK = SHARED_FONT_STACK;
+export const LOGO_URL = SHARED_LOGO_URL;
+export const WEB_ORIGIN = SHARED_WEB_ORIGIN;
 
 // ── Reusable component fragments ─────────────────────────────────
 
@@ -226,6 +203,3 @@ export function escapeHtml(s: string | number | null | undefined): string {
     .replace(/'/g, '&#39;');
 }
 
-// Deno global declared so non-Deno tooling (typecheck, IDE) doesn't
-// flag the env access. Real Deno runtime supplies the global.
-declare const Deno: { env: { get(k: string): string | undefined } } | undefined;

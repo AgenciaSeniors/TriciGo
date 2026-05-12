@@ -23,8 +23,15 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1?target=deno';
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import {
+  BRAND_NAME,
+  BRAND_RGB,
+  LOGO_URL,
+  SUPPORT_EMAIL,
+  WEB_ORIGIN,
+} from '../_shared/brand.ts';
 import {
   walletReceiptHtml,
   walletReceiptSubject,
@@ -228,7 +235,7 @@ Deno.serve(async (req) => {
     const pdfBase64 = encodeBase64(pdfBytes);
     const adminEmail = Deno.env.get('ADMIN_RECEIPT_EMAIL') ?? ADMIN_EMAIL_FALLBACK;
 
-    const dateLabel = formatDate(dateISO);
+    const dateLabel = formatDateLong(dateISO);
 
     const userEmailResult = userRow.email && !existingRow?.email_sent_at_user
       ? await sendResend({
@@ -331,114 +338,289 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  const orange = rgb(0.97, 0.45, 0.09);
-  const ink = rgb(0.10, 0.10, 0.10);
-  const muted = rgb(0.42, 0.42, 0.42);
+  // Brand palette — same source of truth as the email templates so
+  // PDF and email feel like one product.
+  const primary = rgb(...BRAND_RGB.primary);
+  const primaryLight = rgb(...BRAND_RGB.primaryLight);
+  const ink = rgb(...BRAND_RGB.ink);
+  const text = rgb(...BRAND_RGB.text);
+  const muted = rgb(...BRAND_RGB.muted);
+  const border = rgb(...BRAND_RGB.border);
 
-  let y = 790;
   const left = 50;
   const right = 545;
+  const pageWidth = 595.28;
 
-  // Header
-  page.drawText('TriciGo', { x: left, y, size: 26, font: helvBold, color: orange });
-  page.drawText(receiptNo, { x: right - helv.widthOfTextAtSize(receiptNo, 11), y: y + 4, size: 11, font: helvBold, color: ink });
-  y -= 14;
-  page.drawText('Comprobante de recarga · Wallet TriciCoin', { x: left, y, size: 10, font: helv, color: muted });
-  y -= 30;
+  // ── Header band: white bg, logo left + receipt-number chip right.
+  // Logo is fetched at runtime; if the URL fails we fall back to a
+  // wordmark in primary color so the PDF never breaks because of a
+  // network hiccup.
+  let y = 790;
+  const logo = await tryEmbedLogo(pdf);
+  if (logo) {
+    const targetH = 28;
+    const w = (logo.width / logo.height) * targetH;
+    page.drawImage(logo, { x: left, y: y - 4, width: w, height: targetH });
+  } else {
+    page.drawText(BRAND_NAME, { x: left, y, size: 24, font: helvBold, color: primary });
+  }
+  // Receipt-number chip — right side, soft orange background.
+  drawChip(page, helv, helvBold, receiptNo, right, y - 4, primary, primaryLight);
+  y -= 18;
+  page.drawText('Comprobante de recarga · Wallet TriciCoin', {
+    x: left, y, size: 9, font: helv, color: muted,
+  });
+  y -= 24;
 
-  // Title underline
-  page.drawText('COMPROBANTE DE RECARGA', { x: left, y, size: 13, font: helvBold, color: ink });
-  y -= 6;
-  page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 1.5, color: orange });
-  y -= 22;
+  // ── Hero block: orange band with the credited amount in big type.
+  // Anchors the rider's eye on what they got, not on what they paid.
+  const heroH = 64;
+  page.drawRectangle({ x: 0, y: y - heroH, width: pageWidth, height: heroH, color: primary });
+  page.drawText('RECARGA CONFIRMADA', {
+    x: left, y: y - 22, size: 10, font: helvBold, color: rgb(1, 1, 1),
+  });
+  const tcLabel = `${amounts.tcCredited.toFixed(2)} TriciCoin acreditados`;
+  page.drawText(tcLabel, {
+    x: left, y: y - 46, size: 18, font: helvBold, color: rgb(1, 1, 1),
+  });
+  y -= heroH + 28;
 
-  // User info block
-  const dateStr = formatDate(dateISO);
-  drawRow(page, helv, 'Fecha', dateStr, left, right, y, ink, muted); y -= 18;
-  if (user.full_name) { drawRow(page, helv, 'Usuario', user.full_name, left, right, y, ink, muted); y -= 18; }
-  drawRow(page, helv, 'ID usuario', user.id, left, right, y, ink, muted); y -= 18;
-  if (user.email) { drawRow(page, helv, 'Email', user.email, left, right, y, ink, muted); y -= 18; }
-  if (user.phone) { drawRow(page, helv, 'Teléfono', user.phone, left, right, y, ink, muted); y -= 18; }
-  y -= 14;
-
-  // Amounts block
-  page.drawText('Detalle:', { x: left, y, size: 11, font: helvBold, color: ink });
-  y -= 6;
-  page.drawLine({ start: { x: left, y }, end: { x: left + 50, y }, thickness: 1, color: ink });
+  // ── Section 1: rider details ───────────────────────────────────
+  y = drawSectionHeader(page, helvBold, 'Datos del usuario', left, y, ink, primary);
+  y = drawRow(page, helv, helvBold, 'Fecha', formatDateLong(dateISO), left, right, y, text, muted);
+  if (user.full_name) {
+    y = drawRow(page, helv, helvBold, 'Nombre', user.full_name, left, right, y, text, muted);
+  }
+  y = drawRow(page, helv, helvBold, 'ID usuario', user.id, left, right, y, muted, muted);
+  if (user.email) {
+    y = drawRow(page, helv, helvBold, 'Email', user.email, left, right, y, text, muted);
+  }
+  if (user.phone) {
+    y = drawRow(page, helv, helvBold, 'Teléfono', user.phone, left, right, y, text, muted);
+  }
   y -= 18;
 
-  drawRow(page, helv, 'Importe cobrado USD', `$${amounts.usdCharged.toFixed(2)}`, left, right, y, ink, muted); y -= 16;
-  drawRow(page, helv, `Comisión de servicio`, `-$${amounts.feeUsd.toFixed(2)}`, left, right, y, ink, muted); y -= 16;
-  drawRow(page, helv, 'Importe neto acreditado', `$${amounts.netUsd.toFixed(2)}`, left, right, y, ink, muted, helvBold); y -= 16;
-  drawRow(page, helv, 'TriciCoin acreditados (1 TC = 1 USD)', `${amounts.tcCredited.toFixed(2)} TC`, left, right, y, ink, muted, helvBold); y -= 22;
-
-  // CUP equivalence
-  page.drawText('Equivalencia CUP (informativa):', { x: left, y, size: 10, font: helvBold, color: ink });
+  // ── Section 2: transaction breakdown ───────────────────────────
+  y = drawSectionHeader(page, helvBold, 'Detalle de la transacción', left, y, ink, primary);
+  y = drawRow(page, helv, helvBold, 'Importe cobrado', fmtUsd(amounts.usdCharged), left, right, y, text, muted);
+  y = drawRow(page, helv, helvBold, 'Comisión de servicio', `−${fmtUsd(amounts.feeUsd)}`, left, right, y, text, muted);
+  y = drawRow(page, helv, helvBold, 'Importe neto acreditado', fmtUsd(amounts.netUsd), left, right, y, ink, muted, true);
+  y = drawTotalRow(page, helvBold, 'TriciCoin acreditados', `${amounts.tcCredited.toFixed(2)} TC`, left, right, y, primary, ink);
+  y = drawHelperLine(page, helv, '1 TriciCoin = 1 USD', left, y, muted);
   y -= 16;
+
+  // ── Section 3: CUP conversion (only if rate snapshotted) ───────
+  y = drawSectionHeader(page, helvBold, 'Conversión a CUP (referencial)', left, y, ink, primary);
   if (amounts.exchangeRate > 0) {
-    drawRow(page, helv, 'Tasa USD/CUP del día', amounts.exchangeRate.toFixed(2), left, right, y, ink, muted); y -= 16;
-    drawRow(page, helv, 'Equivalente en CUP', formatCup(amounts.cupEquivalent), left, right, y, ink, muted); y -= 22;
+    y = drawRow(page, helv, helvBold, 'Tasa USD → CUP del día', amounts.exchangeRate.toFixed(2), left, right, y, text, muted);
+    y = drawRow(page, helv, helvBold, 'Equivalente en CUP', formatCup(amounts.cupEquivalent), left, right, y, text, muted);
   } else {
-    page.drawText('Tasa de cambio no disponible al momento de la recarga.', { x: left, y, size: 9, font: helv, color: muted });
-    y -= 22;
+    y = drawHelperLine(page, helv, 'Tasa de cambio no disponible al momento de la recarga.', left, y, muted);
   }
+  y -= 18;
 
-  // Payment method (card brand + last4 will be wired in PR 3)
-  page.drawText('Método de pago:', { x: left, y, size: 10, font: helvBold, color: ink });
-  y -= 16;
+  // ── Section 4: payment method ──────────────────────────────────
+  y = drawSectionHeader(page, helvBold, 'Método de pago', left, y, ink, primary);
   const cardLine = cardBrand && cardLast4
     ? `${capitalize(cardBrand)} terminada en •••• ${cardLast4}`
     : cardBrand
       ? `${capitalize(cardBrand)} (Stripe)`
-      : 'Tarjeta de crédito/débito (Stripe)';
-  page.drawText(cardLine, { x: left, y, size: 10, font: helv, color: ink });
+      : 'Tarjeta de crédito/débito (vía Stripe)';
+  page.drawText(cardLine, { x: left, y, size: 10, font: helv, color: text });
   y -= 14;
   if (stripePaymentIntentId) {
-    page.drawText(`Stripe PaymentIntent: ${stripePaymentIntentId}`, { x: left, y, size: 8, font: helv, color: muted });
-    y -= 18;
+    page.drawText(`Referencia Stripe: ${stripePaymentIntentId}`, {
+      x: left, y, size: 8, font: helv, color: muted,
+    });
   }
 
-  // Footer disclaimer
-  y = 110;
-  page.drawLine({ start: { x: left, y: y + 10 }, end: { x: right, y: y + 10 }, thickness: 0.5, color: muted });
-  page.drawText('Este comprobante se emite a efectos contables. La equivalencia en CUP es', {
-    x: left, y, size: 8, font: helv, color: muted,
+  // ── Footer: disclaimer + tagline + contact ─────────────────────
+  const footerY = 90;
+  page.drawLine({
+    start: { x: left, y: footerY + 38 },
+    end: { x: right, y: footerY + 38 },
+    thickness: 0.5,
+    color: border,
   });
-  y -= 11;
-  page.drawText('referencial al momento de la transacción y puede variar al gastar.', {
-    x: left, y, size: 8, font: helv, color: muted,
+  page.drawText(
+    'Este comprobante se emite a efectos contables. La equivalencia en CUP es',
+    { x: left, y: footerY + 24, size: 8, font: helv, color: muted },
+  );
+  page.drawText(
+    'referencial al momento de la transacción y puede variar al gastar.',
+    { x: left, y: footerY + 14, size: 8, font: helv, color: muted },
+  );
+  page.drawText(`${BRAND_NAME} · Cuba · ${SUPPORT_EMAIL}`, {
+    x: left, y: footerY - 4, size: 8, font: helvBold, color: ink,
   });
-  y -= 22;
-  page.drawText('TriciGo · Cuba · contacto@tricigo.com', {
-    x: left, y, size: 8, font: helvBold, color: ink,
+  // Web origin right-aligned on the same baseline.
+  const webText = WEB_ORIGIN.replace(/^https?:\/\//, '');
+  const webW = helv.widthOfTextAtSize(webText, 8);
+  page.drawText(webText, {
+    x: right - webW, y: footerY - 4, size: 8, font: helv, color: muted,
   });
 
   return pdf.save();
 }
 
+// ── PDF helpers ─────────────────────────────────────────────────
+
+const ROW_HEIGHT = 18;
+
+function drawSectionHeader(
+  page: PDFPage,
+  fontBold: PDFFont,
+  title: string,
+  left: number,
+  y: number,
+  ink: ReturnType<typeof rgb>,
+  primary: ReturnType<typeof rgb>,
+): number {
+  page.drawText(title, { x: left, y, size: 11, font: fontBold, color: ink });
+  // Short orange underline — visual anchor for each section without
+  // pulling focus from the row data below.
+  page.drawLine({
+    start: { x: left, y: y - 4 },
+    end: { x: left + 36, y: y - 4 },
+    thickness: 1.5,
+    color: primary,
+  });
+  return y - 22;
+}
+
 function drawRow(
-  page: ReturnType<PDFDocument['addPage']>,
-  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  page: PDFPage,
+  font: PDFFont,
+  fontBold: PDFFont,
   label: string,
   value: string,
   left: number,
   right: number,
   y: number,
-  ink: ReturnType<typeof rgb>,
+  textColor: ReturnType<typeof rgb>,
   muted: ReturnType<typeof rgb>,
-  valueFont?: Awaited<ReturnType<PDFDocument['embedFont']>>,
-) {
+  emphasize = false,
+): number {
   page.drawText(label, { x: left, y, size: 10, font, color: muted });
-  const vFont = valueFont ?? font;
+  const vFont = emphasize ? fontBold : font;
   const w = vFont.widthOfTextAtSize(value, 10);
-  page.drawText(value, { x: right - w, y, size: 10, font: vFont, color: ink });
+  page.drawText(value, { x: right - w, y, size: 10, font: vFont, color: textColor });
+  return y - ROW_HEIGHT;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('es-CU', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana',
+function drawTotalRow(
+  page: PDFPage,
+  fontBold: PDFFont,
+  label: string,
+  value: string,
+  left: number,
+  right: number,
+  y: number,
+  primary: ReturnType<typeof rgb>,
+  ink: ReturnType<typeof rgb>,
+): number {
+  page.drawText(label, { x: left, y, size: 11, font: fontBold, color: ink });
+  const w = fontBold.widthOfTextAtSize(value, 14);
+  page.drawText(value, { x: right - w, y: y - 1, size: 14, font: fontBold, color: primary });
+  return y - 20;
+}
+
+function drawHelperLine(
+  page: PDFPage,
+  font: PDFFont,
+  text: string,
+  left: number,
+  y: number,
+  muted: ReturnType<typeof rgb>,
+): number {
+  page.drawText(text, { x: left, y, size: 8, font, color: muted });
+  return y - 14;
+}
+
+function drawChip(
+  page: PDFPage,
+  font: PDFFont,
+  fontBold: PDFFont,
+  label: string,
+  rightX: number,
+  y: number,
+  primary: ReturnType<typeof rgb>,
+  primaryLight: ReturnType<typeof rgb>,
+): void {
+  const padX = 10;
+  const w = fontBold.widthOfTextAtSize(label, 10) + padX * 2;
+  const h = 22;
+  const x = rightX - w;
+  page.drawRectangle({ x, y, width: w, height: h, color: primaryLight });
+  page.drawRectangle({ x, y, width: w, height: h, borderColor: primary, borderWidth: 0.5 });
+  page.drawText(label, {
+    x: x + padX,
+    y: y + 7,
+    size: 10,
+    font: fontBold,
+    color: primary,
   });
+}
+
+// Network-fetch the brand logo and embed as a pdf-lib image. Cached
+// per process — Supabase EFs reuse the runtime across invocations
+// so the logo bytes only travel the wire once per cold start. Any
+// failure (network, 404, decoding) returns null so the caller can
+// fall back to the wordmark text.
+let cachedLogoBytes: Uint8Array | null | undefined;
+async function tryEmbedLogo(pdf: PDFDocument): Promise<PDFImage | null> {
+  if (cachedLogoBytes === null) return null; // negative cache
+  if (cachedLogoBytes === undefined) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      const res = await fetch(LOGO_URL, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) {
+        cachedLogoBytes = null;
+        return null;
+      }
+      cachedLogoBytes = new Uint8Array(await res.arrayBuffer());
+    } catch (_err) {
+      cachedLogoBytes = null;
+      return null;
+    }
+  }
+  try {
+    return await pdf.embedPng(cachedLogoBytes);
+  } catch (_err) {
+    cachedLogoBytes = null;
+    return null;
+  }
+}
+
+function fmtUsd(n: number): string {
+  return `$${n.toFixed(2)} USD`;
+}
+
+const WEEKDAY_ES: Record<number, string> = {
+  0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miércoles',
+  4: 'Jueves', 5: 'Viernes', 6: 'Sábado',
+};
+
+function formatDateLong(iso: string): string {
+  const d = new Date(iso);
+  // We want "Domingo 11 de mayo de 2026, 14:30 (Cuba)" — the native
+  // toLocaleDateString lowercases the weekday and lacks the locale
+  // suffix. Stitch the parts manually to guarantee output stability
+  // across Deno/V8 minor versions (which have shifted "es-CU" output
+  // before).
+  const havanaDate = new Date(d.toLocaleString('en-US', { timeZone: 'America/Havana' }));
+  const weekday = WEEKDAY_ES[havanaDate.getDay()] ?? '';
+  const datePart = d.toLocaleDateString('es-CU', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'America/Havana',
+  });
+  const timePart = d.toLocaleTimeString('es-CU', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: 'America/Havana',
+  });
+  return `${weekday} ${datePart}, ${timePart} (Cuba)`;
 }
 
 function formatCup(cup: number): string {
