@@ -616,6 +616,45 @@ function WebMapboxView({
   );
 }
 
+/**
+ * Reusable stylized map placeholder. PR E (2026-05-12) — extracts the
+ * grid + glow + "LA HABANA" watermark already used by the no-Mapbox /
+ * token-not-applied fallbacks, so the *same* placeholder can also be
+ * rendered as a transient overlay above the live MapView until its
+ * style finishes streaming on first install. Before this fix, that
+ * gap showed up as a pure-black rectangle because navigation-night-v1's
+ * default background renders dark before any tiles arrive.
+ *
+ * `absolute` mode (default) fills the parent — used as an overlay on
+ * top of <MapboxGL.MapView>. Pass `height` to render as a standalone
+ * block (legacy fallback paths).
+ */
+function MapFallbackGrid({ height, absolute = false }: { height?: number; absolute?: boolean }) {
+  const containerStyle = absolute
+    ? [webFallbackStyles.container, StyleSheet.absoluteFillObject as object]
+    : [webFallbackStyles.container, { height }];
+  return (
+    <View style={containerStyle} pointerEvents="none">
+      <View style={webFallbackStyles.gradientBase} />
+      <View style={webFallbackStyles.gradientOverlay} />
+      <View style={webFallbackStyles.gridContainer}>
+        {[0.15, 0.3, 0.45, 0.6, 0.75, 0.9].map((pos, i) => (
+          <View key={`h${i}`} style={[webFallbackStyles.gridLineH, { top: `${pos * 100}%` as any }]} />
+        ))}
+        {[0.12, 0.28, 0.42, 0.58, 0.72, 0.88].map((pos, i) => (
+          <View key={`v${i}`} style={[webFallbackStyles.gridLineV, { left: `${pos * 100}%` as any }]} />
+        ))}
+        <View style={webFallbackStyles.diagonalLine} />
+      </View>
+      <View style={webFallbackStyles.cityWatermark}>
+        <Text style={webFallbackStyles.cityText}>LA HABANA</Text>
+      </View>
+      <View style={webFallbackStyles.glowOrange} />
+      <View style={webFallbackStyles.glowOrange2} />
+    </View>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────────────────
 function RideMapViewInner(
   {
@@ -647,6 +686,12 @@ function RideMapViewInner(
   const { t } = useTranslation('driver');
   const cameraRef = useRef<any>(null);
   const [markerImageError, setMarkerImageError] = useState(false);
+  // PR E (2026-05-12) — track whether MapboxGL has finished streaming
+  // the style URL. On first install, fetching the style + glyphs from
+  // api.mapbox.com can take 1–3s; until then the native MapView paints
+  // its dark background and the user sees a pure-black rectangle. We
+  // render <MapFallbackGrid /> on top until onDidFinishLoadingStyle fires.
+  const [styleLoaded, setStyleLoaded] = useState(false);
 
   // Pulse animation for driver marker (native only)
   const useNative = Platform.OS !== 'web';
@@ -932,6 +977,13 @@ function RideMapViewInner(
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        onDidFinishLoadingStyle={() => setStyleLoaded(true)}
+        onDidFailLoadingMap={() => {
+          // First-install network race or invalid token. The fallback
+          // grid stays visible; the user can still tap CONECTARSE.
+          // Logged here so it shows up in adb logcat for diagnosis.
+          console.warn('[RideMapView] onDidFailLoadingMap — Mapbox style/tile fetch failed');
+        }}
         onRegionWillChange={(feature: any) => {
           if (feature?.properties?.isUserInteraction && followMode) {
             onUserInteraction?.();
@@ -1183,6 +1235,15 @@ function RideMapViewInner(
           </MapboxGL.PointAnnotation>
         ))}
       </MapboxGL.MapView>
+      {/* PR E (2026-05-12) — first-install overlay until the Mapbox style
+          streams in. Without this, navigation-night-v1 paints a solid
+          near-black rectangle and the user sees a pure-black map on
+          their very first cold start after installing the dev-client
+          APK. Once `onDidFinishLoadingStyle` fires we drop the overlay
+          and the real tiles take over. Subsequent launches hit the
+          style cache, so styleLoaded flips true within ms and the
+          overlay is effectively invisible. */}
+      {!styleLoaded && <MapFallbackGrid absolute />}
       {!followMode && driverLocation && (
         <Pressable
           onPress={onRecenter}
