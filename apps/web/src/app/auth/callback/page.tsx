@@ -2,7 +2,25 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, referralService } from '@tricigo/api';
+
+// Mirror of LoginPage's PENDING_REFERRAL_KEY — the referral code may
+// have been stashed before the OAuth round-trip, and now (with a
+// session in hand) is the right time to redeem it.
+const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
+
+async function applyPendingReferralIfAny(uid: string): Promise<void> {
+  let code: string | null = null;
+  try { code = sessionStorage.getItem(PENDING_REFERRAL_KEY); } catch { return; }
+  if (!code) return;
+  try {
+    await referralService.applyReferralCode(uid, code);
+  } catch (err) {
+    console.warn('[auth/callback] applyReferralCode failed:', err);
+  } finally {
+    try { sessionStorage.removeItem(PENDING_REFERRAL_KEY); } catch { /* ignore */ }
+  }
+}
 
 /**
  * OAuth callback page.
@@ -17,22 +35,23 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = getSupabaseClient();
 
-    function redirectToBook() {
+    async function finishAndRedirect(uid: string | undefined) {
       if (handled.current) return;
       handled.current = true;
+      if (uid) await applyPendingReferralIfAny(uid);
       router.replace('/book');
     }
 
     // Listen for the SIGNED_IN event from hash parsing
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        redirectToBook();
+        finishAndRedirect(session?.user?.id);
       }
     });
 
     // Fallback: if the session was already parsed before listener registered
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) redirectToBook();
+      if (session) finishAndRedirect(session.user?.id);
     });
 
     // Safety timeout: if nothing happens in 5s, send to login
