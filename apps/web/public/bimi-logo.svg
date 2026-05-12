@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 64 64">
+  <title>TriciGo</title>
+  <!-- BIMI requires a solid (non-transparent) square background. -->
+  <rect width="64" height="64" rx="12" fill="#F97316"/>
+  <!--
+    Map-pin silhouette + lightning bolt — distilled from icon-192.png so
+    the inbox avatar reads as the same brand mark the apps use.
+    Pin: rounded teardrop. Bolt: white zig-zag inside the circular head.
+  -->
+  <path d="M 32 12 C 22 12 14 20 14 30 C 14 41 32 54 32 54 C 32 54 50 41 50 30 C 50 20 42 12 32 12 Z" fill="#FFFFFF"/>
+  <path d="M 35 20 L 24 33 L 31 33 L 28 44 L 40 30 L 33 30 Z" fill="#F97316"/>
+</svg>

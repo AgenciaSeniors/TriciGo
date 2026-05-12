@@ -18,11 +18,12 @@
 
 // ── Design tokens — re-exported from the shared brand module so
 // PDF and HTML emit from a single source of truth. ───────────────
-import { BRAND_HEX, FONT_STACK as SHARED_FONT_STACK, LOGO_URL as SHARED_LOGO_URL, WEB_ORIGIN as SHARED_WEB_ORIGIN } from '../brand.ts';
+import { BRAND_HEX, FONT_STACK as SHARED_FONT_STACK, LOGO_URL as SHARED_LOGO_URL, LOGO_ICON_URL as SHARED_LOGO_ICON_URL, WEB_ORIGIN as SHARED_WEB_ORIGIN } from '../brand.ts';
 
 export const COLORS = BRAND_HEX;
 export const FONT_STACK = SHARED_FONT_STACK;
 export const LOGO_URL = SHARED_LOGO_URL;
+export const LOGO_ICON_URL = SHARED_LOGO_ICON_URL;
 export const WEB_ORIGIN = SHARED_WEB_ORIGIN;
 
 // ── Reusable component fragments ─────────────────────────────────
@@ -146,13 +147,13 @@ export function wrapHtml(opts: LayoutOptions): string {
     ? `<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">${escapeHtml(preheader)}</div>`
     : '';
 
-  return `<!DOCTYPE html>
+  const rawHtml = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light only">
-  <meta name="supported-color-schemes" content="light only">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
   <title>TriciGo</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: ${COLORS.bgPage}; font-family: ${FONT_STACK};">
@@ -163,8 +164,21 @@ ${preheaderBlock}
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: ${COLORS.bgCard}; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);">
         <tr>
           <td style="padding: 28px 32px 20px; text-align: center;">
-            <a href="${WEB_ORIGIN}" target="_blank" rel="noopener" style="display: inline-block; text-decoration: none;">
-              <img src="${LOGO_URL}" alt="TriciGo" width="120" style="display: inline-block; max-width: 120px; height: auto;">
+            <a href="${WEB_ORIGIN}" target="_blank" rel="noopener"
+               style="display: inline-block; text-decoration: none; color: ${COLORS.ink};">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td valign="middle" style="padding-right: 12px;">
+                    <img src="${LOGO_ICON_URL}" alt="" width="40" height="40"
+                         style="display: block; width: 40px; height: 40px; border-radius: 8px;">
+                  </td>
+                  <td valign="middle">
+                    <span style="display: inline-block; font-family: ${FONT_STACK}; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: ${COLORS.ink}; line-height: 1;">
+                      Trici<span style="color: ${COLORS.primary};">Go</span>
+                    </span>
+                  </td>
+                </tr>
+              </table>
             </a>
           </td>
         </tr>
@@ -189,6 +203,11 @@ ${preheaderBlock}
 </table>
 </body>
 </html>`;
+
+  // Final pass: collapse all non-ASCII codepoints into numeric HTML
+  // entities. The body is now safe to ship over any 7-bit transport,
+  // independent of the Content-Type charset declaration.
+  return asciiSafeHtml(rawHtml);
 }
 
 // ── Utilities ────────────────────────────────────────────────────
@@ -201,5 +220,32 @@ export function escapeHtml(s: string | number | null | undefined): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Convert any non-ASCII codepoint (>= U+0080) to its numeric HTML
+ * entity (&#NNN;). Run on the FINAL email body so the bytes leaving
+ * Resend are 100% 7-bit ASCII — no dependency on the transport
+ * declaring charset=utf-8 correctly. This eliminates the "tilde
+ * shows as a square with ?" issue some mail clients exhibit when
+ * they don't honor the inline <meta charset="UTF-8">.
+ *
+ * Surrogate pairs (e.g. emoji like 🛺 = U+1F6FA) collapse to a single
+ * codepoint via String.codePointAt so we emit one entity, not two.
+ */
+export function asciiSafeHtml(html: string): string {
+  let out = '';
+  for (let i = 0; i < html.length; ) {
+    const cp = html.codePointAt(i)!;
+    if (cp < 0x80) {
+      out += html[i]!;
+      i += 1;
+    } else {
+      out += `&#${cp};`;
+      // Skip the low surrogate when we just consumed a surrogate pair.
+      i += cp > 0xFFFF ? 2 : 1;
+    }
+  }
+  return out;
 }
 

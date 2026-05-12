@@ -21,8 +21,23 @@ import {
   walletReceiptSubject,
   type WalletReceiptData,
 } from './wallet_receipt.ts';
+import {
+  rideReceiptHtml,
+  rideReceiptSubject,
+  type RideReceiptData,
+} from './ride_receipt.ts';
+import {
+  driverUnderReviewHtml,
+  driverUnderReviewSubject,
+  type DriverUnderReviewData,
+} from './driver_under_review.ts';
 
-export type TemplateKey = 'welcome' | 'win_back' | 'wallet_receipt';
+export type TemplateKey =
+  | 'welcome'
+  | 'win_back'
+  | 'wallet_receipt'
+  | 'ride_receipt'
+  | 'driver_under_review';
 
 export interface RenderedTemplate {
   subject: string;
@@ -62,6 +77,20 @@ export function renderTemplate(
         html: walletReceiptHtml(d),
       };
     }
+    case 'ride_receipt': {
+      const d = data as RideReceiptData;
+      return {
+        subject: subjectOverride ?? rideReceiptSubject,
+        html: rideReceiptHtml(d),
+      };
+    }
+    case 'driver_under_review': {
+      const d = data as DriverUnderReviewData;
+      return {
+        subject: subjectOverride ?? driverUnderReviewSubject,
+        html: driverUnderReviewHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -79,7 +108,13 @@ export function renderTemplate(
  * still rely on.
  */
 export function isTemplateKey(key: string): key is TemplateKey {
-  return key === 'welcome' || key === 'win_back' || key === 'wallet_receipt';
+  return (
+    key === 'welcome' ||
+    key === 'win_back' ||
+    key === 'wallet_receipt' ||
+    key === 'ride_receipt' ||
+    key === 'driver_under_review'
+  );
 }
 
 // Re-exports for callers that need the renderers/subjects directly
@@ -91,4 +126,12 @@ export function isTemplateKey(key: string): key is TemplateKey {
 export { welcomeHtml, welcomeSubject };
 export { winBackHtml, winBackSubject };
 export { walletReceiptHtml, walletReceiptSubject };
-export type { WelcomeData, WinBackData, WalletReceiptData };
+export { rideReceiptHtml, rideReceiptSubject };
+export { driverUnderReviewHtml, driverUnderReviewSubject };
+export type {
+  WelcomeData,
+  WinBackData,
+  WalletReceiptData,
+  RideReceiptData,
+  DriverUnderReviewData,
+};
