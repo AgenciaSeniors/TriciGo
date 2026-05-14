@@ -104,8 +104,10 @@ Deno.serve(async (req) => {
             channel: 'sms',
             recipients: [normalizedPhone],
             content: `Tu código TriciGo es ${code}. Vence en 10 min. No lo compartas.`,
+            // Use unicode (UCS-2) so accented Spanish chars (ó, ñ) render correctly.
+            // GSM-7 ('text') would replace 'código' with 'c?digo' on delivery.
             msg_type: 'text',
-            data_coding: 'text',
+            data_coding: 'unicode',
           }],
           message_globals: {
             originator: d7Sender,
@@ -123,13 +125,31 @@ Deno.serve(async (req) => {
         });
 
         const d7Result = await d7Response.json().catch(() => ({}));
+        const d7RequestId = (d7Result as { request_id?: string }).request_id;
         console.log('D7 Networks response:', JSON.stringify({
           status: d7Response.status,
-          request_id: (d7Result as { request_id?: string }).request_id,
+          request_id: d7RequestId,
           errors: (d7Result as { errors?: unknown }).errors,
         }));
 
         if (d7Response.ok) {
+          // Track initial delivery state in sms_deliveries (best-effort, non-blocking).
+          // process-sms-dlr upserts later via D7 DLR webhook with delivered/un_delivered/etc.
+          if (d7RequestId) {
+            try {
+              await supabase.from('sms_deliveries').insert({
+                request_id: d7RequestId,
+                recipient: normalizedPhone,
+                originator: d7Sender,
+                provider: 'd7',
+                status: 'sent',
+                sent_at: new Date().toISOString(),
+                raw_dlr: { initial_send_response: d7Result },
+              });
+            } catch (trackErr) {
+              console.error('[send-sms-otp] sms_deliveries insert failed (non-fatal):', trackErr);
+            }
+          }
           return new Response(
             JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
             { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
