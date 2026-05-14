@@ -368,6 +368,18 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# ── Per-function overrides ──
+# Most TriciGo functions default to verify_jwt=true (set in Supabase dashboard).
+# The two below are public-facing (signup OTP + DLR webhook) and use internal
+# auth (rate limiter + shared secret), so they must NOT require Supabase JWT.
+# Without these entries, `supabase functions deploy` would silently regress
+# them to verify_jwt=true, breaking signup flows.
+[functions.send-sms-otp]
+verify_jwt = false
+
+[functions.process-sms-dlr]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
