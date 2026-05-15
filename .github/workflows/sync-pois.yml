@@ -101,8 +101,18 @@ jobs:
           # GeoJSON directly (it's not a format `osmium export` accepts as
           # input either way). Two-step: tags-filter narrows to POI tags,
           # then export converts the resulting .osm.pbf to GeoJSON.
+          #
+          # BUG-297: filter prefix is `nwr/` (nodes + ways + relations),
+          # NOT `n/` (nodes only). A huge share of institutional POIs in
+          # OSM — hospitals, schools, hotels, museums, stadiums, churches,
+          # government buildings, large stores — are mapped as building
+          # *ways*, not nodes. The old `n/` filter silently dropped them
+          # all, roughly halving the OSM input. `osmium export` emits
+          # Polygon/MultiPolygon geometry for ways/relations; the Python
+          # merge step (load_osm → _representative_point) converts those
+          # footprints to a point.
           osmium tags-filter /tmp/sync/cuba.osm.pbf \
-            n/amenity n/shop n/tourism n/leisure n/office n/historic n/healthcare n/public_transport \
+            nwr/amenity nwr/shop nwr/tourism nwr/leisure nwr/office nwr/historic nwr/healthcare nwr/public_transport \
             -o /tmp/sync/osm-pois-filtered.osm.pbf \
             --overwrite
 

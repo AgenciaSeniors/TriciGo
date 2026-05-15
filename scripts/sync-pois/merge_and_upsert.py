@@ -199,6 +199,40 @@ def map_overture_category(category: str | None, mapping: dict) -> str | None:
 # Source loaders
 # ──────────────────────────────────────────────────────────────
 
+def _representative_point(geom: dict) -> tuple[float, float] | None:
+    """Reduce any GeoJSON geometry to a single (lng, lat) point.
+
+    BUG-297: the OSM step now captures ways + relations (nwr/), so
+    osmium export emits Polygon / MultiPolygon / LineString for
+    building-mapped POIs (hospitals, schools, hotels, museums…).
+    A POI marker needs a point, so for non-Point geometries we
+    average the boundary vertices. For the small, mostly-rectangular
+    building footprints in OSM Cuba this lands within a few metres
+    of the true centroid — accurate enough for a map marker, and it
+    avoids pulling in a `shapely` dependency.
+    """
+    t = geom.get("type")
+    c = geom.get("coordinates")
+    if not c:
+        return None
+    if t == "Point":
+        return c[0], c[1]
+    if t == "LineString":
+        pts = c
+    elif t == "Polygon":
+        pts = c[0]                       # exterior ring
+    elif t == "MultiPolygon":
+        pts = c[0][0]                    # first polygon's exterior ring
+    elif t == "MultiLineString":
+        pts = c[0]
+    else:
+        return None
+    if not pts:
+        return None
+    n = len(pts)
+    return sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n
+
+
 def load_osm(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
     """OSM GeoJSON from `osmium tags-filter ... -o file.geojson`."""
     if not path.exists():
@@ -211,9 +245,12 @@ def load_osm(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
     for feat in data.get("features", []):
         props = feat.get("properties", {}) or {}
         geom = feat.get("geometry") or {}
-        if geom.get("type") != "Point":
+        # BUG-297: ways/relations come through as Polygon/Line/Multi* —
+        # collapse to a representative point instead of dropping them.
+        pt = _representative_point(geom)
+        if pt is None:
             continue
-        lng, lat = geom["coordinates"][0], geom["coordinates"][1]
+        lng, lat = pt
         if not in_bbox(lng, lat, bbox):
             continue
         name = props.get("name")
