@@ -40,8 +40,9 @@ function bearingBetween(
 }
 
 // Haversine distance in meters between two lat/lng pairs. Used to gate the
-// bearing recomputation: ignore movements <5m so GPS noise on a stationary
-// driver doesn't produce random bearings.
+// bearing recomputation: ignore micro-movements so GPS noise on a stationary
+// driver doesn't produce random bearings. BUG-267 v3 dropped the threshold
+// from 5m to 2m (1m for mocks) — see heading logic below.
 function distanceMeters(
   lat1: number,
   lng1: number,
@@ -58,6 +59,20 @@ function distanceMeters(
     Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+// Exponential moving average for heading angle. Handles the 359° → 1°
+// wrap case by computing the signed shortest-path delta. Used to dampen
+// GPS heading jitter AND the noise from short-distance bearing calcs
+// (a bearing between two coords 2m apart has ±20° noise at typical
+// urban GPS accuracy of 5-10m — EMA smooths that into a stable signal).
+const HEADING_SMOOTHING_ALPHA = 0.4;
+function smoothHeading(raw: number, prev: number | null): number {
+  if (prev === null || !Number.isFinite(prev)) return raw;
+  let delta = raw - prev;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return (prev + HEADING_SMOOTHING_ALPHA * delta + 360) % 360;
 }
 
 export function useDriverLocationTracking(
@@ -80,6 +95,12 @@ export function useDriverLocationTracking(
   // Android stationary, etc). Without this, the driver marker never rotates
   // and the camera stays north-up despite followMode being on.
   const lastCoordRef = useRef<{ lat: number; lng: number } | null>(null);
+  // BUG-267 v3: last smoothed heading we uploaded. Used (a) to feed the EMA
+  // filter on the next sample, and (b) to preserve bearing while a mock
+  // provider is paused on the same coord (Lockito Journey emits the same
+  // lat/lng with heading=0 between segments → without this we'd snap back
+  // to north each pause).
+  const smoothedHeadingRef = useRef<number | null>(null);
 
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
@@ -238,45 +259,67 @@ export function useDriverLocationTracking(
             const locationAge = Date.now() - loc.timestamp;
             if (locationAge > 90000) return;
 
-            // BUG-267 v2: expo-location's coords.heading is unreliable on
-            // stationary devices (Android -1, iOS null) AND on Lockito mock
-            // providers (Journey/joystick emit 0 regardless of direction).
-            // We keep the previous logic of preserving last known when the
-            // hardware reading is invalid, but ADD a bearing-from-deltas
-            // fallback: if we moved >5m since the last sample, compute the
-            // bearing between the two coords ourselves. That gives us
-            // accurate heading-up rotation even without compass-grade GPS.
+            // BUG-267 v3: heading source hierarchy with EMA smoothing +
+            // mock-provider awareness.
+            //
+            // History:
+            //  - v1 used coords.heading directly → 0° during pickup waits.
+            //  - v2 added bearing-from-deltas fallback with 5m threshold →
+            //    fixed real-GPS driving but broke for Lockito Journey paused
+            //    on a coord (moveDist=0 → fallback skipped → 0° again).
+            //  - v3 (this version): drop threshold to 2m (1m if mocked),
+            //    detect loc.mocked on Android, preserve the previously
+            //    smoothed heading when mocked-and-stationary, and EMA-smooth
+            //    the final value to dampen short-distance bearing noise.
             const rawHeading = loc.coords.heading;
-            const previousHeading = useLocationStore.getState().heading;
+            // expo-location surfaces loc.mocked on Android when GPS came from
+            // a mock provider (Lockito, joystick apps). iOS has no equivalent
+            // and the property is undefined — defaults to "not mocked".
+            const isMocked =
+              (loc as unknown as { mocked?: boolean }).mocked === true;
+            const previousHeading =
+              smoothedHeadingRef.current ?? useLocationStore.getState().heading;
             const isValidRaw =
               typeof rawHeading === 'number' &&
               Number.isFinite(rawHeading) &&
               rawHeading > 0 && // exclude 0 (Lockito) and negatives (Android)
               rawHeading <= 360;
 
-            let heading: number | null;
+            const last = lastCoordRef.current;
+            const moveDist = last
+              ? distanceMeters(
+                  last.lat,
+                  last.lng,
+                  loc.coords.latitude,
+                  loc.coords.longitude,
+                )
+              : 0;
+            const moveThreshold = isMocked ? 1 : 2; // metres
+
+            let nextHeading: number | null;
             if (isValidRaw) {
-              heading = rawHeading;
+              nextHeading = rawHeading;
+            } else if (last && moveDist >= moveThreshold) {
+              nextHeading = bearingBetween(
+                last.lat,
+                last.lng,
+                loc.coords.latitude,
+                loc.coords.longitude,
+              );
             } else {
-              const last = lastCoordRef.current;
-              if (
-                last &&
-                distanceMeters(
-                  last.lat,
-                  last.lng,
-                  loc.coords.latitude,
-                  loc.coords.longitude,
-                ) > 5
-              ) {
-                heading = bearingBetween(
-                  last.lat,
-                  last.lng,
-                  loc.coords.latitude,
-                  loc.coords.longitude,
-                );
-              } else {
-                heading = previousHeading;
-              }
+              // Preserve the previously smoothed bearing. Critical for
+              // mock providers like Lockito Journey that pause on the
+              // same coord (moveDist=0) — without this we'd snap to 0/north
+              // every pause and the marker would visibly "jump" upright.
+              nextHeading = previousHeading;
+            }
+
+            const heading =
+              nextHeading != null
+                ? smoothHeading(nextHeading, smoothedHeadingRef.current)
+                : null;
+            if (heading != null) {
+              smoothedHeadingRef.current = heading;
             }
             lastCoordRef.current = {
               lat: loc.coords.latitude,
@@ -328,6 +371,8 @@ export function useDriverLocationTracking(
                   console.log('[GPS upload] updateDriverPosition OK', {
                     lat: pos.latitude.toFixed(5),
                     lng: pos.longitude.toFixed(5),
+                    heading:
+                      pos.heading != null ? Math.round(pos.heading) : null,
                     has_ride: !!activeRideId,
                   });
                 })

@@ -13,7 +13,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, MAP_STYLE_LIGHT, MAP_COLORS } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement } from '@tricigo/api';
@@ -100,7 +100,9 @@ function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000
 const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: any }[] = [
   { name: 'Triciclo', desc: 'Económico', slug: 'triciclo_basico', img: require('../../assets/vehicles/selection/triciclo.png') },
   { name: 'Moto', desc: 'Rápido', slug: 'moto_standard', img: require('../../assets/vehicles/selection/moto.png') },
-  { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/markers/auto_clasico.png') },
+  // TODO: dedicated side-view almendrón asset pending. Using selection/auto.png
+  // until then (top-down markers/auto_clasico.png looked off in card UI).
+  { name: 'Auto', desc: 'Cómodo', slug: 'auto_standard', img: require('../../assets/vehicles/selection/auto.png') },
   { name: 'Confort', desc: 'Premium', slug: 'auto_confort', img: require('../../assets/vehicles/selection/confort.png') },
   { name: 'Envío', desc: 'Delivery', slug: 'mensajeria', img: require('../../assets/vehicles/selection/mensajeria.png') },
 ];
@@ -661,7 +663,8 @@ function WebHomeScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const { fetchRoute } = await import('@tricigo/utils');
+        // QA 2026-05-13: fetchRoute moved from dynamic to static import (top of file).
+        // Workspace package dynamic imports hang silently in --no-dev --minify.
         const result = await fetchRoute(
           { lat: pickup.latitude, lng: pickup.longitude },
           { lat: dropoff.latitude, lng: dropoff.longitude },
@@ -2754,8 +2757,12 @@ const SERVICE_META: Record<string, { label: string; desc: string; maxPax: number
 const VEHICLE_ICONS: Record<string, any> = {
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
-  // Web.docx 2026-05-08: "auto es el almendrón cubano"
-  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
+  // TODO: dedicated side-view almendrón selection asset still pending.
+  // markers/auto_clasico.png is top-down style — looked wrong in the
+  // selection card (per user QA 2026-05-13). Using selection/auto.png
+  // (modern sedan side-view) until a proper almendrón selection asset
+  // lands. Map markers continue using auto_clasico.png correctly.
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
   mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
 };
@@ -4426,19 +4433,54 @@ function SearchingView() {
         />
       )}
 
-      {/* Radar pulse animation — 3 rings expanding from center */}
-      {!acceptedDriver && !searchTimedOut && (
+      {/* BUG-293: radar dot now lives inside the DriverInfoMiniCard header.
+           The standalone floating car icon felt disconnected from the rest
+           of the searching state. Keeping it ONLY for the timed-out case so
+           the rider has a visible signal something is still happening. */}
+
+      {/* Interactive driver presence mini-card — now carries pickup/
+           dropoff/fare so the rider has useful context while waiting. */}
+      {!acceptedDriver && activeRide && (() => {
+        // BUG-293: replicate the showTrc/showCup fare display pattern from
+        // RideActiveView so the badge inside the card respects payment
+        // method (cash → CUP, tricicoin → TRC).
+        const showTrc = activeRide.payment_method === 'tricicoin';
+        const fareTrc = activeRide.estimated_fare_trc;
+        const fareCup = activeRide.estimated_fare_cup;
+        const fareDisplay =
+          showTrc && fareTrc != null
+            ? formatTRC(fareTrc)
+            : formatCUP(fareCup ?? 0);
+        const serviceSlug = activeRide.service_type;
+        const serviceTypeLabel = serviceSlug
+          ? t(`service_type.${serviceSlug}` as const, { defaultValue: String(serviceSlug) })
+          : null;
+        const durationS = activeRide.estimated_duration_s ?? null;
+        const etaLabel = durationS && durationS > 0
+          ? t('ride.trip_duration_min', {
+              defaultValue: `~${Math.ceil(durationS / 60)} min`,
+              minutes: Math.ceil(durationS / 60),
+            })
+          : null;
+        return (
+          <DriverInfoMiniCard
+            drivers={searchingDrivers}
+            isSearching={!searchTimedOut}
+            pickupAddress={activeRide.pickup_address ?? null}
+            dropoffAddress={activeRide.dropoff_address ?? null}
+            fareDisplay={fareDisplay}
+            etaLabel={etaLabel}
+            serviceTypeLabel={serviceTypeLabel}
+          />
+        );
+      })()}
+
+      {/* Fallback radar — visible only while the card itself isn't shown
+           (e.g. when activeRide is null in an edge state). */}
+      {!acceptedDriver && !searchTimedOut && !activeRide && (
         <View style={{ alignItems: 'center', justifyContent: 'center', height: 100, marginBottom: 8 }}>
           <RadarPulseAnimation />
         </View>
-      )}
-
-      {/* Interactive driver presence mini-card */}
-      {!acceptedDriver && (
-        <DriverInfoMiniCard
-          drivers={searchingDrivers}
-          isSearching={!searchTimedOut}
-        />
       )}
 
       <StatusStepper

@@ -1,22 +1,26 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Pressable, Animated, Platform, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
-// BUG-281: branded dropoff pin asset. The image is a white silhouette on
-// a transparent background — RN tints it via the Image `tintColor` style
-// so we can apply the brand orange consistently across light/dark themes.
-const DROPOFF_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
+// BUG-281: branded pin asset. The image is a white silhouette on a
+// transparent background — RN tints it via the Image `tintColor` style
+// so we can apply different brand colors per pickup/dropoff consistently
+// across light/dark themes. BUG-292: pickup also uses this asset (was a
+// flat green disc that looked indistinguishable from a POI dot — users
+// thought their pickup was being snapped to a non-existent POI).
+const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { reverseGeocode, MAP_STYLE_LIGHT } from '@tricigo/utils';
-import type { GeoPoint, ViewportPoi } from '@tricigo/utils';
+import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { useViewportPois } from '@/hooks/useViewportPois';
+import { PoiMapLayers } from './PoiMapLayers';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -44,28 +48,8 @@ ensureMapboxToken();
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
 const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 
-/* POI category colors (same as RideMapView) */
-const POI_COLORS: Record<string, string> = {
-  restaurant: '#E53935', cafe: '#E53935', bar: '#E53935', fast_food: '#E53935', bakery: '#E53935',
-  hotel: '#1E88E5', guest_house: '#1E88E5', hostel: '#1E88E5',
-  hospital: '#43A047', clinic: '#43A047', pharmacy: '#43A047', doctors: '#43A047',
-  supermarket: '#FB8C00', convenience: '#FB8C00', marketplace: '#FB8C00',
-  school: '#8E24AA', university: '#8E24AA',
-  bank: '#546E7A', post_office: '#546E7A', police: '#546E7A',
-  park: '#2E7D32', beach: '#2E7D32', museum: '#2E7D32', monument: '#2E7D32',
-  fuel: '#FF6F00', bus_station: '#FF6F00',
-};
-
-function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: pois.map((p) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-      properties: { id: p.id, name: p.name, color: POI_COLORS[p.subcategory] || '#78909C' },
-    })),
-  };
-}
+// BUG-296: POI rendering moved to the shared <PoiMapLayers> component.
+// The old per-subcategory POI_COLORS map + poisToGeoJSON are gone.
 
 interface ConfirmLocationScreenProps {
   mode: 'pickup' | 'dropoff';
@@ -97,10 +81,7 @@ export function ConfirmLocationScreen({
   const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois(
     initialLocation ?? null,
   );
-  const poiGeoJSON = useMemo(() => {
-    if (!pois || pois.length === 0) return null;
-    return poisToGeoJSON(pois);
-  }, [pois]);
+  // BUG-296: POI GeoJSON now built inside <PoiMapLayers>.
 
   const handleCameraForPois = useCallback((event: any) => {
     try {
@@ -293,40 +274,27 @@ export function ConfirmLocationScreen({
           }}
         />
 
-        {/* POI layers */}
-        {poiGeoJSON && (
-          <MapboxGL.ShapeSource id="confirm-pois" shape={poiGeoJSON} cluster clusterMaxZoomLevel={14} clusterRadius={40}>
-            <MapboxGL.CircleLayer
-              id="confirm-poi-clusters"
-              filter={['has', 'point_count']}
-              style={{ circleColor: ['step', ['get', 'point_count'], '#51bbd6', 50, '#f1f075', 200, '#f28cb1'], circleRadius: ['step', ['get', 'point_count'], 12, 50, 16, 200, 20], circleStrokeWidth: 1.5, circleStrokeColor: 'rgba(255,255,255,0.6)' }}
-            />
-            <MapboxGL.SymbolLayer
-              id="confirm-poi-cluster-count"
-              filter={['has', 'point_count']}
-              style={{ textField: ['get', 'point_count_abbreviated'], textSize: 10, textColor: '#333' }}
-            />
-            <MapboxGL.CircleLayer
-              id="confirm-poi-unclustered"
-              filter={['!', ['has', 'point_count']]}
-              style={{ circleColor: ['get', 'color'], circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 7], circleStrokeWidth: 1, circleStrokeColor: 'rgba(255,255,255,0.9)' }}
-            />
-            <MapboxGL.SymbolLayer
-              id="confirm-poi-labels"
-              filter={['!', ['has', 'point_count']]}
-              minZoomLevel={14}
-              style={{ textField: ['get', 'name'], textSize: ['interpolate', ['linear'], ['zoom'], 14, 8, 16, 10], textOffset: [0, 1.0], textAnchor: 'top', textMaxWidth: 7, textOptional: true, textAllowOverlap: false, textColor: '#555', textHaloColor: 'rgba(255,255,255,0.95)', textHaloWidth: 1 }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+        {/* BUG-296: POIs via the shared <PoiMapLayers> — same Google-
+            Maps-style categorical badges as RideMapView. No onPoiPress
+            here: while confirming a pickup/dropoff the POIs are visual
+            context only (the user drags the map under the center pin). */}
+        <PoiMapLayers
+          MapboxGL={MapboxGL}
+          pois={pois}
+          isDark={isDark}
+        />
       </MapboxGL.MapView>
 
-      {/* BUG-281 — Static center pin overlaid on map center.
-         Pickup: small green disc (universal "you are here" semantic).
-         Dropoff: branded TriciGo pin in brand-orange — the asset is the
-         app's adaptive-icon foreground (white pin silhouette on transparent
-         background) tinted via Image.tintColor so the brand color stays
-         consistent without shipping a second PNG. */}
+      {/* BUG-292 — Static center pin overlaid on map center.
+         Pickup AND dropoff now share the same branded TriciGo pin silhouette,
+         differentiated only by tint color (green for pickup, orange for
+         dropoff). Previously the pickup was a flat 28-px disc which looked
+         indistinguishable from a POI dot — users reported "when I drop the
+         pickup on an empty street it says a POI dot and the address" because
+         the green circle visually matched the POI category dots underneath.
+         A real pin shape (vertical needle, transparent above the tip) leaves
+         the street name DIRECTLY below the tip readable, fixing the
+         companion "no veo las calles en la dirección" complaint. */}
       <View
         pointerEvents="none"
         style={{
@@ -339,78 +307,49 @@ export function ConfirmLocationScreen({
           alignItems: 'center',
         }}
       >
-        {/* Drop shadow under the pin tip — anchors the pin to the map */}
+        {/* Drop shadow under the pin tip — anchors the pin to the map.
+           translateY is the offset between the View center (where the
+           shadow sits) and the visual tip of the pin asset (a few px
+           higher than the asset midpoint). Same offset for both modes
+           since the asset is the same. */}
         <View
           style={{
-            width: 8,
+            width: 10,
             height: 4,
             borderRadius: 4,
-            backgroundColor: 'rgba(0,0,0,0.2)',
+            backgroundColor: 'rgba(0,0,0,0.22)',
             marginBottom: -2,
-            transform: [{ translateY: isPickup ? 20 : 22 }],
+            transform: [{ translateY: 22 }],
           }}
         />
-        {isPickup ? (
-          /* Pickup — kept simple/green for "you" semantic */
-          <View style={{ alignItems: 'center' }}>
-            <View
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: pinColor,
-                justifyContent: 'center',
-                alignItems: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
-                shadowRadius: 4,
-                elevation: 4,
-              }}
-            >
-              <Ionicons name="radio-button-on" size={14} color="#fff" />
-            </View>
-            <View
-              style={{
-                width: 3,
-                height: 12,
-                backgroundColor: pinColor,
-                borderBottomLeftRadius: 2,
-                borderBottomRightRadius: 2,
-              }}
-            />
-          </View>
-        ) : (
-          /* Dropoff — branded TriciGo pin.
-             BUG-285 — wrapper needs explicit width/height to render. The
-             ConfirmLocationScreen overlay is `position: absolute` with
-             centered alignment, so a 0×0 wrapper still renders nothing.
-             Same fix as the in-trip dropoff markers. */
-          <View
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            elevation: 5,
+          }}
+        >
+          <Image
+            source={ROUTE_PIN_ASSET}
             style={{
               width: 44,
               height: 44,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.3,
-              shadowRadius: 4,
-              elevation: 5,
+              tintColor: pinColor,
             }}
-          >
-            <Image
-              source={DROPOFF_PIN_ASSET}
-              style={{
-                width: 44,
-                height: 44,
-                tintColor: colors.brand.orange,
-              }}
-              resizeMode="contain"
-              accessibilityLabel="Pin de destino TriciGo"
-            />
-          </View>
-        )}
+            resizeMode="contain"
+            accessibilityLabel={
+              isPickup
+                ? 'Pin de recogida TriciGo'
+                : 'Pin de destino TriciGo'
+            }
+          />
+        </View>
       </View>
 
       {/* Top address bar */}

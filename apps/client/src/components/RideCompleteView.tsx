@@ -89,6 +89,9 @@ export function RideCompleteView() {
   const [sendingTip, setSendingTip] = useState(false);
   const [receiptEmailed, setReceiptEmailed] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  // BUG-291: gate the download button while the PDF is generating so
+  // the user gets feedback (was silently no-op on failure).
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [isFirstRide, setIsFirstRide] = useState(false);
   const [showTipConfetti, setShowTipConfetti] = useState(false);
   const [customTipOpen, setCustomTipOpen] = useState(false);
@@ -284,7 +287,8 @@ export function RideCompleteView() {
   };
 
   const handleDownloadReceipt = async () => {
-    if (!activeRide) return;
+    if (!activeRide || downloadingReceipt) return;
+    setDownloadingReceipt(true);
     try {
       const data = await rideService.getReceiptData(activeRide.id, 'passenger');
       // Override the raw payment_method with a translated label when corporate.
@@ -295,9 +299,28 @@ export function RideCompleteView() {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });
+      } else {
+        // Print succeeded but Sharing is unavailable on this device.
+        // BUG-291: tell the rider the PDF was generated so they don't
+        // think the button is broken (previous behavior: silent no-op).
+        Toast.show({
+          type: 'info',
+          text1: t('ride.receipt_saved', { defaultValue: 'Recibo guardado' }),
+          text2: t('ride.receipt_saved_subtitle', {
+            defaultValue: 'Compartir no está disponible en este dispositivo.',
+          }),
+        });
       }
     } catch (err) {
+      // BUG-291: surface failures via Toast. Was silently logged.
       logger.error('Receipt generation failed', { error: String(err) });
+      Toast.show({
+        type: 'error',
+        text1: t('ride.receipt_error', { defaultValue: 'No se pudo generar el recibo' }),
+        text2: t('ride.receipt_error_subtitle', { defaultValue: 'Probá de nuevo en un momento.' }),
+      });
+    } finally {
+      setDownloadingReceipt(false);
     }
   };
 
@@ -376,16 +399,34 @@ export function RideCompleteView() {
       <Text variant="h2" color="accent" className="mb-2" accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: fareDisplay })}>
         {fareDisplay}
       </Text>
-      {activeRide.actual_distance_m != null && (
-        <View className="flex-row gap-4 mb-2" accessible={true} accessibilityLabel={`${t('a11y.stat_distance', { ns: 'common', value: `${(activeRide.actual_distance_m / 1000).toFixed(1)} km` })}, ${t('a11y.stat_duration', { ns: 'common', value: `${Math.round((activeRide.actual_duration_s ?? 0) / 60)} min` })}`}>
-          <Text variant="caption" color="secondary">
-            {(activeRide.actual_distance_m / 1000).toFixed(1)} km
-          </Text>
-          <Text variant="caption" color="secondary">
-            {Math.round((activeRide.actual_duration_s ?? 0) / 60)} min
-          </Text>
-        </View>
-      )}
+      {activeRide.actual_distance_m != null && (() => {
+        // BUG-291: defensive display clamp. The legacy
+        // calculate_ride_distance RPC could produce 1000s of km
+        // when a single corrupt GPS sample slipped through. With
+        // the SQL fixes (migration 00267) raw actual_distance_m is
+        // still preserved for audit, but for display we cap at
+        // estimated × 1.3 (or 100km absolute) so the rider never
+        // sees "24,619.9 km · 6 min" on a 2 km trip.
+        const HARD_CEILING_M = 100_000;
+        const rawM = activeRide.actual_distance_m;
+        const estM = activeRide.estimated_distance_m ?? 0;
+        const capM = estM > 0
+          ? Math.min(estM * 1.3, HARD_CEILING_M)
+          : HARD_CEILING_M;
+        const displayM = Math.min(rawM, capM);
+        const km = (displayM / 1000).toFixed(1);
+        const mins = Math.round((activeRide.actual_duration_s ?? 0) / 60);
+        return (
+          <View className="flex-row gap-4 mb-2" accessible={true} accessibilityLabel={`${t('a11y.stat_distance', { ns: 'common', value: `${km} km` })}, ${t('a11y.stat_duration', { ns: 'common', value: `${mins} min` })}`}>
+            <Text variant="caption" color="secondary">
+              {km} km
+            </Text>
+            <Text variant="caption" color="secondary">
+              {mins} min
+            </Text>
+          </View>
+        );
+      })()}
       <Text variant="caption" color="secondary" className="mb-2">
         {activeRide.payment_method === 'cash'
           ? t('ride.paid_cash', { defaultValue: 'Pagado en efectivo' })
@@ -501,11 +542,15 @@ export function RideCompleteView() {
             />
           )}
           <Button
-            title={t('ride.download_receipt', { defaultValue: 'Descargar recibo' })}
+            title={downloadingReceipt
+              ? t('ride.downloading_receipt', { defaultValue: 'Generando recibo…' })
+              : t('ride.download_receipt', { defaultValue: 'Descargar recibo' })}
             variant="outline"
             size="sm"
             fullWidth
             onPress={handleDownloadReceipt}
+            loading={downloadingReceipt}
+            disabled={downloadingReceipt}
             className="mb-2"
           />
           {!receiptEmailed ? (

@@ -3,7 +3,7 @@ import { View, Text, Animated, Pressable, StyleSheet, Platform, Image } from 're
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, vehicleMarkerRotationOffset } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
@@ -90,6 +90,14 @@ interface RideMapViewProps {
   driverHeading?: number | null;
   /** Callback when user interacts with map (disables follow mode) */
   onUserInteraction?: () => void;
+  /**
+   * BUG-267 v3 — current ride status. When present and in
+   * {accepted, driver_en_route, arrived_at_pickup, in_progress} the
+   * camera uses a per-status cinematic profile (zoom/pitch optimized
+   * for the phase of the trip) instead of the legacy fixed
+   * zoom-16.5/pitch-45. Only consulted when `followMode` is true.
+   */
+  rideStatus?: string | null;
   /**
    * When true, prevents zoom-out beyond level 14 regardless of follow mode.
    * Set during active trips so the driver never loses position context, even
@@ -681,6 +689,7 @@ function RideMapViewInner(
     nearbyDrivers,
     demandHotspots,
     popularLocations,
+    rideStatus,
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
@@ -890,10 +899,141 @@ function RideMapViewInner(
     }
   }, [bounds, followMode]);
 
+  // BUG-293 (Round 3): snap driver position to the route polyline.
+  // Returns the projected point + the segment's bearing when the GPS is
+  // within 30m of the polyline. Falls back to null when the driver
+  // genuinely departed the route — caller then renders raw GPS.
+  // Display-side only; ride_location_events keeps the raw lat/lng.
+  const snappedDriver = useMemo(() => {
+    if (!driverLocation || !routeCoordinates) return null;
+    if (!Number.isFinite(driverLocation.latitude) || !Number.isFinite(driverLocation.longitude)) {
+      return null;
+    }
+    return snapDriverToRoute(
+      { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+      routeCoordinates,
+      30,
+    );
+  }, [driverLocation?.latitude, driverLocation?.longitude, routeCoordinates]);
+
+  // Effective driver position + bearing (snapped if on-route, raw if off-route).
+  const effectiveDriverCoord: [number, number] | null = driverLocation
+    ? [
+        snappedDriver?.longitude ?? driverLocation.longitude,
+        snappedDriver?.latitude ?? driverLocation.latitude,
+      ]
+    : null;
+  const effectiveDriverHeading: number =
+    snappedDriver?.bearing ??
+    (typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0);
+
   // Default center: driver location > Havana
   const defaultCenter: [number, number] = driverLocation
     ? toCoord(driverLocation)
     : HAVANA_CENTER;
+
+  // BUG-267 v3 + Round 5 — Uber-style cinematic camera profile per ride
+  // status. Active only while followMode is true AND we have a driver fix.
+  // The legacy fixed zoom-16.5/pitch-45 is preserved as the fallback (when
+  // rideStatus is null/unknown, e.g. idle online sessions).
+  //
+  // Round 5 update — PITCH MIXTO confirmed by user:
+  //   Info phases (parado / llegada) → pitch BAJO + zoom alto top-down:
+  //     accepted (pickup glance):       z=15.5  pitch=10  flyTo 1500
+  //     arrived_at_pickup:              z=18    pitch=0   easeTo 800
+  //     arrived_at_destination:         z=17.5  pitch=0   easeTo 800
+  //   Nav phases (manejando) → 3D inmersivo:
+  //     driver_en_route:                z=16.5  pitch=45  easeTo 1000
+  //     in_progress:                    z=17.5  pitch=45  easeTo 800
+  //
+  // Rationale: info phases need legible street names (top-down), nav
+  // phases benefit from 3D perspective (Waze/GMaps style). Earlier
+  // values (z=14-17.5, pitch 0-50) were inconsistent — high pitch on
+  // arrived_at_pickup made street names unreadable, low zoom on accepted
+  // hid the pickup detail. Closer + status-appropriate pitch = more
+  // Uber-like.
+  const tripCameraProfile = useMemo(() => {
+    if (!followMode || !driverLocation) return null;
+    const driverCoord = toCoord(driverLocation);
+    const heading = driverHeading ?? 0;
+
+    switch (rideStatus) {
+      case 'accepted':
+        // Info phase: close enough to see pickup neighbourhood, mild tilt
+        // for spatial context, north-up so the rider thumbnail and the
+        // pickup pin both stay aligned.
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 15.5,
+          pitch: 10,
+          heading: 0,
+          animationDuration: 1500,
+          animationMode: 'flyTo' as const,
+        };
+      case 'driver_en_route':
+        // Nav phase: 3D perspective, heading-up navigation. Closer zoom
+        // (16.5) than the previous 15.5 so individual streets are visible.
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 16.5,
+          pitch: 45,
+          heading,
+          animationDuration: 1000,
+          animationMode: 'easeTo' as const,
+        };
+      case 'arrived_at_pickup':
+        // Info phase: top-down + tightest zoom so the driver can spot the
+        // rider on the sidewalk. Pitch=0 keeps street labels legible.
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 18,
+          pitch: 0,
+          heading: 0,
+          animationDuration: 800,
+          animationMode: 'easeTo' as const,
+        };
+      case 'in_progress':
+        // Nav phase: same family as driver_en_route, slightly tighter
+        // zoom (17.5) for the dense city driving leg with rider on board.
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 17.5,
+          pitch: 45,
+          heading,
+          animationDuration: 800,
+          animationMode: 'easeTo' as const,
+        };
+      case 'arrived_at_destination':
+        // Info phase (NEW — was falling through to default with random
+        // values). Top-down zoom on the drop-off so the driver verifies
+        // they're at the right building before tapping "Finalizar viaje".
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 17.5,
+          pitch: 0,
+          heading: 0,
+          animationDuration: 800,
+          animationMode: 'easeTo' as const,
+        };
+      default:
+        // No status (idle online with manual follow toggle) — legacy profile.
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 16.5,
+          pitch: 45,
+          heading,
+          animationDuration: 1000,
+          animationMode: 'easeTo' as const,
+        };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    followMode,
+    driverLocation?.latitude,
+    driverLocation?.longitude,
+    driverHeading,
+    rideStatus,
+  ]);
 
   // Expose imperative API for parent (camera control)
   useImperativeHandle(ref, () => ({
@@ -1015,11 +1155,14 @@ function RideMapViewInner(
           // Logged here so it shows up in adb logcat for diagnosis.
           console.warn('[RideMapView] onDidFailLoadingMap — Mapbox style/tile fetch failed');
         }}
-        onRegionWillChange={(feature: any) => {
-          if (feature?.properties?.isUserInteraction && followMode) {
-            onUserInteraction?.();
-          }
-        }}
+        // BUG-291 v2: onRegionWillChange is deprecated in @rnmapbox/maps v10
+        // AND fires with isUserInteraction=true on programmatic camera moves
+        // (every GPS update triggers a follow-camera animation that the
+        // library mis-tags as a user gesture). That flipped followMode off
+        // within a second of accepting a ride, freezing the camera for the
+        // rest of the trip. onTouchStart is the same pattern the client app
+        // uses and only fires on real finger contact.
+        onTouchStart={followMode ? () => onUserInteraction?.() : undefined}
       >
         <MapboxGL.Camera
           ref={cameraRef}
@@ -1030,16 +1173,8 @@ function RideMapViewInner(
           // user is gesturing within the allowed range. Idle home leaves
           // zoom unrestricted.
           {...(lockZoom ? { minZoomLevel: 14 } : {})}
-          {...(followMode && driverLocation
-            ? {
-                // Follow path: heading-up navigation mode (Uber driver style)
-                centerCoordinate: toCoord(driverLocation),
-                zoomLevel: 16.5,
-                pitch: 45,
-                heading: driverHeading ?? 0,
-                animationDuration: 1000,
-                animationMode: 'easeTo',
-              }
+          {...(tripCameraProfile
+            ? tripCameraProfile
             : !driverLocation && bounds
               ? {
                   // Initial fit while driverLocation is loading. Once we have
@@ -1117,7 +1252,13 @@ function RideMapViewInner(
           // PointAnnotation snapshots its child once on mount — if the image
           // hasn't loaded yet, the snapshot is empty and the user sees just
           // a dark/white circle without the vehicle icon.
-          <MapboxGL.MarkerView id="driver" coordinate={toCoord(driverLocation)} anchor={{ x: 0.5, y: 0.5 }}>
+          //
+          // BUG-293: coordinate + rotation now come from `effectiveDriverCoord`
+          // / `effectiveDriverHeading` which prefer the route-polyline snap
+          // when available. This keeps the marker on-road and aligned with
+          // the visible street geometry instead of drifting through
+          // buildings as Lockito/GPS noise crosses streets diagonally.
+          <MapboxGL.MarkerView id="driver" coordinate={effectiveDriverCoord ?? toCoord(driverLocation)} anchor={{ x: 0.5, y: 0.5 }}>
             <View style={styles.driverMarkerContainer}>
               <Animated.View
                 style={[styles.driverRing, { transform: [{ scale: ringAnim }], opacity: ringOpacity }]}
@@ -1133,10 +1274,19 @@ function RideMapViewInner(
                 <View
                   style={{
                     transform: [
-                      // 0=N, 90=E, 180=S, 270=W. The marker images are drawn
-                      // pointing up (north) so a direct deg rotation aligns
-                      // the nose with the direction of travel.
-                      { rotate: `${(vehicleType && NON_ROTATING_MARKERS.has(vehicleType)) ? 0 : (typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0)}deg` },
+                      // 0=N, 90=E, 180=S, 270=W. Most marker assets point UP
+                      // (north) at rotation 0°. The triciclo asset is the
+                      // exception — drawn with the driver/handlebar pointing
+                      // south. BUG-295: vehicleMarkerRotationOffset() adds
+                      // +180° for triciclo so the rendered rotation aligns
+                      // with the bearing of motion. Other vehicles → 0.
+                      {
+                        rotate: `${
+                          (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
+                            ? 0
+                            : ((effectiveDriverHeading + vehicleMarkerRotationOffset(vehicleType)) % 360)
+                        }deg`,
+                      },
                     ],
                   }}
                 >
@@ -1241,7 +1391,16 @@ function RideMapViewInner(
                   iconImage: ['get', 'icon'],
                   iconSize: 0.45,
                   // Cargo box marker (mensajería) stays at 0deg — no inherent front.
-                  iconRotate: ['case', ['==', ['get', 'icon'], 'marker-mensajeria'], 0, ['get', 'heading']],
+                  // BUG-295: triciclo asset drawn pointing south — add 180°
+                  // to align the nose with direction of travel. Mensajería
+                  // doesn't rotate (cargo box has no inherent front). All
+                  // other markers use the raw heading.
+                  iconRotate: [
+                    'case',
+                    ['==', ['get', 'icon'], 'marker-mensajeria'], 0,
+                    ['==', ['get', 'icon'], 'marker-triciclo'], ['%', ['+', ['get', 'heading'], 180], 360],
+                    ['get', 'heading'],
+                  ],
                   iconAllowOverlap: true,
                   iconRotationAlignment: 'map',
                   iconPitchAlignment: 'map',

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService } from '@tricigo/api';
+import { rideService } from '@tricigo/api';
 import type { SharedRideView, RideStatus } from '@tricigo/types';
 import '../../[id]/track.css';
 
@@ -92,7 +92,7 @@ export default function SharedTrackingPage() {
   const [ride, setRide] = useState<SharedRideView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number; heading: number | null } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const statusSteps = useStatusSteps();
 
@@ -108,43 +108,65 @@ export default function SharedTrackingPage() {
     }
   }, [token, t]);
 
-  // Initial fetch only — no polling (real-time subscription handles updates)
+  // One-time fetch of the STATIC info (driver, vehicle, addresses, route
+  // endpoints). Live status + driver position come from the poll below.
   useEffect(() => {
     fetchRide();
   }, [fetchRide]);
 
+  // ── Live tracking via polling ──────────────────────────────────────
+  // The shared page used to subscribe to a `ride-driver-location-*`
+  // broadcast channel + rideService.subscribeToRide. Both are dead:
+  //   - The driver's GPS loop writes ride_location_events via the
+  //     update_driver_position RPC and emits NO broadcast (BUG-275).
+  //   - subscribeToRide is a no-op stub (BUG-277, realtime removed).
+  // Result: the car never moved and the stepper was frozen.
+  //
+  // Fix: poll the token-gated get_shared_trip_state RPC every 3s — the
+  // canonical post-BUG-277 pattern. One small request returns ride
+  // status (drives the stepper) + the latest driver GPS sample. Stops
+  // once the ride reaches a terminal state.
   useEffect(() => {
     if (!ride) return;
-    const channel = rideService.subscribeToRide(ride.id, (updated) => {
-      setRide((prev) => {
-        if (!prev) return null;
-        // Only update fields that exist on SharedRideView
-        const safe: Partial<SharedRideView> = {};
-        if (updated.status) safe.status = updated.status as SharedRideView['status'];
-        if (updated.accepted_at !== undefined) safe.accepted_at = updated.accepted_at;
-        if (updated.pickup_at !== undefined) safe.pickup_at = updated.pickup_at;
-        if (updated.arrived_at_destination_at !== undefined) safe.arrived_at_destination_at = updated.arrived_at_destination_at;
-        if (updated.completed_at !== undefined) safe.completed_at = updated.completed_at;
-        if (updated.canceled_at !== undefined) safe.canceled_at = updated.canceled_at;
-        return { ...prev, ...safe };
-      });
-    });
-    return () => { channel.unsubscribe(); };
-  }, [ride?.id]);
+    const isTerminalStatus = (s: string) =>
+      ['completed', 'canceled', 'disputed'].includes(s);
+    if (isTerminalStatus(ride.status)) return;
 
-  // Subscribe to driver location via ride-level channel (no driver_id exposed)
-  useEffect(() => {
-    if (!ride) return;
-    const isActive = !['completed', 'canceled', 'disputed'].includes(ride.status);
-    if (!isActive) return;
-    const supabase = getSupabaseClient();
-    const channel = supabase.channel(`ride-driver-location-${ride.id}`)
-      .on('broadcast', { event: 'driver_location' }, (payload: { payload: { latitude: number; longitude: number } }) => {
-        setDriverLocation({ lat: payload.payload.latitude, lng: payload.payload.longitude });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [ride?.id, ride?.status]);
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const poll = async () => {
+      try {
+        const state = await rideService.getSharedTripState(token);
+        if (cancelled || !state) return;
+        setRide((prev) => (prev ? {
+          ...prev,
+          status: state.status,
+          accepted_at: state.accepted_at,
+          pickup_at: state.pickup_at,
+          arrived_at_destination_at: state.arrived_at_destination_at,
+          completed_at: state.completed_at,
+          canceled_at: state.canceled_at,
+        } : prev));
+        if (state.driver_location) {
+          setDriverLocation({
+            lat: state.driver_location.latitude,
+            lng: state.driver_location.longitude,
+            heading: state.driver_heading,
+          });
+        }
+        if (isTerminalStatus(state.status) && interval) {
+          clearInterval(interval);
+        }
+      } catch {
+        /* best-effort — keep last known state, retry next tick */
+      }
+    };
+
+    poll(); // immediate first sample
+    interval = setInterval(poll, 3000);
+    return () => { cancelled = true; if (interval) clearInterval(interval); };
+  }, [ride?.id, token]);
 
   /* ── Loading State ── */
   if (loading) {
@@ -216,6 +238,7 @@ export default function SharedTrackingPage() {
             dropoffLng={dropoffLng}
             driverLat={driverLocation?.lat}
             driverLng={driverLocation?.lng}
+            driverHeading={driverLocation?.heading ?? undefined}
             vehicleType={ride.vehicle_type ?? undefined}
             waypoints={ride.waypoints}
             rideStatus={ride.status}
@@ -265,7 +288,7 @@ export default function SharedTrackingPage() {
             </div>
           )}
 
-          {/* Route Card — coordinates only for privacy */}
+          {/* Route Card — exact pickup / dropoff addresses */}
           <div className="track-card">
             <div className="track-route">
               <div className="track-route-dots">
@@ -276,14 +299,14 @@ export default function SharedTrackingPage() {
               <div className="track-route-addresses">
                 <div>
                   <div className="track-route-label">{t('track.from', { defaultValue: 'Origen' })}</div>
-                  <div className="track-route-address" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                    {pickupLat.toFixed(4)}, {pickupLng.toFixed(4)}
+                  <div className="track-route-address">
+                    {ride.pickup_address || t('track.pickup_point', { defaultValue: 'Punto de recogida' })}
                   </div>
                 </div>
                 <div>
                   <div className="track-route-label">{t('track.to', { defaultValue: 'Destino' })}</div>
-                  <div className="track-route-address" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                    {dropoffLat.toFixed(4)}, {dropoffLng.toFixed(4)}
+                  <div className="track-route-address">
+                    {ride.dropoff_address || t('track.dropoff_point', { defaultValue: 'Punto de destino' })}
                   </div>
                 </div>
               </div>

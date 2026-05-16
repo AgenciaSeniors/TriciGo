@@ -232,6 +232,71 @@ export function projectPointOnPolyline(
 }
 
 /**
+ * Initial spherical bearing from `from` to `to` in degrees
+ * (0=N, 90=E, 180=S, 270=W).
+ *
+ * Promoted from `apps/driver/src/hooks/useDriverLocation.ts` (BUG-267 v3)
+ * so client RideMapView can reuse it for snap-to-road bearing (BUG-293).
+ * The old copy in useDriverLocation took `(lat1, lng1, lat2, lng2)` positional
+ * args; this exported version takes GeoPoint objects for consistency with
+ * the other geo helpers (haversineDistance, projectPointOnPolyline, etc).
+ */
+export function bearingBetween(from: GeoPoint, to: GeoPoint): number {
+  if (!from || !to) return 0;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+  const phi1 = toRad(from.latitude);
+  const phi2 = toRad(to.latitude);
+  const dLambda = toRad(to.longitude - from.longitude);
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/**
+ * BUG-293: snap a driver position to the nearest point on a route polyline
+ * and return that segment's bearing.
+ *
+ * Used by client RideMapView (rider sees the driver) and driver RideMapView
+ * (driver sees their own marker) so the vehicle icon visually tracks the
+ * actual road, even when GPS drifts off-road. Common causes of drift:
+ *   - Lockito Journey emits linear interpolation between journey points
+ *     without following street geometry (mock GPS for QA).
+ *   - Real GPS in dense urban areas under tree cover, near tall buildings,
+ *     or in tunnels can be 10-30m off the real position.
+ *   - Cuban GPS units, especially older Android devices, often have
+ *     5-15m of static drift on stationary positions.
+ *
+ * The snap is purely display-side: `ride_location_events.{latitude,longitude}`
+ * still stores the raw GPS for audit/analytics.
+ *
+ * If the driver is more than `maxDriftM` away from the polyline they have
+ * genuinely departed the route (detour, reroute pending) — return `null`
+ * so the caller falls back to the raw GPS coord (don't lie about where
+ * the driver is when they really are elsewhere).
+ */
+export function snapDriverToRoute(
+  driver: GeoPoint,
+  polyline: GeoPoint[] | null | undefined,
+  maxDriftM: number = 30,
+): { latitude: number; longitude: number; bearing: number } | null {
+  if (!polyline || polyline.length < 2) return null;
+  if (!driver || !Number.isFinite(driver.latitude) || !Number.isFinite(driver.longitude)) return null;
+  const proj = projectPointOnPolyline(driver, polyline);
+  const drift = haversineDistance(driver, proj.projectedPoint);
+  if (drift > maxDriftM) return null;
+  const a = polyline[proj.segmentIndex]!;
+  const b = polyline[proj.segmentIndex + 1] ?? a;
+  return {
+    latitude: proj.projectedPoint.latitude,
+    longitude: proj.projectedPoint.longitude,
+    bearing: bearingBetween(a, b),
+  };
+}
+
+/**
  * Average speeds in km/h per service type.
  * Calibrated for Cuban urban conditions:
  * - Narrow streets, potholes, long traffic lights
@@ -1151,8 +1216,16 @@ export async function lookupCrossStreetsSupabase(
  *
  * Bounded at NEAREST_POI_CACHE_MAX entries, evicted oldest-first when
  * full so a long session of pin dragging doesn't grow memory unbounded.
+ *
+ * BUG-292: cache now stores both name AND distance_m so the consumer
+ * (reverseGeocode) can decide whether to include the POI in the
+ * address text based on proximity, not just existence.
  */
-const nearestPoiCache = new Map<string, { name: string | null; ts: number }>();
+interface NearestPoi {
+  name: string;
+  distance_m: number;
+}
+const nearestPoiCache = new Map<string, { value: NearestPoi | null; ts: number }>();
 const NEAREST_POI_CACHE_TTL = 24 * 60 * 60 * 1000;
 const NEAREST_POI_CACHE_MAX = 1000;
 
@@ -1169,16 +1242,23 @@ function quantizeCell(lat: number, lng: number): string {
  * Find the nearest named POI from Supabase cuba_pois table (~5-10ms uncached,
  * 0ms on cache hit). Only returns user-recognizable POIs (shops, hotels,
  * restaurants, etc.) within 30m radius. Returns null if no POI nearby.
+ *
+ * BUG-292: returns BOTH name and distance_m (was returning just name).
+ * `reverseGeocode` uses `distance_m` to decide whether to include the POI
+ * in the final address text — the RPC `nearest_poi` has always returned
+ * the column (see `supabase/migrations/00264_restore_dropped_geo_rpcs.sql:114`)
+ * but we were discarding it, so any POI within 30m was being prefixed to
+ * the address even when the pin clearly landed on the street.
  */
 async function lookupNearestPoi(
   lat: number,
   lng: number,
-): Promise<string | null> {
+): Promise<NearestPoi | null> {
   // Cache lookup: quantize to 50m cell so close pins share results
   const cacheKey = quantizeCell(lat, lng);
   const cached = nearestPoiCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < NEAREST_POI_CACHE_TTL) {
-    return cached.name;
+    return cached.value;
   }
 
   try {
@@ -1218,8 +1298,11 @@ async function lookupNearestPoi(
 
     if (!res.ok) return null;
     const data = await res.json();
-    const name = data && Array.isArray(data) && data.length > 0 && data[0].name
-      ? (data[0].name as string)
+    const first = data && Array.isArray(data) && data.length > 0 ? data[0] : null;
+    // PostgREST sometimes serialises numerics as strings — coerce + validate.
+    const rawDist = first ? Number(first.distance_m) : NaN;
+    const value: NearestPoi | null = (first && first.name && Number.isFinite(rawDist))
+      ? { name: first.name as string, distance_m: rawDist }
       : null;
 
     // Evict oldest entry if cache is full (insertion-order LRU)
@@ -1227,9 +1310,9 @@ async function lookupNearestPoi(
       const oldest = nearestPoiCache.keys().next().value;
       if (oldest !== undefined) nearestPoiCache.delete(oldest);
     }
-    nearestPoiCache.set(cacheKey, { name, ts: Date.now() });
+    nearestPoiCache.set(cacheKey, { value, ts: Date.now() });
 
-    return name;
+    return value;
   } catch {
     return null;
   }
@@ -1661,6 +1744,27 @@ const REVERSE_GEOCODE_CACHE_TTL = 24 * 60 * 60 * 1000;
 const REVERSE_GEOCODE_CACHE_MAX = 1000;
 
 /**
+ * BUG-292 — POI proximity threshold for address-text inclusion.
+ *
+ * The `nearest_poi` RPC returns POIs within a 30m radius (radio del RPC
+ * configurado en línea ~1218). Pero un usuario que arrastra la pin en
+ * `ConfirmLocationScreen` típicamente NO quiere ver "Capitolio Nacional,
+ * Calle Brasil" cuando marcó la calle Brasil enfrente del Capitolio.
+ *
+ * Solo incluimos el nombre del POI en el texto de address si el centro
+ * de la pin está MUY cerca (≤15m). Para distancias entre 15-30m, el
+ * RPC sigue devolviendo el POI pero acá lo descartamos: el usuario
+ * apuntó a la calle, no al POI.
+ *
+ * Tuning notes (validado QA Round 3):
+ *  - 10m: muy estricto, requiere estar literal en la puerta del POI.
+ *  - 15m: balanceado, captura entrance + acera adyacente.            ← actual
+ *  - 20m: permisivo, captura POIs grandes (Capitolio = ~80m de largo,
+ *         estadios). Subir si en QA aparecen falsos negativos.
+ */
+const POI_INCLUSION_THRESHOLD_M = 15;
+
+/**
  * Reverse geocode coordinates to a Cuban-style street address.
  *
  * Pipeline (parallel):
@@ -1717,7 +1821,16 @@ export async function reverseGeocode(
     const road = metadata?.road || '';
     const municipality = metadata?.municipality || '';
     const province = metadata?.province || '';
-    const poiName = nearestPoi || metadata?.poiName || '';
+    // BUG-292: only include the Supabase nearest POI if it's within the
+    // proximity threshold. Distance comes precomputed from the RPC
+    // (ST_Distance on geography — exact, not approximate). If the POI is
+    // farther than the threshold we fall back to Mapbox's `poiName`
+    // (which is already heuristic-ranked by Mapbox, not radius-based).
+    const supabasePoiName =
+      nearestPoi && nearestPoi.distance_m <= POI_INCLUSION_THRESHOLD_M
+        ? nearestPoi.name
+        : '';
+    const poiName = supabasePoiName || metadata?.poiName || '';
 
     // 2. If Supabase has cross-streets, use them (instant path, ~100ms total)
     if (supabaseResult && supabaseResult.crossStreets.length > 0) {

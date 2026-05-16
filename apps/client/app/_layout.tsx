@@ -202,7 +202,11 @@ function RootNavigator() {
       <Stack.Screen name="chat" />
       <Stack.Screen name="driver-profile" />
       <Stack.Screen name="support" />
-      <Stack.Screen name="notifications" />
+      {/* BUG-294: route name must match the actual registered route
+          (notifications/index.tsx → 'notifications/index'). Was emitting
+          a `[Layout children]: No route named "notifications"` warning
+          on every Stack reconcile. */}
+      <Stack.Screen name="notifications/index" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

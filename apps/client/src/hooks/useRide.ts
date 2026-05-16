@@ -5,8 +5,8 @@ import i18next from 'i18next';
 import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { rideService, deliveryService, trustedContactService, notificationService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug } from '@tricigo/utils';
+import { rideService, deliveryService, trustedContactService, notificationService, walletService, corporateService } from '@tricigo/api';
+import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
@@ -309,8 +309,11 @@ export function useRideActions() {
       return;
     }
 
-    // Bug 8: Validate pickup ≠ dropoff (min 200m)
-    const { haversineDistance } = await import('@tricigo/utils');
+    // Bug 8: Validate pickup ≠ dropoff (min 200m).
+    // QA 2026-05-13: was using `await import('@tricigo/utils')` which
+    // hung silently in --no-dev --minify bundles (workspace packages don't
+    // dynamic-import cleanly when minified). haversineDistance is now
+    // statically imported at the top, so this is a sync call.
     const dist = haversineDistance(draft.pickup.location, draft.dropoff.location);
     if (dist < RIDE_CONFIG.MIN_DISTANCE_M) {
       Toast.show({
@@ -449,8 +452,9 @@ export function useRideActions() {
       return;
     }
 
-    // Bug 25: Validate minimum distance in confirmRide (guards deep-link bypass)
-    const { haversineDistance } = await import('@tricigo/utils');
+    // Bug 25: Validate minimum distance in confirmRide (guards deep-link bypass).
+    // QA 2026-05-13: was `await import('@tricigo/utils')` which hung silently in
+    // --no-dev --minify bundles, breaking the entire Solicitar tap. Now static.
     const confirmDist = haversineDistance(d.pickup.location, d.dropoff.location);
     if (confirmDist < RIDE_CONFIG.MIN_DISTANCE_M) {
       isSubmittingRef.current = false;
@@ -474,7 +478,6 @@ export function useRideActions() {
     // Bug 9: Validate TRC balance before booking
     if (d.paymentMethod === 'tricicoin' && fareEstimate) {
       try {
-        const { walletService } = await import('@tricigo/api');
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           const bal = await walletService.getBalance(userId);
@@ -506,7 +509,6 @@ export function useRideActions() {
     // Validate mixed payment wallet balance
     if (d.paymentMethod === 'mixed' && fareEstimate) {
       try {
-        const { walletService } = await import('@tricigo/api');
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           const walletPart = fareEstimate.estimated_fare_cup * (d.walletRatio ?? 0.5);
@@ -538,7 +540,6 @@ export function useRideActions() {
     // BUG-073: For corporate rides, re-fetch budget to account for pending rides
     if (d.paymentMethod === 'corporate' && d.corporateAccountId && fareEstimate) {
       try {
-        const { corporateService } = await import('@tricigo/api');
         // Bugfix: method is `getAccount`, not `getAccountDetails` —
         // same return shape (CorporateAccount).
         const freshAccount = await corporateService.getAccount(d.corporateAccountId);
@@ -1120,6 +1121,9 @@ export function useRideActions() {
   }, [setActiveRide, setFlowStep, setLoading, setError, setRideWithDriver, user?.id]);
 
   const cancelRide = useCallback(async (reason?: string) => {
+    // QA 2026-05-13: ride got auto-canceled at insert — trace the caller.
+    // eslint-disable-next-line no-console
+    console.log('[QA-DEBUG cancelRide] CALLED', { reason, stack: new Error().stack?.split('\n').slice(1, 8).join('\n') });
     const { activeRide } = useRideStore.getState();
     if (!activeRide) return;
 

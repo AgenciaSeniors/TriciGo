@@ -515,8 +515,31 @@ export function useDriverRideActions() {
           // Fall back to estimated distance
         }
 
-        // Warn if GPS trail is suspiciously sparse per-km (possible fraud or GPS issue)
+        // BUG-291: defensive sanity clamp on the GPS-derived distance.
+        // Until the SQL-side fixes ship (calculate_ride_distance currently
+        // sums haversine across NULL/0,0 points which produces multi-thousand-km
+        // garbage when a single sample is corrupt; complete_ride_and_pay
+        // applies no cap on actual_distance_m), an absurd value would flow
+        // straight into the fare formula. QA Round 2 produced 24,619 km on a
+        // 2km Vedado trip and charged the customer 1,440 CUP. Clamp to
+        // estimated × 1.5 with an absolute 100km ceiling (Cuba is ~1,200 km
+        // long; a single ride does not realistically exceed 100km in-app).
+        // Result: even if the GPS / SQL fails, the rider and driver see
+        // sensible numbers and the driver still gets credit for the trip.
         const estimatedM = activeTrip.estimated_distance_m ?? 0;
+        const HARD_DISTANCE_CEILING_M = 100_000; // 100 km
+        const sanityCap = estimatedM > 0
+          ? Math.min(estimatedM * 1.5, HARD_DISTANCE_CEILING_M)
+          : HARD_DISTANCE_CEILING_M;
+        if (actualDistanceM > sanityCap) {
+          console.warn(
+            `[DriverRide] GPS distance ${actualDistanceM}m exceeds sanity cap ${sanityCap}m (estimated ${estimatedM}m) — clamping`,
+          );
+          // Prefer the estimate when it's available; otherwise the ceiling.
+          actualDistanceM = estimatedM > 0 ? estimatedM : sanityCap;
+        }
+
+        // Warn if GPS trail is suspiciously sparse per-km (possible fraud or GPS issue)
         const distanceKm = actualDistanceM / 1000;
         const pointsPerKm = distanceKm > 0 ? gpsPointCount / distanceKm : 0;
         if (pointsPerKm < 3 && estimatedM > 0 && actualDistanceM < estimatedM * 0.5) {

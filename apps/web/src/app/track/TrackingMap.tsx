@@ -249,7 +249,15 @@ export default function TrackingMap({
       .addTo(mapRef.current);
   }, [dropoffLat, dropoffLng, mapReady]);
 
-  /* ── Driver marker (update position without re-creating) ── */
+  /* ── Driver marker — smooth glide between poll samples ──
+     The share page polls the driver position every ~3 s. Teleporting
+     the marker each poll looks jerky; instead we lerp position +
+     heading over ANIM_MS so the car glides (Uber feel). Linear easing
+     on purpose: a vehicle between two GPS fixes travels at ~constant
+     speed — ease-out would fake a brake every 3 s. Each new sample
+     restarts the glide from the marker's current mid-glide position,
+     so movement chains seamlessly. */
+  const driverAnimRef = useRef<number | null>(null);
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
 
@@ -258,23 +266,63 @@ export default function TrackingMap({
       return;
     }
 
-    if (driverMarkerRef.current) {
-      // Just update position — no full re-render
-      driverMarkerRef.current.setLngLat([driverLng, driverLat]);
-      // Update rotation if heading provided
-      if (driverHeading != null) {
-        driverMarkerRef.current.setRotation(driverHeading);
-      }
-    } else {
+    const targetLng = driverLng;
+    const targetLat = driverLat;
+    const targetRot = driverHeading ?? 0;
+
+    // First sample — place the marker instantly, nothing to glide from.
+    if (!driverMarkerRef.current) {
       driverMarkerRef.current = new mapboxgl.Marker({
         element: createDriverMarkerEl(vehicleType),
         anchor: 'center',
-        rotation: driverHeading ?? 0,
+        rotation: targetRot,
         rotationAlignment: 'map',
       })
-        .setLngLat([driverLng, driverLat])
+        .setLngLat([targetLng, targetLat])
         .addTo(mapRef.current);
+      return;
     }
+
+    const marker = driverMarkerRef.current;
+
+    // Respect reduced-motion — snap instead of gliding.
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) {
+      marker.setLngLat([targetLng, targetLat]);
+      if (driverHeading != null) marker.setRotation(targetRot);
+      return;
+    }
+
+    const start = marker.getLngLat();
+    const fromLng = start.lng;
+    const fromLat = start.lat;
+    const fromRot = marker.getRotation();
+    // Shortest-path rotation delta (handles the 359°→1° wrap).
+    let rotDelta = targetRot - fromRot;
+    if (rotDelta > 180) rotDelta -= 360;
+    if (rotDelta < -180) rotDelta += 360;
+
+    const ANIM_MS = 2500;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / ANIM_MS);
+      marker.setLngLat([
+        fromLng + (targetLng - fromLng) * t,
+        fromLat + (targetLat - fromLat) * t,
+      ]);
+      if (driverHeading != null) marker.setRotation(fromRot + rotDelta * t);
+      driverAnimRef.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    driverAnimRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (driverAnimRef.current != null) {
+        cancelAnimationFrame(driverAnimRef.current);
+        driverAnimRef.current = null;
+      }
+    };
   }, [driverLat, driverLng, driverHeading, mapReady]);
 
   /* ── Fetch and draw STATIC route (pickup → dropoff, used pre-trip) ── */

@@ -411,17 +411,24 @@ export interface RideWithDriver extends Ride {
 
 /**
  * Privacy-safe subset of ride data exposed via public share token.
- * Does NOT include: driver phone, exact addresses, fare amounts,
- * payment details, promo codes, or customer identifiers.
+ * Does NOT include: driver phone, fare amounts, payment details,
+ * promo codes, or customer identifiers.
+ *
+ * Pickup/dropoff addresses ARE included: the share token is the
+ * authorization (the rider hands it out) and expires 24h after the
+ * ride completes — showing trusted contacts the real addresses is the
+ * expected behaviour of a "share my trip" feature (same as Uber).
  */
 export interface SharedRideView {
   id: string;
   status: RideStatus;
   service_type: ServiceTypeSlug;
 
-  // Coordinates only (NOT full addresses)
+  // Coordinates + human-readable addresses
   pickup_location: GeoPoint;
   dropoff_location: GeoPoint;
+  pickup_address: string | null;
+  dropoff_address: string | null;
 
   // Timing
   estimated_duration_s: number;
@@ -452,6 +459,26 @@ export interface SharedRideView {
     arrived_at: string | null;
     departed_at: string | null;
   }>;
+}
+
+/**
+ * Live/dynamic slice of a shared ride — what the public tracking page
+ * polls every few seconds (get_shared_trip_state RPC). Status + the
+ * latest driver GPS sample. No driver_id exposed.
+ */
+export interface SharedTripState {
+  status: RideStatus;
+  accepted_at: string | null;
+  pickup_at: string | null;
+  arrived_at_destination_at: string | null;
+  completed_at: string | null;
+  canceled_at: string | null;
+  /** Latest driver GPS fix — null until the driver uploads one. */
+  driver_location: GeoPoint | null;
+  /** Heading in degrees (0=N, 90=E). null when unknown. */
+  driver_heading: number | null;
+  /** Server timestamp of the latest GPS fix (ISO). */
+  driver_recorded_at: string | null;
 }
 
 /** Trip progress state for Uber-style progress bar */
