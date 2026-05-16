@@ -1,13 +1,15 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Animated, Platform, useColorScheme, Image } from 'react-native';
+import { View, Text, Animated, Platform, useColorScheme, Image, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, tricigoCategoryEmoji } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, vehicleMarkerRotationOffset } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
+import { PoiMapLayers } from './PoiMapLayers';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
@@ -119,6 +121,14 @@ interface RideMapViewProps {
    * driver bounds are active.
    */
   initialUserCenter?: [number, number] | null;
+  /**
+   * BUG-267 v3 — current ride status. Drives the Uber-style camera follow
+   * profile: when the ride is between `accepted` and `in_progress` the
+   * camera centers on the driver with state-specific zoom/pitch/heading
+   * (heading-up navigation). When null/undefined the camera falls back to
+   * the static bounds fit (previous behavior).
+   */
+  rideStatus?: string | null;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -136,41 +146,10 @@ const DASH_SEQUENCE: number[][] = [
   [0, 3, 3, 1], [0, 3.25, 3, 0.75], [0, 3.5, 3, 0.5], [0, 3.75, 3, 0.25],
 ];
 
-/* ── POI category → color (matches web BookingMap) ── */
-const POI_COLORS: Record<string, string> = {
-  restaurant: '#E53935', cafe: '#E53935', bar: '#E53935', fast_food: '#E53935', bakery: '#E53935', nightclub: '#E53935',
-  hotel: '#1E88E5', guest_house: '#1E88E5', hostel: '#1E88E5', apartment: '#1E88E5', motel: '#1E88E5',
-  hospital: '#43A047', clinic: '#43A047', pharmacy: '#43A047', doctors: '#43A047', dentist: '#43A047',
-  supermarket: '#FB8C00', convenience: '#FB8C00', marketplace: '#FB8C00', mobile_phone: '#FB8C00', hairdresser: '#FB8C00', car_repair: '#FB8C00',
-  school: '#8E24AA', university: '#8E24AA', college: '#8E24AA', kindergarten: '#8E24AA',
-  bank: '#546E7A', post_office: '#546E7A', police: '#546E7A', embassy: '#546E7A', townhall: '#546E7A', fire_station: '#546E7A',
-  park: '#2E7D32', beach: '#2E7D32', attraction: '#2E7D32', museum: '#2E7D32', monument: '#2E7D32', theatre: '#2E7D32', cinema: '#2E7D32', library: '#2E7D32',
-  fuel: '#FF6F00', bus_station: '#FF6F00', ferry_terminal: '#FF6F00', aerodrome: '#FF6F00',
-};
-
-function poisToGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: pois.map((p) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-      properties: {
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        subcategory: p.subcategory,
-        // Smart category-aware emoji — falls back to a pin glyph 📍 when
-        // the row has no tricigo_category (older OSM rows). Used by the
-        // emoji SymbolLayer so the user sees 🏥 / 🍺 / ⛽ at a glance.
-        tricigo_category: p.tricigo_category ?? '',
-        emoji: tricigoCategoryEmoji(p.tricigo_category),
-        is_admin: p.is_admin ? 1 : 0,
-        // Legacy color used by the small-dot CircleLayer (zoom 12-14).
-        color: POI_COLORS[p.subcategory] || '#78909C',
-      },
-    })),
-  };
-}
+// BUG-296: POI rendering moved to the shared <PoiMapLayers> component.
+// The old POI_COLORS rainbow map + poisToGeoJSON (emoji-based) are gone —
+// the new system maps every POI to one of 9 restrained visual groups
+// (see packages/utils/src/poiCategories.ts).
 
 /** Compute bounding box from an array of [lng, lat] coordinates */
 function computeBounds(coords: [number, number][]): {
@@ -199,6 +178,25 @@ function toCoord(p: GeoPoint): [number, number] {
   return [lng, lat];
 }
 
+/** Midpoint between two Mapbox [lng, lat] coords. Used for the `accepted`
+ *  camera state where we want to frame both the rider's pickup and the
+ *  driver's current position at the same time. */
+function midpointCoord(a: [number, number], b: [number, number]): [number, number] {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
+/** Ride statuses that activate the Uber-style follow camera. Outside this
+ *  set the camera falls back to bounds fitting or default settings. */
+const FOLLOW_STATUSES = new Set<string>([
+  'accepted',
+  'driver_en_route',
+  'arrived_at_pickup',
+  'in_progress',
+]);
+
+/** Auto re-engage delay (ms) after a user gesture pauses the follow. */
+const FOLLOW_RESUME_DELAY_MS = 8000;
+
 function RideMapViewInner({
   pickupLocation,
   dropoffLocation,
@@ -223,6 +221,7 @@ function RideMapViewInner({
   onPoiPress,
   fullscreen,
   initialUserCenter,
+  rideStatus,
 }: RideMapViewProps) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -264,14 +263,47 @@ function RideMapViewInner({
   // driverLocation with stale or partial coords (lat or lng undefined),
   // and `.toFixed()` downstream blew up the whole map view via the
   // ErrorBoundary. The Number.isFinite() gate filters those out.
+  //
+  // BUG-293 (Round 3): snap-to-road. During an active ride, project the
+  // driver's GPS onto the closest segment of the route polyline so the
+  // marker visually tracks the actual road, and use the segment's bearing
+  // for the marker rotation. Without this, Lockito's linear interpolation
+  // (mock GPS) leaves the marker drifting through buildings/parks AND
+  // rotating in directions that don't match the visible road. If the
+  // driver is genuinely >30m off the polyline, snap returns null and we
+  // fall back to the raw GPS (don't hide a real detour).
+  const snappedDriver = useMemo(() => {
+    if (!driverLocation || !routeCoordinates) return null;
+    if (!Number.isFinite(driverLocation.latitude) || !Number.isFinite(driverLocation.longitude)) {
+      return null;
+    }
+    return snapDriverToRoute(
+      { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+      routeCoordinates,
+      30,
+    );
+  }, [
+    driverLocation?.latitude,
+    driverLocation?.longitude,
+    routeCoordinates,
+  ]);
+
   const animatedDriver =
     driverLocation &&
     Number.isFinite(driverLocation.latitude) &&
     Number.isFinite(driverLocation.longitude)
       ? {
-          latitude: driverLocation.latitude,
-          longitude: driverLocation.longitude,
+          latitude: snappedDriver?.latitude ?? driverLocation.latitude,
+          longitude: snappedDriver?.longitude ?? driverLocation.longitude,
+          // Bearing precedence (BUG-293):
+          //   1. polyline segment bearing (most stable visually — always
+          //      aligned with the road the driver is on)
+          //   2. explicit driverHeading prop (GPS hardware or computed
+          //      bearing from useDriverLocation v3)
+          //   3. heading on driverLocation object (legacy fallback)
+          //   4. 0 (north — last resort)
           heading:
+            (snappedDriver != null ? snappedDriver.bearing : null) ??
             (Number.isFinite(driverHeading) ? (driverHeading as number) : null) ??
             (Number.isFinite((driverLocation as { heading?: number | null }).heading)
               ? ((driverLocation as { heading?: number | null }).heading as number)
@@ -377,11 +409,7 @@ function RideMapViewInner({
     };
   }, [nearbyVehicles]);
 
-  // POI GeoJSON for map layers
-  const poiGeoJSON = useMemo(() => {
-    if (!pois || pois.length === 0) return null;
-    return poisToGeoJSON(pois);
-  }, [pois]);
+  // BUG-296: POI GeoJSON now built inside <PoiMapLayers> — no local memo.
 
   // Handle camera change — notify parent with viewport bounds + zoom
   const handleCameraChanged = useCallback((event: any) => {
@@ -499,6 +527,133 @@ function RideMapViewInner({
     }
   }, [bounds, hasFitInitially, rideKey]);
 
+  // ─── BUG-267 v3: Uber-style camera follow ──────────────────────────────
+  // When the ride is between `accepted` and `in_progress` we keep the
+  // camera centered on the driver with a state-specific cinematic
+  // profile (zoom + pitch + heading-up). User pan/zoom pauses the
+  // follow for FOLLOW_RESUME_DELAY_MS (8 s); a tappable FAB lets them
+  // re-engage instantly.
+  const isRideActive = useMemo(
+    () => rideStatus != null && FOLLOW_STATUSES.has(rideStatus),
+    [rideStatus],
+  );
+
+  const [userOverride, setUserOverride] = useState(false);
+  const overrideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleUserGesture = useCallback(() => {
+    setUserOverride(true);
+    if (overrideTimerRef.current) clearTimeout(overrideTimerRef.current);
+    overrideTimerRef.current = setTimeout(
+      () => setUserOverride(false),
+      FOLLOW_RESUME_DELAY_MS,
+    );
+  }, []);
+
+  const handleRecenter = useCallback(() => {
+    if (overrideTimerRef.current) {
+      clearTimeout(overrideTimerRef.current);
+      overrideTimerRef.current = null;
+    }
+    setUserOverride(false);
+  }, []);
+
+  // Clear any pending timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (overrideTimerRef.current) {
+        clearTimeout(overrideTimerRef.current);
+        overrideTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Reset override when ride leaves follow states (e.g. completed/cancelled).
+  useEffect(() => {
+    if (!isRideActive && userOverride) setUserOverride(false);
+  }, [isRideActive, userOverride]);
+
+  const cameraProfile = useMemo(() => {
+    if (!isRideActive || !animatedDriver) return null;
+    const driverCoord: [number, number] = [
+      animatedDriver.longitude,
+      animatedDriver.latitude,
+    ];
+    const heading = Number.isFinite(animatedDriver.heading)
+      ? (animatedDriver.heading as number)
+      : 0;
+
+    switch (rideStatus) {
+      case 'accepted': {
+        // Driver just accepted — frame BOTH user (pickup) and driver.
+        const userCoord = pickupLocation ? toCoord(pickupLocation) : driverCoord;
+        return {
+          centerCoordinate: midpointCoord(userCoord, driverCoord),
+          zoomLevel: 14,
+          pitch: 0,
+          heading: 0,
+          animationDuration: 1500,
+          animationMode: 'flyTo' as const,
+        };
+      }
+      case 'driver_en_route':
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 15.5,
+          pitch: 30,
+          heading,
+          animationDuration: 1000,
+          animationMode: 'easeTo' as const,
+        };
+      case 'arrived_at_pickup':
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: 17.5,
+          pitch: 50,
+          heading,
+          animationDuration: 800,
+          animationMode: 'easeTo' as const,
+        };
+      case 'in_progress': {
+        // If approaching drop-off, slightly tighten zoom/pitch so the
+        // rider can see the final destination resolve into view.
+        const driverGeo = {
+          latitude: animatedDriver.latitude,
+          longitude: animatedDriver.longitude,
+        };
+        const distToDrop = dropoffLocation
+          ? haversineDistance(driverGeo, dropoffLocation)
+          : Infinity;
+        const nearDrop = distToDrop < 500;
+        return {
+          centerCoordinate: driverCoord,
+          zoomLevel: nearDrop ? 17.5 : 17,
+          pitch: nearDrop ? 50 : 45,
+          heading,
+          animationDuration: 800,
+          animationMode: 'easeTo' as const,
+        };
+      }
+      default:
+        return null;
+    }
+    // animatedDriver intentionally tracked via lat/lng/heading primitives
+    // below to avoid invalidating the memo on each parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isRideActive,
+    rideStatus,
+    animatedDriver?.latitude,
+    animatedDriver?.longitude,
+    animatedDriver?.heading,
+    pickupLat,
+    pickupLng,
+    dropoffLat,
+    dropoffLng,
+  ]);
+
+  const showFollowOverlayFab = isRideActive && userOverride;
+
   if (!MapboxGL) {
     // On web, use WebMapView with mapbox-gl instead of native @rnmapbox/maps
     if (Platform.OS === 'web') {
@@ -548,6 +703,12 @@ function RideMapViewInner({
         // the previous bounds, so it's safe to attach both.
         onMapIdle={handleCameraChanged}
         onCameraChanged={handleCameraChanged}
+        // BUG-267 v3: pause the Uber follow while the user is exploring
+        // the map. onTouchStart on the underlying View fires on any
+        // touch (tap/pan/pinch begins). Combined with the 8s resume
+        // timer in handleUserGesture, this prevents the camera from
+        // fighting the user's finger.
+        onTouchStart={isRideActive ? handleUserGesture : undefined}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to
             initialUserCenter (BUG-282) / Havana fallback.
@@ -578,133 +739,41 @@ function RideMapViewInner({
                 animationDuration: 1500,
                 animationMode: 'flyTo',
               }
-            : activeBounds
-              ? {
-                  bounds: {
-                    ne: activeBounds.ne,
-                    sw: activeBounds.sw,
-                    // BUG-231: tighter padding so the route fills more of
-                    // the viewport. Combined with bounds excluding driver
-                    // position (which could be 8+ km away), the rider
-                    // sees the pickup→dropoff trip clearly.
-                    paddingTop: 60,
-                    paddingRight: 60,
-                    paddingBottom: 60,
-                    paddingLeft: 60,
-                  },
-                  // BUG-231 v2: NO minZoomLevel — was blocking the user
-                  // from zooming out. Only cap max so we don't fly to
-                  // building-level when bounds are tiny.
-                  maxZoomLevel: 16,
-                  animationDuration: 500,
-                }
-              : {})}
+            : cameraProfile && !userOverride
+              ? cameraProfile
+              : activeBounds
+                ? {
+                    bounds: {
+                      ne: activeBounds.ne,
+                      sw: activeBounds.sw,
+                      // BUG-231: tighter padding so the route fills more of
+                      // the viewport. Combined with bounds excluding driver
+                      // position (which could be 8+ km away), the rider
+                      // sees the pickup→dropoff trip clearly.
+                      paddingTop: 60,
+                      paddingRight: 60,
+                      paddingBottom: 60,
+                      paddingLeft: 60,
+                    },
+                    // BUG-231 v2: NO minZoomLevel — was blocking the user
+                    // from zooming out. Only cap max so we don't fly to
+                    // building-level when bounds are tiny.
+                    maxZoomLevel: 16,
+                    animationDuration: 500,
+                  }
+                : {})}
         />
 
-        {/* POI dots + labels (rendered below routes and markers) */}
-        {poiGeoJSON && (
-          <MapboxGL.ShapeSource
-            id="pois"
-            shape={poiGeoJSON}
-            cluster
-            clusterMaxZoomLevel={14}
-            clusterRadius={40}
-            // Tap → emit POI to parent (which opens the bottom sheet).
-            // The event payload's `features` array carries our properties.
-            onPress={(e: { features?: Array<{ properties?: Record<string, unknown>; geometry?: { coordinates?: [number, number] } }> }) => {
-              const feat = e.features?.[0];
-              if (!feat || !feat.properties || !onPoiPress) return;
-              if (feat.properties.point_count) return; // cluster tap, ignore
-              const coords = feat.geometry?.coordinates ?? [0, 0];
-              onPoiPress({
-                id: Number(feat.properties.id),
-                name: String(feat.properties.name ?? ''),
-                tricigo_category: (feat.properties.tricigo_category as string) || null,
-                lat: Number(coords[1]),
-                lng: Number(coords[0]),
-                address: (feat.properties.address as string) || null,
-              });
-            }}
-          >
-            {/* Cluster circles — smaller */}
-            <MapboxGL.CircleLayer
-              id="poi-clusters"
-              filter={['has', 'point_count']}
-              style={{
-                circleColor: ['step', ['get', 'point_count'], '#51bbd6', 50, '#f1f075', 200, '#f28cb1'],
-                circleRadius: ['step', ['get', 'point_count'], 12, 50, 16, 200, 20],
-                circleStrokeWidth: 1.5,
-                circleStrokeColor: 'rgba(255,255,255,0.6)',
-              }}
-            />
-            {/* Cluster count labels */}
-            <MapboxGL.SymbolLayer
-              id="poi-cluster-count"
-              filter={['has', 'point_count']}
-              style={{
-                textField: ['get', 'point_count_abbreviated'],
-                textSize: 10,
-                textColor: '#333',
-              }}
-            />
-            {/* POI dots — visible at every zoom level. At low zoom
-                (12-14) the dot is the only POI affordance; at zoom 15+
-                the dot sits *under* the emoji as a spatial anchor (the
-                emoji conveys category, the dot conveys exact location).
-                Opacity dampens at deep zoom so the emoji stays dominant.
-                Mirrors apps/web BookingMap.tsx fix. Web.docx 2026-05-08:
-                a previous maxZoomLevel: 14.99 hid dots at street zoom
-                so users only saw floating emoji and reported "no POI
-                dots". */}
-            <MapboxGL.CircleLayer
-              id="poi-unclustered"
-              filter={['!', ['has', 'point_count']]}
-              style={{
-                circleColor: ['get', 'color'],
-                circleRadius: ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 4, 18, 6],
-                circleStrokeWidth: 1,
-                circleStrokeColor: 'rgba(255,255,255,0.9)',
-                circleOpacity: ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 0.85, 18, 0.6],
-              }}
-            />
-            {/* Category emoji — rendered as a SymbolLayer text glyph.
-                Native emoji rendering means no asset bundling and a
-                single layer covers all 21 categories. Visible at zoom
-                15+ where the user is already street-level and can
-                resolve individual icons. */}
-            <MapboxGL.SymbolLayer
-              id="poi-emoji"
-              filter={['!', ['has', 'point_count']]}
-              minZoomLevel={15}
-              style={{
-                textField: ['get', 'emoji'],
-                textSize: ['interpolate', ['linear'], ['zoom'], 15, 14, 18, 22],
-                textAllowOverlap: true,
-                textIgnorePlacement: true,
-                textHaloColor: 'rgba(255,255,255,0.85)',
-                textHaloWidth: 1.2,
-              }}
-            />
-            {/* POI name labels — smaller */}
-            <MapboxGL.SymbolLayer
-              id="poi-labels"
-              filter={['!', ['has', 'point_count']]}
-              minZoomLevel={16}
-              style={{
-                textField: ['get', 'name'],
-                textSize: ['interpolate', ['linear'], ['zoom'], 16, 9, 18, 11],
-                textOffset: [0, 1.4],
-                textAnchor: 'top',
-                textMaxWidth: 7,
-                textOptional: true,
-                textAllowOverlap: false,
-                textColor: '#444',
-                textHaloColor: 'rgba(255,255,255,0.95)',
-                textHaloWidth: 1.2,
-              }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+        {/* BUG-296: POIs rendered below routes and markers via the
+            shared <PoiMapLayers> — Google-Maps-style categorical badges
+            (9 visual groups, Ionicons glyphs) replacing the old
+            colored-circle + emoji layers. */}
+        <PoiMapLayers
+          MapboxGL={MapboxGL}
+          pois={pois}
+          onPoiPress={onPoiPress}
+          isDark={isDark}
+        />
 
         {/* Driver-to-pickup route (light blue dashed) */}
         {driverRouteGeoJSON && (
@@ -920,7 +989,19 @@ function RideMapViewInner({
                   backgroundColor: 'transparent',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transform: [{ rotate: `${(vehicleType && NON_ROTATING_MARKERS.has(vehicleType)) ? 0 : (animatedDriver.heading ?? 0)}deg` }],
+                  // BUG-295: triciclo PNG drawn pointing south — apply
+                  // +180° via vehicleMarkerRotationOffset so the rendered
+                  // nose aligns with bearing of motion. Other markers (auto,
+                  // moto, confort) → offset 0; mensajería → no rotation.
+                  transform: [
+                    {
+                      rotate: `${
+                        (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
+                          ? 0
+                          : (((animatedDriver.heading ?? 0) + vehicleMarkerRotationOffset(vehicleType)) % 360)
+                      }deg`,
+                    },
+                  ],
                 }}
               >
                 {vehicleType && vehicleMarkerImages[`marker-${vehicleType}`] ? (
@@ -959,9 +1040,16 @@ function RideMapViewInner({
                   iconSize: 0.55,
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
-                  // Cargo box marker (mensajería) has no front — keep rotation 0;
-                  // all vehicle markers rotate by their reported heading.
-                  iconRotate: ['case', ['==', ['get', 'icon'], 'marker-mensajeria'], 0, ['get', 'heading']],
+                  // Cargo box marker (mensajería) has no front — keep rotation 0.
+                  // BUG-295: triciclo asset drawn pointing south — add 180° to
+                  // align the nose with direction of travel. All other markers
+                  // (auto, moto, confort) rotate by their raw heading.
+                  iconRotate: [
+                    'case',
+                    ['==', ['get', 'icon'], 'marker-mensajeria'], 0,
+                    ['==', ['get', 'icon'], 'marker-triciclo'], ['%', ['+', ['get', 'heading'], 180], 360],
+                    ['get', 'heading'],
+                  ],
                 }}
               />
             </MapboxGL.ShapeSource>
@@ -976,6 +1064,37 @@ function RideMapViewInner({
           />
         )}
       </MapboxGL.MapView>
+
+      {/* BUG-267 v3 — Recenter FAB. Visible only while the user has paused
+          the Uber-style auto-follow (after pan/zoom during an active ride).
+          Tapping it re-engages the follow camera instantly. */}
+      {showFollowOverlayFab && (
+        <TouchableOpacity
+          onPress={handleRecenter}
+          accessibilityLabel={t('home.recenter_fab', { defaultValue: 'Recentrar mapa' })}
+          accessibilityRole="button"
+          activeOpacity={0.85}
+          style={{
+            position: 'absolute',
+            right: 14,
+            bottom: 14,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: '#ffffff',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.18,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 4,
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="navigate" size={20} color="#FF4D00" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

@@ -50,7 +50,11 @@ import { useRiderLocation } from '@/hooks/useRiderLocation';
 import { useDriverStore } from '@/stores/driver.store';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useDriverETA } from '@/hooks/useDriverETA';
-import { ETABadge } from '@tricigo/ui/ETABadge';
+// Round 5: ETABadge integrated into the hero block at the top of the sheet
+// — the standalone import is no longer needed. The label/urgent logic was
+// status-coded inline so dropping the component cleanly removes one nesting
+// layer without losing the info.
+// import { ETABadge } from '@tricigo/ui/ETABadge';
 import { useInAppNavigation } from '@/hooks/useInAppNavigation';
 import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { NavigationOverlay } from '@/components/NavigationOverlay';
@@ -540,7 +544,13 @@ export function DriverTripView() {
 
   return (
     <DraggableSheet
-      snapPoints={['25%', '55%', '90%']}
+      // Round 5: smaller default sheet so the map dominates the view
+      // (Uber-style). Previous: ['25%', '55%', '90%'] @ index 1 (55%)
+      // gave only ~45% of the viewport to the map — too cramped on
+      // mid-range Pixels. New: ['20%', '38%', '90%'] @ index 1 (38%)
+      // recovers ~135px of map. The 90% snap is preserved for chat /
+      // detailed actions when the driver pulls up.
+      snapPoints={['20%', '38%', '90%']}
       initialIndex={1}
       theme="dark"
       scrollable
@@ -575,6 +585,101 @@ export function DriverTripView() {
           onToggleVoice={() => setVoiceGuidanceEnabled(!voiceGuidanceEnabled)}
         />
       )}
+
+      {/* Round 5: stepper moved to TOP of the sheet so the driver
+          glances down once and sees: where they are in the flow → who/
+          what is next → CTA. Was buried after the action button + a
+          dozen banners. */}
+      <TripStepper
+        steps={TRIP_STEPS}
+        currentStatus={activeTrip.status}
+        activeDotColor={actionButtonColor}
+        tintBackground={stepperTint}
+      />
+
+      {/* Round 5: status-aware HERO block. Replaces the standalone
+          ETABadge (which was floating below the action button and added
+          one more banner). All key info — ETA, primary address, wait
+          timer when applicable — lives here. */}
+      <View
+        style={{
+          marginBottom: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          backgroundColor: midnightEmber.map.bg.elevated,
+          borderRadius: midnightEmber.radius.card,
+          borderWidth: 1,
+          borderColor: midnightEmber.map.line.hairline,
+        }}
+      >
+        {(() => {
+          const status = activeTrip.status;
+          const isToPickup = status === 'accepted' || status === 'driver_en_route';
+          const isAtPickup = status === 'arrived_at_pickup';
+          const isOnTrip = status === 'in_progress';
+          const isAtDest = status === 'arrived_at_destination';
+          // Primary line: status-specific summary
+          let primary: string;
+          if (isToPickup) {
+            primary = etaMinutes !== null
+              ? t('trip.eta_driver_to_pickup', { minutes: etaMinutes, defaultValue: `~${etaMinutes} min al pickup` })
+              : t('trip.heading_to_pickup', { defaultValue: 'En camino al pickup' });
+          } else if (isAtPickup) {
+            primary = t('trip.eta_driver_arrived', { defaultValue: 'Llegaste al pickup' });
+          } else if (isOnTrip) {
+            primary = etaMinutes !== null
+              ? t('trip.eta_to_destination', { minutes: etaMinutes, defaultValue: `~${etaMinutes} min al destino` })
+              : t('trip.heading_to_destination', { defaultValue: 'En camino al destino' });
+          } else if (isAtDest) {
+            primary = t('trip.arrived_at_destination', { defaultValue: 'Llegaste al destino' });
+          } else {
+            primary = t('trip.in_progress', { defaultValue: 'Viaje activo' });
+          }
+          // Secondary line: relevant address (pickup or dropoff)
+          const secondaryAddress = (isToPickup || isAtPickup)
+            ? activeTrip.pickup_address
+            : activeTrip.dropoff_address;
+          return (
+            <>
+              <Text
+                variant="h4"
+                style={{
+                  color: midnightEmber.map.text.primary,
+                  fontWeight: '700',
+                  marginBottom: 4,
+                }}
+                numberOfLines={1}
+              >
+                {primary}
+              </Text>
+              {secondaryAddress ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons
+                    name="location-outline"
+                    size={14}
+                    color={midnightEmber.map.text.tertiary}
+                  />
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: midnightEmber.map.text.secondary, flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {secondaryAddress}
+                  </Text>
+                </View>
+              ) : null}
+              {/* WaitTimer renders INSIDE the hero block now during
+                  arrived_at_pickup — it's the most prominent info while
+                  the rider is on the curb. */}
+              {isAtPickup && activeTrip.driver_arrived_at ? (
+                <View style={{ marginTop: 8 }}>
+                  <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
+                </View>
+              ) : null}
+            </>
+          );
+        })()}
+      </View>
 
       {/* BUG-244 polish: live distance hint + GPS health detection. */}
       <LiveDistanceHint
@@ -709,36 +814,9 @@ export function DriverTripView() {
         </View>
       )}
 
-      {/* 4. Compact status stepper */}
-      <TripStepper
-        steps={TRIP_STEPS}
-        currentStatus={activeTrip.status}
-        activeDotColor={actionButtonColor}
-        tintBackground={stepperTint}
-      />
-
-      {/* 5. ETA Badge */}
-      {etaMinutes !== null && (
-        <View className="items-center mb-3">
-          <ETABadge
-            label={
-              activeTrip.status === 'arrived_at_pickup'
-                ? t('trip.eta_driver_arrived')
-                : activeTrip.status === 'in_progress'
-                  ? t('trip.eta_to_destination', { minutes: etaMinutes })
-                  : t('trip.eta_driver_to_pickup', { minutes: etaMinutes })
-            }
-            isCalculating={isCalculating}
-            urgent={etaMinutes > 0 && etaMinutes <= 3}
-            variant="dark"
-          />
-        </View>
-      )}
-
-      {/* 6. Wait timer (visible when arrived at pickup) */}
-      {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at && (
-        <WaitTimer arrivedAt={activeTrip.driver_arrived_at} freeMinutes={5} />
-      )}
+      {/* Round 5: stepper, ETABadge, and WaitTimer all moved into the
+          hero block at the top of the sheet. The standalone components
+          are gone — their content lives in the same visual zone now. */}
 
       {/* No-show button — appears after 5 min wait */}
       {activeTrip.status === 'arrived_at_pickup' && activeTrip.driver_arrived_at &&

@@ -25,6 +25,8 @@ import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
 import { getQuickRepliesForRole, triggerHaptic } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { chatLastReadKey } from '@/hooks/useUnreadChatCount';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -61,6 +63,22 @@ export default function ChatScreen() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Bug B: persist the "last read" timestamp so the trip screen's
+  // unread badge (useUnreadChatCount) clears. Stamped on mount (covers
+  // messages received before opening) and on unmount (covers messages
+  // that arrived while the rider was reading the conversation).
+  useEffect(() => {
+    if (!rideId) return;
+    const stamp = () => {
+      AsyncStorage.setItem(
+        chatLastReadKey(rideId),
+        new Date().toISOString(),
+      ).catch(() => { /* best-effort */ });
+    };
+    stamp();
+    return stamp;
+  }, [rideId]);
 
   const quickReplies = getQuickRepliesForRole('rider').map((qr) => ({
     key: qr.key,

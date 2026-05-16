@@ -80,6 +80,7 @@ function ActiveTripMap({
 }) {
   const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates } = useActiveTripMapData();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
+  const rideStatus = activeTrip?.status ?? null;
   // BUG-258: driver marker wasn't rotating during turns because this
   // component never passed `driverHeading` to <RideMapView>. The store
   // already has the latest heading from useDriverLocation; we just need
@@ -112,6 +113,9 @@ function ActiveTripMap({
       followMode={followMode}
       onUserInteraction={onUserInteraction}
       lockZoom={lockZoom}
+      // BUG-267 v3 — drive the per-status cinematic camera profile
+      // (zoom/pitch tailored to accepted → in_progress).
+      rideStatus={rideStatus}
     />
   );
 }
@@ -828,21 +832,54 @@ function NativeDriverHomeScreen() {
 
   // Navigation mode (Uber-driver style): heading-up rotation, 3D tilt,
   // zoom-out lock, auto-center on driver. Re-engages every time a new
-  // active trip starts. User pan/zoom flips it OFF and reveals the
-  // floating recenter button; tapping that button or the home recenter
-  // flips it back ON.
+  // active trip starts. User pan/zoom flips it OFF temporarily; after
+  // 8s of no further interaction it auto-resumes (so the driver doesn't
+  // get stuck with a static map if they accidentally bump the screen).
+  // The floating recenter button forces immediate re-engage.
   const [followMode, setFollowMode] = useState<boolean>(true);
+  // BUG-291 v2: auto-resume timer reference. Without this, a single
+  // false-positive map-interaction event (e.g. a programmatic Mapbox
+  // animation that's mis-tagged as a user gesture) would freeze the
+  // follow camera for the entire ride.
+  const followResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     // Engage navigation mode whenever a fresh activeTrip arrives
     // (accept, status transitions). Disengage when no active trip.
     setFollowMode(!!activeTrip);
+    // New ride starts clean — kill any pending resume timer from a
+    // previous ride.
+    if (followResumeTimerRef.current) {
+      clearTimeout(followResumeTimerRef.current);
+      followResumeTimerRef.current = null;
+    }
   }, [activeTrip?.id]);
+
+  // Cleanup the resume timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (followResumeTimerRef.current) {
+        clearTimeout(followResumeTimerRef.current);
+        followResumeTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleUserMapInteraction = useCallback(() => {
     setFollowMode(false);
+    if (followResumeTimerRef.current) clearTimeout(followResumeTimerRef.current);
+    // Only auto-resume during an active trip — idle online sessions
+    // expect manual follow toggle.
+    followResumeTimerRef.current = setTimeout(() => {
+      const stillInTrip = !!useDriverRideStore.getState().activeTrip;
+      if (stillInTrip) setFollowMode(true);
+    }, 8000);
   }, []);
 
   const handleRecenter = useCallback(() => {
+    if (followResumeTimerRef.current) {
+      clearTimeout(followResumeTimerRef.current);
+      followResumeTimerRef.current = null;
+    }
     if (driverLocation) {
       mapRef.current?.flyTo(driverLocation.latitude, driverLocation.longitude, 15);
     }

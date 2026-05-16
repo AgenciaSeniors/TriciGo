@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
@@ -249,7 +249,16 @@ function WebRidesScreen() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {group.rides.map((ride) => {
                     const cardIdx = globalCardIdx++;
-                    const fare = ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0;
+                    // BUG-293: pick the correct currency based on payment
+                    // method. Previously fell back to TRC fields and showed
+                    // "0 TRC" for cash rides where only *_fare_cup is set.
+                    const rShowTrc = ride.payment_method === 'tricicoin';
+                    const rTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
+                    const rCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
+                    const fareLabel =
+                      rShowTrc && rTrc != null
+                        ? formatTRC(rTrc)
+                        : formatCUP(rCup ?? 0);
                     const serviceType = ride.service_type ?? '';
                     const isCompleted = ride.status === 'completed';
 
@@ -344,7 +353,7 @@ function WebRidesScreen() {
                           paddingTop: 12, borderTop: '1px solid #f0f0f0',
                         }}>
                           <span style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
-                            {formatTRC(fare)}
+                            {fareLabel}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#999', fontWeight: 500 }}>
                             {ride.estimated_distance_m != null && ride.estimated_distance_m > 0 && (
@@ -530,7 +539,17 @@ function NativeRidesScreen() {
   }, [userId, filters]);
 
   const renderItem = useCallback(({ item, index }: { item: Ride; index: number }) => {
-    const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.estimated_fare_cup ?? 0;
+    // BUG-293: pick the right currency based on payment_method.
+    // Previously formatted all rides as TRC, even cash ones whose only
+    // populated field is estimated_fare_cup.
+    const showTrc = item.payment_method === 'tricicoin';
+    const iTrc = item.final_fare_trc ?? item.estimated_fare_trc;
+    const iCup = item.final_fare_cup ?? item.estimated_fare_cup;
+    const fareLabel =
+      showTrc && iTrc != null
+        ? formatTRC(iTrc)
+        : formatCUP(iCup ?? 0);
+    const fare = iTrc ?? iCup ?? 0; // raw numeric for USD approximation below
     const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
     const fareUsd = trcToUsd(fare, rate);
 
@@ -539,7 +558,7 @@ function NativeRidesScreen() {
         <Pressable
           onPress={() => router.push(`/ride/${item.id}`)}
           accessibilityRole="button"
-          accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}
+          accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${fareLabel}`}
         >
           {/* Cuban Modern card \u2014 bg.elev1 surface, subtle hairline,
               soft shadow in light mode only. */}
@@ -598,7 +617,7 @@ function NativeRidesScreen() {
                   variant="numberMono"
                   style={{ color: tokens.ink.primary, fontWeight: '600' }}
                 >
-                  {formatTRC(fare)}
+                  {fareLabel}
                 </Text>
                 <Text variant="caption" style={{ color: tokens.ink.subtle }}>
                   {'\u2248'} {formatUSD(fareUsd)}

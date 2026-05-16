@@ -12,10 +12,11 @@ export const vehicleSelectionImages: Record<ServiceTypeSlug, ImageSourcePropType
   triciclo_premium: require('../../assets/vehicles/selection/triciclo.png'),
   triciclo_cargo: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
-  // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror the
-  // marker choice (vehicleMarkerImages) so selection and map use the
-  // same Auto image — keeps the rider's mental model consistent.
-  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
+  // TODO: dedicated selection-style almendrón asset still pending.
+  // Using the marker image (top-down) in selection UI looked off — reverted
+  // to selection/auto.png (modern sedan) until a proper side-view almendrón
+  // is delivered. Map markers continue to use auto_clasico.png correctly.
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
   mensajeria: require('../../assets/vehicles/selection/mensajeria.png'),
 };

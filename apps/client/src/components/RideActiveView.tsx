@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { StopsList } from '@tricigo/ui';
-import { formatTRC, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic } from '@tricigo/utils';
+import { formatTRC, formatCUP, haversineDistance, logger, formatArrivalTime, buildShareUrl, triggerHaptic } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
@@ -17,7 +17,9 @@ import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
 import { RideMapView } from '@/components/RideMapView';
+import { TripActionBar } from '@/components/TripActionBar';
 import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
+import { useUnreadChatCount } from '@/hooks/useUnreadChatCount';
 import { formatTimeAgo } from '@tricigo/utils/offlineLabels';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { useDriverToPickupRoute, useLiveDriverRoute } from '@/hooks/useDriverToPickupRoute';
@@ -27,7 +29,6 @@ import { TripProgressBar } from '@tricigo/ui/TripProgressBar';
 import { ArrivalBanner } from '@/components/ArrivalBanner';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { ETABadge } from '@tricigo/ui/ETABadge';
-import { IconButton } from '@tricigo/ui/IconButton';
 import { DriverCard } from '@tricigo/ui/DriverCard';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { CancelRideSheet } from '@/components/CancelRideSheet';
@@ -63,6 +64,10 @@ export function RideActiveView() {
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
   const driverPosition = driverPosState.position;
+  // Bug B: unread-message badge for the fixed TripActionBar chat button.
+  const { count: unreadChatCount, markRead: markChatRead } = useUnreadChatCount(
+    activeRide?.id ?? null,
+  );
 
   // Waypoints state — declared early so useRoutePolyline below can
   // include them in the route fetch. State is populated by a useEffect
@@ -973,11 +978,17 @@ export function RideActiveView() {
           pickupLocation={activeRide.pickup_location}
           dropoffLocation={activeRide.dropoff_location}
           driverLocation={driverPosition}
+          driverHeading={driverPosition?.heading ?? null}
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
           routeCoordinates={routeCoordinates}
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}
           waypointStatuses={waypointStatuses}
+          // BUG-267 v3: drive the Uber-style follow camera based on ride
+          // status. RideMapView centers on the driver with state-specific
+          // zoom/pitch/heading-up while activeRide.status is in
+          // {accepted, driver_en_route, arrived_at_pickup, in_progress}.
+          rideStatus={activeRide.status}
           // BUG-232: derive vehicleType from the ride's service_type so the
           // driver marker renders the correct vehicle icon (almendrón for
           // auto, triciclo, etc.) instead of the generic blue dot fallback.
@@ -1011,6 +1022,20 @@ export function RideActiveView() {
           </View>
         )}
       </View>
+      {/* Bug B — fixed action bar: Mensaje · Llamar · Seguridad.
+           Sits between the map and the scrolling panel so it's always
+           visible. Gated only on the active ride (NOT rideWithDriver),
+           so the rider always has a prominent chat entry point. */}
+      <TripActionBar
+        unreadCount={unreadChatCount}
+        callEnabled={!!rideWithDriver?.driver_phone}
+        onChat={() => {
+          markChatRead();
+          router.push(`/chat/${activeRide.id}`);
+        }}
+        onCall={handleCall}
+        onSafety={() => setSafetySheetVisible(true)}
+      />
       {/* BUG-230: from here down, content scrolls inside its own
            ScrollView so the map above keeps full pan/zoom gestures.
            Outer Screen has scroll disabled for the 'active' flow. */}
@@ -1214,44 +1239,6 @@ export function RideActiveView() {
             vehiclePhotoUrl={rideWithDriver.vehicle_photo_url}
             vehicleYear={driverExpanded ? rideWithDriver.vehicle_year : null}
             ridesLabel={t('ride.driver_rides_count', { count: rideWithDriver.driver_total_rides ?? 0, defaultValue: '{{count}} viajes' }).replace(/^\d+\s*/, '')}
-            actions={
-              <>
-                <IconButton
-                  icon="chatbubble-outline"
-                  variant="secondary"
-                  size="lg"
-                  onPress={() => router.push(`/chat/${activeRide.id}`)}
-                  label="Chat"
-                />
-                {rideWithDriver.driver_phone ? (
-                  <IconButton
-                    icon="call-outline"
-                    variant="primary"
-                    size="lg"
-                    onPress={handleCall}
-                    label={t('ride.call_driver', { defaultValue: 'Llamar' })}
-                  />
-                ) : (
-                  <View style={{ alignItems: 'center', opacity: 0.5 }}>
-                    <IconButton
-                      icon="call-outline"
-                      variant="secondary"
-                      size="lg"
-                      onPress={() => {}}
-                      label={t('ride.driver_phone_unavailable', { defaultValue: 'Número del conductor no disponible' })}
-                      disabled
-                    />
-                  </View>
-                )}
-                <IconButton
-                  icon="shield-checkmark-outline"
-                  variant="danger"
-                  size="lg"
-                  onPress={() => setSafetySheetVisible(true)}
-                  label={t('ride.safety_button', { defaultValue: 'Safety' })}
-                />
-              </>
-            }
           />
           </Pressable>
           {/* I4.1: See more / See less toggle — min 44px touch target */}
@@ -1373,13 +1360,32 @@ export function RideActiveView() {
         </View>
       )}
 
-      {/* Fare */}
-      <View className="flex-row justify-between items-center mb-6 px-2" accessible={true} accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatTRC(activeRide.estimated_fare_trc ?? activeRide.estimated_fare_cup) })}>
-        <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
-        <Text variant="h4" color="accent">
-          {formatTRC(activeRide.estimated_fare_trc ?? activeRide.estimated_fare_cup)}
-        </Text>
-      </View>
+      {/* Fare.
+          BUG-293 (Round 3): cash and corporate rides settle in CUP, only
+          payment_method='tricicoin' actually denominates in TRC. The
+          previous version used formatTRC() universally and fell back to
+          estimated_fare_cup when estimated_fare_trc was null — so the user
+          saw "1,440 TRC" on a ride they paid 1,440 CUP for. Replicates the
+          pattern already in RideCompleteView (lines ~209-212). */}
+      {(() => {
+        const showTrc = activeRide.payment_method === 'tricicoin';
+        const fareTrc = activeRide.estimated_fare_trc;
+        const fareCup = activeRide.estimated_fare_cup;
+        const fareDisplay =
+          showTrc && fareTrc != null
+            ? formatTRC(fareTrc)
+            : formatCUP(fareCup ?? 0);
+        return (
+          <View
+            className="flex-row justify-between items-center mb-6 px-2"
+            accessible={true}
+            accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: fareDisplay })}
+          >
+            <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
+            <Text variant="h4" color="accent">{fareDisplay}</Text>
+          </View>
+        );
+      })()}
 
       {/* Cancel button */}
       {canCancel && (
@@ -1463,7 +1469,9 @@ export function RideActiveView() {
                   {t('ride.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}
                 </Text>
                 <Text variant="body" className="font-bold text-primary-600">
-                  +{formatTRC(pendingStop.extraFareCup)}
+                  {/* BUG-293: extra_fare is CUP-denominated (field name says
+                      so). Was using formatTRC which labelled it as TRC. */}
+                  +{formatCUP(pendingStop.extraFareCup)}
                 </Text>
               </View>
             </View>

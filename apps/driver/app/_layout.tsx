@@ -257,7 +257,13 @@ function RootNavigator() {
       <Stack.Screen name="profile" />
       <Stack.Screen name="trip" />
       <Stack.Screen name="chat" />
-      <Stack.Screen name="notifications" />
+      {/* BUG-294: route name must match the actual registered route. The
+          file is `notifications/index.tsx`, so the route registers as
+          `notifications/index`. Declaring just `notifications` here was
+          producing a console warning on every Stack reconcile:
+          `[Layout children]: No route named "notifications" exists in
+          nested children`. */}
+      <Stack.Screen name="notifications/index" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

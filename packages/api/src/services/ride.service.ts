@@ -25,6 +25,7 @@ import type {
   Waypoint,
   RideSplit,
   SharedRideView,
+  SharedTripState,
 } from '@tricigo/types';
 import type { PackageCategory, PaymentMethod, RideStatus, ServiceTypeSlug, VehicleType } from '@tricigo/types';
 import {
@@ -1404,6 +1405,8 @@ export const rideService = {
       service_type: row.service_type as SharedRideView['service_type'],
       pickup_location: { latitude: (row.pickup_lat as number) ?? 0, longitude: (row.pickup_lng as number) ?? 0 },
       dropoff_location: { latitude: (row.dropoff_lat as number) ?? 0, longitude: (row.dropoff_lng as number) ?? 0 },
+      pickup_address: (row.pickup_address as string | null) ?? null,
+      dropoff_address: (row.dropoff_address as string | null) ?? null,
       estimated_duration_s: (row.estimated_duration_s as number) ?? 0,
       accepted_at: (row.accepted_at as string | null) ?? null,
       pickup_at: (row.pickup_at as string | null) ?? null,
@@ -1427,6 +1430,55 @@ export const rideService = {
     // N+1 round-trip pattern.
 
     return result;
+  },
+
+  /**
+   * Bug A — poll endpoint for the public share-tracking page.
+   *
+   * Returns the LIVE slice of a shared ride: status + the latest driver
+   * GPS sample. The static info (driver name, vehicle, route endpoints,
+   * addresses) is fetched once via getPublicRideByShareToken(); this is
+   * the small payload the page polls every few seconds.
+   *
+   * Why polling and not realtime: the driver's GPS loop writes
+   * ride_location_events via the update_driver_position RPC and emits
+   * NO broadcast (BUG-275). Realtime channels were also removed app-wide
+   * (BUG-277). Polling a SECURITY DEFINER RPC is the canonical path —
+   * works for anonymous viewers, zero extra load on the driver.
+   *
+   * Tolerates the RPC being absent (migration 00268 not yet applied):
+   * returns null so the page keeps its last known state, no crash.
+   */
+  async getSharedTripState(token: string): Promise<SharedTripState | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_shared_trip_state', { p_token: token });
+    if (error) {
+      // 42883 = undefined_function — migration 00268 not applied to prod.
+      if (
+        error.code === '42883' ||
+        error.message?.toLowerCase().includes('does not exist')
+      ) {
+        return null;
+      }
+      throw error;
+    }
+    const row = (data && data[0]) as Record<string, unknown> | undefined;
+    if (!row) return null;
+
+    const lat = row.driver_lat as number | null;
+    const lng = row.driver_lng as number | null;
+    return {
+      status: row.status as SharedTripState['status'],
+      accepted_at: (row.accepted_at as string | null) ?? null,
+      pickup_at: (row.pickup_at as string | null) ?? null,
+      arrived_at_destination_at: (row.arrived_at_destination_at as string | null) ?? null,
+      completed_at: (row.completed_at as string | null) ?? null,
+      canceled_at: (row.canceled_at as string | null) ?? null,
+      driver_location:
+        lat != null && lng != null ? { latitude: lat, longitude: lng } : null,
+      driver_heading: (row.driver_heading as number | null) ?? null,
+      driver_recorded_at: (row.driver_recorded_at as string | null) ?? null,
+    };
   },
 
   /**

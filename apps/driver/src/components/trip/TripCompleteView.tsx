@@ -52,6 +52,10 @@ export function TripCompleteView() {
   const excessMeters = activeTrip?.excess_distance_uncharged_m ?? 0;
   const alreadyJustified = !!activeTrip?.excess_distance_reason;
   const [showExcessSheet, setShowExcessSheet] = useState(excessMeters > 0 && !alreadyJustified);
+  // Receipt-download in-flight flag. Declared here with the other hooks
+  // so it sits ABOVE the `if (!activeTrip) return null` guard below —
+  // calling useState after an early return violates rules-of-hooks.
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   useEffect(() => {
     walletService.getConfigValue('commission_rate')
@@ -79,8 +83,23 @@ export function TripCompleteView() {
   const netEarnings = fare - commissionAmount;
   const isCash = activeTrip.payment_method === 'cash' || activeTrip.payment_method === 'mixed';
 
+  // BUG-291: defensive display clamp. If actual_distance_m landed on a
+  // garbage value (e.g. corrupt GPS samples summed to thousands of km)
+  // and the BD wasn't redeployed yet with the new RPC, we still don't
+  // want to flash "24,619.93 km" in the trip summary. Clamp to the
+  // chargeable distance: estimated × 1.3 if known, else 100km ceiling.
+  const HARD_DISTANCE_CEILING_M = 100_000; // 100 km
+  const rawActualM = activeTrip.actual_distance_m ?? 0;
+  const estimatedM = activeTrip.estimated_distance_m ?? 0;
+  const sanityCapM = estimatedM > 0
+    ? Math.min(estimatedM * 1.3, HARD_DISTANCE_CEILING_M)
+    : HARD_DISTANCE_CEILING_M;
+  const displayDistanceM = Math.min(rawActualM, sanityCapM);
+  const distanceWasCapped = rawActualM > sanityCapM;
+
   const handleDownloadReceipt = async () => {
-    if (!activeTrip) return;
+    if (!activeTrip || downloadingReceipt) return;
+    setDownloadingReceipt(true);
     try {
       const data = await rideService.getReceiptData(activeTrip.id, 'driver');
       // Localise the raw payment_method enum on the way out.
@@ -96,9 +115,39 @@ export function TripCompleteView() {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });
+      } else {
+        // Print succeeded but Share is unavailable on this device — let
+        // the user know the PDF still exists. Previously this silently
+        // did nothing, which the QA team interpreted as "doesn't work".
+        Toast.show({
+          type: 'info',
+          text1: t('trip.receipt_saved', {
+            defaultValue: 'Recibo guardado',
+          }),
+          text2: t('trip.receipt_saved_subtitle', {
+            defaultValue: 'Compartir no está disponible en este dispositivo.',
+          }),
+        });
       }
     } catch (err) {
-      console.error('Receipt generation failed:', err);
+      // BUG-291: surface failures via Toast instead of console-only.
+      // Most common causes in the field:
+      //   - Receipt data RPC failed (network / not-yet-completed ride)
+      //   - expo-print failed to render the HTML (e.g. base64 image)
+      //   - expo-sharing dialog dismissed mid-flow
+      // Whatever the cause, the driver was tapping a dead button.
+      console.error('[Receipt] generation failed:', err);
+      Toast.show({
+        type: 'error',
+        text1: t('trip.receipt_error', {
+          defaultValue: 'No se pudo generar el recibo',
+        }),
+        text2: t('trip.receipt_error_subtitle', {
+          defaultValue: 'Probá de nuevo en un momento.',
+        }),
+      });
+    } finally {
+      setDownloadingReceipt(false);
     }
   };
 
@@ -159,17 +208,35 @@ export function TripCompleteView() {
           {t('trip.trip_completed')}
         </Text>
 
-        {/* Compressed trip summary — single line */}
+        {/* Compressed trip summary — single line.
+            BUG-291: shows the clamped distance, not the raw actual_distance_m.
+            Without this guard, a corrupt GPS sum (e.g. 24,619 km on a 2 km
+            trip) would surface as "24619.9 km" in the summary even though
+            the customer was only billed for the capped chargeable portion. */}
         <Text
           variant="bodySmall"
           style={{
             color: midnightEmber.map.text.secondary,
             textAlign: 'center',
-            marginBottom: 12,
+            marginBottom: distanceWasCapped ? 4 : 12,
           }}
         >
-          {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {((activeTrip.actual_distance_m ?? 0) / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
+          {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {(displayDistanceM / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
         </Text>
+        {distanceWasCapped && (
+          <Text
+            variant="caption"
+            style={{
+              color: midnightEmber.map.text.tertiary,
+              textAlign: 'center',
+              marginBottom: 12,
+            }}
+          >
+            {t('trip.distance_clamped', {
+              defaultValue: 'Distancia ajustada por la app — GPS inconsistente.',
+            })}
+          </Text>
+        )}
 
         {/* Commission breakdown */}
         <View style={surfaceCard}>
@@ -299,15 +366,22 @@ export function TripCompleteView() {
           </Text>
         )}
 
-        {/* Receipt download: native-only */}
+        {/* Receipt download: native-only.
+            BUG-291: surfaces loading state + error toast (previously silent
+            console.error only, so the QA team saw a button that "does
+            nothing" when generation failed). */}
         {Platform.OS !== 'web' && (
           <Button
-            title={t('trip.download_receipt', { defaultValue: 'Descargar recibo' })}
+            title={downloadingReceipt
+              ? t('trip.downloading_receipt', { defaultValue: 'Generando recibo…' })
+              : t('trip.download_receipt', { defaultValue: 'Descargar recibo' })}
             variant="outline"
             size="lg"
             fullWidth
             forceDark
             onPress={handleDownloadReceipt}
+            loading={downloadingReceipt}
+            disabled={downloadingReceipt}
             className="mb-3"
           />
         )}
