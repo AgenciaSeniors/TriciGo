@@ -52,6 +52,10 @@ export function TripCompleteView() {
   const excessMeters = activeTrip?.excess_distance_uncharged_m ?? 0;
   const alreadyJustified = !!activeTrip?.excess_distance_reason;
   const [showExcessSheet, setShowExcessSheet] = useState(excessMeters > 0 && !alreadyJustified);
+  // Receipt-download in-flight flag. Declared here with the other hooks
+  // so it sits ABOVE the `if (!activeTrip) return null` guard below —
+  // calling useState after an early return violates rules-of-hooks.
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   useEffect(() => {
     walletService.getConfigValue('commission_rate')
@@ -92,8 +96,6 @@ export function TripCompleteView() {
     : HARD_DISTANCE_CEILING_M;
   const displayDistanceM = Math.min(rawActualM, sanityCapM);
   const distanceWasCapped = rawActualM > sanityCapM;
-
-  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   const handleDownloadReceipt = async () => {
     if (!activeTrip || downloadingReceipt) return;
