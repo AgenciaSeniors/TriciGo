@@ -14,6 +14,7 @@
     "amenity=pharmacy": "pharmacy",
     "healthcare=hospital": "hospital",
     "healthcare=pharmacy": "pharmacy",
+    "healthcare=*": "hospital",
 
     "amenity=school": "school",
     "amenity=university": "school",
@@ -25,6 +26,11 @@
     "amenity=courthouse": "gov",
     "amenity=post_office": "gov",
     "amenity=public_building": "gov",
+    "amenity=police": "gov",
+    "amenity=fire_station": "gov",
+    "amenity=prison": "gov",
+    "amenity=community_centre": "gov",
+    "amenity=social_facility": "gov",
     "office=government": "gov",
     "office=diplomatic": "embassy",
     "amenity=embassy": "embassy",
@@ -35,8 +41,14 @@
     "tourism=motel": "hotel",
     "tourism=apartment": "hotel",
     "tourism=chalet": "hotel",
+    "tourism=camp_site": "hotel",
+    "tourism=cabin": "hotel",
+    "tourism=wilderness_hut": "hotel",
+    "tourism=alpine_hut": "hotel",
+    "tourism=beach_resort": "hotel",
 
     "amenity=restaurant": "restaurant",
+    "amenity=food_court": "restaurant",
     "amenity=cafe": "cafe",
     "amenity=ice_cream": "cafe",
     "amenity=fast_food": "cafe",
@@ -49,9 +61,11 @@
     "shop=convenience": "supermarket",
     "shop=mall": "supermarket",
     "shop=department_store": "supermarket",
+    "amenity=marketplace": "supermarket",
     "shop=*": "shop",
 
     "amenity=bank": "bank",
+    "amenity=bureau_de_change": "bank",
     "amenity=atm": "atm",
     "amenity=fuel": "gas_station",
 
@@ -60,6 +74,13 @@
     "tourism=attraction": "museum",
     "tourism=viewpoint": "museum",
     "tourism=artwork": "museum",
+    "tourism=zoo": "museum",
+    "tourism=theme_park": "museum",
+    "tourism=aquarium": "museum",
+    "tourism=information": "other",
+    "amenity=cinema": "museum",
+    "amenity=theatre": "museum",
+    "amenity=arts_centre": "museum",
     "historic=*": "museum",
 
     "leisure=park": "park",
@@ -188,6 +209,7 @@
       "guest_house": "hotel",
       "casa_particular": "hotel",
       "resort": "hotel",
+      "accommodation": "hotel",
 
       "restaurant": "restaurant",
       "cuban_restaurant": "paladar",
@@ -211,6 +233,7 @@
       "museum": "museum",
       "art_gallery": "museum",
       "historic_site": "museum",
+      "landmark_and_historical_building": "museum",
       "monument": "museum",
       "tourist_attraction": "museum",
 
@@ -221,13 +244,18 @@
       "beach": "beach",
 
       "church": "religion",
+      "church_cathedral": "religion",
       "mosque": "religion",
       "temple": "religion",
 
       "bus_station": "transport",
       "train_station": "transport",
       "airport": "transport",
-      "taxi_stand": "transport"
+      "taxi_stand": "transport",
+
+      "professional_services": "other",
+      "structure_and_geography": "other",
+      "other": "other"
     },
     "substring": {
       "hospital": "hospital",

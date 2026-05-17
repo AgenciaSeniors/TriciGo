@@ -138,7 +138,7 @@ export const darkColors = {
   text: {
     primary: '#f5f5f5',
     secondary: '#a0a0a0',
-    tertiary: '#666666',
+    tertiary: '#8a8a8a',
     inverse: '#111111',
     accent: '#FF6D38',
   },

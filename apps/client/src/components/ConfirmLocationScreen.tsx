@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Pressable, Animated, Platform, Image } from 'react-native';
+import { View, Pressable, Animated, Platform, Image, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,6 +72,8 @@ export function ConfirmLocationScreen({
   const [address, setAddress] = useState<string | null>(null);
   const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
   const [isGeocoding, setIsGeocoding] = useState(false);
+  // Confirm button is decoupled from geocoding — see handleConfirm.
+  const [confirming, setConfirming] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
 
@@ -172,9 +174,29 @@ export function ConfirmLocationScreen({
     geocodeCenter(centerRef.current.latitude, centerRef.current.longitude);
   }, [geocodeCenter]);
 
-  const handleConfirm = () => {
-    const finalAddress = address || 'Ubicación seleccionada en el mapa';
-    onConfirm(finalAddress, centerRef.current);
+  // The confirm button used to be gated on `disabled={isGeocoding ||
+  // !address}`, forcing the user to wait out the reverse-geocode (the
+  // Overpass fallback runs 1-6s ×3 retries) before the screen advanced
+  // — "avanza pero se demora". Confirming only needs the COORDINATE
+  // (centerRef.current, always fresh from the map). We geocode the exact
+  // center here, raced against a 3s cap; reverseGeocode is cached
+  // (~55m cells) so when the address bar already resolved this spot it's
+  // an instant cache hit. The tap is acknowledged immediately (spinner).
+  const handleConfirm = async () => {
+    if (confirming) return; // re-entrancy guard (double-tap)
+    setConfirming(true);
+    const center = centerRef.current;
+    let finalAddress = address;
+    try {
+      const fresh = await Promise.race([
+        reverseGeocode(center.latitude, center.longitude),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (fresh) finalAddress = fresh;
+    } catch { /* keep `address` / fallback */ }
+    // User may have tapped back while the geocode was in flight.
+    if (!mountedRef.current) return;
+    onConfirm(finalAddress || 'Ubicación seleccionada en el mapa', center);
   };
 
   const isPickup = mode === 'pickup';
@@ -411,12 +433,14 @@ export function ConfirmLocationScreen({
       >
         <Pressable
           onPress={handleConfirm}
-          disabled={isGeocoding || !address}
+          disabled={confirming}
           style={{
-            backgroundColor: isGeocoding ? (isDark ? darkColors.background.tertiary : colors.neutral[300]) : pinColor,
+            backgroundColor: pinColor,
             borderRadius: 14,
             paddingVertical: 16,
             alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: 56,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.15,
@@ -424,16 +448,20 @@ export function ConfirmLocationScreen({
             elevation: 3,
           }}
         >
-          <Text
-            variant="body"
-            style={{
-              color: '#fff',
-              fontWeight: '700',
-              fontSize: 16,
-            }}
-          >
-            {t('ride.confirm_location', { defaultValue: 'Confirmar ubicación' })}
-          </Text>
+          {confirming ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text
+              variant="body"
+              style={{
+                color: '#fff',
+                fontWeight: '700',
+                fontSize: 16,
+              }}
+            >
+              {t('ride.confirm_location', { defaultValue: 'Confirmar ubicación' })}
+            </Text>
+          )}
         </Pressable>
       </View>
     </View>
