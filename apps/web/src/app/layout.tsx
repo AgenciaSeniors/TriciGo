@@ -60,10 +60,18 @@ const organizationJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'TriciGo',
+  legalName: 'MACH DIGITAL TECH S.R.L.',
   url: 'https://tricigo.com',
   logo: 'https://tricigo.com/logo-wordmark.png',
   description:
     'Plataforma de transporte urbano. Solicita triciclos, motos y autos de forma rápida y segura.',
+  taxID: '54552055',
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: 'Str. Lungă nr. 149, Ap. P3',
+    addressLocality: 'Brașov',
+    addressCountry: 'RO',
+  },
   contactPoint: {
     '@type': 'ContactPoint',
     email: 'soporte@tricigo.com',
@@ -76,9 +84,16 @@ const localBusinessJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
   name: 'TriciGo',
+  legalName: 'MACH DIGITAL TECH S.R.L.',
   url: 'https://tricigo.com',
   description:
     'Servicio de transporte bajo demanda. Triciclos, motos y autos.',
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: 'Str. Lungă nr. 149, Ap. P3',
+    addressLocality: 'Brașov',
+    addressCountry: 'RO',
+  },
   priceRange: '$',
 };
 

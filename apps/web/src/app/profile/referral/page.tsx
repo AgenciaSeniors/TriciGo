@@ -493,7 +493,7 @@ export default function ReferralPage() {
           { num: '1', text: t('web.referral_step_1', { defaultValue: 'Compartí tu código o enlace con un amigo.' }) },
           { num: '2', text: t('web.referral_step_2', { defaultValue: 'Tu amigo se registra usando tu código y completa su primer viaje.' }) },
           { num: '3', text: t('web.referral_step_3', {
-            defaultValue: 'Recibís {{bonus}} CUP en TriciCoins, acreditados directamente a tu billetera.',
+            defaultValue: 'Recibís {{bonus}} CUP en TriciCoins, acreditados directamente a tus créditos de viaje.',
             bonus: BONUS_CUP,
           }) },
         ].map((step, i, arr) => (

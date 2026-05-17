@@ -13,7 +13,7 @@ import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { paymentService } from '@tricigo/api/services/payment';
 import type { StripeRechargeConfig } from '@tricigo/types';
-import { formatTriciCoin, formatTriciCoinUsd, formatCupApprox, formatTRCasUSD, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, normalizeCubanPhone, isValidCubanPhone, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
+import { formatTriciCoin, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -53,13 +53,16 @@ if (Platform.OS !== 'web') {
  *
  *   ride_payment also matches ride_hold/ride_hold_release/redemption — the
  *   filter logic in `filteredTransactions` widens accordingly.
+ *
+ *   P2P transfer filters ('transfer_in'/'transfer_out') were removed when
+ *   the peer-to-peer transfer feature was retired (closed-loop ride
+ *   credit). Legacy transfer ledger rows still render under "Todos" with
+ *   their TYPE_LABELS label, but they no longer get a dedicated chip.
  */
 type TxnFilter =
   | 'all'
   | 'recharge'
   | 'ride_payment'
-  | 'transfer_in'
-  | 'transfer_out'
   | 'bonus'
   | 'adjustment';
 
@@ -173,16 +176,6 @@ function WebWalletScreen() {
   const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // P2P Transfer state
-  const [transferPhone, setTransferPhone] = useState('');
-  const [transferSearching, setTransferSearching] = useState(false);
-  const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string } | null>(null);
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferNote, setTransferNote] = useState('');
-  const [transferSubmitting, setTransferSubmitting] = useState(false);
-  const [transferError, setTransferError] = useState('');
-  const [transferSuccess, setTransferSuccess] = useState('');
 
   // Fetch wallet data.
   // ensureAccount is idempotent on the server side, balance/account
@@ -302,8 +295,6 @@ function WebWalletScreen() {
     { key: 'all', label: t('wallet.filter_all', { defaultValue: 'Todos' }) },
     { key: 'recharge', label: t('wallet.filter_recharge', { defaultValue: 'Recargas' }) },
     { key: 'ride_payment', label: t('wallet.filter_rides', { defaultValue: 'Viajes' }) },
-    { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Recibidas' }) },
-    { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
     { key: 'bonus', label: t('wallet.filter_bonus', { defaultValue: 'Bonos' }) },
     { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
@@ -314,63 +305,12 @@ function WebWalletScreen() {
     Toast.show({ type: 'info', text1: t('wallet.recharge_web_hint', { defaultValue: 'Usa la version web (tricigo.com/wallet) para recargar con tarjeta' }) });
   }, [t, userId]);
 
-  // P2P search recipient
-  const searchRecipient = useCallback(async () => {
-    if (!isValidCubanPhone(transferPhone)) return;
-    setTransferSearching(true);
-    setTransferRecipient(null);
-    setTransferError('');
-    try {
-      const normalized = normalizeCubanPhone(transferPhone);
-      const user = await walletService.findUserByPhone(normalized);
-      if (user && user.id !== userId) {
-        setTransferRecipient({ id: user.id, full_name: user.full_name });
-      } else if (user && user.id === userId) {
-        setTransferError(t('wallet.cannot_transfer_self', { defaultValue: 'No puedes transferirte a ti mismo' }));
-      } else {
-        setTransferError(t('wallet.transfer_user_not_found', { defaultValue: 'Usuario no encontrado' }));
-      }
-    } catch {
-      setTransferError(t('errors.transfer_failed', { defaultValue: 'Error al buscar usuario' }));
-    } finally {
-      setTransferSearching(false);
-    }
-  }, [transferPhone, userId, t]);
-
-  // P2P submit transfer
-  const submitTransfer = useCallback(async () => {
-    if (!transferRecipient || !userId) return;
-    const amountNum = parseInt(transferAmount, 10);
-    if (!amountNum || amountNum <= 0) return;
-    const amountCentavos = amountNum * 100;
-    if (amountCentavos > balance.available) {
-      setTransferError(t('wallet.transfer_insufficient', { defaultValue: 'Saldo insuficiente' }));
-      return;
-    }
-    setTransferSubmitting(true);
-    setTransferError('');
-    setTransferSuccess('');
-    try {
-      await walletService.transferP2P(userId, transferRecipient.id, amountCentavos, transferNote || undefined);
-      setTransferSuccess(t('wallet.transfer_success', { defaultValue: 'Transferencia exitosa' }));
-      setTransferPhone('');
-      setTransferAmount('');
-      setTransferNote('');
-      setTransferRecipient(null);
-      await fetchData();
-    } catch (err) {
-      setTransferError(getErrorMessage(err));
-    } finally {
-      setTransferSubmitting(false);
-    }
-  }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData]);
-
   // Login required
   if (!userId) {
     return (
       <Screen bg="cuban" padded>
         <View className="flex-1 justify-center items-center">
-          <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesion para ver tu billetera' })}</Text>
+          <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesion para ver tus créditos de viaje' })}</Text>
         </View>
       </Screen>
     );
@@ -384,43 +324,23 @@ function WebWalletScreen() {
           <View className="rounded-2xl p-5 mb-6" style={{ background: 'linear-gradient(135deg, #FF4D00, #FF8A5C)' } as any}>
             <View className="flex-row items-center gap-2.5 mb-3">
               <Image source={tricoinLogo} style={{ width: 40, height: 40 }} resizeMode="contain" />
-              <Text variant="h4" className="font-semibold" style={{ color: '#fff' }}>{t('wallet.title', { defaultValue: 'Billetera TriciCoin' })}</Text>
+              <Text variant="h4" className="font-semibold" style={{ color: '#fff' }}>{t('wallet.title', { defaultValue: 'Créditos TriciGo' })}</Text>
             </View>
             <Text variant="caption" className="mb-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
               {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
             </Text>
-            {/* Wallet v2 phase 2: switch primary display to USD when migrated. */}
-            {balance.availableUsdCents != null ? (
-              <>
-                <Text variant="h2" className="font-bold mb-1" style={{ color: '#fff', fontVariant: ['tabular-nums'] }}>
-                  {loading ? '...' : formatTriciCoinUsd(balance.availableUsdCents)}
-                </Text>
-                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.65)', fontVariant: ['tabular-nums'] }}>
-                  {loading ? '' : (balance.migrationRate ? formatCupApprox(balance.availableUsdCents, balance.migrationRate) : '')}
-                </Text>
-                {(balance.heldUsdCents ?? 0) > 0 && (
-                  <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.55)', fontVariant: ['tabular-nums'] }}>
-                    {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoinUsd(balance.heldUsdCents ?? 0)}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <>
-                <View className="flex-row items-center gap-2 mb-1">
-                  <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
-                  <Text variant="h2" className="font-bold" style={{ color: '#fff' }}>
-                    {loading ? '...' : formatTriciCoin(balance.available)}
-                  </Text>
-                </View>
-                <Text variant="caption" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  {loading ? '' : `\u2248 ${formatUSD(trcToUsd(balance.available, exchangeRate))}`}
-                </Text>
-                {balance.held > 0 && (
-                  <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)} ({`\u2248 ${formatUSD(trcToUsd(balance.held, exchangeRate))}`})
-                  </Text>
-                )}
-              </>
+            {/* Closed-loop ride credit: the primary balance is shown in
+                credit units (formatTriciCoin), never as a USD amount. */}
+            <View className="flex-row items-center gap-2 mb-1">
+              <Image source={tricoinSmall} style={{ width: 28, height: 28 }} resizeMode="contain" />
+              <Text variant="h2" className="font-bold" style={{ color: '#fff' }}>
+                {loading ? '...' : formatTriciCoin(balance.available)}
+              </Text>
+            </View>
+            {balance.held > 0 && (
+              <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)}
+              </Text>
             )}
           </View>
 
@@ -492,7 +412,7 @@ function WebWalletScreen() {
               <EmptyState
                 icon="receipt-outline"
                 title={t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}
-                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Pedí un viaje o recibí una transferencia para ver movimientos acá.' })}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Pedí un viaje para ver tus movimientos acá.' })}
                 action={{
                   label: t('wallet.request_ride_cta', { defaultValue: 'Pedí tu primer viaje' }),
                   onPress: () => router.push('/(tabs)'),
@@ -590,7 +510,7 @@ function WebWalletScreen() {
           {/* ─── Recharge Section ─── */}
           <View className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl p-5 mb-6">
             <Text variant="h4" className="mb-1">
-              {t('wallet.recharge_title', { defaultValue: 'Recargar billetera' })}
+              {t('wallet.recharge_title', { defaultValue: 'Comprar créditos de viaje' })}
             </Text>
             <Text variant="caption" color="tertiary" className="mb-4">
               {t('wallet.recharge_coming_soon', { defaultValue: 'Próximamente: recarga con tarjeta' })}
@@ -604,96 +524,6 @@ function WebWalletScreen() {
             />
           </View>
 
-          {/* ─── P2P Transfer Section ─── */}
-          <View className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl p-5 mb-6">
-            <Text variant="h4" className="mb-4">
-              {t('wallet.transfer_title', { defaultValue: 'Transferir a otro usuario' })}
-            </Text>
-
-            {transferSuccess ? (
-              <View className="bg-green-50 dark:bg-green-950 rounded-lg p-3 mb-3">
-                <Text variant="bodySmall" className="text-green-700 dark:text-green-300">{transferSuccess}</Text>
-              </View>
-            ) : null}
-            {transferError ? (
-              <View className="bg-red-50 dark:bg-red-950 rounded-lg p-3 mb-3">
-                <Text variant="bodySmall" className="text-red-700 dark:text-red-300">{transferError}</Text>
-              </View>
-            ) : null}
-
-            {/* Phone search */}
-            <Text variant="bodySmall" color="secondary" className="mb-2">
-              {t('wallet.transfer_phone', { defaultValue: 'Telefono del destinatario' })}
-            </Text>
-            <View className="flex-row gap-2 mb-3">
-              <View className="flex-1">
-                <Input
-                  placeholder="+53 5XXXXXXX"
-                  value={transferPhone}
-                  onChangeText={(text: string) => {
-                    setTransferPhone(text);
-                    setTransferRecipient(null);
-                    setTransferError('');
-                    setTransferSuccess('');
-                  }}
-                  keyboardType="phone-pad"
-                  className="mb-0"
-                />
-              </View>
-              <Button
-                title={t('search', { defaultValue: 'Buscar' })}
-                variant="outline"
-                size="md"
-                onPress={searchRecipient}
-                loading={transferSearching}
-                disabled={!isValidCubanPhone(transferPhone)}
-              />
-            </View>
-
-            {/* Recipient found */}
-            {transferRecipient && (
-              <View className="bg-green-50 dark:bg-green-950 rounded-lg p-3 mb-3">
-                <Text variant="bodySmall" className="text-green-700 dark:text-green-300">
-                  {t('wallet.transfer_to', { defaultValue: 'Enviar a: {{name}}', name: transferRecipient.full_name })}
-                </Text>
-              </View>
-            )}
-
-            {/* Amount + note */}
-            {transferRecipient && (
-              <>
-                <Text variant="bodySmall" color="secondary" className="mb-2">
-                  {t('wallet.transfer_amount', { defaultValue: 'Monto' })} (CUP)
-                </Text>
-                <Input
-                  placeholder="100"
-                  value={transferAmount}
-                  onChangeText={setTransferAmount}
-                  keyboardType="numeric"
-                />
-                <Text variant="bodySmall" color="secondary" className="mb-2">
-                  {t('wallet.transfer_note', { defaultValue: 'Nota (opcional)' })}
-                </Text>
-                <Input
-                  placeholder={t('wallet.transfer_note_hint', { defaultValue: 'Ej: Compartimos el viaje' })}
-                  value={transferNote}
-                  onChangeText={setTransferNote}
-                  maxLength={200}
-                />
-                <Text variant="caption" color="tertiary" className="mb-3 text-center">
-                  {t('wallet.balance', { defaultValue: 'Saldo' })}: {formatTriciCoin(balance.available)}
-                </Text>
-                <Button
-                  title={t('wallet.transfer_confirm', { defaultValue: 'Enviar' })}
-                  size="lg"
-                  fullWidth
-                  onPress={submitTransfer}
-                  loading={transferSubmitting}
-                  disabled={transferSubmitting || !transferAmount || parseInt(transferAmount, 10) <= 0}
-                />
-              </>
-            )}
-          </View>
         </View>
       </ScrollView>
 
@@ -780,15 +610,6 @@ function NativeWalletScreen() {
   // effectively static — useStripe is always called or always not.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const stripe = useStripe ? useStripe() : null;
-
-  // Transfer state
-  const [transferSheetVisible, setTransferSheetVisible] = useState(false);
-  const [transferPhone, setTransferPhone] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferNote, setTransferNote] = useState('');
-  const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string } | null>(null);
-  const [transferSearching, setTransferSearching] = useState(false);
-  const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   // Processing guard to prevent double-submit across all wallet actions
   const [isProcessing, setIsProcessing] = useState(false);
@@ -983,79 +804,6 @@ function NativeWalletScreen() {
   }, [userId, stripeReady, stripe, rechargeAmount, exchangeRate, t, fetchData]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
-  // Transfer handlers
-  const handleTransfer = async () => {
-    setTransferPhone('');
-    setTransferAmount('');
-    setTransferNote('');
-    setTransferRecipient(null);
-    // X2.3: Refresh balance before opening transfer sheet to ensure freshness
-    if (userId) {
-      try {
-        const freshBalance = await walletService.getBalance(userId);
-        setBalance(freshBalance);
-      } catch {
-        // Best effort — continue with current balance
-      }
-    }
-    setTransferSheetVisible(true);
-  };
-
-  const searchRecipient = async () => {
-    if (!isValidCubanPhone(transferPhone)) return;
-    setTransferSearching(true);
-    setTransferRecipient(null);
-    try {
-      const normalized = normalizeCubanPhone(transferPhone);
-      const user = await walletService.findUserByPhone(normalized);
-      if (user && user.id !== userId) {
-        setTransferRecipient({ id: user.id, full_name: user.full_name });
-      } else if (user && user.id === userId) {
-        Toast.show({ type: 'error', text1: t('wallet.cannot_transfer_self') });
-      } else {
-        Toast.show({ type: 'error', text1: t('wallet.transfer_user_not_found') });
-      }
-    } catch {
-      Toast.show({ type: 'error', text1: t('errors.transfer_failed') });
-    } finally {
-      setTransferSearching(false);
-    }
-  };
-
-  const submitTransfer = useCallback(async () => {
-    if (isProcessing) return;
-    if (!transferRecipient || !userId) return;
-    const amountNum = parseInt(transferAmount, 10);
-    if (!amountNum || amountNum <= 0) return;
-
-    const amountCentavos = amountNum * 100;
-    if (amountCentavos > balance.available) {
-      Toast.show({ type: 'error', text1: t('wallet.transfer_insufficient') });
-      return;
-    }
-
-    setIsProcessing(true);
-    setTransferSubmitting(true);
-    try {
-      await walletService.transferP2P(
-        userId,
-        transferRecipient.id,
-        amountCentavos,
-        transferNote || undefined,
-      );
-      setTransferSheetVisible(false);
-      triggerHaptic('success');
-      Toast.show({ type: 'success', text1: t('wallet.transfer_success') });
-      await fetchData();
-    } catch (err) {
-      Toast.show({ type: 'error', text1: getErrorMessage(err) });
-    } finally {
-      setTransferSubmitting(false);
-      setIsProcessing(false);
-    }
-  }, [transferRecipient, userId, transferAmount, balance.available, transferNote, t, fetchData, isProcessing]);
-  const debouncedSubmitTransfer = useDebouncePress(submitTransfer);
-
   // BUG-280 — Monthly spending insights, fixed.
   //
   // Old calculation summed every debit as "totalSpent" and counted every
@@ -1121,8 +869,6 @@ function NativeWalletScreen() {
     { key: 'all', label: t('wallet.filter_all', { defaultValue: 'Todos' }) },
     { key: 'recharge', label: t('wallet.filter_recharge', { defaultValue: 'Recargas' }) },
     { key: 'ride_payment', label: t('wallet.filter_rides', { defaultValue: 'Viajes' }) },
-    { key: 'transfer_in', label: t('wallet.filter_received', { defaultValue: 'Recibidas' }) },
-    { key: 'transfer_out', label: t('wallet.filter_sent', { defaultValue: 'Enviadas' }) },
     { key: 'bonus', label: t('wallet.filter_bonus', { defaultValue: 'Bonos' }) },
     { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
@@ -1261,7 +1007,7 @@ function NativeWalletScreen() {
           <View className="flex-row items-center gap-2">
             <Image source={tricoinLogo} style={{ width: 22, height: 22 }} resizeMode="contain" />
             <Text variant="h4" style={{ color: tokens.ink.primary }}>
-              {t('wallet.title')}
+              {t('wallet.title', { defaultValue: 'Créditos TriciGo' })}
             </Text>
           </View>
         </View>
@@ -1322,21 +1068,16 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Compact action buttons — smaller than before, iOS native size */}
-        <View className="flex-row gap-2 mb-6">
+        {/* Compact action buttons — smaller than before, iOS native size.
+            P2P transfer removed (closed-loop ride credit); recharge is the
+            only wallet action now. */}
+        <View className="mb-6">
           <Button
             title={t('wallet.recharge')}
             variant="primary"
             size="sm"
-            className="flex-1"
+            fullWidth
             onPress={handleRecharge}
-          />
-          <Button
-            title={t('wallet.transfer')}
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onPress={handleTransfer}
           />
         </View>
 
@@ -1483,7 +1224,7 @@ function NativeWalletScreen() {
               <EmptyState
                 icon="wallet-outline"
                 title={t('wallet.no_transactions')}
-                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Recargá tu billetera o pedí un viaje para ver movimientos acá.' })}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Comprá créditos de viaje o pedí un viaje para ver movimientos acá.' })}
                 action={{
                   label: t('wallet.recharge_cta', { defaultValue: 'Recargar saldo' }),
                   onPress: () => { triggerHaptic('light'); setRechargeSheetVisible(true); },
@@ -1604,92 +1345,6 @@ function NativeWalletScreen() {
             onPress={debouncedSubmitRecharge}
             loading={rechargeSubmitting}
             disabled={isProcessing || !rechargeAmount || parseFloat(rechargeAmount) < MIN_RECHARGE_USD}
-          />
-        </View>
-      </BottomSheet>
-
-      {/* Transfer BottomSheet */}
-      <BottomSheet
-        visible={transferSheetVisible}
-        onClose={() => setTransferSheetVisible(false)}
-      >
-        <View className="px-4 pb-6">
-          <Text variant="h4" className="mb-4">{t('wallet.transfer_title')}</Text>
-
-          {/* Phone input + search */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">
-            {t('wallet.transfer_phone')}
-          </Text>
-          <View className="flex-row gap-2 mb-3">
-            <View className="flex-1">
-              <Input
-                placeholder="+53 5XXXXXXX"
-                value={transferPhone}
-                onChangeText={(text: string) => {
-                  setTransferPhone(text);
-                  setTransferRecipient(null);
-                }}
-                keyboardType="phone-pad"
-                className="mb-0"
-              />
-            </View>
-            <Button
-              title={t('search')}
-              variant="outline"
-              size="md"
-              onPress={searchRecipient}
-              loading={transferSearching}
-              disabled={!isValidCubanPhone(transferPhone)}
-            />
-          </View>
-
-          {/* Recipient info */}
-          {transferRecipient && (
-            <View className="bg-green-50 rounded-lg p-3 mb-3">
-              <Text variant="bodySmall" color="primary">
-                {t('wallet.transfer_to', { name: transferRecipient.full_name })}
-              </Text>
-            </View>
-          )}
-
-          {/* Amount */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">
-            {t('wallet.transfer_amount')} (CUP)
-          </Text>
-          <Input
-            placeholder="100"
-            value={transferAmount}
-            onChangeText={setTransferAmount}
-            keyboardType="numeric"
-          />
-
-          {/* Note */}
-          <Text variant="bodySmall" color="secondary" className="mb-2">
-            {t('wallet.transfer_note')}
-          </Text>
-          <Input
-            placeholder={t('wallet.transfer_note_hint', { defaultValue: 'Ej: Compartimos el viaje' })}
-            value={transferNote}
-            onChangeText={setTransferNote}
-            maxLength={200}
-          />
-
-          <Text variant="caption" color="tertiary" className="mb-3 text-center">
-            {t('wallet.balance')}: {formatTriciCoin(balance.available)}
-          </Text>
-
-          <Button
-            title={t('wallet.transfer_confirm')}
-            size="lg"
-            fullWidth
-            onPress={debouncedSubmitTransfer}
-            loading={transferSubmitting}
-            disabled={
-              isProcessing ||
-              !transferRecipient ||
-              !transferAmount ||
-              parseInt(transferAmount, 10) <= 0
-            }
           />
         </View>
       </BottomSheet>

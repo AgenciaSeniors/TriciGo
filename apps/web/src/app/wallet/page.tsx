@@ -4,23 +4,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
+import { formatTRC, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount, StripeRechargeConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-// BUG-280-web: filter parity with mobile wallet (apps/client).
-// Splits transfers in/out, adds Bonos (promo_credit) and Ajustes (adjustment)
-// so admin corrections + referral/promo bonuses get their own chip instead of
-// being only visible under "Todos".
+// Filter tabs for the transaction history: Recargas, Viajes, Bonos
+// (promo_credit) and Ajustes (adjustment). Legacy P2P transfers still
+// appear under "Todos" but no new transfers can be created.
 type FilterTab =
   | 'all'
   | 'recharge'
   | 'rides'
-  | 'received'
-  | 'sent'
   | 'bonus'
   | 'adjustment';
 
@@ -28,8 +25,6 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'Todos' },
   { key: 'recharge', label: 'Recargas' },
   { key: 'rides', label: 'Viajes' },
-  { key: 'received', label: 'Recibidas' },
-  { key: 'sent', label: 'Enviadas' },
   { key: 'bonus', label: 'Bonos' },
   { key: 'adjustment', label: 'Ajustes' },
 ];
@@ -53,8 +48,6 @@ function getFilterTypes(filter: FilterTab): string[] | null {
   switch (filter) {
     case 'recharge': return ['recharge'];
     case 'rides': return ['ride_payment', 'ride_hold', 'ride_hold_release', 'redemption'];
-    case 'received': return ['transfer_in'];
-    case 'sent': return ['transfer_out'];
     case 'bonus': return ['promo_credit'];
     case 'adjustment': return ['adjustment'];
     default: return null;
@@ -216,16 +209,6 @@ export default function WalletPage() {
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [rechargeLoading, setRechargeLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
-
-  // ── P2P Transfer state ──
-  const [transferPhone, setTransferPhone] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferNote, setTransferNote] = useState('');
-  const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string; phone: string } | null>(null);
-  const [transferSearching, setTransferSearching] = useState(false);
-  const [transferSending, setTransferSending] = useState(false);
-  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
-  const [transferError, setTransferError] = useState<string | null>(null);
 
   // ── Auth effect ──
   useEffect(() => {
@@ -408,60 +391,6 @@ export default function WalletPage() {
     setRechargeError(null);
   }
 
-  async function handleFindRecipient() {
-    if (!transferPhone.trim()) return;
-    setTransferSearching(true);
-    setTransferRecipient(null);
-    setTransferError(null);
-    try {
-      const user = await walletService.findUserByPhone(transferPhone.trim());
-      if (user) {
-        setTransferRecipient(user);
-      } else {
-        setTransferError('No se encontro un usuario con ese numero.');
-      }
-    } catch {
-      setTransferError('Error al buscar el usuario.');
-    } finally {
-      setTransferSearching(false);
-    }
-  }
-
-  async function handleTransfer() {
-    // The user types the amount in TRC (whole units), same as mobile —
-    // we convert to cents (the unit the wallet ledger stores) right
-    // before the API call. Mobile mirrors this in
-    // apps/client/app/(tabs)/wallet.tsx:345 / :1031 (`amountNum * 100`).
-    // Previously web passed `parseInt(transferAmount)` directly, which
-    // would have been read by the backend as cents — meaning the user
-    // would have to type "1000" to send 10 TRC, very awkward UX.
-    const amountTrc = parseFloat(transferAmount);
-    if (!userId || !transferRecipient || isNaN(amountTrc) || amountTrc <= 0) return;
-    const amountCents = Math.round(amountTrc * 100);
-    setTransferSending(true);
-    setTransferSuccess(null);
-    setTransferError(null);
-    try {
-      await walletService.transferP2P(userId, transferRecipient.id, amountCents, transferNote || undefined);
-      setTransferSuccess(`Transferencia de ${formatTRC(amountCents)} enviada a ${transferRecipient.full_name}.`);
-      setTransferPhone('');
-      setTransferAmount('');
-      setTransferNote('');
-      setTransferRecipient(null);
-      const bal = await walletService.getBalance(userId);
-      setBalance(bal);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('insufficient') || msg.includes('Insufficient')) {
-        setTransferError('Saldo insuficiente para esta transferencia.');
-      } else {
-        setTransferError('Error al realizar la transferencia. Intenta de nuevo.');
-      }
-    } finally {
-      setTransferSending(false);
-    }
-  }
-
   // ── Helper: get amount from joined entry ──
   function getTxAmount(tx: LedgerTransaction): number | null {
     const entries = (tx as unknown as { ledger_entries: { account_id: string; amount: number }[] }).ledger_entries;
@@ -481,7 +410,7 @@ export default function WalletPage() {
         </Link>
 
         <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginTop: '1rem', marginBottom: '1.5rem' }}>
-          Billetera TriciCoin
+          Mis créditos de viaje
         </h1>
 
         {/* ═══ Balance card ═══ */}
@@ -499,9 +428,6 @@ export default function WalletPage() {
               <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
                 {formatTRC(balance.available)}
               </p>
-              <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>
-                ~{formatTRCasUSD(balance.available, exchangeRate)}
-              </p>
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
@@ -516,13 +442,13 @@ export default function WalletPage() {
         {/* ═══ Recharge section ═══ */}
         <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>
-            Recargar billetera
+            Comprar créditos de viaje
           </p>
 
           {rechargeStep === 'amount' && (
             <>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>
-                Recarga tu billetera con tarjeta de credito o debito via Stripe.
+                Comprá créditos de viaje con tarjeta de crédito o débito vía Stripe.
               </p>
 
               {/* Quick amounts */}
@@ -590,7 +516,7 @@ export default function WalletPage() {
 
               {!stripeConfig?.enabled && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0', textAlign: 'center' }}>
-                  Recargas con tarjeta no disponibles temporalmente
+                  Compra de créditos con tarjeta no disponible temporalmente
                 </p>
               )}
             </>
@@ -641,90 +567,6 @@ export default function WalletPage() {
               </button>
             </div>
           )}
-        </div>
-
-        {/* ═══ P2P Transfer section ═══ */}
-        <div className="wallet-section-card" style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Enviar TriciCoin</p>
-
-          <div className="wallet-input-row" style={{ marginBottom: '0.5rem' }}>
-            <input
-              type="tel"
-              placeholder="Telefono del destinatario"
-              aria-label="Telefono del destinatario"
-              value={transferPhone}
-              onChange={(e) => { setTransferPhone(e.target.value); setTransferRecipient(null); setTransferError(null); }}
-              className="input-base"
-              style={{ flex: 1 }}
-            />
-            <button
-              onClick={handleFindRecipient}
-              disabled={transferSearching || !transferPhone.trim()}
-              aria-label="Buscar destinatario"
-              className="btn-base"
-              style={{
-                background: transferSearching || !transferPhone.trim() ? 'var(--bg-hover)' : 'var(--text-primary)',
-                color: transferSearching || !transferPhone.trim() ? 'var(--text-tertiary)' : '#fff',
-                cursor: transferSearching || !transferPhone.trim() ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {transferSearching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Buscar'}
-            </button>
-          </div>
-
-          {transferRecipient && (
-            <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f0fdf4', border: '1px solid #86efac', marginBottom: '0.5rem' }}>
-              <p style={{ fontSize: '0.8rem', margin: 0 }}>
-                <span style={{ fontWeight: 600 }}>{transferRecipient.full_name}</span>
-                <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>{transferRecipient.phone}</span>
-              </p>
-            </div>
-          )}
-
-          {transferRecipient && (
-            <>
-              {/* User types whole TRC (e.g. 10 → 10 TRC). The handler
-                  converts to cents before the API call (mirrors mobile). */}
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Monto en TRC"
-                aria-label="Monto de transferencia en TRC"
-                value={transferAmount}
-                onChange={(e) => setTransferAmount(e.target.value)}
-                className="input-base"
-                style={{ marginBottom: '0.5rem' }}
-              />
-              {transferAmount && !isNaN(parseFloat(transferAmount)) && parseFloat(transferAmount) > 0 && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  = {formatTRC(Math.round(parseFloat(transferAmount) * 100))} (~{formatTRCasUSD(Math.round(parseFloat(transferAmount) * 100), exchangeRate)})
-                </p>
-              )}
-              <input
-                type="text"
-                placeholder="Nota (opcional)"
-                aria-label="Nota para la transferencia"
-                value={transferNote}
-                onChange={(e) => setTransferNote(e.target.value)}
-                className="input-base"
-                style={{ marginBottom: '0.5rem' }}
-              />
-              <button
-                onClick={handleTransfer}
-                disabled={transferSending || !transferAmount || parseInt(transferAmount) <= 0}
-                aria-label="Enviar transferencia"
-                className="btn-base btn-primary-solid"
-                style={{ width: '100%' }}
-              >
-                {transferSending ? 'Enviando...' : 'Enviar'}
-              </button>
-            </>
-          )}
-
-          {transferSuccess && <p style={{ fontSize: '0.8rem', color: '#16a34a', margin: '0.5rem 0 0' }}>{transferSuccess}</p>}
-          {transferError && <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{transferError}</p>}
         </div>
 
         {/* ═══ Transaction history ═══ */}

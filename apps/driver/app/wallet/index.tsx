@@ -220,7 +220,7 @@ export default function WalletScreen() {
                 <Ionicons name="arrow-back" size={20} color="#fff" />
               </Pressable>
               <Text variant="h2" color="inverse" className="flex-1">
-                {t('wallet.title', { defaultValue: 'Wallet' })}
+                {t('wallet.title', { defaultValue: 'Mi cuenta de conductor' })}
               </Text>
               <Pressable
                 onPress={handleExportCSV}
@@ -254,23 +254,6 @@ export default function WalletScreen() {
 
             {/* Action buttons */}
             <View className="flex-row gap-3 mb-4">
-              <Pressable
-                onPress={() => router.push('/wallet/transfer')}
-                className="flex-1 items-center justify-center py-4 rounded-2xl"
-                style={({ pressed }) => [
-                  { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', minHeight: 56 },
-                  pressed && { backgroundColor: '#252540', transform: [{ scale: 0.97 }] },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={t('wallet.transfer', { defaultValue: 'Transferir' })}
-              >
-                <View className="w-10 h-10 rounded-full items-center justify-center mb-1" style={{ backgroundColor: 'rgba(255,77,0,0.1)' }}>
-                  <Ionicons name="swap-horizontal" size={20} color={colors.brand.orange} />
-                </View>
-                <Text variant="bodySmall" color="inverse" className="font-semibold">
-                  {t('wallet.transfer', { defaultValue: 'Transferir' })}
-                </Text>
-              </Pressable>
               <Pressable
                 onPress={() => router.push('/wallet/recharge')}
                 className="flex-1 items-center justify-center py-4 rounded-2xl"

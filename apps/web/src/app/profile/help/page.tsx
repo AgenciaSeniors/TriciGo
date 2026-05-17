@@ -11,7 +11,7 @@ const faqItems = [
   },
   {
     question: 'Cuales son los metodos de pago?',
-    answer: 'Aceptamos efectivo (CUP), TriciCoins y transferencias moviles. Puedes configurar tu metodo preferido en tu perfil.',
+    answer: 'Aceptamos efectivo (CUP) y créditos de viaje TriciCoin. Puedes comprar créditos con tarjeta y elegir tu método preferido en tu perfil.',
   },
   {
     question: 'Como cancelo un viaje?',
@@ -19,7 +19,7 @@ const faqItems = [
   },
   {
     question: 'Que son los TriciCoins?',
-    answer: 'TriciCoins es nuestra moneda virtual. Puedes ganarlos con referidos, promociones y quests. Se pueden usar para pagar viajes.',
+    answer: 'TriciCoin es el crédito de viaje prepago de TriciGo. Puedes ganarlo con referidos, promociones y quests, y se usa únicamente para pagar viajes dentro de la app. No es dinero ni una moneda, y no se puede convertir a efectivo.',
   },
   {
     question: 'Como contacto a mi conductor?',

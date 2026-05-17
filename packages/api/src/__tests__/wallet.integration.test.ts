@@ -44,68 +44,6 @@ describe('Wallet Service Integration', () => {
     vi.clearAllMocks();
   });
 
-  // ─── P2P Transfer ─────────────────────────────────────────
-
-  describe('transferP2P', () => {
-    it('should prevent self-transfer via schema validation', async () => {
-      // The transferP2PSchema has a refine: fromUserId !== toUserId
-      const sameUserId = '550e8400-e29b-41d4-a716-446655440000';
-
-      await expect(
-        walletService.transferP2P(sameUserId, sameUserId, 100),
-      ).rejects.toThrow();
-    });
-
-    it('should succeed for valid transfer between different users', async () => {
-      const fromUser = '550e8400-e29b-41d4-a716-446655440001';
-      const toUser = '550e8400-e29b-41d4-a716-446655440002';
-
-      mockRpc.mockResolvedValueOnce({ data: 'txn-001', error: null });
-
-      const result = await walletService.transferP2P(fromUser, toUser, 500);
-      expect(result).toBe('txn-001');
-      expect(mockRpc).toHaveBeenCalledWith('transfer_wallet_p2p', {
-        p_from_user_id: fromUser,
-        p_to_user_id: toUser,
-        p_amount: 500,
-        p_note: null,
-      });
-    });
-
-    it('should pass note to the RPC when provided', async () => {
-      const fromUser = '550e8400-e29b-41d4-a716-446655440001';
-      const toUser = '550e8400-e29b-41d4-a716-446655440002';
-
-      mockRpc.mockResolvedValueOnce({ data: 'txn-002', error: null });
-
-      await walletService.transferP2P(fromUser, toUser, 100, 'Gracias!');
-      expect(mockRpc).toHaveBeenCalledWith('transfer_wallet_p2p', {
-        p_from_user_id: fromUser,
-        p_to_user_id: toUser,
-        p_amount: 100,
-        p_note: 'Gracias!',
-      });
-    });
-
-    it('should reject transfer with zero amount', async () => {
-      const fromUser = '550e8400-e29b-41d4-a716-446655440001';
-      const toUser = '550e8400-e29b-41d4-a716-446655440002';
-
-      await expect(
-        walletService.transferP2P(fromUser, toUser, 0),
-      ).rejects.toThrow();
-    });
-
-    it('should reject transfer exceeding max amount', async () => {
-      const fromUser = '550e8400-e29b-41d4-a716-446655440001';
-      const toUser = '550e8400-e29b-41d4-a716-446655440002';
-
-      await expect(
-        walletService.transferP2P(fromUser, toUser, 200000),
-      ).rejects.toThrow();
-    });
-  });
-
   // ─── Recharge ─────────────────────────────────────────────
 
   describe('requestRecharge', () => {

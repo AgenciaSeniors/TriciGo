@@ -39,7 +39,7 @@ const faqJsonLd = {
       name: '¿Cómo pago mi viaje?',
       acceptedAnswer: {
         '@type': 'Answer',
-        text: 'Puedes pagar en efectivo, con TriciCoin (monedero digital), con tarjeta de crédito/débito o con métodos mixtos.',
+        text: 'Puedes pagar en efectivo o con créditos de viaje TriciCoin. Los créditos se compran con tarjeta de crédito o débito dentro de la app.',
       },
     },
     {
@@ -162,8 +162,8 @@ export default function HomePage() {
               botón de emergencia en cada viaje.
             </li>
             <li>
-              <strong>Pagos flexibles</strong> — Paga en efectivo, TriciCoin o
-              transferencia. Tú decides.
+              <strong>Pagos flexibles</strong> — Paga en efectivo o con tus créditos
+              de viaje TriciCoin. Tú decides.
             </li>
           </ul>
         </section>

@@ -26,7 +26,7 @@ real driver availability.
 
 ### Wallet recharge — Apple Guideline 3.1.1 defense
 
-The in-app wallet (visible at bottom tab "Billetera") accepts top-ups via
+The in-app trip credit balance (visible at bottom tab "Créditos de viaje") accepts top-ups via
 Stripe Payment Sheet. **This is intentionally not StoreKit / In-App
 Purchase**, and we believe it falls outside Apple's IAP requirement based
 on the published precedents for ride-sharing wallets (Uber Cash,
@@ -46,9 +46,10 @@ Starbucks, Lyft Cash):
    physical transportation services. It does not unlock digital content
    or premium features inside the app.")
 
-3. **Refundable**. Users may transfer remaining balance to other
-   verified users (peer-to-peer, no commission), or contact support to
-   request a refund of unused balance to the original payment method.
+3. **Closed-loop and refundable.** TriciCoin credit is closed-loop: it
+   is redeemable only for TriciGo rides and is not transferable between
+   users. On account closure, any unused balance may be refunded to the
+   original payment method in line with consumer-protection rules.
 
 4. **Reference apps with the same model:** Uber, Lyft, DoorDash,
    Postmates — all use third-party payment processors for physical

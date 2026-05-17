@@ -33,7 +33,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 • Historial de viajes — Consulta todos tus viajes anteriores con detalles de ruta, precio y conductor.
 
-• Métodos de pago flexibles — Paga en efectivo o con saldo digital. Tú eliges.
+• Métodos de pago flexibles — Paga en efectivo o con crédito de viaje. Tú eliges.
 
 • Lugares favoritos — Guarda tu casa, trabajo y lugares frecuentes para pedir viajes más rápido.
 
@@ -41,7 +41,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 • Divide el costo — Comparte la tarifa con otros pasajeros en tiempo real.
 
-• Billetera con filtros — Filtra tu historial por recargas, viajes o transferencias.
+• Créditos de viaje — consultá tu saldo e historial de movimientos.
 
 • Blog TriciGo — Lee noticias y novedades del servicio directamente desde la app.
 

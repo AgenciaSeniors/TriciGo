@@ -30,13 +30,13 @@ KEY FEATURES
 
 - Ride history: View all your past rides with route details, price, and driver info.
 
-- Flexible payments: Pay with cash or digital wallet balance. Your choice.
+- Flexible payments: Pay with cash or trip credit balance. Your choice.
 
 - Saved places: Save home, work, and frequent locations to book rides faster.
 
 - Split fare: Share the cost with other passengers in real time.
 
-- Digital wallet: Manage your balance, view transactions, and transfer funds.
+- Trip credits: check your balance and full transaction history.
 
 WHY TRICIGO?
 

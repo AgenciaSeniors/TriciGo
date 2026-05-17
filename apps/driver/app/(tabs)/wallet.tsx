@@ -156,7 +156,7 @@ export default function WalletScreen() {
       <Screen bg="lightPrimary" statusBarStyle="dark-content" padded scroll>
         <View className="pt-4">
           <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
-            {t('wallet.title', { defaultValue: 'Billetera' })}
+            {t('wallet.title', { defaultValue: 'Mi cuenta de conductor' })}
           </Text>
           <SkeletonBalance />
           <SkeletonCard />
