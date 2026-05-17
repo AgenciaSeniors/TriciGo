@@ -694,6 +694,13 @@ export function useRideActions() {
         try {
           const { flowStep, activeRide: pinnedRide } = useRideStore.getState();
           if (!pinnedRide || flowStep === 'idle' || flowStep === 'completed') return;
+          // Persistent search: heartbeat so the server keeps the search
+          // alive — cleanup_orphan_searching_rides only cancels rides whose
+          // heartbeat went stale. Fire-and-forget (touchSearchingRide
+          // swallows all errors internally).
+          if (flowStep === 'searching') {
+            void rideService.touchSearchingRide(pinnedRide.id);
+          }
           const fresh = await rideService.getActiveRide(user!.id);
           if (!fresh) {
             // getActiveRide filters out canceled/completed. If it returns
@@ -1000,25 +1007,28 @@ export function useRideActions() {
       searchStartTimeRef.current = Date.now();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
+      // Persistent search — the loop reschedules itself indefinitely
+      // while flowStep === 'searching'. The search is NEVER auto-canceled:
+      // for the first rounds it nudges an immediate re-dispatch with a
+      // wider radius + reassures the rider; after that the server keeps
+      // working on its own (retry cron every minute + the driver-online
+      // trigger). The rider cancels manually if they no longer want it.
       const scheduleSearchTimeout = () => {
         timeoutRef.current = setTimeout(async () => {
           const { flowStep, activeRide: ar } = useRideStore.getState();
-          if (flowStep !== 'searching' || !ar) return;
+          if (flowStep !== 'searching' || !ar) return; // search ended → stop loop
 
-          // Check if ride was accepted during search
+          // Ride was accepted during the search → move to the active flow.
           if (ar.status !== 'searching') {
             useRideStore.getState().setFlowStep('active');
             return;
           }
 
           searchRetryCountRef.current += 1;
-          const totalElapsed = Date.now() - searchStartTimeRef.current;
 
-          // If under max total time and still have retry rounds, show "expanding" toast and retry
-          if (
-            searchRetryCountRef.current <= RIDE_CONFIG.SEARCH_RETRY_ROUNDS &&
-            totalElapsed < RIDE_CONFIG.SEARCH_MAX_TOTAL_MS
-          ) {
+          // First rounds: widen the radius + reassure. retryMatchDrivers is
+          // best-effort — the server re-dispatches on its own regardless.
+          if (searchRetryCountRef.current <= RIDE_CONFIG.SEARCH_RETRY_ROUNDS) {
             Toast.show({
               type: 'info',
               text1: i18next.t('rider:ride.expanding_search', {
@@ -1026,33 +1036,16 @@ export function useRideActions() {
               }),
               visibilityTime: 3000,
             });
-            // F001: Re-trigger matching with expanded radius (counter already incremented)
             const radius = RIDE_CONFIG.SEARCH_RADIUS_PROGRESSION[searchRetryCountRef.current - 1] ?? 12000;
             try {
               await rideService.retryMatchDrivers(ar.id, radius);
             } catch {
-              // Best-effort — don't block retry scheduling
+              // Best-effort — don't block the loop
             }
-            // Schedule next timeout round
-            scheduleSearchTimeout();
-            return;
           }
 
-          // Max retries exhausted — cancel the ride
-          try {
-            await rideService.cancelRide(ar.id, user?.id, 'search_timeout');
-          } catch {
-            // Best effort
-          }
-          channelRef.current?.unsubscribe();
-          channelRef.current = null;
-          resetAll();
-          Toast.show({
-            type: 'error',
-            text1: i18next.t('rider:ride.no_driver_found', {
-              defaultValue: 'No se encontro conductor disponible',
-            }),
-          });
+          // Keep searching — the loop never cancels the ride.
+          scheduleSearchTimeout();
         }, SEARCH_TIMEOUT_MS);
       };
 

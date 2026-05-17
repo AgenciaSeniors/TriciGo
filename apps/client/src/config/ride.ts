@@ -1,9 +1,10 @@
 export const RIDE_CONFIG = {
   MIN_DISTANCE_M: 200,
+  /** Interval of the persistent-search loop (reassurance toast + radius
+   *  nudge). The search is NEVER auto-canceled — the server keeps
+   *  dispatching and the rider cancels manually if they want. */
   SEARCH_TIMEOUT_MS: 120_000,
-  /** Maximum total search time before final cancellation (5 min) */
-  SEARCH_MAX_TOTAL_MS: 300_000,
-  /** Number of search retry rounds (expanding message each round) */
+  /** First rounds that show the "expanding search" toast + widen radius. */
   SEARCH_RETRY_ROUNDS: 2,
   /** Radius progression for retry rounds (initial creation uses 5000m) */
   SEARCH_RADIUS_PROGRESSION: [8000, 12000],
