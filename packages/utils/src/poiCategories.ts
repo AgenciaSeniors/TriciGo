@@ -36,9 +36,9 @@ export const POI_VISUAL_GROUPS: readonly PoiVisualGroup[] = [
   { key: 'health',    icon: 'medkit',         color: '#0CA678', label: 'Salud' },
   { key: 'finance',   icon: 'card',           color: '#3B5BDB', label: 'Banca' },
   { key: 'civic',     icon: 'school',         color: '#6B7F8F', label: 'Servicios' },
-  { key: 'culture',   icon: 'color-palette',  color: '#F08C00', label: 'Cultura' },
+  { key: 'culture',   icon: 'color-palette',  color: '#C2620A', label: 'Cultura' },
   { key: 'transport', icon: 'bus',            color: '#1971C2', label: 'Transporte' },
-  { key: 'other',     icon: 'ellipse',        color: '#868E96', label: 'Lugar' },
+  { key: 'other',     icon: 'location',       color: '#868E96', label: 'Lugar' },
 ] as const;
 
 const GROUP_BY_KEY: Record<string, PoiVisualGroup> = Object.fromEntries(

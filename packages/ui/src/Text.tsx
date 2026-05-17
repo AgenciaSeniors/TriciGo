@@ -40,7 +40,7 @@ const variantClasses = {
 const colorClasses = {
   primary: 'text-neutral-950 dark:text-neutral-50',
   secondary: 'text-neutral-600 dark:text-neutral-400',
-  tertiary: 'text-neutral-400 dark:text-neutral-500',
+  tertiary: 'text-neutral-400 dark:text-[#8a8a8a]',
   inverse: 'text-white',
   accent: 'text-primary-500',
   error: 'text-error',
