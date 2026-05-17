@@ -991,6 +991,25 @@ export const rideService = {
   },
 
   /**
+   * Rider heartbeat for a searching ride (persistent search). The client
+   * calls this every ~30s while on the "searching" screen so the server
+   * knows the rider is still waiting — `cleanup_orphan_searching_rides`
+   * only cancels rides whose heartbeat went stale (abandoned app).
+   *
+   * Fully best-effort: a missed beat is harmless (the next one retries
+   * 30s later) and the RPC may be absent if migration 00269 hasn't
+   * reached prod yet. All errors are swallowed.
+   */
+  async touchSearchingRide(rideId: string): Promise<void> {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.rpc('touch_searching_ride', { p_ride_id: rideId });
+    } catch {
+      /* best-effort heartbeat — ignore */
+    }
+  },
+
+  /**
    * Preview the cancellation fee based on ride state (without applying it).
    * Shows the user exactly what they'd be charged before confirming.
    */
