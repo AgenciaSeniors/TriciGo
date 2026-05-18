@@ -12,7 +12,7 @@ Phone: +1 415 555 0100
 OTP code: 000000  (test override active in DEV/Apple Review accounts)
 
 Alternative:
-Email: reviewer-rider@tricigo.app
+Email: reviewer-rider@tricigo.com
 Password: <fill in before submit>
 ```
 
@@ -99,5 +99,5 @@ present for travelers using the app abroad.
 
 ## Contact
 
-- App support email: soporte@tricigo.app
+- App support email: soporte@tricigo.com
 - Developer contact: edua56621636@gmail.com (technical)

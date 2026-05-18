@@ -55,9 +55,9 @@ function renderUser(data: WalletReceiptData): string {
       Hola, <strong>${escapeHtml(greetingName)}</strong>. Recibimos tu pago.
     </p>
     <p style="margin: 0 0 24px;">
-      Tu wallet ya tiene los TriciCoin disponibles para tus próximos viajes.
-      Adjuntamos el comprobante en PDF — también lo encontrás en tu billetera
-      dentro de la app.
+      Tus créditos TriciCoin ya están disponibles para tus próximos viajes.
+      Adjuntamos el comprobante en PDF — también lo encontrás en tus créditos
+      de viaje dentro de la app.
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 8px;">
       ${detailRow('Comprobante', receiptNo, { strong: true })}
@@ -77,7 +77,7 @@ function renderUser(data: WalletReceiptData): string {
     preheader: `Recarga confirmada · ${fmtTrc(amounts.tcCredited)} acreditados`,
     hero: {
       title: 'Recarga confirmada',
-      subtitle: `${fmtTrc(amounts.tcCredited)} ya están en tu wallet.`,
+      subtitle: `${fmtTrc(amounts.tcCredited)} ya están en tus créditos.`,
     },
     body,
     footerNote:

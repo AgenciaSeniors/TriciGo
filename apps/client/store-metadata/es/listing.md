@@ -56,7 +56,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 TriciGo se despliega ciudad por ciudad. Revisa la app para ver las zonas de servicio disponibles.
 
 📞 SOPORTE
-¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.app
+¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.com
 
 Descarga TriciGo y muévete por la ciudad como nunca antes. ¡Tu viaje te espera! 🚲
 
@@ -67,11 +67,11 @@ Maps & Navigation (principal) / Travel & Local (secundaria)
 bicitaxi, taxi, transporte, movilidad, triciclo, ride, conductor, viaje, urbano, rideshare
 
 ## Política de privacidad URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Clasificación de contenido
 Todos (Everyone)
 
 ## Información de contacto
-- Email: soporte@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

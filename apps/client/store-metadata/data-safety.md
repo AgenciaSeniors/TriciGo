@@ -1,6 +1,6 @@
 # Google Play Data Safety Form — TriciGo (Pasajero)
 
-> Pegar/seleccionar las respuestas de este draft en Play Console → Policy and programs → App content → Data safety → Manage. Debe coincidir EXACTAMENTE con la Privacy Policy en `tricigo.app/privacy` y con el `PrivacyInfo.xcprivacy` de iOS para evitar bloqueo automático.
+> Pegar/seleccionar las respuestas de este draft en Play Console → Policy and programs → App content → Data safety → Manage. Debe coincidir EXACTAMENTE con la Privacy Policy en `tricigo.com/privacy` y con el `PrivacyInfo.xcprivacy` de iOS para evitar bloqueo automático.
 
 ---
 
@@ -13,7 +13,7 @@
 **Yes** (HTTPS / TLS 1.2+ everywhere — Supabase, Stripe, Mapbox)
 
 ### Do you provide a way for users to request that their data be deleted?
-**Yes** (Settings → Eliminar cuenta + URL público en `tricigo.app/account/delete`)
+**Yes** (Settings → Eliminar cuenta + URL público en `tricigo.com/account/delete`)
 
 ---
 

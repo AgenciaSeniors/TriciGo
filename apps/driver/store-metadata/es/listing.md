@@ -61,7 +61,7 @@ TriciGo Conductor es tu herramienta de trabajo como bicitaxista. La app te conec
 TriciGo Conductor se despliega ciudad por ciudad. Revisa la app para ver las zonas de servicio disponibles.
 
 📞 SOPORTE PARA CONDUCTORES
-¿Necesitas ayuda? Contáctanos desde la app o escríbenos a conductores@tricigo.app
+¿Necesitas ayuda? Contáctanos desde la app o escríbenos a conductores@tricigo.com
 
 Únete a TriciGo Conductor y empieza a generar ingresos con tu vehículo. 🚲
 
@@ -72,11 +72,11 @@ Maps & Navigation (principal) / Business (secundaria)
 conductor, bicitaxi, taxi, driver, transporte, ganancias, bicitaxista, empleo, urbano, rideshare
 
 ## Política de privacidad URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Clasificación de contenido
 Todos (Everyone)
 
 ## Información de contacto
-- Email: conductores@tricigo.app
-- Website: https://tricigo.app
+- Email: conductores@tricigo.com
+- Website: https://tricigo.com
