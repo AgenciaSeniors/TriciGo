@@ -28,6 +28,8 @@ export function WebFooter() {
           <div className="footer-section-title">{t('footer.legal', { defaultValue: 'Legal' })}</div>
           <a href="/privacy" className="footer-link">{t('footer.privacy')}</a>
           <a href="/terms" className="footer-link">{t('footer.terms')}</a>
+          <a href="/refunds" className="footer-link">{t('footer.refunds', { defaultValue: 'Reembolsos' })}</a>
+          <a href="/contact" className="footer-link">{t('footer.contact', { defaultValue: 'Contacto' })}</a>
         </div>
       </div>
 

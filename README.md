@@ -44,7 +44,7 @@ TriciGo/
 | Base de datos | Supabase (PostgreSQL + PostGIS + Auth + Realtime + Storage) |
 | Mapas | Mapbox GL (con soporte offline) |
 | Notificaciones | Expo Push Notifications |
-| Pagos | TropiPay (tarjetas internacionales) |
+| Pagos | Stripe (tarjetas de crédito/débito) |
 | Error tracking | Sentry |
 | Analytics | PostHog |
 | Tests | Vitest (282 tests) |
@@ -64,7 +64,7 @@ TriciGo/
 - Multi-stop: agregar hasta 3 paradas durante el viaje
 - Viajes programados
 - Chat in-ride con respuestas rapidas
-- Wallet TriciCoin + efectivo + TropiPay + corporativo
+- Créditos TriciCoin + efectivo + tarjeta (Stripe) + corporativo
 - Propinas al conductor
 - Codigos promocionales y referidos
 - Surge pricing transparente con rango de tarifa

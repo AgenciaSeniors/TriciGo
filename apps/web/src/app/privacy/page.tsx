@@ -65,6 +65,12 @@ export default function PrivacyPolicyPage() {
       <Section title={t('privacy.intro_title')}>
         <p>{t('privacy.intro_text')}</p>
       </Section>
+      <Section title={t('privacy.controller_title')}>
+        <p>{t('privacy.controller_text')}</p>
+      </Section>
+      <Section title={t('privacy.legal_basis_title')}>
+        <p>{t('privacy.legal_basis_text')}</p>
+      </Section>
       <Section title={t('privacy.data_collected_title')}>
         <p>{t('privacy.data_collected_intro')}</p>
         <ul style={{ paddingLeft: '1.25rem', marginTop: '0.5rem' }}>
@@ -88,6 +94,9 @@ export default function PrivacyPolicyPage() {
       <Section title={t('privacy.sharing_title')}>
         <p>{t('privacy.sharing_text')}</p>
       </Section>
+      <Section title={t('privacy.processors_title')}>
+        <p>{t('privacy.processors_text')}</p>
+      </Section>
       <Section title={t('privacy.retention_title')}>
         <p>{t('privacy.retention_text')}</p>
       </Section>
@@ -99,6 +108,9 @@ export default function PrivacyPolicyPage() {
           <li>{t('privacy.right_deletion')}</li>
           <li>{t('privacy.right_portability')}</li>
         </ul>
+      </Section>
+      <Section title={t('privacy.authority_title')}>
+        <p>{t('privacy.authority_text')}</p>
       </Section>
       <Section title={t('privacy.security_title')}>
         <p>{t('privacy.security_text')}</p>
