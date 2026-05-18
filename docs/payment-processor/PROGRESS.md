@@ -7,14 +7,14 @@
 
 ## Estado general
 
-- **Fase actual:** A (limpieza del modelo) — **completada en código**. Las migraciones
-  `00273` / `00274` / `00275` quedan escritas; aplicarlas a producción es paso del
-  pipeline de deploy. Próximo: Fases B, C y D.
+- **Fase actual:** B (controles de compliance) en curso — **B1 (velocity controls) hecho
+  en código**. Migraciones `00273`–`00276` escritas; aplicarlas a producción es paso del
+  pipeline de deploy. Próximo: B2/B3 (KYC + SDN, esperan cuenta Sumsub), Fase C, D1.
 - **Procesador objetivo:** NETOPIA Payments + EuPlătesc, ambos detrás de una capa de
   abstracción `PaymentProvider`. Stripe se retira al final (cuando el reemplazo esté
   verificado en Live). Decidido el 2026-05-18.
 - **Modo:** Pre-Sandbox — todavía sin integración de procesador rumano.
-- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre + ejecución Fase A).
+- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, Fase B1).
 
 ## Hitos completados
 
@@ -47,6 +47,14 @@
   - Limpieza de TropiPay: eliminadas las edge functions deprecadas `create-tropipay-link`
     y `process-tropipay-webhook`; `README.md` actualizado.
   - Verificado: `turbo run check-types` 4/4 apps OK.
+- **2026-05-18** — **Fase B1 ejecutada en código** (velocity controls):
+  - Migración `00276_customer_topup_velocity.sql`: 2 límites tunables en `platform_config`
+    (`velocity_max_recharges_24h`=3, `velocity_max_amount_usd_30d`=1000) + RPC
+    `check_topup_velocity` que los chequea contra `payment_intents` (la tabla `rate_limits`
+    no sirve: borra filas a las 2h).
+  - `create-stripe-payment-intent`: llama al RPC antes de crear el cargo; responde 429 si
+    se supera el límite; recargas corporativas exentas; fail-open si la migración no está
+    aplicada (no rompe las recargas).
 
 ## Bloqueos activos
 
@@ -54,26 +62,35 @@
   Bloquea la Fase F (aplicación al procesador). Claude NO puede emitir esta opinión
   (`PAYMENT_COMPANION.md` §9).
 - **Migraciones SQL sin aplicar a producción** (guard de MCP) — `00273` (cashout),
-  `00274` (P2P) y `00275` (contenido legal CMS) quedan escritas en el repo; aplicarlas es
-  paso del pipeline de deploy. Hasta entonces: el closed-loop es real en el frontend pero
-  no en el backend, y las páginas legales live siguen mostrando el placeholder viejo.
+  `00274` (P2P), `00275` (contenido legal CMS) y `00276` (velocity controls) quedan
+  escritas en el repo; aplicarlas es paso del pipeline de deploy. Hasta entonces: el
+  closed-loop es real en el frontend pero no en el backend, las páginas legales live
+  siguen mostrando el placeholder viejo, y el velocity control no se activa (la edge
+  function es fail-open mientras el RPC `check_topup_velocity` no exista).
 
 ## Decisiones pendientes del fundador
 
-- **Proveedor de KYC del pagador** (Fase B2) — Sumsub / Veriff / Onfido.
-- **Proveedor de SDN screening** (Fase B3) — ComplyAdvantage / Sanctions.io.
+(Ninguna decisión de proveedor pendiente.)
 
-(Resueltas el 2026-05-18: reemplazar Stripe por procesadores rumanos; integrar NETOPIA +
-EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestiona Eduardo.)
+Resueltas el 2026-05-18: reemplazar Stripe por procesadores rumanos; integrar NETOPIA +
+EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestiona Eduardo;
+**proveedor de KYC y de SDN screening: Sumsub para ambos** (Fases B2 y B3 — un solo vendor).
+
+## Acciones pendientes de Eduardo (destraban trabajo de Claude)
+
+- **Crear cuenta en Sumsub** (sumsub.com) y obtener las API keys de Sandbox — destraba la
+  implementación de B2 (KYC del pagador) y B3 (SDN screening de conductores).
+- **Crear cuenta Sandbox en NETOPIA** — destraba la integración D2b.
+- **Contacto comercial + contrato con EuPlătesc** — destraba la integración D3b.
+- **Teléfono real para la página `/contact`** — destraba la tarea C4.
 
 ## Próximas 3 acciones recomendadas
 
-1. **Fase C** (rápida, sin dependencia externa): crear las páginas `/aml` y `/cookies`;
-   pedir a Eduardo el teléfono real para `/contact`.
-2. **Fase B1** (sin dependencia de proveedor): velocity controls por usuario en backend
-   Supabase (máx. cargos/24h, máx. monto/30 días).
-3. **Fase B2/B3**: decidir proveedores de KYC y SDN screening para destrabar esas tareas;
-   en paralelo, **Fase D1**: construir la abstracción `PaymentProvider`.
+1. **Fase C** (rápida, sin dependencia externa): crear las páginas `/aml` y `/cookies`.
+2. **Fase D1** (sin dependencia externa): construir la abstracción `PaymentProvider`
+   sobre la cual se integrarán NETOPIA y EuPlătesc.
+3. **Fase B4–B7** (3DS2 explícito, audit trail de pagos, device fingerprinting, política
+   de chargebacks). B2/B3 esperan la cuenta Sumsub de Eduardo.
 
 ## Notas de ubicación de documentos
 

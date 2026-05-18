@@ -185,6 +185,37 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Phase B1: per-user top-up velocity control ──────────────
+    // Reject before creating a charge if the user exceeds the
+    // configured recharge frequency / amount limits. Corporate
+    // top-ups are a separate vetted B2B flow and are exempt.
+    // Fail-open: if check_topup_velocity is not yet deployed
+    // (migration 00276 pending) or errors, log and allow — velocity
+    // is one layer among IP rate-limiting, per-tx caps and 3DS.
+    if (!corporate_account_id) {
+      try {
+        const { data: velocity, error: velocityError } = await supabase.rpc(
+          'check_topup_velocity',
+          { p_user_id: user_id, p_amount_usd: amountUsd },
+        );
+        if (velocityError) {
+          console.error('Velocity check unavailable, allowing recharge:', velocityError.message);
+        } else if (velocity?.allowed === false) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: 'velocity_limit',
+              reason: velocity.reason,
+              detail: 'You have reached the recharge limit. Please try again later.',
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      } catch (velErr) {
+        console.error('Velocity check threw, allowing recharge:', velErr);
+      }
+    }
+
     const intentRow: Record<string, unknown> = {
       user_id,
       amount_cup,
