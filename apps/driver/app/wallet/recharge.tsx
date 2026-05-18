@@ -112,6 +112,28 @@ export default function RechargeScreen() {
           </View>
         )}
 
+        {/* Closed-loop notice — recharge credits pay platform commissions only */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 8,
+            backgroundColor: 'rgba(249,115,22,0.08)',
+            borderWidth: 1,
+            borderColor: 'rgba(249,115,22,0.25)',
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 12,
+          }}
+        >
+          <Ionicons name="information-circle-outline" size={18} color={colors.brand.orange} />
+          <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+            {t('wallet.recharge_non_refundable', {
+              defaultValue: 'Estos créditos son no reembolsables y solo sirven para pagar comisiones de plataforma.',
+            })}
+          </Text>
+        </View>
+
         <Button
           title={t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })}
           onPress={handleRecharge}

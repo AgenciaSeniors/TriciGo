@@ -48,14 +48,14 @@ export default function RefundsPage() {
         </p>
       </Section>
 
-      {/* Parámetros de reembolso propuestos — confirmar con el negocio */}
-      <Section title="Reembolso de creditos no consumidos">
+      <Section title="Creditos TriciCoin: no reembolsables">
         <p>
-          Los creditos TriciCoin son un credito prepago de transporte que se usa unicamente para
-          pagar viajes dentro de la app. Si decides cerrar tu cuenta, el saldo de creditos no
-          consumidos puede reembolsarse al metodo de pago original con el que fueron adquiridos.
-          El reembolso se procesa dentro de un plazo aproximado de 14 dias habiles a partir de la
-          solicitud de cierre de cuenta.
+          Los creditos TriciCoin —tanto los del pasajero como los del conductor— son un credito
+          prepago de transporte de uso interno (closed-loop). No son reembolsables: una vez
+          adquiridos no se devuelven al metodo de pago, ni en efectivo, ni al cierre de la cuenta.
+          Tampoco se pueden transferir a otros usuarios ni convertir a dinero. Se usan
+          exclusivamente para pagar viajes —en el caso del pasajero— o comisiones de plataforma
+          —en el caso del conductor— dentro de TriciGo.
         </p>
       </Section>
 

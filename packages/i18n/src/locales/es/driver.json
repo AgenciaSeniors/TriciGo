@@ -355,7 +355,7 @@
     "tx_transfer_in": "Transferencia recibida",
     "tx_transfer_out": "Transferencia enviada",
     "tx_promo_credit": "Crédito promocional",
-    "tx_redemption": "Retiro",
+    "tx_redemption": "Ajuste de saldo",
     "tx_adjustment": "Ajuste",
     "tx_ride_hold": "Retención de viaje",
     "tx_ride_hold_release": "Liberación de retención",
@@ -682,8 +682,10 @@
   },
 
   "wallet": {
-    "title": "Créditos de viaje",
+    "title": "Crédito de comisión",
     "available_balance": "Saldo disponible",
+    "commission_credit": "Crédito de comisión",
+    "commission_credit_hint": "Este saldo se usa solo para pagar comisiones de plataforma. No es retirable ni reembolsable.",
     "hold_balance": "En retención",
     "earning_goals": "Metas de ganancia",
     "goal_daily": "Meta diaria",
@@ -699,13 +701,14 @@
     "type_surge": "Tarifa dinámica",
     "no_commissions": "Sin comisiones aun",
     "no_commissions_desc": "Tus comisiones apareceran aqui",
-    "quota_title": "Cuota de trabajo",
-    "quota_balance": "Balance de cuota",
-    "recharge_quota": "Recargar cuota",
-    "quota_low_warning": "Tu cuota esta baja. Recarga pronto para seguir trabajando.",
-    "quota_grace": "Cuota agotada. Te quedan {count} viajes de gracia.",
-    "quota_blocked": "Cuota agotada. Recarga para seguir aceptando viajes.",
-    "quota_deduction_info": "Se descuenta {pct} del valor de cada viaje."
+    "quota_title": "Crédito de comisión",
+    "quota_balance": "Crédito disponible",
+    "recharge_quota": "Recargar crédito",
+    "quota_low_warning": "Tu crédito esta bajo. Recarga pronto para seguir trabajando.",
+    "quota_grace": "Crédito agotado. Te quedan {count} viajes de gracia.",
+    "quota_blocked": "Crédito agotado. Recarga para seguir aceptando viajes.",
+    "quota_deduction_info": "Se descuenta {pct} del valor de cada viaje.",
+    "recharge_non_refundable": "Estos créditos son no reembolsables y solo sirven para pagar comisiones de plataforma."
   },
 
   "map": {

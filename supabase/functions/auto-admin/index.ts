@@ -74,25 +74,6 @@ async function autoApproveDrivers(supabase: ReturnType<typeof getSupabase>, conf
   return { count, errors };
 }
 
-async function autoApproveRedemptions(supabase: ReturnType<typeof getSupabase>, config: Record<string, string>) {
-  if (!isEnabled(config, 'auto_approve_redemptions_enabled')) return { count: 0, errors: [] };
-  const maxTrc = getNumber(config, 'auto_approve_redemptions_max_trc', 10000);
-  let count = 0; const errors: string[] = [];
-  const { data: redemptions } = await supabase.from('wallet_redemptions').select('id, driver_id, amount').eq('status', 'requested').lte('amount', maxTrc);
-  if (!redemptions?.length) return { count, errors };
-  for (const red of redemptions) {
-    try {
-      const { data: profile } = await supabase.from('driver_profiles').select('status').eq('id', red.driver_id).single();
-      if (profile?.status !== 'approved') continue;
-      const { error } = await supabase.rpc('approve_redemption', { p_redemption_id: red.id, p_admin_id: SYSTEM_USER });
-      if (error) throw error;
-      await supabase.from('admin_actions').insert({ admin_id: SYSTEM_USER, action: 'auto_approve_redemption', target_type: 'wallet_redemption', target_id: red.id, new_values: { amount: red.amount, auto: true } });
-      count++;
-    } catch (err) { errors.push(`Redemption ${red.id}: ${(err as Error).message}`); }
-  }
-  return { count, errors };
-}
-
 async function autoResolveFraud(supabase: ReturnType<typeof getSupabase>, config: Record<string, string>) {
   if (!isEnabled(config, 'auto_resolve_fraud_enabled')) return { count: 0, errors: [] };
   const hours = getNumber(config, 'auto_resolve_fraud_hours', 48);
@@ -162,18 +143,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     const config = await getConfig(supabase);
-    const [drivers, redemptions, fraud, incidents, tropipay] = await Promise.all([
+    const [drivers, fraud, incidents, tropipay] = await Promise.all([
       autoApproveDrivers(supabase, config),
-      autoApproveRedemptions(supabase, config),
       autoResolveFraud(supabase, config),
       autoCloseIncidents(supabase, config),
       autoFailStaleTropipay(supabase),
     ]);
-    const allErrors = [...drivers.errors, ...redemptions.errors, ...fraud.errors, ...incidents.errors, ...tropipay.errors];
+    const allErrors = [...drivers.errors, ...fraud.errors, ...incidents.errors, ...tropipay.errors];
     if (runId) {
-      await supabase.from('auto_admin_runs').update({ completed_at: new Date().toISOString(), drivers_approved: drivers.count, redemptions_approved: redemptions.count, fraud_resolved: fraud.count, incidents_closed: incidents.count, errors: allErrors.length > 0 ? JSON.stringify(allErrors) : '[]' }).eq('id', runId);
+      await supabase.from('auto_admin_runs').update({ completed_at: new Date().toISOString(), drivers_approved: drivers.count, fraud_resolved: fraud.count, incidents_closed: incidents.count, errors: allErrors.length > 0 ? JSON.stringify(allErrors) : '[]' }).eq('id', runId);
     }
-    return new Response(JSON.stringify({ success: true, drivers_approved: drivers.count, redemptions_approved: redemptions.count, fraud_resolved: fraud.count, incidents_closed: incidents.count, errors: allErrors.length }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, drivers_approved: drivers.count, fraud_resolved: fraud.count, incidents_closed: incidents.count, errors: allErrors.length }), { headers: { ...cors, 'Content-Type': 'application/json' } });
   } catch (err) {
     const message = (err as Error).message;
     if (runId) await supabase.from('auto_admin_runs').update({ completed_at: new Date().toISOString(), errors: JSON.stringify([message]) }).eq('id', runId);

@@ -240,7 +240,7 @@ export default function WalletScreen() {
             {/* Balance card */}
             <Card forceDark variant="surface" padding="lg" className="mb-4">
               <Text variant="caption" color="secondary" className="mb-1">
-                {t('wallet.available_balance', { defaultValue: 'Balance disponible' })}
+                {t('wallet.commission_credit', { defaultValue: 'Crédito de comisión' })}
               </Text>
               <Text variant="stat" color="inverse">
                 {formatCUP(summary?.available_balance ?? 0)}
@@ -250,6 +250,11 @@ export default function WalletScreen() {
                   {t('wallet.held', { defaultValue: 'Retenido' })}: {formatCUP(summary?.held_balance ?? 0)}
                 </Text>
               )}
+              <Text variant="caption" color="tertiary" className="mt-2">
+                {t('wallet.commission_credit_hint', {
+                  defaultValue: 'Este saldo se usa solo para pagar comisiones de plataforma. No es retirable ni reembolsable.',
+                })}
+              </Text>
             </Card>
 
             {/* Action buttons */}

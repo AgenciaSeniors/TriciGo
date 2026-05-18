@@ -355,7 +355,7 @@
     "tx_transfer_in": "Transfer received",
     "tx_transfer_out": "Transfer sent",
     "tx_promo_credit": "Promo credit",
-    "tx_redemption": "Withdrawal",
+    "tx_redemption": "Balance adjustment",
     "tx_adjustment": "Adjustment",
     "tx_ride_hold": "Ride hold",
     "tx_ride_hold_release": "Hold released",
@@ -682,8 +682,10 @@
   },
 
   "wallet": {
-    "title": "Trip credits",
+    "title": "Commission credit",
     "available_balance": "Available balance",
+    "commission_credit": "Commission credit",
+    "commission_credit_hint": "This balance is used only to pay platform commissions. It is not withdrawable or refundable.",
     "hold_balance": "On hold",
     "earning_goals": "Earning goals",
     "goal_daily": "Daily goal",
@@ -699,13 +701,14 @@
     "type_surge": "Surge",
     "no_commissions": "No commissions yet",
     "no_commissions_desc": "Your commissions will appear here",
-    "quota_title": "Work quota",
-    "quota_balance": "Quota balance",
-    "recharge_quota": "Recharge quota",
-    "quota_low_warning": "Your quota is running low. Recharge soon to keep working.",
-    "quota_grace": "Quota depleted. You have {count} grace trips remaining.",
-    "quota_blocked": "Quota depleted. Recharge to continue accepting rides.",
-    "quota_deduction_info": "{pct} of each trip's value is deducted."
+    "quota_title": "Commission credit",
+    "quota_balance": "Available credit",
+    "recharge_quota": "Recharge credit",
+    "quota_low_warning": "Your credit is running low. Recharge soon to keep working.",
+    "quota_grace": "Credit depleted. You have {count} grace trips remaining.",
+    "quota_blocked": "Credit depleted. Recharge to continue accepting rides.",
+    "quota_deduction_info": "{pct} of each trip's value is deducted.",
+    "recharge_non_refundable": "These credits are non-refundable and can only be used to pay platform commissions."
   },
 
   "map": {

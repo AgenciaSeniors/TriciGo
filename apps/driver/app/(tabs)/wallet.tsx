@@ -179,7 +179,9 @@ export default function WalletScreen() {
           {t('wallet.title', { defaultValue: 'Billetera' })}
         </Text>
 
-        {/* Quota Card */}
+        {/* Quota Card — closed-loop commission credit. The quota balance is
+            credit usable only to pay TriciGo platform commissions: not
+            withdrawable, not refundable, not convertible to cash. */}
         {quotaStatus && (
           <AnimatedCard delay={0} className="mb-4">
             <QuotaCard
@@ -192,15 +194,20 @@ export default function WalletScreen() {
               blocked={quotaStatus.blocked}
               onRecharge={() => router.push('/wallet/recharge')}
               labels={{
-                title: t('wallet.quota_title', { defaultValue: 'Cuota de trabajo' }),
-                balance: t('wallet.quota_balance', { defaultValue: 'Balance de cuota' }),
-                recharge: t('wallet.recharge_quota', { defaultValue: 'Recargar cuota' }),
-                lowWarning: t('wallet.quota_low_warning', { defaultValue: 'Tu cuota esta baja. Recarga pronto para seguir trabajando.' }),
-                graceMessage: t('wallet.quota_grace', { defaultValue: 'Cuota agotada. Te quedan {count} viajes de gracia.' }),
-                blockedMessage: t('wallet.quota_blocked', { defaultValue: 'Cuota agotada. Recarga para seguir aceptando viajes.' }),
+                title: t('wallet.quota_title', { defaultValue: 'Crédito de comisión' }),
+                balance: t('wallet.quota_balance', { defaultValue: 'Crédito disponible' }),
+                recharge: t('wallet.recharge_quota', { defaultValue: 'Recargar crédito' }),
+                lowWarning: t('wallet.quota_low_warning', { defaultValue: 'Tu crédito esta bajo. Recarga pronto para seguir trabajando.' }),
+                graceMessage: t('wallet.quota_grace', { defaultValue: 'Crédito agotado. Te quedan {count} viajes de gracia.' }),
+                blockedMessage: t('wallet.quota_blocked', { defaultValue: 'Crédito agotado. Recarga para seguir aceptando viajes.' }),
                 deductionInfo: t('wallet.quota_deduction_info', { defaultValue: 'Se descuenta {pct} del valor de cada viaje.' }),
               }}
             />
+            <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-2 ml-1">
+              {t('wallet.commission_credit_hint', {
+                defaultValue: 'Este saldo se usa solo para pagar comisiones de plataforma. No es retirable ni reembolsable.',
+              })}
+            </Text>
           </AnimatedCard>
         )}
 

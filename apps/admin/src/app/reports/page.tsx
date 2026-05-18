@@ -689,18 +689,10 @@ export default function ReportsPage() {
           {/* Wallet section */}
           <section className="mb-6">
             <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.section_finance')}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
                 <p className="text-sm text-neutral-500 mb-1">{t('reports.circulation')}</p>
                 <p className="text-2xl font-bold text-primary-500">{formatTriciCoin(walletStats?.total_in_circulation ?? 0)}</p>
-              </div>
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-                <p className="text-sm text-neutral-500 mb-1">{t('reports.pending_redemptions')}</p>
-                <p className="text-2xl font-bold text-yellow-600">{walletStats?.pending_redemptions_count ?? 0}</p>
-              </div>
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-                <p className="text-sm text-neutral-500 mb-1">{t('reports.pending_amount')}</p>
-                <p className="text-2xl font-bold text-neutral-900">{formatTriciCoin(walletStats?.pending_redemptions_amount ?? 0)}</p>
               </div>
             </div>
           </section>
