@@ -16,7 +16,7 @@ export type PaymentIntentStatus =
   | 'refunded';
 
 /** Payment provider used for this intent */
-export type PaymentProvider = 'stripe' | 'tropipay';
+export type PaymentProvider = 'stripe' | 'tropipay' | 'netopia' | 'euplatesc';
 
 export interface PaymentIntent {
   id: string;
@@ -78,6 +78,59 @@ export interface CreateStripeIntentResponse {
 /** Stripe recharge config from platform_config */
 export interface StripeRechargeConfig {
   enabled: boolean;
+  publishableKey: string;
+  minRechargeCup: number;
+  maxRechargeCup: number;
+  feeUsd: number;
+  feeType: 'fixed' | 'percentage';
+}
+
+// ============================================================
+// Provider-agnostic recharge contract (Phase D1)
+// Generalizes the Stripe-specific types above so NETOPIA / EuPlatesc
+// can plug in behind one contract. See
+// docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
+// ============================================================
+
+/** Provider-agnostic input to create a wallet recharge intent. */
+export interface RechargeIntentRequest {
+  /** Which payment processor to route this recharge through. */
+  provider: PaymentProvider;
+  userId: string;
+  amountCup: number;
+  /** 'customer' credits the rider wallet; 'driver_quota' the driver commission credit. */
+  rechargeType?: 'customer' | 'driver_quota';
+  corporateAccountId?: string;
+}
+
+/**
+ * Provider-agnostic result of creating a recharge intent. The common
+ * fields are always present; the provider-specific fields are optional
+ * — each provider populates the ones its checkout UI needs (Stripe →
+ * clientSecret + publishableKey; a redirect-based provider → redirectUrl).
+ */
+export interface RechargeIntentResult {
+  ok: true;
+  provider: PaymentProvider;
+  /** TriciGo payment_intents row id. */
+  intentId: string;
+  amountCup: number;
+  amountUsd: number;
+  feeUsd: number;
+  exchangeRate: number;
+  /** Stripe: client secret for Stripe Elements. */
+  clientSecret?: string;
+  /** Stripe: publishable key for the Stripe.js SDK. */
+  publishableKey?: string;
+  /** Redirect-based providers: URL to send the payer to. */
+  redirectUrl?: string;
+}
+
+/** Provider-agnostic recharge configuration from platform_config. */
+export interface PaymentProviderConfig {
+  provider: PaymentProvider;
+  enabled: boolean;
+  /** Publishable / public key, when the provider uses one. */
   publishableKey: string;
   minRechargeCup: number;
   maxRechargeCup: number;

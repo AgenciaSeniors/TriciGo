@@ -7,14 +7,14 @@
 
 ## Estado general
 
-- **Fase actual:** B (controles de compliance) en curso — **B1 (velocity controls) hecho
-  en código**. Migraciones `00273`–`00276` escritas; aplicarlas a producción es paso del
-  pipeline de deploy. Próximo: B2/B3 (KYC + SDN, esperan cuenta Sumsub), Fase C, D1.
+- **Fase actual:** B y D en curso — **B1 (velocity controls) y D1 (abstracción
+  `PaymentProvider`) hechos en código**. Migraciones `00273`–`00277` escritas; aplicarlas
+  a producción es paso del pipeline de deploy. Próximo: Fase C, B4–B7, D2 (NETOPIA).
 - **Procesador objetivo:** NETOPIA Payments + EuPlătesc, ambos detrás de una capa de
   abstracción `PaymentProvider`. Stripe se retira al final (cuando el reemplazo esté
   verificado en Live). Decidido el 2026-05-18.
 - **Modo:** Pre-Sandbox — todavía sin integración de procesador rumano.
-- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, Fase B1).
+- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, B1, D1).
 
 ## Hitos completados
 
@@ -55,6 +55,17 @@
   - `create-stripe-payment-intent`: llama al RPC antes de crear el cargo; responde 429 si
     se supera el límite; recargas corporativas exentas; fail-open si la migración no está
     aplicada (no rompe las recargas).
+- **2026-05-18** — **Fase D1 ejecutada en código** (abstracción `PaymentProvider`):
+  - Tipos agnósticos en `packages/types/src/payment.ts` (`RechargeIntentRequest`,
+    `RechargeIntentResult`, `PaymentProviderConfig`; `PaymentProvider` ampliado a
+    netopia/euplatesc).
+  - `payment.service.ts`: método genérico `createRechargeIntent` + `getPaymentProviderConfig`
+    / `getActivePaymentProvider` / `getEnabledPaymentProviders`; `createStripePaymentIntent`
+    y `getStripeConfig` pasan a ser wrappers de compat (comportamiento idéntico).
+  - Migración `00277_payment_provider_registry.sql`: registry de proveedores en
+    `platform_config` (`active_payment_provider`, flags `_enabled`).
+  - `docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md`: el contrato que D2/D3 implementan.
+  - El flujo Stripe queda intacto; cambios aditivos.
 
 ## Bloqueos activos
 
@@ -62,11 +73,12 @@
   Bloquea la Fase F (aplicación al procesador). Claude NO puede emitir esta opinión
   (`PAYMENT_COMPANION.md` §9).
 - **Migraciones SQL sin aplicar a producción** (guard de MCP) — `00273` (cashout),
-  `00274` (P2P), `00275` (contenido legal CMS) y `00276` (velocity controls) quedan
-  escritas en el repo; aplicarlas es paso del pipeline de deploy. Hasta entonces: el
-  closed-loop es real en el frontend pero no en el backend, las páginas legales live
-  siguen mostrando el placeholder viejo, y el velocity control no se activa (la edge
-  function es fail-open mientras el RPC `check_topup_velocity` no exista).
+  `00274` (P2P), `00275` (contenido legal CMS), `00276` (velocity controls) y `00277`
+  (registry de proveedores) quedan escritas en el repo; aplicarlas es paso del pipeline
+  de deploy. Hasta entonces: el closed-loop es real en el frontend pero no en el backend,
+  las páginas legales live siguen mostrando el placeholder viejo, y el velocity control
+  no se activa (la edge function es fail-open mientras el RPC `check_topup_velocity` no
+  exista).
 
 ## Decisiones pendientes del fundador
 
@@ -87,10 +99,11 @@ EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestio
 ## Próximas 3 acciones recomendadas
 
 1. **Fase C** (rápida, sin dependencia externa): crear las páginas `/aml` y `/cookies`.
-2. **Fase D1** (sin dependencia externa): construir la abstracción `PaymentProvider`
-   sobre la cual se integrarán NETOPIA y EuPlătesc.
-3. **Fase B4–B7** (3DS2 explícito, audit trail de pagos, device fingerprinting, política
-   de chargebacks). B2/B3 esperan la cuenta Sumsub de Eduardo.
+2. **Fase B4–B7** (sin dependencia externa): 3DS2 explícito, audit trail de pagos,
+   device fingerprinting, política de chargebacks.
+3. **Fase D2/D3** — integrar NETOPIA y EuPlătesc contra el contrato de D1
+   (`PAYMENT_PROVIDER_CONTRACT.md`); esperan que Eduardo cree la cuenta Sandbox de
+   NETOPIA y el contrato con EuPlătesc. B2/B3 esperan la cuenta Sumsub.
 
 ## Notas de ubicación de documentos
 
