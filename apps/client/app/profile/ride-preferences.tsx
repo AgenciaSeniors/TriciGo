@@ -126,10 +126,10 @@ export default function RidePreferencesScreen() {
             <View className="flex-row items-center gap-3 flex-1">
               <Ionicons name="volume-mute-outline" size={22} color={colors.neutral[600]} />
               <View className="flex-1">
-                <Text className="text-base font-medium text-neutral-900">
+                <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100">
                   {t('preferences.quiet_mode')}
                 </Text>
-                <Text className="text-sm text-neutral-500 mt-0.5">
+                <Text className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
                   {t('preferences.quiet_mode_desc')}
                 </Text>
               </View>
@@ -147,7 +147,7 @@ export default function RidePreferencesScreen() {
           <View className="gap-3">
             <View className="flex-row items-center gap-3">
               <Ionicons name="thermometer-outline" size={22} color={colors.neutral[600]} />
-              <Text className="text-base font-medium text-neutral-900">
+              <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100">
                 {t('preferences.temperature')}
               </Text>
             </View>
@@ -161,7 +161,7 @@ export default function RidePreferencesScreen() {
                     className={`flex-1 flex-row items-center justify-center gap-1.5 py-2.5 rounded-xl border ${
                       selected
                         ? 'bg-primary-50 border-primary-500'
-                        : 'bg-white border-neutral-200'
+                        : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700'
                     }`}
                   >
                     <Ionicons
@@ -171,7 +171,7 @@ export default function RidePreferencesScreen() {
                     />
                     <Text
                       className={`text-sm font-medium ${
-                        selected ? 'text-primary-600' : 'text-neutral-600'
+                        selected ? 'text-primary-600' : 'text-neutral-600 dark:text-neutral-300'
                       }`}
                     >
                       {t(opt.labelKey)}
@@ -189,10 +189,10 @@ export default function RidePreferencesScreen() {
             <View className="flex-row items-center gap-3 flex-1">
               <Ionicons name="chatbubbles-outline" size={22} color={colors.neutral[600]} />
               <View className="flex-1">
-                <Text className="text-base font-medium text-neutral-900">
+                <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100">
                   {t('preferences.conversation_ok')}
                 </Text>
-                <Text className="text-sm text-neutral-500 mt-0.5">
+                <Text className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
                   {t('preferences.conversation_ok_desc')}
                 </Text>
               </View>
@@ -211,10 +211,10 @@ export default function RidePreferencesScreen() {
             <View className="flex-row items-center gap-3 flex-1">
               <Ionicons name="briefcase-outline" size={22} color={colors.neutral[600]} />
               <View className="flex-1">
-                <Text className="text-base font-medium text-neutral-900">
+                <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100">
                   {t('preferences.luggage_trunk')}
                 </Text>
-                <Text className="text-sm text-neutral-500 mt-0.5">
+                <Text className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
                   {t('preferences.luggage_trunk_desc')}
                 </Text>
               </View>
@@ -233,10 +233,10 @@ export default function RidePreferencesScreen() {
             <View className="flex-row items-center gap-3">
               <Ionicons name="accessibility-outline" size={22} color={colors.neutral[600]} />
               <View className="flex-1">
-                <Text className="text-base font-medium text-neutral-900">
+                <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100">
                   {t('preferences.accessibility_title')}
                 </Text>
-                <Text className="text-sm text-neutral-500 mt-0.5">
+                <Text className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
                   {t('preferences.accessibility_desc')}
                 </Text>
               </View>
@@ -250,7 +250,7 @@ export default function RidePreferencesScreen() {
                   className={`flex-row items-center gap-3 px-3 py-3 rounded-xl border ${
                     selected
                       ? 'bg-primary-50 border-primary-300'
-                      : 'bg-white border-neutral-200'
+                      : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700'
                   }`}
                 >
                   <Ionicons
@@ -261,12 +261,12 @@ export default function RidePreferencesScreen() {
                   <View className="flex-1">
                     <Text
                       className={`text-sm font-medium ${
-                        selected ? 'text-primary-700' : 'text-neutral-800'
+                        selected ? 'text-primary-700' : 'text-neutral-800 dark:text-neutral-100'
                       }`}
                     >
                       {t(opt.labelKey)}
                     </Text>
-                    <Text className="text-xs text-neutral-500 mt-0.5">
+                    <Text className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
                       {t(opt.descKey)}
                     </Text>
                   </View>

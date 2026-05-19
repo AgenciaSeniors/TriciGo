@@ -78,6 +78,7 @@ function webGroupRidesByDate(rides: Ride[]): { label: string; rides: Ride[] }[] 
 function WebRidesScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -86,6 +87,28 @@ function WebRidesScreen() {
   const [hasMore, setHasMore] = useState(false);
 
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+
+  // Theme-aware palette — mirrors the app's cubanDark tokens. Brand orange,
+  // semantic status greens/reds and skeleton greys stay fixed.
+  const c = isDark
+    ? {
+        bg: '#0A0E1A',
+        surface: '#11172A',
+        elevated: '#18203A',
+        text: '#F4F0EA',
+        textMuted: '#B7C4CF',
+        textSubtle: '#6B7F8F',
+        border: 'rgba(244,240,234,0.10)',
+      }
+    : {
+        bg: '#fafafa',
+        surface: '#fff',
+        elevated: '#f5f5f5',
+        text: '#1a1a1a',
+        textMuted: '#666',
+        textSubtle: '#999',
+        border: '#f0f0f0',
+      };
 
   const fetchRides = useCallback(async (p: number, tab: WebFilterTab, append: boolean) => {
     if (!userId) return;
@@ -136,11 +159,11 @@ function WebRidesScreen() {
   let globalCardIdx = 0;
 
   return (
-    <div style={{ height: 'calc(100vh - 60px)', overflowY: 'auto', background: '#fafafa', ...font }}>
+    <div style={{ height: 'calc(100vh - 60px)', overflowY: 'auto', background: c.bg, ...font }}>
       <style dangerouslySetInnerHTML={{ __html: WEB_RIDES_CSS }} />
 
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 20px' }}>
-        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginBottom: 20, color: '#1a1a1a' }}>
+        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginBottom: 20, color: c.text }}>
           {t('rides_history.title', { defaultValue: 'Historial de viajes' })}
         </h1>
 
@@ -158,7 +181,7 @@ function WebRidesScreen() {
                 transition: 'all 0.2s ease',
                 ...(activeTab === tab.key
                   ? { background: '#FF4D00', borderColor: '#FF4D00', color: '#fff', border: '1.5px solid #FF4D00' }
-                  : { background: 'transparent', border: '1.5px solid #e5e5e5', color: '#666' }),
+                  : { background: 'transparent', border: `1.5px solid ${c.border}`, color: c.textMuted }),
               }}
             >
               {tab.label}
@@ -169,19 +192,23 @@ function WebRidesScreen() {
         {/* Loading */}
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ padding: '16px 20px', borderRadius: 12, border: '1px solid #f0f0f0', background: '#fff' }}>
-                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f0f0f0' }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ width: '40%', height: 14, background: '#f0f0f0', borderRadius: 4, marginBottom: 6 }} />
-                    <div style={{ width: '25%', height: 10, background: '#f5f5f5', borderRadius: 4 }} />
+            {[0, 1, 2, 3].map((i) => {
+              const skelStrong = isDark ? '#18203A' : '#f0f0f0';
+              const skelSoft = isDark ? '#141B30' : '#f5f5f5';
+              return (
+                <div key={i} style={{ padding: '16px 20px', borderRadius: 12, border: `1px solid ${c.border}`, background: c.surface }}>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 8, background: skelStrong }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ width: '40%', height: 14, background: skelStrong, borderRadius: 4, marginBottom: 6 }} />
+                      <div style={{ width: '25%', height: 10, background: skelSoft, borderRadius: 4 }} />
+                    </div>
                   </div>
+                  <div style={{ width: '80%', height: 12, background: skelSoft, borderRadius: 4, marginBottom: 8 }} />
+                  <div style={{ width: '60%', height: 12, background: skelSoft, borderRadius: 4 }} />
                 </div>
-                <div style={{ width: '80%', height: 12, background: '#f5f5f5', borderRadius: 4, marginBottom: 8 }} />
-                <div style={{ width: '60%', height: 12, background: '#f5f5f5', borderRadius: 4 }} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -192,12 +219,12 @@ function WebRidesScreen() {
              was a dead end on day 1 and "No hay viajes con este filtro"
              didn't offer the obvious next step. */}
         {!loading && rides.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2.7-3.6A2 2 0 0013.7 5H10l-2.7 1.4L5 10 2.5 11.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a', marginBottom: 8 }}>
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: c.textSubtle }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={isDark ? '#3A4661' : '#ccc'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 16px' }}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2.7-3.6A2 2 0 0013.7 5H10l-2.7 1.4L5 10 2.5 11.1C1.7 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+            <div style={{ fontSize: 18, fontWeight: 700, color: c.text, marginBottom: 8 }}>
               {activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
             </div>
-            <div style={{ fontSize: 14, color: '#999', marginBottom: 20 }}>
+            <div style={{ fontSize: 14, color: c.textSubtle, marginBottom: 20 }}>
               {activeTab === 'all'
                 ? 'Cuando completes un viaje, aparecerá aquí con todos los detalles.'
                 : 'No hay viajes con este filtro.'}
@@ -220,7 +247,7 @@ function WebRidesScreen() {
                 onClick={() => { setActiveTab('all'); setRides([]); setPage(0); }}
                 style={{
                   padding: '10px 20px', borderRadius: 10,
-                  background: '#fff', color: colors.brand.orange, fontSize: 14,
+                  background: c.surface, color: colors.brand.orange, fontSize: 14,
                   fontWeight: 600, cursor: 'pointer',
                   border: '1px solid ' + colors.brand.orange,
                 }}
@@ -239,7 +266,7 @@ function WebRidesScreen() {
                 {/* Date header */}
                 <div style={{
                   fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const,
-                  letterSpacing: '0.06em', color: '#999',
+                  letterSpacing: '0.06em', color: c.textSubtle,
                   padding: '12px 0 8px', marginTop: 8,
                 }}>
                   {group.label}
@@ -268,13 +295,13 @@ function WebRidesScreen() {
                         onClick={() => router.push(`/ride/${ride.id}`)}
                         style={{
                           padding: '16px 20px', borderRadius: 12,
-                          border: '1px solid #f0f0f0', background: '#fff',
+                          border: `1px solid ${c.border}`, background: c.surface,
                           cursor: 'pointer',
                           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
                           opacity: 0,
                           animation: `wr-fadeInUp 0.4s ease ${Math.min(cardIdx * 0.05, 0.4)}s forwards`,
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = isDark ? '0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}
                       >
                         {/* Header */}
@@ -282,7 +309,7 @@ function WebRidesScreen() {
                           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                             <div style={{
                               width: 40, height: 40, borderRadius: 8,
-                              background: '#f5f5f5', display: 'flex',
+                              background: c.elevated, display: 'flex',
                               alignItems: 'center', justifyContent: 'center',
                             }}>
                               <Image
@@ -292,10 +319,10 @@ function WebRidesScreen() {
                               />
                             </div>
                             <div>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.3' }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: c.text, lineHeight: '1.3' }}>
                                 {WEB_SERVICE_LABELS[serviceType] ?? serviceType}
                               </div>
-                              <div style={{ fontSize: 12, color: '#999', marginTop: 1 }}>
+                              <div style={{ fontSize: 12, color: c.textSubtle, marginTop: 1 }}>
                                 {formatTime(ride.created_at)}
                               </div>
                             </div>
@@ -327,7 +354,7 @@ function WebRidesScreen() {
                             }} />
                             <div style={{
                               width: 2, flex: 1, minHeight: 24, borderRadius: 1,
-                              backgroundImage: 'repeating-linear-gradient(to bottom, #e5e5e5 0px, #e5e5e5 3px, transparent 3px, transparent 6px)',
+                              backgroundImage: `repeating-linear-gradient(to bottom, ${c.border} 0px, ${c.border} 3px, transparent 3px, transparent 6px)`,
                             }} />
                             <div style={{
                               width: 10, height: 10, borderRadius: '50%',
@@ -337,12 +364,12 @@ function WebRidesScreen() {
                           </div>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: '#999', marginBottom: 1 }}>Desde</div>
-                              <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.pickup_address}</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: c.textSubtle, marginBottom: 1 }}>Desde</div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: c.text, lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.pickup_address}</div>
                             </div>
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: '#999', marginBottom: 1 }}>Hasta</div>
-                              <div style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.dropoff_address}</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.04em', color: c.textSubtle, marginBottom: 1 }}>Hasta</div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: c.text, lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ride.dropoff_address}</div>
                             </div>
                           </div>
                         </div>
@@ -350,12 +377,12 @@ function WebRidesScreen() {
                         {/* Footer */}
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          paddingTop: 12, borderTop: '1px solid #f0f0f0',
+                          paddingTop: 12, borderTop: `1px solid ${c.border}`,
                         }}>
-                          <span style={{ fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: c.text, letterSpacing: '-0.02em' }}>
                             {fareLabel}
                           </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#999', fontWeight: 500 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.textSubtle, fontWeight: 500 }}>
                             {ride.estimated_distance_m != null && ride.estimated_distance_m > 0 && (
                               <span>{(ride.estimated_distance_m / 1000).toFixed(1)} km ·</span>
                             )}

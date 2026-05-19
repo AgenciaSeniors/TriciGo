@@ -17,11 +17,13 @@ import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { cmsService } from '@tricigo/api/services/cms';
+import { useTokens } from '@/hooks/useTokens';
 
 const FALLBACK_URL = 'https://tricigo.com/privacy';
 
 export default function PrivacyScreen() {
   const { t, i18n } = useTranslation('common');
+  const tokens = useTokens();
   const [loading, setLoading] = useState(true);
   const [cmsTitle, setCmsTitle] = useState<string | null>(null);
   const [cmsBody, setCmsBody] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function PrivacyScreen() {
             <Text
               key={idx}
               variant="body"
-              style={{ color: '#334155', lineHeight: 22, marginBottom: 16 }}
+              style={{ color: tokens.ink.primary, lineHeight: 22, marginBottom: 16 }}
             >
               {paragraph.trim()}
             </Text>
