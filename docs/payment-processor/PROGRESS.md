@@ -7,14 +7,14 @@
 
 ## Estado general
 
-- **Fase actual:** B y D en curso — **B1 (velocity controls) y D1 (abstracción
-  `PaymentProvider`) hechos en código**. Migraciones `00273`–`00277` escritas; aplicarlas
-  a producción es paso del pipeline de deploy. Próximo: Fase C, B4–B7, D2 (NETOPIA).
+- **Fase actual:** B, C y D en curso — **B1, D1 y C hechos en código**. Migraciones
+  `00273`–`00277` escritas; aplicarlas a producción es paso del pipeline de deploy.
+  Próximo: B4–B7, D2/D3 (NETOPIA / EuPlătesc).
 - **Procesador objetivo:** NETOPIA Payments + EuPlătesc, ambos detrás de una capa de
   abstracción `PaymentProvider`. Stripe se retira al final (cuando el reemplazo esté
   verificado en Live). Decidido el 2026-05-18.
 - **Modo:** Pre-Sandbox — todavía sin integración de procesador rumano.
-- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, B1, D1).
+- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, B1, D1, C).
 
 ## Hitos completados
 
@@ -66,6 +66,13 @@
     `platform_config` (`active_payment_provider`, flags `_enabled`).
   - `docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md`: el contrato que D2/D3 implementan.
   - El flujo Stripe queda intacto; cambios aditivos.
+- **2026-05-18** — **Fase C ejecutada en código** (páginas legales):
+  - Nuevas páginas `/aml` (política AML / uso aceptable) y `/cookies` (política de
+    cookies) — TSX estático, enlazadas en el footer y el sitemap.
+  - `/contact`: teléfono real `+5545998622511`.
+  - Pendiente de Fase C: **C3** (cláusula de ley aplicable = Cuba, hallazgo F-M1) es una
+    decisión legal — espera el input de Eduardo. El sistema de consentimiento de cookies
+    granular (banner con toggles) queda como tarea aparte.
 
 ## Bloqueos activos
 
@@ -94,16 +101,18 @@ EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestio
   implementación de B2 (KYC del pagador) y B3 (SDN screening de conductores).
 - **Crear cuenta Sandbox en NETOPIA** — destraba la integración D2b.
 - **Contacto comercial + contrato con EuPlătesc** — destraba la integración D3b.
-- **Teléfono real para la página `/contact`** — destraba la tarea C4.
+- **Decisión legal sobre la cláusula de ley aplicable** (hoy los Términos dicen "leyes de
+  Cuba" para una SRL rumana — hallazgo F-M1) — destraba la tarea C3.
 
 ## Próximas 3 acciones recomendadas
 
-1. **Fase C** (rápida, sin dependencia externa): crear las páginas `/aml` y `/cookies`.
-2. **Fase B4–B7** (sin dependencia externa): 3DS2 explícito, audit trail de pagos,
+1. **Fase B4–B7** (sin dependencia externa): 3DS2 explícito, audit trail de pagos,
    device fingerprinting, política de chargebacks.
-3. **Fase D2/D3** — integrar NETOPIA y EuPlătesc contra el contrato de D1
+2. **Fase D2/D3** — integrar NETOPIA y EuPlătesc contra el contrato de D1
    (`PAYMENT_PROVIDER_CONTRACT.md`); esperan que Eduardo cree la cuenta Sandbox de
-   NETOPIA y el contrato con EuPlătesc. B2/B3 esperan la cuenta Sumsub.
+   NETOPIA y el contrato con EuPlătesc.
+3. **Fase B2/B3** — KYC del pagador y SDN screening con Sumsub; esperan que Eduardo
+   cree la cuenta Sumsub.
 
 ## Notas de ubicación de documentos
 

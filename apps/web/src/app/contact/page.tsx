@@ -14,8 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-// PENDIENTE: completar con el teléfono de contacto público
-const CONTACT_PHONE = '';
+const CONTACT_PHONE = '+5545998622511';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
