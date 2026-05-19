@@ -30,10 +30,10 @@ export function BottomSheet({
 
         {/* Content */}
         <View
-          className={`bg-white rounded-t-2xl px-5 pt-4 pb-8 ${className ?? ''}`}
+          className={`bg-white dark:bg-neutral-900 rounded-t-2xl px-5 pt-4 pb-8 ${className ?? ''}`}
         >
           {/* Handle bar */}
-          <View className="w-10 h-1 rounded-full bg-neutral-300 self-center mb-4" />
+          <View className="w-10 h-1 rounded-full bg-neutral-300 dark:bg-neutral-700 self-center mb-4" />
           {children}
         </View>
       </View>

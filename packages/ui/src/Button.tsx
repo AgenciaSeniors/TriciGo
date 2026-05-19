@@ -24,16 +24,16 @@ const variantStyles = {
     text: 'text-white',
   },
   secondary: {
-    container: 'bg-neutral-900 active:bg-neutral-800',
-    text: 'text-white',
+    container: 'bg-neutral-900 active:bg-neutral-800 dark:bg-neutral-100 dark:active:bg-neutral-200',
+    text: 'text-white dark:text-neutral-900',
   },
   outline: {
     container: 'border-2 border-primary-500 bg-transparent active:bg-primary-50',
     text: 'text-primary-500',
   },
   ghost: {
-    container: 'bg-transparent active:bg-neutral-100',
-    text: 'text-neutral-900',
+    container: 'bg-transparent active:bg-neutral-100 dark:active:bg-white/10',
+    text: 'text-neutral-900 dark:text-neutral-100',
   },
   danger: {
     container: 'bg-error active:bg-error-dark',
