@@ -44,7 +44,7 @@ export function AdminConfirmModal({
             className="w-full border border-neutral-300 dark:border-neutral-600 rounded-lg px-3 py-2 mb-4 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100" />
         )}
         <div className="flex justify-end gap-3">
-          <button ref={cancelRef} onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700">{cancelLabel}</button>
+          <button ref={cancelRef} onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-surface-sunken">{cancelLabel}</button>
           <button onClick={onConfirm} className={`px-4 py-2 text-sm rounded-lg text-white font-medium ${btnColor}`}>{confirmLabel}</button>
         </div>
       </div>

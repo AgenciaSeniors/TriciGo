@@ -388,7 +388,7 @@ export default function RideDetailScreen() {
 
         {/* Prominent action CTAs for completed rides */}
         {isCompleted && (disputesEnabled || lostFoundEnabled) && (!dispute || !lostItem) && (
-          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50">
+          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50 dark:bg-neutral-800">
             <View className="gap-3">
               {disputesEnabled && !dispute && (
                 <Pressable

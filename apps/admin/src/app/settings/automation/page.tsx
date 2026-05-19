@@ -161,7 +161,7 @@ export default function AutomationPage() {
                   } ${savingKey === rule.enabledKey ? 'opacity-50' : ''}`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow transform transition-transform ${
+                    className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white dark:bg-neutral-100 shadow transform transition-transform ${
                       enabled ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />

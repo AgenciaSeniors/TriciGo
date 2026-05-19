@@ -31,7 +31,9 @@ export function SosAlertBanner() {
     >
       {/* Pulsing ring around icon */}
       <span className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center">
+        {/* eslint-disable-next-line tricigo/require-dark-variant -- translucent white on a permanently-red alert banner */}
         <span className="absolute inset-0 animate-ping rounded-full bg-white/40" aria-hidden="true" />
+        {/* eslint-disable-next-line tricigo/require-dark-variant -- translucent white on a permanently-red alert banner */}
         <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
           <Siren className="h-5 w-5" strokeWidth={2.2} />
         </span>
@@ -48,6 +50,7 @@ export function SosAlertBanner() {
         </p>
       </div>
 
+      {/* eslint-disable-next-line tricigo/require-dark-variant -- translucent white on a permanently-red alert banner */}
       <span className="flex items-center gap-1 self-center rounded-full bg-white/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors group-hover:bg-white/30">
         Ver {count === 1 ? 'detalle' : 'lista'}
         <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.4} />

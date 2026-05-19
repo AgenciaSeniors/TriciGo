@@ -250,7 +250,7 @@ export default function PoisAdminPage() {
         <div className="flex items-center gap-1 justify-end">
           <button
             onClick={() => openEdit(p)}
-            className="text-xs px-2 py-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="text-xs px-2 py-1 rounded hover:bg-surface-sunken"
           >
             Editar
           </button>
@@ -409,7 +409,7 @@ export default function PoisAdminPage() {
               <h2 className="text-lg font-semibold">
                 {form._editingId ? 'Editar POI' : 'Agregar POI'}
               </h2>
-              <button onClick={resetForm} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded">
+              <button onClick={resetForm} className="p-1 hover:bg-surface-sunken rounded">
                 <X size={20} />
               </button>
             </div>

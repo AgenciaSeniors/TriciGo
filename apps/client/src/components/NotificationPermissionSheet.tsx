@@ -80,7 +80,7 @@ export function NotificationPermissionSheet() {
       />
 
       {/* Bottom sheet */}
-      <View className="bg-white rounded-t-3xl px-6 pt-6 pb-10">
+      <View className="bg-white dark:bg-neutral-900 rounded-t-3xl px-6 pt-6 pb-10">
         {/* Handle */}
         <View className="w-10 h-1 bg-neutral-200 rounded-full self-center mb-6" />
 

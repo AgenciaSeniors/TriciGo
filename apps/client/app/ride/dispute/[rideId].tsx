@@ -183,6 +183,7 @@ export default function DisputeFormScreen() {
                   reason === r ? 'border-primary-500 bg-primary-500' : 'border-neutral-300'
                 }`}
               >
+                {/* eslint-disable-next-line tricigo/require-dark-variant -- white dot sits on the primary-500 fill of the selected radio in both themes */}
                 {reason === r && <View className="w-2 h-2 rounded-full bg-white" />}
               </View>
               <Text variant="body" className={reason === r ? 'font-semibold' : ''}>

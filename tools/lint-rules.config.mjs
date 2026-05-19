@@ -23,6 +23,71 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 
+// ── Custom rule: dark-mode contrast guard ──────────────────────────────
+// Encodes the #1 recurring bug from the dark-mode audit (DARK_MODE_AUDIT.md):
+// a light-surface or dark-text Tailwind/NativeWind class with no `dark:`
+// counterpart silently locks an element to one theme. Warn so new code pairs
+// the variant (or uses a semantic token). Hardcoded hex colors are NOT
+// flagged — the audit showed the large majority are deliberate brand /
+// status / map colors, so a blanket hex rule would be mostly false noise.
+const darkModePlugin = {
+  rules: {
+    'require-dark-variant': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description:
+            'Light-surface / dark-text Tailwind classes must pair with a dark: variant',
+        },
+        schema: [],
+        messages: {
+          surface:
+            "'{{cls}}' is a light surface with no `dark:bg-*` sibling — it stays light in dark mode. Add a `dark:bg-*` variant or use a semantic token.",
+          text:
+            "'{{cls}}' is dark text with no `dark:text-*` sibling — it stays dark on dark surfaces. Add a `dark:text-*` variant or use a semantic token.",
+        },
+      },
+      create(context) {
+        // The driver app is intentionally built as locked single-mode
+        // surfaces (see DARK_MODE_AUDIT.md) — "pair with a dark: variant"
+        // does not apply there, so skip it to avoid ~60 false positives.
+        const filename = (context.filename || '').replace(/\\/g, '/');
+        if (filename.includes('/apps/driver/')) return {};
+        const LIGHT_SURFACE = /\b(bg-white|bg-neutral-50|bg-neutral-100)\b/;
+        const DARK_TEXT = /\btext-(?:neutral|gray|slate|zinc|stone)-(?:700|800|900|950)\b/;
+        const checkValue = (node, raw) => {
+          if (typeof raw !== 'string') return;
+          const surface = raw.match(LIGHT_SURFACE);
+          // Accept a dark sibling under any stacked variant — `dark:bg-*`,
+          // `dark:hover:bg-*`, `dark:focus:bg-*`, etc.
+          if (surface && !/\bdark:(?:[\w-]+:)*bg-/.test(raw)) {
+            context.report({ node, messageId: 'surface', data: { cls: surface[1] } });
+          }
+          const text = raw.match(DARK_TEXT);
+          if (text && !/\bdark:(?:[\w-]+:)*text-/.test(raw)) {
+            context.report({ node, messageId: 'text', data: { cls: text[0] } });
+          }
+        };
+        return {
+          JSXAttribute(node) {
+            if (!node.name || node.name.name !== 'className' || !node.value) return;
+            const v = node.value;
+            if (v.type === 'Literal') {
+              checkValue(v, v.value);
+            } else if (v.type === 'JSXExpressionContainer') {
+              const e = v.expression;
+              if (e.type === 'Literal') checkValue(e, e.value);
+              else if (e.type === 'TemplateLiteral') {
+                for (const q of e.quasis) checkValue(q, q.value.cooked);
+              }
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 export default [
   {
     ignores: [
@@ -51,6 +116,7 @@ export default [
   {
     plugins: {
       'react-hooks': reactHooks,
+      tricigo: darkModePlugin,
     },
     languageOptions: {
       globals: {
@@ -139,6 +205,12 @@ export default [
       'no-inner-declarations': 'off',
       'no-import-assign': 'off', // false positives on Vitest mocks
       'no-empty-pattern': 'off',
+
+      // Dark-mode contrast guard — see darkModePlugin above. Applies to
+      // every linted app (admin / client / driver); the web app has no
+      // lint task so it is never reached. The rule only inspects JSX
+      // className attributes, so non-JSX files are unaffected.
+      'tricigo/require-dark-variant': 'warn',
     },
   },
 ];

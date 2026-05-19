@@ -156,7 +156,7 @@ export default function FeatureFlagsPage() {
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white dark:bg-neutral-100 rounded-full shadow transition-transform ${
                     flag.value ? 'translate-x-6' : 'translate-x-0'
                   }`}
                 />

@@ -938,7 +938,7 @@ export default function CorporateProfileScreen() {
                     </Text>
                   ) : (
                     employeeReports.map((r) => (
-                      <Card key={r.user_id} variant="filled" padding="sm" className="mb-2 bg-neutral-50">
+                      <Card key={r.user_id} variant="filled" padding="sm" className="mb-2 bg-neutral-50 dark:bg-neutral-800">
                         <View className="flex-row justify-between items-center mb-1">
                           <Text variant="bodySmall" className="font-semibold">{r.name}</Text>
                           <Text variant="caption" color="secondary">{r.phone}</Text>
