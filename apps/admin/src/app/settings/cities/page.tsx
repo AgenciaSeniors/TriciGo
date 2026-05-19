@@ -135,58 +135,58 @@ export default function CitiesPage() {
         <h1 className="text-3xl font-bold">{t('cities.title')}</h1>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-x-auto">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-x-auto">
         <table className="w-full text-sm min-w-[700px]">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_name')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_slug')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_timezone')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_rides')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_bounds')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('cities.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_name')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_slug')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_timezone')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_rides')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_bounds')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {cities.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-neutral-400">
+                <td colSpan={7} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('cities.no_cities')}
                 </td>
               </tr>
             ) : (
               cities.map((city) => (
-                <tr key={city.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={city.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-3">
                     {editingId === city.id ? (
                       <input
                         type="text"
                         aria-label={t('cities.col_name')}
-                        className="w-full px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-full px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.name}
                         onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                       />
                     ) : (
-                      <span className="font-medium text-neutral-900">{city.name}</span>
+                      <span className="font-medium text-ink">{city.name}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500 font-mono text-xs">{city.slug}</td>
+                  <td className="px-4 py-3 text-ink-muted font-mono text-xs">{city.slug}</td>
                   <td className="px-4 py-3">
                     {editingId === city.id ? (
                       <input
                         type="text"
                         aria-label={t('cities.col_timezone')}
-                        className="w-40 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-40 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.timezone}
                         onChange={(e) => setEditForm((f) => ({ ...f, timezone: e.target.value }))}
                       />
                     ) : (
-                      <span className="text-neutral-600 text-xs">{city.timezone}</span>
+                      <span className="text-ink-muted text-xs">{city.timezone}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-neutral-600">{city.rides_count ?? 0}</td>
-                  <td className="px-4 py-3 text-neutral-400 text-xs">
+                  <td className="px-4 py-3 text-ink-muted">{city.rides_count ?? 0}</td>
+                  <td className="px-4 py-3 text-ink-subtle text-xs">
                     {city.bounds ? t('cities.bounds_configured') : t('cities.bounds_none')}
                   </td>
                   <td className="px-4 py-3">
@@ -212,7 +212,7 @@ export default function CitiesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
                         >
                           {t('common.cancel')}
                         </button>

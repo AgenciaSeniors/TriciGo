@@ -24,7 +24,7 @@ interface Experiment {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-neutral-100 text-neutral-600',
+  draft: 'bg-surface-sunken text-ink-muted',
   active: 'bg-green-100 text-green-700',
   paused: 'bg-amber-100 text-amber-700',
   completed: 'bg-blue-100 text-blue-700',
@@ -58,25 +58,25 @@ export default function ExperimentsPage() {
       <h1 className="text-3xl font-bold mb-2">
         {t('experiments.title', { defaultValue: 'Experimentos de Precios' })}
       </h1>
-      <p className="text-neutral-500 mb-6">
+      <p className="text-ink-muted mb-6">
         {t('experiments.subtitle', { defaultValue: 'A/B testing para optimizar tarifas y conversión' })}
       </p>
 
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <p className="text-ink-subtle">{t('common.loading')}</p>
       ) : experiments.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-8 text-center">
-          <p className="text-neutral-400 mb-2">{t('experiments.no_experiments', { defaultValue: 'Sin experimentos activos' })}</p>
-          <p className="text-sm text-neutral-300">{t('experiments.create_hint', { defaultValue: 'Crea un experimento desde la base de datos (pricing_experiments table)' })}</p>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-8 text-center">
+          <p className="text-ink-subtle mb-2">{t('experiments.no_experiments', { defaultValue: 'Sin experimentos activos' })}</p>
+          <p className="text-sm text-ink-subtle">{t('experiments.create_hint', { defaultValue: 'Crea un experimento desde la base de datos (pricing_experiments table)' })}</p>
         </div>
       ) : (
         <div className="space-y-4">
           {experiments.map((exp) => (
-            <div key={exp.id} className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+            <div key={exp.id} className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-lg">{exp.name}</h3>
-                  {exp.description && <p className="text-sm text-neutral-500">{exp.description}</p>}
+                  {exp.description && <p className="text-sm text-ink-muted">{exp.description}</p>}
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[exp.status] ?? STATUS_COLORS.draft}`}>
                   {exp.status.toUpperCase()}
@@ -104,7 +104,7 @@ export default function ExperimentsPage() {
               </div>
 
               {exp.service_type && (
-                <p className="text-xs text-neutral-400 mt-3">Servicio: {exp.service_type}</p>
+                <p className="text-xs text-ink-subtle mt-3">Servicio: {exp.service_type}</p>
               )}
             </div>
           ))}
