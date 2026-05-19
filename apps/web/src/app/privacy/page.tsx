@@ -33,7 +33,7 @@ export default function PrivacyPolicyPage() {
   if (loading) {
     return (
       <main style={{ maxWidth: 800, margin: '0 auto', padding: '3rem 1.5rem' }}>
-        <p style={{ textAlign: 'center', color: '#999' }}>{t('blog.loading')}</p>
+        <p style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>{t('blog.loading')}</p>
       </main>
     );
   }
@@ -45,7 +45,7 @@ export default function PrivacyPolicyPage() {
           {cmsTitle ?? t('privacy.title')}
         </h1>
         <div
-          style={{ color: '#444', lineHeight: 1.7, fontSize: '0.95rem' }}
+          style={{ color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem' }}
           className="prose prose-neutral max-w-none"
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(cmsBody.replace(/\n/g, '<br />')) }}
         />
@@ -58,7 +58,7 @@ export default function PrivacyPolicyPage() {
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>
         {t('privacy.title')}
       </h1>
-      <p style={{ color: '#999', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
         {t('privacy.last_updated')}
       </p>
 
@@ -125,7 +125,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>
         {title}
       </h2>
-      <div style={{ color: '#444', lineHeight: 1.7, fontSize: '0.95rem' }}>
+      <div style={{ color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem' }}>
         {children}
       </div>
     </section>

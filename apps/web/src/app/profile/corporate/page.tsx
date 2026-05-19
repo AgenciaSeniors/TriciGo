@@ -325,7 +325,7 @@ export default function CorporatePage() {
       </div>
 
       {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.5rem' }}>
           <p style={{ color: '#c53030', margin: 0, fontSize: '0.9rem' }}>{error}</p>
         </div>
       )}
@@ -477,7 +477,7 @@ export default function CorporatePage() {
                 {/* Success banner */}
                 {justSaved && (
                   <div style={{
-                    background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.5rem',
+                    background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem',
                     padding: '0.6rem 1rem', marginBottom: '0.75rem',
                   }}>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 500 }}>
@@ -489,7 +489,7 @@ export default function CorporatePage() {
                 {/* ─── Policy Editor (admin only) ─── */}
                 {isEditing && (
                   <div style={{
-                    background: '#f8fafc', borderRadius: '0.75rem', padding: '1.25rem',
+                    background: 'var(--bg-light)', borderRadius: '0.75rem', padding: '1.25rem',
                     border: '1px solid var(--border-light)', marginBottom: '1rem',
                   }}>
                     <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>

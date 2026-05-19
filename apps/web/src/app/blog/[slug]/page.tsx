@@ -31,7 +31,7 @@ export default function BlogPostPage() {
   if (loading) {
     return (
       <main style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
-        <p style={{ color: '#888' }}>{t('blog.loading')}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('blog.loading')}</p>
       </main>
     );
   }
@@ -39,7 +39,7 @@ export default function BlogPostPage() {
   if (!post) {
     return (
       <main style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
-        <p style={{ color: '#888', marginBottom: '1rem' }}>{t('blog.not_found')}</p>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>{t('blog.not_found')}</p>
         <Link href="/blog" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>
           {t('blog.back_to_blog')}
         </Link>
@@ -73,7 +73,7 @@ export default function BlogPostPage() {
       </h1>
 
       {post.published_at && (
-        <p style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '2rem' }}>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem', marginBottom: '2rem' }}>
           {new Date(post.published_at).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-CU', {
             year: 'numeric',
             month: 'long',
@@ -83,7 +83,7 @@ export default function BlogPostPage() {
       )}
 
       <div
-        style={{ lineHeight: 1.8, color: '#333', fontSize: '1rem' }}
+        style={{ lineHeight: 1.8, color: 'var(--text-primary)', fontSize: '1rem' }}
         dangerouslySetInnerHTML={{ __html: sanitizeHtml(locale === 'en' ? post.body_en : post.body_es) }}
       />
     </main>

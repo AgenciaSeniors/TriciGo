@@ -792,7 +792,7 @@ body {
   display: flex;
   gap: 1rem;
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-secondary);
   flex-wrap: wrap;
 }
 

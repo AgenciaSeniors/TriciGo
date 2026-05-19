@@ -543,8 +543,8 @@ export default function TrackingMap({
   if (!hasValidCoords) {
     return (
       <div style={{
-        width: '100%', height: styleProp?.height ?? 300, borderRadius: styleProp?.borderRadius ?? '0.75rem', background: '#f0f0f0',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888',
+        width: '100%', height: styleProp?.height ?? 300, borderRadius: styleProp?.borderRadius ?? '0.75rem', background: 'var(--bg-light)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)',
         ...styleProp,
       }}>
         Cargando mapa...

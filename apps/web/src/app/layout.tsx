@@ -89,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={localBusinessJsonLd} />
       </head>
-      <body className="font-sans antialiased bg-white text-neutral-900">
+      <body className="font-sans antialiased">
         {/* Demo-mode banner — fixed at top, only renders when
             NEXT_PUBLIC_DEMO_MODE=true. Mirrors the mobile DemoBanner. */}
         <DemoBanner />

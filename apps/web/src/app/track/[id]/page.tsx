@@ -13,8 +13,8 @@ import './track.css';
 const TrackingMap = dynamic(() => import('../TrackingMap'), {
   ssr: false,
   loading: () => (
-    <div style={{ width: '100%', height: '300px', background: '#f0f0f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ color: '#999', fontSize: '0.875rem' }}>Cargando mapa...</span>
+    <div style={{ width: '100%', height: '300px', background: 'var(--bg-light)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>Cargando mapa...</span>
     </div>
   ),
 });
@@ -285,7 +285,7 @@ export default function TrackRidePage() {
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: '#00C853' }}>Go</span>
           </div>
-          <p style={{ color: '#999', fontSize: '0.875rem' }}>Cargando datos del viaje...</p>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>Cargando datos del viaje...</p>
         </div>
       </div>
     );

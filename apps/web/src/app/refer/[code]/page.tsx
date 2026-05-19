@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -88,29 +89,62 @@ export default function ReferralLandingPage() {
     })();
   }, [code, router]);
 
+  const iconBg =
+    status === 'applied'
+      ? 'rgba(34, 197, 94, 0.12)'
+      : status === 'failed'
+        ? 'rgba(239, 68, 68, 0.12)'
+        : 'var(--primary-alpha-10)';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'var(--space-lg)',
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--radius-xl)',
+          boxShadow: 'var(--shadow-xl)',
+          maxWidth: 420,
+          width: '100%',
+          padding: 'var(--space-xl)',
+          textAlign: 'center',
+        }}
+      >
         {/* Brand */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">
-            Trici<span className="text-orange-500">Go</span>
+        <div style={{ marginBottom: 'var(--space-lg)' }}>
+          <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </h1>
         </div>
 
         {/* Icon shifts with the status so the page feels alive even
             without copy changes. */}
         <div
-          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-            status === 'applied' ? 'bg-green-100' : status === 'failed' ? 'bg-red-100' : 'bg-orange-100'
-          }`}
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 'var(--radius-full)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto var(--space-lg)',
+            background: iconBg,
+          }}
         >
-          <span className="text-4xl">
+          <span style={{ fontSize: '2.25rem', lineHeight: 1 }}>
             {status === 'applied' ? '✓' : status === 'failed' ? '!' : '🎁'}
           </span>
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 var(--space-sm)' }}>
           {status === 'applied'
             ? '¡Código aplicado!'
             : status === 'failed'
@@ -118,7 +152,7 @@ export default function ReferralLandingPage() {
               : '¡Te invitaron a TriciGo!'}
         </h2>
 
-        <p className="text-gray-600 mb-2">
+        <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-sm)', lineHeight: 1.5 }}>
           {status === 'applied'
             ? 'Tu invitador recibirá su bono cuando completes tu primer viaje.'
             : status === 'failed'
@@ -130,9 +164,30 @@ export default function ReferralLandingPage() {
 
         {/* Code chip — always visible so the rider can copy it
             manually if anything goes off-rails. */}
-        <div className="bg-gray-50 rounded-xl px-6 py-4 my-6 border-2 border-dashed border-orange-300">
-          <p className="text-sm text-gray-500 mb-1">Código de referido</p>
-          <p className="text-2xl font-bold tracking-widest text-orange-600 font-mono">{code}</p>
+        <div
+          style={{
+            background: 'var(--bg-light)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-md) var(--space-lg)',
+            margin: 'var(--space-lg) 0',
+            border: '2px dashed var(--primary)',
+          }}
+        >
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', margin: '0 0 var(--space-xs)' }}>
+            Código de referido
+          </p>
+          <p
+            style={{
+              fontSize: 'var(--text-2xl)',
+              fontWeight: 800,
+              letterSpacing: '0.15em',
+              color: 'var(--primary)',
+              fontFamily: 'monospace',
+              margin: 0,
+            }}
+          >
+            {code}
+          </p>
         </div>
 
         {/* CTAs depend on status. We always offer the deep link to
@@ -140,48 +195,60 @@ export default function ReferralLandingPage() {
             on desktop the link is a no-op fallback under the visible
             web actions. */}
         {status === 'applied' && (
-          <Link
-            href="/book"
-            className="block w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl mb-3 transition-colors"
-          >
+          <Link href="/book" className="btn-base btn-primary-solid" style={primaryCtaStyle}>
             Pedir mi primer viaje
           </Link>
         )}
 
         {status === 'guest' && (
           <>
-            <Link
-              href={`/login?ref=${code}`}
-              className="block w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl mb-3 transition-colors"
-            >
+            <Link href={`/login?ref=${code}`} className="btn-base btn-primary-solid" style={primaryCtaStyle}>
               Iniciar sesión y aplicar
             </Link>
-            <a
-              href={appDeepLink}
-              className="block w-full bg-white border border-orange-500 text-orange-600 font-semibold py-4 px-6 rounded-2xl mb-3 transition-colors hover:bg-orange-50"
-            >
+            <a href={appDeepLink} className="btn-base btn-secondary-outline" style={primaryCtaStyle}>
               Abrir en la app TriciGo
             </a>
           </>
         )}
 
         {status === 'failed' && (
-          <Link
-            href="/profile/referral"
-            className="block w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl mb-3 transition-colors"
-          >
+          <Link href="/profile/referral" className="btn-base btn-primary-solid" style={primaryCtaStyle}>
             Ir a mi código
           </Link>
         )}
 
         {/* Fallback note + brand link, always visible. */}
-        <p className="text-sm text-gray-400 mt-4">
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
           ¿No tenés la app? Descargala desde la App Store o Google Play.
         </p>
-        <Link href="/" className="text-sm text-orange-500 hover:underline mt-4 inline-block">
+        <Link
+          href="/"
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--primary)',
+            textDecoration: 'none',
+            marginTop: 'var(--space-md)',
+            display: 'inline-block',
+          }}
+        >
           Visitar tricigo.com
         </Link>
       </div>
     </div>
   );
 }
+
+/**
+ * Shared style for the full-width CTA links. Layered on top of the
+ * `.btn-base` + `.btn-primary-solid`/`.btn-secondary-outline` classes
+ * from globals.css so the buttons match the rest of the web app while
+ * still spanning the card width with a roomier vertical rhythm.
+ */
+const primaryCtaStyle: CSSProperties = {
+  display: 'flex',
+  width: '100%',
+  padding: 'var(--space-md) var(--space-lg)',
+  borderRadius: 'var(--radius-lg)',
+  fontSize: 'var(--text-lg)',
+  marginBottom: 'var(--space-sm)',
+};

@@ -674,7 +674,7 @@ export default function WalletPage() {
           </div>
 
           {transferRecipient && (
-            <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: '#f0fdf4', border: '1px solid #86efac', marginBottom: '0.5rem' }}>
+            <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', marginBottom: '0.5rem' }}>
               <p style={{ fontSize: '0.8rem', margin: 0 }}>
                 <span style={{ fontWeight: 600 }}>{transferRecipient.full_name}</span>
                 <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>{transferRecipient.phone}</span>
