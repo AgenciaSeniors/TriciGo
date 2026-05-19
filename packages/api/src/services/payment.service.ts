@@ -104,6 +104,7 @@ export const paymentService = {
         amount_cup: req.amountCup,
         recharge_type: req.rechargeType ?? 'customer',
         corporate_account_id: req.corporateAccountId,
+        device_fingerprint: req.deviceFingerprint,
       }),
     });
 
@@ -138,6 +139,7 @@ export const paymentService = {
     amountCup: number,
     rechargeType: 'customer' | 'driver_quota' = 'customer',
     corporateAccountId?: string,
+    deviceFingerprint?: string,
   ): Promise<CreateStripeIntentResponse> {
     const result = await this.createRechargeIntent({
       provider: 'stripe',
@@ -145,6 +147,7 @@ export const paymentService = {
       amountCup,
       rechargeType,
       corporateAccountId,
+      deviceFingerprint,
     });
     return {
       ok: true,

@@ -7,14 +7,14 @@
 
 ## Estado general
 
-- **Fase actual:** B, C y D en curso — **B1, D1 y C hechos en código**. Migraciones
-  `00273`–`00277` escritas; aplicarlas a producción es paso del pipeline de deploy.
-  Próximo: B4–B7, D2/D3 (NETOPIA / EuPlătesc).
+- **Fase actual:** A y C cerradas; **B1 + B4–B7 y D1 hechos en código**; B2/B3 esperan
+  la cuenta Sumsub. Migraciones `00273`–`00278` escritas; aplicarlas a producción es
+  paso del pipeline de deploy. Próximo: D2/D3 (NETOPIA / EuPlătesc), después E/F/G.
 - **Procesador objetivo:** NETOPIA Payments + EuPlătesc, ambos detrás de una capa de
   abstracción `PaymentProvider`. Stripe se retira al final (cuando el reemplazo esté
   verificado en Live). Decidido el 2026-05-18.
 - **Modo:** Pre-Sandbox — todavía sin integración de procesador rumano.
-- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, B1, D1, C).
+- **Última actualización:** 2026-05-18 — Claude (sesión: plan de cierre, Fase A, B1, D1, C, B4–B7).
 
 ## Hitos completados
 
@@ -73,6 +73,15 @@
   - Pendiente de Fase C: **C3** (cláusula de ley aplicable = Cuba, hallazgo F-M1) es una
     decisión legal — espera el input de Eduardo. El sistema de consentimiento de cookies
     granular (banner con toggles) queda como tarea aparte.
+- **2026-05-18** — **Fase B4–B7 ejecutada en código** (controles de compliance):
+  - **B4:** 3DS2 forzado (`request_three_d_secure: 'any'`) en cada cobro con tarjeta.
+  - **B5:** trigger de auditoría sobre `payment_intents` (migración `00278` §1 — reutiliza
+    `record_audit()`).
+  - **B6:** device fingerprinting — `payment_intents` guarda IP, user-agent y un
+    fingerprint del navegador; el edge function lo escribe con un `UPDATE` fail-open.
+  - **B7:** RPC `build_chargeback_evidence` que arma el paquete de evidencia para
+    defender un chargeback (recarga + cuenta + viajes que probaron la entrega del
+    servicio) + doc `docs/payment-processor/CHARGEBACK_POLICY.md`.
 
 ## Bloqueos activos
 
@@ -80,12 +89,12 @@
   Bloquea la Fase F (aplicación al procesador). Claude NO puede emitir esta opinión
   (`PAYMENT_COMPANION.md` §9).
 - **Migraciones SQL sin aplicar a producción** (guard de MCP) — `00273` (cashout),
-  `00274` (P2P), `00275` (contenido legal CMS), `00276` (velocity controls) y `00277`
-  (registry de proveedores) quedan escritas en el repo; aplicarlas es paso del pipeline
-  de deploy. Hasta entonces: el closed-loop es real en el frontend pero no en el backend,
-  las páginas legales live siguen mostrando el placeholder viejo, y el velocity control
-  no se activa (la edge function es fail-open mientras el RPC `check_topup_velocity` no
-  exista).
+  `00274` (P2P), `00275` (contenido legal CMS), `00276` (velocity controls), `00277`
+  (registry de proveedores) y `00278` (controles de compliance B5/B6/B7) quedan escritas
+  en el repo; aplicarlas es paso del pipeline de deploy. Hasta entonces: el closed-loop
+  es real en el frontend pero no en el backend, las páginas legales live siguen mostrando
+  el placeholder viejo, el velocity control y el audit trail de pagos no se activan, y la
+  edge function es fail-open en los controles que dependen de SQL aún no aplicado.
 
 ## Decisiones pendientes del fundador
 
@@ -106,13 +115,13 @@ EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestio
 
 ## Próximas 3 acciones recomendadas
 
-1. **Fase B4–B7** (sin dependencia externa): 3DS2 explícito, audit trail de pagos,
-   device fingerprinting, política de chargebacks.
-2. **Fase D2/D3** — integrar NETOPIA y EuPlătesc contra el contrato de D1
+1. **Fase D2/D3** — integrar NETOPIA y EuPlătesc contra el contrato de D1
    (`PAYMENT_PROVIDER_CONTRACT.md`); esperan que Eduardo cree la cuenta Sandbox de
-   NETOPIA y el contrato con EuPlătesc.
-3. **Fase B2/B3** — KYC del pagador y SDN screening con Sumsub; esperan que Eduardo
+   NETOPIA y el contacto/contrato con EuPlătesc.
+2. **Fase B2/B3** — KYC del pagador y SDN screening con Sumsub; esperan que Eduardo
    cree la cuenta Sumsub.
+3. **Fases E/F/G** — documentación de underwriting, aplicación al procesador y
+   go-live; dependen de que las Fases B y D estén completas.
 
 ## Notas de ubicación de documentos
 

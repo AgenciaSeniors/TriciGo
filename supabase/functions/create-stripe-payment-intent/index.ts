@@ -27,6 +27,7 @@ interface CreateIntentRequest {
   amount_cup: number;
   recharge_type?: 'customer' | 'driver_quota';
   corporate_account_id?: string;
+  device_fingerprint?: string;
 }
 
 Deno.serve(async (req) => {
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const body: CreateIntentRequest = await req.json();
-    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id } = body;
+    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint } = body;
 
     if (!user_id || !Number.isFinite(amount_cup) || amount_cup <= 0 || amount_cup > 10_000_000) {
       return new Response(
@@ -241,6 +242,29 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Phase B6: device fingerprinting ─────────────────────────
+    // Record the IP, user-agent and the client-computed device
+    // fingerprint on the payment_intent for fraud analysis and
+    // chargeback evidence. Best-effort + fail-open: the columns
+    // arrive with migration 00278; if it is not applied yet the
+    // update returns an error which is logged and ignored, and the
+    // recharge proceeds. The critical INSERT above is untouched.
+    try {
+      const userAgent = req.headers.get('user-agent') ?? null;
+      const { error: fpError } = await supabase.from('payment_intents')
+        .update({
+          client_ip: clientIP,
+          user_agent: userAgent,
+          device_fingerprint: device_fingerprint ?? null,
+        })
+        .eq('id', intent.id);
+      if (fpError) {
+        console.error('Device metadata update skipped:', fpError.message);
+      }
+    } catch (fpErr) {
+      console.error('Device metadata update threw:', fpErr);
+    }
+
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-04-10' });
 
     let stripePaymentIntent;
@@ -262,6 +286,10 @@ Deno.serve(async (req) => {
           fee_usd: String(feeUsd),
         },
         automatic_payment_methods: { enabled: true },
+        // Phase B4: force 3-D Secure (Strong Customer Authentication) on
+        // every card transaction whenever the network supports it — not
+        // only when the issuer mandates it.
+        payment_method_options: { card: { request_three_d_secure: 'any' } },
       });
     } catch (stripeErr) {
       await supabase.from('payment_intents')

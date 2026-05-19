@@ -57,6 +57,33 @@ function getFilterTypes(filter: FilterTab): string[] | null {
 // ── Quick amount buttons (CUP) ──
 const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 10000];
 
+// ── Phase B6: basic device fingerprint ──
+// A dependency-free SHA-256 hash of stable browser signals, recorded
+// with the payment intent for fraud analysis and chargeback evidence.
+// Fail-open: returns undefined if anything is unavailable.
+async function computeDeviceFingerprint(): Promise<string | undefined> {
+  try {
+    if (typeof navigator === 'undefined' || typeof crypto === 'undefined' || !crypto.subtle) {
+      return undefined;
+    }
+    const signals = [
+      navigator.userAgent,
+      navigator.language,
+      `${screen.width}x${screen.height}x${screen.colorDepth}`,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.platform ?? '',
+      String(navigator.hardwareConcurrency ?? ''),
+    ].join('|');
+    const bytes = new TextEncoder().encode(signals);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Stripe checkout form (inside Elements provider) ──
 function StripeCheckoutForm({
   amountCup,
@@ -354,7 +381,10 @@ export default function WalletPage() {
     setRechargeLoading(true);
     setRechargeError(null);
     try {
-      const result = await paymentService.createStripePaymentIntent(userId, amountCup);
+      const deviceFingerprint = await computeDeviceFingerprint();
+      const result = await paymentService.createStripePaymentIntent(
+        userId, amountCup, undefined, undefined, deviceFingerprint,
+      );
       setClientSecret(result.clientSecret);
       setRechargeIntentId(result.intentId);
       setRechargeAmountUsd(result.amountUsd);

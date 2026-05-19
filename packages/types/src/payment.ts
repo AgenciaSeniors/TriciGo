@@ -101,6 +101,8 @@ export interface RechargeIntentRequest {
   /** 'customer' credits the rider wallet; 'driver_quota' the driver commission credit. */
   rechargeType?: 'customer' | 'driver_quota';
   corporateAccountId?: string;
+  /** Phase B6: basic device fingerprint of the payer's browser, for fraud analysis. */
+  deviceFingerprint?: string;
 }
 
 /**
