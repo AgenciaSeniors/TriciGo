@@ -70,9 +70,11 @@
   - Nuevas páginas `/aml` (política AML / uso aceptable) y `/cookies` (política de
     cookies) — TSX estático, enlazadas en el footer y el sitemap.
   - `/contact`: teléfono real `+5545998622511`.
-  - Pendiente de Fase C: **C3** (cláusula de ley aplicable = Cuba, hallazgo F-M1) es una
-    decisión legal — espera el input de Eduardo. El sistema de consentimiento de cookies
-    granular (banner con toggles) queda como tarea aparte.
+  - **C3** ejecutada el 2026-05-18 (migración `00279`): la cláusula de ley aplicable de
+    los Términos pasa de "leyes de Cuba" a derecho rumano, con carve-out de protección al
+    consumidor (es/en/pt + `cms_content`). La redacción se tomó del memo de preparación;
+    la confirma el abogado rumano. El sistema de consentimiento de cookies granular
+    (banner con toggles) queda como tarea aparte.
 - **2026-05-18** — **Fase B4–B7 ejecutada en código** (controles de compliance):
   - **B4:** 3DS2 forzado (`request_three_d_secure: 'any'`) en cada cobro con tarjeta.
   - **B5:** trigger de auditoría sobre `payment_intents` (migración `00278` §1 — reutiliza
@@ -110,8 +112,10 @@ EuPlătesc en paralelo detrás de una abstracción; la revisión legal la gestio
   implementación de B2 (KYC del pagador) y B3 (SDN screening de conductores).
 - **Crear cuenta Sandbox en NETOPIA** — destraba la integración D2b.
 - **Contacto comercial + contrato con EuPlătesc** — destraba la integración D3b.
-- **Decisión legal sobre la cláusula de ley aplicable** (hoy los Términos dicen "leyes de
-  Cuba" para una SRL rumana — hallazgo F-M1) — destraba la tarea C3.
+- **Contratar las opiniones legales reales** — un abogado rumano de fintech (BNR/MiCA —
+  el "gate crítico" antes de aplicar al procesador) y un especialista en sanciones OFAC.
+  El memo de preparación (`TriciGo_Memorandum_Legal_OFAC_BNR.docx` — una simulación, NO
+  una opinión legal válida) sirve como brief para entregarles. Bloquea la Fase F.
 
 ## Próximas 3 acciones recomendadas
 
