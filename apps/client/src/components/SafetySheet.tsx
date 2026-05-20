@@ -194,13 +194,13 @@ export function SafetySheet({
       </View>
 
       {/* ═══ TIER 2 — PRECAUTION ═══ */}
-      <Text variant="bodySmall" className="text-neutral-500 mb-2">
+      <Text variant="bodySmall" className="text-neutral-500 dark:text-neutral-400 mb-2">
         {tr('ride.other_options')}
       </Text>
 
       {/* Share Trip */}
       <Pressable
-        className="flex-row items-center py-3 border-b border-neutral-100"
+        className="flex-row items-center py-3 border-b border-neutral-100 dark:border-neutral-700"
         onPress={handleShareTrip}
         disabled={sharing}
         accessibilityRole="button"

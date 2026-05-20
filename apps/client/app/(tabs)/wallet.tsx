@@ -1566,7 +1566,7 @@ function NativeWalletScreen() {
                   })}
                 </Text>
                 {belowMin && (
-                  <Text variant="caption" style={{ marginTop: 6, color: '#b45309', fontWeight: '600' }}>
+                  <Text variant="caption" style={{ marginTop: 6, color: isDark ? '#fbbf24' : '#b45309', fontWeight: '600' }}>
                     {t('wallet.recharge_min_warning', {
                       defaultValue: 'Mínimo ${{min}} USD por recarga.',
                       min: MIN_RECHARGE_USD,
@@ -1578,7 +1578,7 @@ function NativeWalletScreen() {
           })()}
           {!stripeReady && (
             <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
-              <Text variant="caption" style={{ color: '#b45309' }}>
+              <Text variant="caption" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
                 {t('wallet.stripe_not_ready', {
                   defaultValue: 'Pagos con tarjeta desde la app — próximamente. Por ahora abrimos la versión web.',
                 })}

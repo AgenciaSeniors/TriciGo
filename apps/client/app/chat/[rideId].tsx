@@ -111,7 +111,7 @@ export default function ChatScreen() {
       >
         <View
           className={`px-4 py-2 rounded-2xl ${
-            isOwn ? 'bg-primary-500 rounded-br-sm' : 'bg-neutral-200 rounded-bl-sm'
+            isOwn ? 'bg-primary-500 rounded-br-sm' : 'bg-neutral-200 dark:bg-neutral-800 rounded-bl-sm'
           }`}
         >
           <Text
@@ -262,7 +262,8 @@ export default function ChatScreen() {
               onChangeText={(v) => { setText(v); notifyTyping(); }}
               placeholder={t('chat.placeholder')}
               accessibilityLabel={t('chat.placeholder')}
-              className="flex-1 bg-neutral-100 rounded-full px-4 py-2 text-base"
+              className="flex-1 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-2 text-base text-neutral-900 dark:text-neutral-100"
+              placeholderTextColor={colors.neutral[400]}
               multiline
               maxLength={500}
             />

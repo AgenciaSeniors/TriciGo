@@ -186,6 +186,23 @@ function WebSearchingState({
   const activeRideId = useRideStore((s) => s.activeRide?.id ?? null);
   const { searchingDrivers, acceptedDriver } = useSearchingDrivers(activeRideId);
 
+  // ── Dark mode: single palette object (mirrors cubanDark) ──
+  // NativeWind `dark:` does not apply to inline styles, so the web
+  // render path reads the theme store directly and references `c.*`.
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
+  const c = isDark
+    ? {
+        bg: '#0A0E1A', panel: '#11172A', surface: '#18203A', surfaceAlt: '#18203A',
+        mapBg: '#0A0E1A', text: '#F4F0EA', textMuted: '#B7C4CF', textFaint: '#6B7F8F',
+        border: 'rgba(244,240,234,0.12)', borderFaint: 'rgba(244,240,234,0.08)',
+      }
+    : {
+        bg: '#f5f5f5', panel: '#fff', surface: '#fafafa', surfaceAlt: '#f3f4f6',
+        mapBg: '#f0f0f0', text: '#1a1a1a', textMuted: '#6b7280', textFaint: '#9ca3af',
+        border: '#e5e5e5', borderFaint: '#f0f0f0',
+      };
+
   // Progressive messages
   useEffect(() => {
     const timers = [
@@ -219,7 +236,7 @@ function WebSearchingState({
       <style dangerouslySetInnerHTML={{ __html: WEB_SEARCHING_CSS }} />
 
       {/* ═══ LEFT: Map ═══ */}
-      <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
+      <div style={{ flex: 1, position: 'relative', background: c.mapBg }}>
         {pickup && dropoff && (
           <WebMapView
             pickup={{ latitude: pickup.latitude, longitude: pickup.longitude }}
@@ -250,16 +267,16 @@ function WebSearchingState({
       <div style={{
         width: 440, minWidth: 380, maxWidth: 480,
         display: 'flex', flexDirection: 'column',
-        backgroundColor: '#fff', borderLeft: '1px solid #e5e5e5',
+        backgroundColor: c.panel, borderLeft: `1px solid ${c.border}`,
         overflowY: 'auto', padding: '32px 28px',
         gap: 20, ...font,
       }}>
         {/* Header */}
         <div style={{ animation: 'ws-fadeIn 0.3s ease both' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: c.textFaint, textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
             {serviceType === 'mensajeria' ? 'Seguimiento de envío' : 'Seguimiento de viaje'}
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: c.text, letterSpacing: '-0.02em' }}>
             {searchTimedOut ? 'Sin conductor disponible' : '¡Viaje solicitado!'}
           </div>
         </div>
@@ -277,12 +294,12 @@ function WebSearchingState({
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 marginBottom: 16,
               }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={c.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 6 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: c.text, textAlign: 'center' as const, marginBottom: 6 }}>
                 No encontramos conductor
               </div>
-              <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center' as const, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: c.textMuted, textAlign: 'center' as const, marginBottom: 16 }}>
                 Intenta de nuevo o prueba con otro tipo de vehículo
               </div>
               <button onClick={onReset} style={{
@@ -361,8 +378,8 @@ function WebSearchingState({
               {/* Searching drivers count + chips */}
               {!acceptedDriver && searchingDrivers.length > 0 && (
                 <div style={{
-                  width: '100%', background: '#fafafa',
-                  border: '1px solid #f0f0f0', borderRadius: 12,
+                  width: '100%', background: c.surface,
+                  border: `1px solid ${c.borderFaint}`, borderRadius: 12,
                   padding: '12px 14px', marginBottom: 12,
                   animation: 'ws-fadeIn 0.3s ease both',
                 }}>
@@ -372,7 +389,7 @@ function WebSearchingState({
                       background: colors.brand.orange,
                       animation: 'ws-pulse 2s ease-in-out infinite',
                     }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
                       {searchingDrivers.length} {searchingDrivers.length === 1 ? 'conductor revisando' : 'conductores revisando'}
                     </span>
                   </div>
@@ -382,8 +399,8 @@ function WebSearchingState({
                       .map((d) => (
                       <div key={d.driverId} style={{
                         display: 'flex', alignItems: 'center', gap: 6,
-                        background: '#fff', borderRadius: 20,
-                        padding: '5px 10px', border: '1px solid #e5e5e5',
+                        background: c.panel, borderRadius: 20,
+                        padding: '5px 10px', border: `1px solid ${c.border}`,
                         animation: 'ws-fadeIn 0.3s ease both',
                       }}>
                         <div style={{
@@ -394,22 +411,22 @@ function WebSearchingState({
                         }}>
                           {d.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: '#1a1a1a' }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>
                           {d.name.split(' ')[0]}
                         </span>
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{d.rating.toFixed(1)}</span>
+                        <span style={{ fontSize: 11, color: c.textFaint }}>{d.rating.toFixed(1)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', textAlign: 'center' as const, marginBottom: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: c.text, textAlign: 'center' as const, marginBottom: 4 }}>
                 {acceptedDriver ? '' : 'Buscando conductor'}
               </div>
               {!acceptedDriver && (
               <div key={searchPhase} style={{
-                fontSize: 13, color: '#6b7280', textAlign: 'center' as const,
+                fontSize: 13, color: c.textMuted, textAlign: 'center' as const,
                 animation: 'ws-fadeIn 0.3s ease both',
               }}>
                 {searchMessage}
@@ -418,13 +435,13 @@ function WebSearchingState({
 
               {/* Progress bar */}
               <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
-                <div style={{ height: 3, backgroundColor: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: 3, backgroundColor: c.surfaceAlt, borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', backgroundColor: colors.brand.orange,
                     borderRadius: 2, animation: 'ws-progress 120s linear forwards',
                   }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: '#9ca3af' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: c.textFaint }}>
                   <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
                   <span>2:00</span>
                 </div>
@@ -436,7 +453,7 @@ function WebSearchingState({
         {/* Status Stepper */}
         {!searchTimedOut && (
           <div style={{
-            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            background: c.surface, border: `1px solid ${c.borderFaint}`, borderRadius: 12,
             padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.1s',
           }}>
             {[
@@ -453,16 +470,16 @@ function WebSearchingState({
                     fontSize: 11, fontWeight: 700,
                     ...(step.active
                       ? { background: colors.brand.orange, color: '#fff', animation: 'ws-glow 2s ease-in-out infinite' }
-                      : { background: '#f0f0f0', color: '#9ca3af', border: '2px solid #e5e5e5' }),
+                      : { background: c.surfaceAlt, color: c.textFaint, border: `2px solid ${c.border}` }),
                   }}>
                     {idx + 1}
                   </div>
                   {idx < 3 && (
                     <div style={{
                       width: 2, flex: 1, minHeight: 12, marginTop: 4,
-                      background: step.active ? colors.brand.orange : '#e5e5e5',
+                      background: step.active ? colors.brand.orange : c.border,
                       ...(step.active ? {} : {
-                        background: 'repeating-linear-gradient(to bottom, #e5e5e5 0px, #e5e5e5 3px, transparent 3px, transparent 6px)',
+                        background: `repeating-linear-gradient(to bottom, ${c.border} 0px, ${c.border} 3px, transparent 3px, transparent 6px)`,
                       }),
                     }} />
                   )}
@@ -470,8 +487,8 @@ function WebSearchingState({
                 <span style={{
                   fontSize: 13, paddingTop: 3, lineHeight: '1.3',
                   ...(step.active
-                    ? { fontWeight: 700, color: '#1a1a1a' }
-                    : { fontWeight: 500, color: '#9ca3af' }),
+                    ? { fontWeight: 700, color: c.text }
+                    : { fontWeight: 500, color: c.textFaint }),
                 }}>
                   {step.label}
                 </span>
@@ -482,23 +499,23 @@ function WebSearchingState({
 
         {/* Route Card */}
         <div style={{
-          background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+          background: c.surface, border: `1px solid ${c.borderFaint}`, borderRadius: 12,
           padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.15s',
         }}>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, gap: 2 }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-              <div style={{ width: 2, flex: 1, minHeight: 20, background: '#e5e5e5', borderRadius: 1 }} />
+              <div style={{ width: 2, flex: 1, minHeight: 20, background: c.border, borderRadius: 1 }} />
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Desde</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{pickupAddress || 'Origen'}</div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: c.textFaint, textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Desde</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: c.text, lineHeight: '1.4' }}>{pickupAddress || 'Origen'}</div>
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Hasta</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', lineHeight: '1.4' }}>{dropoffAddress || 'Destino'}</div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: c.textFaint, textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 2 }}>Hasta</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: c.text, lineHeight: '1.4' }}>{dropoffAddress || 'Destino'}</div>
               </div>
             </div>
           </div>
@@ -507,14 +524,14 @@ function WebSearchingState({
         {/* Fare Card */}
         {selectedEstimate && (
           <div style={{
-            background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 12,
+            background: c.surface, border: `1px solid ${c.borderFaint}`, borderRadius: 12,
             padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             animation: 'ws-fadeIn 0.4s ease both 0.2s',
           }}>
             <div>
-              <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>Tarifa estimada</div>
+              <div style={{ fontSize: 13, color: c.textMuted, fontWeight: 500 }}>Tarifa estimada</div>
               {selectedEstimate.estimated_distance_m && (
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: c.textFaint, marginTop: 2 }}>
                   {(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km
                 </div>
               )}
@@ -529,14 +546,14 @@ function WebSearchingState({
         {!searchTimedOut && (
           <button onClick={onReset} style={{
             width: '100%', padding: '14px 24px', borderRadius: 12,
-            background: 'transparent', color: '#6b7280',
+            background: 'transparent', color: c.textMuted,
             fontWeight: 600, fontSize: 14, cursor: 'pointer',
-            border: '1.5px solid #e5e5e5', ...font,
+            border: `1.5px solid ${c.border}`, ...font,
             transition: 'all 0.2s ease',
             animation: 'ws-fadeIn 0.4s ease both 0.25s',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.color = '#6b7280'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = c.border; e.currentTarget.style.color = c.textMuted; }}
           >
             Cancelar búsqueda
           </button>
@@ -546,7 +563,7 @@ function WebSearchingState({
         {!searchTimedOut && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 8, fontSize: 11, color: '#9ca3af', fontWeight: 500,
+            gap: 8, fontSize: 11, color: c.textFaint, fontWeight: 500,
             animation: 'ws-fadeIn 0.4s ease both 0.3s',
           }}>
             <div style={{
@@ -566,6 +583,25 @@ function WebHomeScreen() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
+
+  // ── Dark mode: single palette object (mirrors cubanDark) ──
+  // NativeWind `dark:` does not apply to inline styles, so the web
+  // render path reads the theme store directly and references `c.*`.
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
+  const c = isDark
+    ? {
+        bg: '#0A0E1A', panel: '#11172A', surface: '#18203A', surfaceAlt: '#18203A',
+        inputBg: '#11172A', text: '#F4F0EA', textMuted: '#B7C4CF', textFaint: '#6B7F8F',
+        border: 'rgba(244,240,234,0.12)', borderFaint: 'rgba(244,240,234,0.08)',
+        cardSel: 'rgba(255,77,0,0.16)', disabled: '#2A3350',
+      }
+    : {
+        bg: '#f5f5f5', panel: '#fff', surface: '#f9fafb', surfaceAlt: '#f3f4f6',
+        inputBg: '#fff', text: '#1a1a1a', textMuted: '#6b7280', textFaint: '#9ca3af',
+        border: '#e5e5e5', borderFaint: '#f0f0f0',
+        cardSel: '#FFF5F0', disabled: '#d1d5db',
+      };
 
   // Recent addresses
   const { recentAddresses, addRecentAddress } = useRecentAddresses();
@@ -1006,22 +1042,22 @@ function WebHomeScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      <div style={{ display: 'flex', flexDirection: 'row', height: 'calc(100vh - 60px)', fontFamily: 'Montserrat, system-ui, sans-serif' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <div style={{ display: 'flex', flexDirection: 'row', height: 'calc(100vh - 60px)', fontFamily: 'Montserrat, system-ui, sans-serif', background: c.bg }}>
         {/* ═══ LEFT SIDEBAR — Booking controls ═══ */}
         <div style={{
           width: 420, minWidth: 380, maxWidth: 460,
           display: 'flex', flexDirection: 'column',
-          backgroundColor: '#fff', borderRight: '1px solid #e5e5e5',
+          backgroundColor: c.panel, borderRight: `1px solid ${c.border}`,
           overflowY: 'auto',
         }}>
           <div style={{ padding: '24px 20px', flex: 1 }}>
             {/* Header */}
             <div style={{ marginBottom: 20 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: 0 }}>
                 Solicita tu viaje
               </h2>
-              <p style={{ fontSize: 13, color: '#9ca3af', margin: '4px 0 0' }}>
+              <p style={{ fontSize: 13, color: c.textFaint, margin: '4px 0 0' }}>
                 Selecciona origen y destino
               </p>
             </div>
@@ -1046,8 +1082,8 @@ function WebHomeScreen() {
 
               {/* Swap button */}
               <div style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0' }}>
-                <Pressable onPress={handleSwap} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="swap-vertical" size={18} color="#6b7280" />
+                <Pressable onPress={handleSwap} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="swap-vertical" size={18} color={c.textMuted} />
                 </Pressable>
               </div>
 
@@ -1075,7 +1111,7 @@ function WebHomeScreen() {
                    and quietly disappears once they've taken their first
                    ride and the history-driven dropdown takes over. */}
               {(savedLocations?.length ?? 0) === 0 && (recentAddresses?.length ?? 0) === 0 && (
-                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: -4, marginBottom: 0, paddingLeft: 2 }}>
+                <p style={{ fontSize: 11, color: c.textFaint, marginTop: -4, marginBottom: 0, paddingLeft: 2 }}>
                   💡 Escribí una calle, esquina o lugar conocido — verás sugerencias al tipear.
                 </p>
               )}
@@ -1109,7 +1145,7 @@ function WebHomeScreen() {
                   </div>
                 )}
                 {hasBothLocations && (
-                  <button onClick={handleReset} type="button" style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid #e5e5e5', backgroundColor: '#fff', fontSize: 12, color: '#6b7280', cursor: 'pointer' }}>
+                  <button onClick={handleReset} type="button" style={{ padding: '6px 12px', borderRadius: 20, border: `1px solid ${c.border}`, backgroundColor: c.panel, fontSize: 12, color: c.textMuted, cursor: 'pointer' }}>
                     Limpiar
                   </button>
                 )}
@@ -1118,7 +1154,7 @@ function WebHomeScreen() {
 
             {/* Route info */}
             {routeInfo && (
-              <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#6b7280', marginBottom: 16, padding: '10px 14px', backgroundColor: '#f9fafb', borderRadius: 10 }}>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, color: c.textMuted, marginBottom: 16, padding: '10px 14px', backgroundColor: c.surface, borderRadius: 10 }}>
                 <span>📏 {(routeInfo.distance_m / 1000).toFixed(1)} km</span>
                 <span>⏱ {Math.round(routeInfo.duration_s / 60)} min</span>
               </div>
@@ -1126,7 +1162,7 @@ function WebHomeScreen() {
 
             {/* ═══ Service cards ═══ */}
             <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: c.textMuted, marginBottom: 8 }}>
                 Elige tu servicio
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: hasBothLocations ? 1 : 0.5, pointerEvents: hasBothLocations ? 'auto' : 'none' }}>
@@ -1144,29 +1180,29 @@ function WebHomeScreen() {
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderRadius: 12,
-                        border: isSelected ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5',
-                        background: isSelected ? '#FFF5F0' : '#fff',
+                        border: isSelected ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`,
+                        background: isSelected ? c.cardSel : c.panel,
                         cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <Image source={svc.img} style={{ width: 40, height: 40 }} resizeMode="contain" />
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{svc.name}</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: c.text }}>{svc.name}</div>
+                          <div style={{ fontSize: 11, color: c.textFaint, marginTop: 2 }}>
                             {isMensajeria ? 'Según vehículo' : svc.desc}
                           </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         {isLoadingEst ? (
-                          <div style={{ width: 60, height: 14, borderRadius: 4, background: '#e5e5e5', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                          <div style={{ width: 60, height: 14, borderRadius: 4, background: c.surfaceAlt, animation: 'pulse 1.5s ease-in-out infinite' }} />
                         ) : est ? (
                           <>
-                            <div style={{ fontWeight: 700, fontSize: 15, color: isSelected ? colors.brand.orange : '#1a1a1a' }}>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: isSelected ? colors.brand.orange : c.text }}>
                               {fmtPrice(est.estimated_fare_cup, est.estimated_fare_trc)}
                             </div>
-                            <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                            <div style={{ fontSize: 11, color: c.textFaint }}>
                               ~{Math.ceil((est.estimated_duration_s || 0) / 60)} min
                             </div>
                           </>
@@ -1179,7 +1215,7 @@ function WebHomeScreen() {
                              definitive no-estimate answer. Say so. */
                           <div
                             title="Este servicio no está disponible para el trayecto seleccionado"
-                            style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}
+                            style={{ fontSize: 11, color: c.textFaint, fontStyle: 'italic' }}
                           >
                             No disponible
                           </div>
@@ -1193,26 +1229,26 @@ function WebHomeScreen() {
 
             {/* ═══ Delivery form ═══ */}
             {serviceType === 'mensajeria' && (
-              <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: '2px solid ' + colors.brand.orange, background: 'linear-gradient(135deg, rgba(255,77,0,0.03), rgba(255,77,0,0.08))' }}>
+              <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: '2px solid ' + colors.brand.orange, background: isDark ? c.surface : 'linear-gradient(135deg, rgba(255,77,0,0.03), rgba(255,77,0,0.08))' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 20 }}>📦</span>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Datos del envío</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Completa los datos del destinatario</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Datos del envío</div>
+                    <div style={{ fontSize: 11, color: c.textFaint }}>Completa los datos del destinatario</div>
                   </div>
                 </div>
 
                 {/* Delivery vehicle selector */}
                 <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Vehículo *</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Vehículo *</label>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                     {DELIVERY_VEHICLES.map((v) => {
                       const sel = deliveryVehicle === v.slug;
                       return (
                         <button key={v.slug} type="button" onClick={() => { setDeliveryVehicle(v.slug); setAllEstimates({}); }}
-                          style={{ flex: 1, padding: '8px 6px', borderRadius: 10, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', textAlign: 'center' }}>
+                          style={{ flex: 1, padding: '8px 6px', borderRadius: 10, border: sel ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`, background: sel ? c.cardSel : c.panel, cursor: 'pointer', textAlign: 'center' }}>
                           <Image source={v.img} style={{ width: 28, height: 28, marginBottom: 2 }} resizeMode="contain" />
-                          <div style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? colors.brand.orange : '#6b7280' }}>{v.label}</div>
+                          <div style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: sel ? colors.brand.orange : c.textMuted }}>{v.label}</div>
                         </button>
                       );
                     })}
@@ -1221,9 +1257,9 @@ function WebHomeScreen() {
 
                 {/* Recipient name */}
                 <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Destinatario *</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Destinatario *</label>
                   <input type="text" value={deliveryName} onChange={(e) => setDeliveryName(e.target.value)} placeholder="Nombre completo"
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1px solid ${c.border}`, fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none', background: c.inputBg, color: c.text }} />
                 </div>
 
                 {/* Recipient phone */}
@@ -1238,15 +1274,16 @@ function WebHomeScreen() {
                   const phoneShowError = deliveryPhone.length > 0 && !phoneLooksValid;
                   return (
                     <div style={{ marginBottom: 8 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Teléfono *</label>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Teléfono *</label>
                       <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX"
                         style={{
                           width: '100%', padding: '8px 10px', borderRadius: 8,
-                          border: phoneShowError ? '1px solid #ef4444' : '1px solid #e5e5e5',
+                          border: phoneShowError ? '1px solid #ef4444' : `1px solid ${c.border}`,
                           fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none',
+                          background: c.inputBg, color: c.text,
                         }} />
                       {phoneShowError && (
-                        <p style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
+                        <p style={{ fontSize: 11, color: isDark ? '#fca5a5' : '#b91c1c', marginTop: 4 }}>
                           Usa formato internacional con +: ej. +5356622516
                         </p>
                       )}
@@ -1256,13 +1293,13 @@ function WebHomeScreen() {
 
                 {/* Package category */}
                 <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Tipo de paquete</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Tipo de paquete</label>
                   <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                     {DELIVERY_CATS.map((cat) => {
                       const sel = deliveryCategory === cat.value;
                       return (
                         <button key={cat.value} type="button" onClick={() => setDeliveryCategory(cat.value)}
-                          style={{ padding: '6px 10px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 12 }}>
+                          style={{ padding: '6px 10px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`, background: sel ? c.cardSel : c.panel, cursor: 'pointer', fontSize: 12, color: c.text }}>
                           {cat.icon} {cat.label}
                         </button>
                       );
@@ -1272,13 +1309,13 @@ function WebHomeScreen() {
 
                 {/* Instructions */}
                 <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Instrucciones</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Instrucciones</label>
                   <input type="text" value={deliveryInstructions} onChange={(e) => setDeliveryInstructions(e.target.value)} placeholder="Instrucciones especiales"
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none' }} />
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1px solid ${c.border}`, fontSize: 13, marginTop: 4, boxSizing: 'border-box', outline: 'none', background: c.inputBg, color: c.text }} />
                 </div>
 
                 {/* Client accompanies toggle */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: c.text }}>
                   <input type="checkbox" checked={clientAccompanies} onChange={(e) => setClientAccompanies(e.target.checked)} />
                   <span style={{ fontWeight: 500 }}>Voy con el envío</span>
                 </label>
@@ -1288,23 +1325,23 @@ function WebHomeScreen() {
             {/* ═══ Fare estimate card ═══ */}
             <div style={{
               padding: 16, borderRadius: 12, marginBottom: 16,
-              border: selectedEstimate ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5',
-              background: selectedEstimate ? '#FFF5F0' : '#fff',
+              border: selectedEstimate ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`,
+              background: selectedEstimate ? c.cardSel : c.panel,
               opacity: selectedEstimate ? 1 : 0.6,
             }}>
               {!selectedEstimate && (
-                <p style={{ textAlign: 'center', fontSize: 13, color: '#9ca3af', margin: 0, padding: '8px 0' }}>
+                <p style={{ textAlign: 'center', fontSize: 13, color: c.textFaint, margin: 0, padding: '8px 0' }}>
                   Selecciona origen y destino para ver el estimado
                 </p>
               )}
               {selectedEstimate && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, color: '#6b7280' }}>Tarifa estimada</span>
+                    <span style={{ fontSize: 13, color: c.textMuted }}>Tarifa estimada</span>
                     <div style={{ textAlign: 'right' }}>
                       {promoResult?.valid && promoResult.discount > 0 ? (
                         <>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginRight: 8 }}>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: c.textFaint, textDecoration: 'line-through', marginRight: 8 }}>
                             {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                           </span>
                           <span style={{ fontSize: 22, fontWeight: 800, color: '#22c55e' }}>
@@ -1318,10 +1355,10 @@ function WebHomeScreen() {
                       )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#6b7280', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 12, color: c.textMuted, flexWrap: 'wrap' }}>
                     <span>{((selectedEstimate.estimated_distance_m || 0) / 1000).toFixed(1)} km</span>
                     <span>{Math.round((selectedEstimate.estimated_duration_s || 0) / 60)} min</span>
-                    <span style={{ color: '#9ca3af' }}>~${((selectedEstimate.estimated_fare_cup || 0) / 300).toFixed(2)} USD</span>
+                    <span style={{ color: c.textFaint }}>~${((selectedEstimate.estimated_fare_cup || 0) / 300).toFixed(2)} USD</span>
                   </div>
                   {(selectedEstimate.surge_multiplier || 0) > 1 && (
                     <span style={{ display: 'inline-block', marginTop: 8, color: '#fff', background: colors.brand.orange, fontWeight: 700, padding: '2px 10px', borderRadius: 12, fontSize: 11 }}>
@@ -1331,13 +1368,13 @@ function WebHomeScreen() {
 
                   {/* Payment method */}
                   <div style={{ marginTop: 14 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Método de pago</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: c.text }}>Método de pago</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {(['cash', 'tricicoin', 'mixed'] as const).map((pm) => {
                         const sel = paymentMethod === pm;
                         return (
                           <button key={pm} type="button" onClick={() => setPaymentMethod(pm)}
-                            style={{ flex: 1, padding: '8px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : '1px solid #e5e5e5', background: sel ? '#FFF5F0' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 400 }}>
+                            style={{ flex: 1, padding: '8px', borderRadius: 8, border: sel ? '2px solid ' + colors.brand.orange : `1px solid ${c.border}`, background: sel ? c.cardSel : c.panel, cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 400, color: sel ? colors.brand.orange : c.text }}>
                             {pm === 'cash' ? 'Efectivo' : pm === 'tricicoin' ? 'TriciCoin' : 'Mixto'}
                           </button>
                         );
@@ -1350,7 +1387,7 @@ function WebHomeScreen() {
 
             {/* ═══ Promo code ═══ */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>Código promocional</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: c.textMuted }}>Código promocional</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <input
                   type="text"
@@ -1360,13 +1397,14 @@ function WebHomeScreen() {
                   disabled={promoResult?.valid === true}
                   style={{
                     flex: 1, padding: '8px 10px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none',
-                    border: promoResult?.valid ? '2px solid #22c55e' : promoResult?.valid === false ? '2px solid #ef4444' : '1px solid #e5e5e5',
-                    background: promoResult?.valid ? 'rgba(34,197,94,0.05)' : '#fff',
+                    color: c.text,
+                    border: promoResult?.valid ? '2px solid #22c55e' : promoResult?.valid === false ? '2px solid #ef4444' : `1px solid ${c.border}`,
+                    background: promoResult?.valid ? 'rgba(34,197,94,0.08)' : c.inputBg,
                   }}
                 />
                 {promoResult?.valid ? (
                   <button type="button" onClick={() => { setPromoCode(''); setPromoResult(null); }}
-                    style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e5e5', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#6b7280' }}>
+                    style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${c.border}`, background: c.panel, fontSize: 13, cursor: 'pointer', color: c.textMuted }}>
                     Quitar
                   </button>
                 ) : (
@@ -1376,7 +1414,7 @@ function WebHomeScreen() {
                       padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       cursor: (!promoCode.trim() || !selectedEstimate || promoValidating) ? 'not-allowed' : 'pointer',
-                      background: (!promoCode.trim() || !selectedEstimate || promoValidating) ? '#d1d5db' : colors.brand.orange,
+                      background: (!promoCode.trim() || !selectedEstimate || promoValidating) ? c.disabled : colors.brand.orange,
                       color: '#fff',
                     }}>
                     {/* UX: text-only 'Validando...' was static; the server call
@@ -1409,7 +1447,7 @@ function WebHomeScreen() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                 <input type="checkbox" checked={isScheduled} onChange={(e) => { setIsScheduled(e.target.checked); if (!e.target.checked) setScheduleDate(''); }} />
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Programar viaje</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>Programar viaje</span>
               </label>
               {isScheduled && (
                 <input
@@ -1417,7 +1455,7 @@ function WebHomeScreen() {
                   value={scheduleDate}
                   onChange={(e) => setScheduleDate(e.target.value)}
                   min={new Date().toISOString().slice(0, 16)}
-                  style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e5e5', fontSize: 13, boxSizing: 'border-box' }}
+                  style={{ width: '100%', marginTop: 8, padding: '8px 10px', borderRadius: 8, border: `1px solid ${c.border}`, fontSize: 13, boxSizing: 'border-box', background: c.inputBg, color: c.text, colorScheme: isDark ? 'dark' : 'light' }}
                 />
               )}
             </div>
@@ -1433,8 +1471,8 @@ function WebHomeScreen() {
                    stale message is now irrelevant). */
               <div style={{
                 display: 'flex', alignItems: 'flex-start', gap: 8,
-                fontSize: 13, color: '#b91c1c', marginBottom: 12, padding: '10px 12px',
-                backgroundColor: 'rgba(239,68,68,0.06)', borderRadius: 8,
+                fontSize: 13, color: isDark ? '#fca5a5' : '#b91c1c', marginBottom: 12, padding: '10px 12px',
+                backgroundColor: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.06)', borderRadius: 8,
                 border: '1px solid rgba(239,68,68,0.25)',
               }}>
                 <span style={{ fontSize: 16, lineHeight: '18px' }} aria-hidden>⚠</span>
@@ -1445,7 +1483,7 @@ function WebHomeScreen() {
                   aria-label="Cerrar error"
                   style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    color: '#b91c1c', fontSize: 14, padding: 0, lineHeight: '18px',
+                    color: isDark ? '#fca5a5' : '#b91c1c', fontSize: 14, padding: 0, lineHeight: '18px',
                   }}
                 >
                   ✕
@@ -1460,7 +1498,7 @@ function WebHomeScreen() {
               disabled={isRequesting || !selectedEstimate}
               style={{
                 width: '100%', padding: 14, borderRadius: 12, border: 'none',
-                background: (!selectedEstimate || isRequesting) ? '#d1d5db' : colors.brand.orange,
+                background: (!selectedEstimate || isRequesting) ? c.disabled : colors.brand.orange,
                 color: '#fff', fontSize: 15, fontWeight: 700,
                 cursor: (!selectedEstimate || isRequesting) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s',
@@ -1479,7 +1517,7 @@ function WebHomeScreen() {
 
           {/* Balance footer */}
           <div style={{
-            padding: '14px 20px', borderTop: '1px solid #e5e5e5',
+            padding: '14px 20px', borderTop: `1px solid ${c.border}`,
             background: 'linear-gradient(135deg, #FF4D00, #FF8A5C)',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
@@ -2020,9 +2058,9 @@ function IdleView() {
 
   if (initialLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-        <View style={{ flex: 1, backgroundColor: '#e5e7eb' }} />
-        <View style={idleStyles.bottomPanel}>
+      <View style={{ flex: 1, backgroundColor: tokens.bg.paper }}>
+        <View style={{ flex: 1, backgroundColor: tokens.bg.elev2 }} />
+        <View style={[idleStyles.bottomPanel, { backgroundColor: tokens.bg.elev1 }]}>
           <Skeleton width="60%" height={28} style={{ marginBottom: 12 }} />
           <Skeleton width="100%" height={52} style={{ borderRadius: 12, marginBottom: 12 }} />
           <SkeletonCard />
@@ -3175,7 +3213,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       {/* Fullscreen search panel — opens when user taps an address input */}
       {searchingField && (
         <ScrollView
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, paddingTop: insets.top + 8 }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: tokens.bg.paper, zIndex: 20, paddingTop: insets.top + 8 }}
           contentContainerStyle={{ paddingHorizontal: 16, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="none"
@@ -3183,7 +3221,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
           {/* Header: back arrow + field label */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <Pressable onPress={() => setSearchingField(null)} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="arrow-back" size={24} color={colors.neutral[700]} />
+              <Ionicons name="arrow-back" size={24} color={tokens.ink.primary} />
             </Pressable>
             <Text variant="h4" style={{ flex: 1, marginLeft: 8 }}>
               {searchingField === 'pickup'
@@ -3243,8 +3281,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
       {/* Bottom panel — services, payment, request (hidden during search) */}
       {!searchingField && (draft.pickup && draft.dropoff) && (
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
-          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.neutral[300], marginBottom: 8 }} />
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: tokens.bg.elev1, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 8, maxHeight: '50%' }}>
+          <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: mode === 'dark' ? tokens.ink.subtle : colors.neutral[300], marginBottom: 8 }} />
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
             {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => {
@@ -3253,7 +3291,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               const isSelected = draft.serviceType === slug;
               const eta = etaByVehicleType[slug];
               return (
-                <Pressable key={slug} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : colors.neutral[200], backgroundColor: isSelected ? '#FFF5F0' : '#fff' }}>
+                <Pressable key={slug} onPress={() => { triggerHaptic('light'); setServiceType(slug); }} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, marginBottom: 8, borderWidth: isSelected ? 2 : 1, borderColor: isSelected ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSelected ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff') }}>
                   <Image source={VEHICLE_ICONS[slug]} style={{ width: 36, height: 36, marginRight: 12 }} resizeMode="contain" />
                   <View style={{ flex: 1 }}>
                     <Text variant="body" style={{ fontWeight: '600' }}>{meta?.label ?? slug}</Text>
@@ -3264,7 +3302,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                   <View style={{ alignItems: 'flex-end' }}>
                     {est ? (
                       <>
-                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : colors.neutral[900] }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
+                        <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : tokens.ink.primary }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
                         {est.estimated_duration_s ? (
                           <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
                         ) : null}
@@ -3279,7 +3317,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
             {/* Delivery form — shown when mensajeria selected */}
             {draft.serviceType === 'mensajeria' && (
-              <View style={{ backgroundColor: colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
+              <View style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev2 : colors.neutral[50], borderRadius: 12, padding: 12, marginBottom: 8 }}>
                 <Text variant="caption" color="secondary" style={{ fontWeight: '600', marginBottom: 8 }}>
                   {t('delivery.details', { defaultValue: 'Datos del envío' })}
                 </Text>
@@ -3298,8 +3336,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                     const vLabel = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto' } as const)[vt];
                     const isSel = draft.delivery.deliveryVehicleType === vt;
                     return (
-                      <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isSel ? '#FFF5F0' : '#fff', alignItems: 'center' }}>
-                        <Text variant="caption" style={{ fontWeight: isSel ? '700' : '400', color: isSel ? colors.brand.orange : colors.neutral[600], fontSize: 11 }}>{vLabel}</Text>
+                      <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSel ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev1 : '#fff'), alignItems: 'center' }}>
+                        <Text variant="caption" style={{ fontWeight: isSel ? '700' : '400', color: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[600]), fontSize: 11 }}>{vLabel}</Text>
                       </Pressable>
                     );
                   })}
@@ -3308,11 +3346,11 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_name', { defaultValue: 'Destinatario' })}</Text>
-                    <TextInput value={draft.delivery.recipientName} onChangeText={(v) => setDeliveryField('recipientName', v)} placeholder="Nombre" placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                    <TextInput value={draft.delivery.recipientName} onChangeText={(v) => setDeliveryField('recipientName', v)} placeholder="Nombre" placeholderTextColor={mode === 'dark' ? tokens.ink.subtle : colors.neutral[400]} style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev1 : '#fff', borderRadius: 8, borderWidth: 1, borderColor: mode === 'dark' ? tokens.line : colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: tokens.ink.primary }} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text variant="caption" color="tertiary" style={{ marginBottom: 2 }}>{t('delivery.recipient_phone', { defaultValue: 'Teléfono' })}</Text>
-                    <TextInput value={draft.delivery.recipientPhone} onChangeText={(v) => setDeliveryField('recipientPhone', v)} placeholder="+53 5..." placeholderTextColor={colors.neutral[400]} keyboardType="phone-pad" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900] }} />
+                    <TextInput value={draft.delivery.recipientPhone} onChangeText={(v) => setDeliveryField('recipientPhone', v)} placeholder="+53 5..." placeholderTextColor={mode === 'dark' ? tokens.ink.subtle : colors.neutral[400]} keyboardType="phone-pad" style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev1 : '#fff', borderRadius: 8, borderWidth: 1, borderColor: mode === 'dark' ? tokens.line : colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: tokens.ink.primary }} />
                   </View>
                 </View>
                 {/* Package category chips */}
@@ -3338,23 +3376,23 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                       };
                       const isCatSel = draft.delivery.packageCategory === cat;
                       return (
-                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : colors.neutral[200], backgroundColor: isCatSel ? '#FFF5F0' : '#fff' }}>
-                          <Text variant="caption" style={{ color: isCatSel ? colors.brand.orange : colors.neutral[600], fontWeight: isCatSel ? '600' : '400' }}>{catLabels[cat]}</Text>
+                        <Pressable key={cat} onPress={() => setDeliveryField('packageCategory', cat)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: isCatSel ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isCatSel ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev1 : '#fff') }}>
+                          <Text variant="caption" style={{ color: isCatSel ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[600]), fontWeight: isCatSel ? '600' : '400' }}>{catLabels[cat]}</Text>
                         </Pressable>
                       );
                     })}
                   </View>
                 </ScrollView>
                 {/* Description + Weight */}
-                <TextInput value={draft.delivery.packageDescription} onChangeText={(v) => setDeliveryField('packageDescription', v)} placeholder={t('delivery.description_placeholder', { defaultValue: 'Descripción del paquete' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                <TextInput value={draft.delivery.packageDescription} onChangeText={(v) => setDeliveryField('packageDescription', v)} placeholder={t('delivery.description_placeholder', { defaultValue: 'Descripción del paquete' })} placeholderTextColor={mode === 'dark' ? tokens.ink.subtle : colors.neutral[400]} style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev1 : '#fff', borderRadius: 8, borderWidth: 1, borderColor: mode === 'dark' ? tokens.line : colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: tokens.ink.primary, marginBottom: 8 }} />
                 {/* Bugfix: estimatedWeightKg is typed as string in the
                      store (matches the raw input). Keep the value as a
                      string — server-side parses to number via fare
                      estimate. Stripping non-digits keeps the input
                      numeric-looking without breaking the store type. */}
-                <TextInput value={draft.delivery.estimatedWeightKg} onChangeText={(v) => setDeliveryField('estimatedWeightKg', v.replace(/[^0-9.]/g, ''))} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                <TextInput value={draft.delivery.estimatedWeightKg} onChangeText={(v) => setDeliveryField('estimatedWeightKg', v.replace(/[^0-9.]/g, ''))} placeholder={t('delivery.weight', { defaultValue: 'Peso estimado (kg)' })} placeholderTextColor={mode === 'dark' ? tokens.ink.subtle : colors.neutral[400]} keyboardType="numeric" style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev1 : '#fff', borderRadius: 8, borderWidth: 1, borderColor: mode === 'dark' ? tokens.line : colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: tokens.ink.primary, marginBottom: 8 }} />
                 {/* Special instructions */}
-                <TextInput value={draft.delivery.specialInstructions} onChangeText={(v) => setDeliveryField('specialInstructions', v)} placeholder={t('delivery.instructions', { defaultValue: 'Instrucciones especiales (opcional)' })} placeholderTextColor={colors.neutral[400]} style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: colors.neutral[900], marginBottom: 8 }} />
+                <TextInput value={draft.delivery.specialInstructions} onChangeText={(v) => setDeliveryField('specialInstructions', v)} placeholder={t('delivery.instructions', { defaultValue: 'Instrucciones especiales (opcional)' })} placeholderTextColor={mode === 'dark' ? tokens.ink.subtle : colors.neutral[400]} style={{ backgroundColor: mode === 'dark' ? tokens.bg.elev1 : '#fff', borderRadius: 8, borderWidth: 1, borderColor: mode === 'dark' ? tokens.line : colors.neutral[200], paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: tokens.ink.primary, marginBottom: 8 }} />
                 {/* Client accompanies toggle */}
                 <Pressable onPress={() => setDeliveryField('clientAccompanies', !draft.delivery.clientAccompanies)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
                   <Ionicons name={draft.delivery.clientAccompanies ? 'checkbox' : 'square-outline'} size={20} color={draft.delivery.clientAccompanies ? colors.brand.orange : colors.neutral[400]} />
@@ -3464,8 +3502,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
             <Text variant="caption" color="secondary" style={{ marginBottom: 8, fontWeight: '600' }}>{t('ride.payment_method', { defaultValue: 'Método de pago' })}</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
               {(['cash', 'tricicoin', 'mixed'] as const).map((method) => (
-                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[200], backgroundColor: draft.paymentMethod === method ? '#FFF5F0' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : colors.neutral[500] }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
+                <Pressable key={method} onPress={() => handlePaymentMethodChange(method)} style={{ flex: 1, paddingVertical: 14, borderRadius: 10, borderWidth: draft.paymentMethod === method ? 2 : 1, borderColor: draft.paymentMethod === method ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: draft.paymentMethod === method ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : '#fff'), alignItems: 'center', justifyContent: 'center' }}>
+                  <Text variant="caption" style={{ fontWeight: draft.paymentMethod === method ? '700' : '400', color: draft.paymentMethod === method ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[500]) }}>{method === 'cash' ? 'Efectivo' : method === 'tricicoin' ? 'TriciCoin' : 'Mixto'}</Text>
                 </Pressable>
               ))}
             </View>
@@ -3551,6 +3589,9 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 function ReviewingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const mode: 'light' | 'dark' = resolvedScheme;
+  const tokens = mode === 'dark' ? cubanDark : cubanLight;
   const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
 
   /** Format fare based on payment method */
@@ -3679,7 +3720,7 @@ function ReviewingView() {
       {/* UBER-1.1: Recommended service PRIMARY card */}
       <View
         className="border-2 border-primary-500 rounded-xl p-4 mb-3 relative"
-        style={{ shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, backgroundColor: '#fff' }}
+        style={{ shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, backgroundColor: tokens.bg.elev1 }}
       >
         {/* "Recomendado" badge */}
         {selectedSlug === recommendedSlug && (

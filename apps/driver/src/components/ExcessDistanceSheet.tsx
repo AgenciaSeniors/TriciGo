@@ -8,6 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { triggerSelection } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
+import { midnightEmber } from '@tricigo/theme';
 
 interface ExcessDistanceSheetProps {
   rideId: string;
@@ -108,12 +109,22 @@ export function ExcessDistanceSheet({
               onPress={() => handleSelectReason(r.key)}
               accessibilityRole="radio"
               accessibilityState={{ selected: isSelected }}
-              className={`flex-row items-center px-4 py-3 mb-2 rounded-2xl ${isSelected ? 'bg-orange-50 border-2 border-orange-500' : 'bg-neutral-50 border border-neutral-200'}`}
+              className="flex-row items-center px-4 py-3 mb-2 rounded-2xl"
+              style={{
+                backgroundColor: isSelected ? midnightEmber.accent.glow : midnightEmber.map.bg.surface,
+                borderWidth: isSelected ? 2 : 1,
+                borderColor: isSelected ? midnightEmber.accent[500] : midnightEmber.map.line.default,
+              }}
             >
               <View className={`w-5 h-5 rounded-full mr-3 ${isSelected ? 'bg-orange-500' : 'border-2 border-neutral-300'}`}>
                 {isSelected && <View className="w-2 h-2 rounded-full bg-white m-auto mt-[6px]" />}
               </View>
-              <Text variant="body" color="primary" className="flex-1">
+              <Text
+                variant="body"
+                color="primary"
+                style={{ color: midnightEmber.map.text.primary }}
+                className="flex-1"
+              >
                 {r.label}
               </Text>
             </Pressable>

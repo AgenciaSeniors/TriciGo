@@ -17,49 +17,117 @@ export default function PromoLandingPage() {
   const appDeepLink = `tricigo://promo/${code}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'var(--space-lg)',
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--radius-xl)',
+          boxShadow: 'var(--shadow-xl)',
+          maxWidth: 420,
+          width: '100%',
+          padding: 'var(--space-xl)',
+          textAlign: 'center',
+        }}
+      >
         {/* Logo */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">
-            Trici<span className="text-orange-500">Go</span>
+        <div style={{ marginBottom: 'var(--space-lg)' }}>
+          <h1 style={{ fontSize: 'var(--text-3xl)', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+            Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </h1>
         </div>
 
         {/* Discount icon */}
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-          <span className="text-4xl">🏷️</span>
+        <div
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(34, 197, 94, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto var(--space-lg)',
+          }}
+        >
+          <span style={{ fontSize: '2.25rem', lineHeight: 1 }}>🏷️</span>
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 var(--space-sm)' }}>
           ¡Tienes un descuento!
         </h2>
 
-        <p className="text-gray-600 mb-2">
+        <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-sm)', lineHeight: 1.5 }}>
           Aplica este código promocional en tu próximo viaje con TriciGo.
         </p>
 
         {/* Promo code display */}
-        <div className="bg-gray-50 rounded-xl px-6 py-4 mb-6 border-2 border-dashed border-green-400">
-          <p className="text-sm text-gray-500 mb-1">Código promocional</p>
-          <p className="text-2xl font-bold tracking-widest text-green-600">{code}</p>
+        <div
+          style={{
+            background: 'var(--bg-light)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-md) var(--space-lg)',
+            marginBottom: 'var(--space-lg)',
+            border: '2px dashed var(--success)',
+          }}
+        >
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', margin: '0 0 var(--space-xs)' }}>
+            Código promocional
+          </p>
+          <p
+            style={{
+              fontSize: 'var(--text-2xl)',
+              fontWeight: 800,
+              letterSpacing: '0.15em',
+              color: 'var(--success)',
+              fontFamily: 'monospace',
+              margin: 0,
+            }}
+          >
+            {code}
+          </p>
         </div>
 
         {/* Open app button */}
         <a
           href={appDeepLink}
-          className="block w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-6 rounded-2xl mb-3 transition-colors"
+          className="btn-base btn-primary-solid"
+          style={{
+            display: 'flex',
+            width: '100%',
+            padding: 'var(--space-md) var(--space-lg)',
+            borderRadius: 'var(--radius-lg)',
+            fontSize: 'var(--text-lg)',
+            marginBottom: 'var(--space-sm)',
+          }}
         >
           Abrir en TriciGo
         </a>
 
         {/* Fallback text */}
-        <p className="text-sm text-gray-400 mt-4">
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
           ¿No tienes la app? Descárgala desde la App Store o Google Play.
         </p>
 
         {/* Home link */}
-        <Link href="/" className="text-sm text-orange-500 hover:underline mt-4 inline-block">
+        <Link
+          href="/"
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--primary)',
+            textDecoration: 'none',
+            marginTop: 'var(--space-md)',
+            display: 'inline-block',
+          }}
+        >
           Visitar tricigo.com
         </Link>
       </div>

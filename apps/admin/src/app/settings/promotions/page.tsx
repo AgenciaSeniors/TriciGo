@@ -203,12 +203,12 @@ export default function PromotionsPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+        <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_code')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_code')}<span className="text-red-500 ml-1">*</span></label>
               <input
-                className={`w-full px-3 py-2 border rounded-lg text-sm uppercase ${formErrors.code ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm uppercase ${formErrors.code ? 'border-red-500' : 'border-line'}`}
                 placeholder="PROMO2024"
                 value={form.code}
                 onChange={(e) => { setForm((f) => ({ ...f, code: e.target.value })); setFormErrors((prev) => { const { code, ...rest } = prev; return rest; }); }}
@@ -216,9 +216,9 @@ export default function PromotionsPage() {
               {formErrors.code && <p className="text-red-500 text-xs mt-1">{formErrors.code}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_type')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_type')}</label>
               <select
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 value={form.type}
                 onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as PromotionType }))}
               >
@@ -230,10 +230,10 @@ export default function PromotionsPage() {
             <div>
               {form.type === 'percentage_discount' ? (
                 <>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_discount_percent')}<span className="text-red-500 ml-1">*</span></label>
+                  <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_discount_percent')}<span className="text-red-500 ml-1">*</span></label>
                   <input
                     type="number"
-                    className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.discount_percent ? 'border-red-500' : 'border-neutral-300'}`}
+                    className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.discount_percent ? 'border-red-500' : 'border-line'}`}
                     placeholder="10"
                     value={form.discount_percent}
                     onChange={(e) => { setForm((f) => ({ ...f, discount_percent: e.target.value })); setFormErrors((prev) => { const { discount_percent, ...rest } = prev; return rest; }); }}
@@ -244,10 +244,10 @@ export default function PromotionsPage() {
                 </>
               ) : (
                 <>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_amount')}</label>
+                  <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_amount')}</label>
                   <input
                     type="number"
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                     placeholder="50.00"
                     value={form.discount_fixed_cup}
                     onChange={(e) => setForm((f) => ({ ...f, discount_fixed_cup: e.target.value }))}
@@ -259,10 +259,10 @@ export default function PromotionsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_max_uses')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_max_uses')}</label>
               <input
                 type="number"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.max_uses ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.max_uses ? 'border-red-500' : 'border-line'}`}
                 placeholder={t('promotions.unlimited_placeholder')}
                 value={form.max_uses}
                 onChange={(e) => { setForm((f) => ({ ...f, max_uses: e.target.value })); setFormErrors((prev) => { const { max_uses, ...rest } = prev; return rest; }); }}
@@ -270,19 +270,19 @@ export default function PromotionsPage() {
               {formErrors.max_uses && <p className="text-red-500 text-xs mt-1">{formErrors.max_uses}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_from')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_valid_from')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 value={form.valid_from}
                 onChange={(e) => setForm((f) => ({ ...f, valid_from: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('promotions.label_valid_until')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('promotions.label_valid_until')}</label>
               <input
                 type="datetime-local"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.valid_until ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.valid_until ? 'border-red-500' : 'border-line'}`}
                 value={form.valid_until}
                 onChange={(e) => { setForm((f) => ({ ...f, valid_until: e.target.value })); setFormErrors((prev) => { const { valid_until, ...rest } = prev; return rest; }); }}
               />
@@ -299,7 +299,7 @@ export default function PromotionsPage() {
             </button>
             <button
               onClick={() => { setShowCreate(false); setForm(emptyForm); setFormErrors({}); }}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
             >
               {t('common.cancel')}
             </button>
@@ -318,7 +318,7 @@ export default function PromotionsPage() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
                 ? 'bg-primary-500 text-white'
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
+                : 'bg-surface-elevated text-ink-muted border-line hover:border-line-strong'
             }`}
           >
             {t(tab.labelKey)}
@@ -327,40 +327,40 @@ export default function PromotionsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_code')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_type')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_discount')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_uses')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_valid_until')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('promotions.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_code')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_type')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_discount')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_uses')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_valid_until')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('promotions.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-neutral-400">
+                <td colSpan={7} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('promotions.no_promotions')}
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={p.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-3 font-mono font-medium">{p.code}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-neutral-100 text-neutral-700">
+                    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-surface-sunken text-ink-muted">
                       {TYPE_LABEL_KEY[p.type] ? t(TYPE_LABEL_KEY[p.type]!) : p.type}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium">{formatDiscount(p)}</td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-ink-muted">
                     {p.current_uses} / {p.max_uses ?? '∞'}
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-ink-muted">
                     {p.valid_until
                       ? formatAdminDate(p.valid_until)
                       : t('promotions.no_limit')}
@@ -399,18 +399,18 @@ export default function PromotionsPage() {
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
           aria-label={t('common.previous')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
+          className="px-4 py-2 rounded-lg text-sm border border-line text-ink disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
+        <span className="text-sm text-ink-muted" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           aria-label={t('common.next')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
+          className="px-4 py-2 rounded-lg text-sm border border-line text-ink disabled:opacity-30"
         >
           {t('common.next')}
         </button>

@@ -150,7 +150,7 @@ export default function TrustedContactsPage() {
       </p>
 
       {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
+        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
           <p style={{ color: '#c53030', margin: 0, fontSize: '0.9rem' }}>{error}</p>
           <button onClick={() => { setError(null); loadContacts(); }} style={{ marginTop: '0.5rem', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
             {t('common.retry', { defaultValue: 'Reintentar' })}
@@ -206,7 +206,7 @@ export default function TrustedContactsPage() {
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })}</span>
                   <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
                     <input type="checkbox" checked={contact.auto_share} onChange={() => handleToggleAutoShare(contact)} style={{ opacity: 0, width: 0, height: 0 }} />
-                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.auto_share ? 'var(--primary)' : '#ccc', transition: 'background 0.2s' }}>
+                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.auto_share ? 'var(--primary)' : 'var(--border)', transition: 'background 0.2s' }}>
                       <span style={{ position: 'absolute', height: 18, width: 18, left: contact.auto_share ? 22 : 3, bottom: 3, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                     </span>
                   </label>
@@ -216,7 +216,7 @@ export default function TrustedContactsPage() {
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.mark_emergency', { defaultValue: 'Contacto de emergencia' })}</span>
                   <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
                     <input type="checkbox" checked={contact.is_emergency} onChange={() => handleToggleEmergency(contact)} style={{ opacity: 0, width: 0, height: 0 }} />
-                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.is_emergency ? '#e53e3e' : '#ccc', transition: 'background 0.2s' }}>
+                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.is_emergency ? '#e53e3e' : 'var(--border)', transition: 'background 0.2s' }}>
                       <span style={{ position: 'absolute', height: 18, width: 18, left: contact.is_emergency ? 22 : 3, bottom: 3, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                     </span>
                   </label>

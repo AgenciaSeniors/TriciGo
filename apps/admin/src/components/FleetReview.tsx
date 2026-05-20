@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<FleetMemberStatus, string> = {
   rejected: 'bg-red-100 text-red-700',
   pending_signup: 'bg-amber-100 text-amber-700',
   active: 'bg-green-100 text-green-800',
-  inactive: 'bg-neutral-200 text-neutral-600',
+  inactive: 'bg-surface-sunken text-ink-muted',
 };
 
 const STATUS_LABELS: Record<FleetMemberStatus, string> = {
@@ -104,11 +104,11 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
   };
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Cargando flota…</p>;
+    return <p className="text-sm text-ink-muted">Cargando flota…</p>;
   }
 
   if (!fleet) {
-    return <p className="text-sm text-neutral-500">Esta cuenta corporativa todavía no tiene flota registrada.</p>;
+    return <p className="text-sm text-ink-muted">Esta cuenta corporativa todavía no tiene flota registrada.</p>;
   }
 
   return (
@@ -128,13 +128,13 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
 
       {/* Members table */}
       <div>
-        <h4 className="text-sm font-medium text-neutral-700 mb-2">Conductores ({members.length})</h4>
+        <h4 className="text-sm font-medium text-ink mb-2">Conductores ({members.length})</h4>
         {members.length === 0 ? (
-          <p className="text-sm text-neutral-400">Sin conductores en la solicitud.</p>
+          <p className="text-sm text-ink-subtle">Sin conductores en la solicitud.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-neutral-500">
+              <tr className="border-b text-left text-ink-muted">
                 <th className="pb-2 pr-2">Nombre</th>
                 <th className="pb-2 pr-2">Teléfono</th>
                 <th className="pb-2 pr-2">Licencia</th>
@@ -147,10 +147,10 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
                 <tr key={m.id} className="border-b last:border-0 align-top">
                   <td className="py-2 pr-2">
                     <div className="font-medium">{m.driver_name}</div>
-                    {m.driver_email && <div className="text-xs text-neutral-500">{m.driver_email}</div>}
+                    {m.driver_email && <div className="text-xs text-ink-muted">{m.driver_email}</div>}
                   </td>
-                  <td className="py-2 pr-2 text-neutral-600">{m.driver_phone}</td>
-                  <td className="py-2 pr-2 text-neutral-600">
+                  <td className="py-2 pr-2 text-ink-muted">{m.driver_phone}</td>
+                  <td className="py-2 pr-2 text-ink-muted">
                     {m.driver_license_number ?? '—'}
                     {m.license_doc_path && (
                       <span className="ml-2 text-[10px] uppercase tracking-wide text-green-700">doc ✓</span>
@@ -194,7 +194,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
       {/* Reject modal */}
       {rejectingId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div role="dialog" aria-modal="true" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Rechazar conductor</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
@@ -205,7 +205,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
             />
             <div className="flex gap-2 justify-end">
               <button
-                className="px-4 py-2 text-sm bg-neutral-100 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-sunken text-ink rounded-lg"
                 onClick={() => { setRejectingId(null); setRejectReason(''); }}
               >
                 Cancelar
@@ -227,9 +227,9 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
 
 function Meta({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-neutral-50 border rounded-lg p-3">
-      <div className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="font-medium text-neutral-800 mt-0.5">{value}</div>
+    <div className="bg-surface-sunken border rounded-lg p-3">
+      <div className="text-[11px] uppercase tracking-wide text-ink-muted">{label}</div>
+      <div className="font-medium text-ink mt-0.5">{value}</div>
     </div>
   );
 }

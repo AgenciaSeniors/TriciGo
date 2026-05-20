@@ -144,7 +144,7 @@ export default function RideDetailPage() {
 
         {/* Ride detail */}
         {!loading && ride && (() => {
-          const statusInfo = STATUS_CONFIG[ride.status] ?? { label: ride.status, bg: '#f3f4f6', color: 'var(--text-secondary)' };
+          const statusInfo = STATUS_CONFIG[ride.status] ?? { label: ride.status, bg: 'var(--bg-hover)', color: 'var(--text-secondary)' };
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

@@ -66,11 +66,11 @@ export default function SafetyPage() {
 
       {/* SOS Info Section */}
       <div style={{
-        background: '#fef2f2',
+        background: 'rgba(239,68,68,0.10)',
         borderRadius: '1rem',
         padding: '1.5rem',
         marginBottom: '2rem',
-        border: '1px solid #fecaca',
+        border: '1px solid rgba(239,68,68,0.3)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
           <div style={{
@@ -91,7 +91,7 @@ export default function SafetyPage() {
           </div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>{t('web.sos_button', { defaultValue: 'Boton SOS' })}</h2>
         </div>
-        <p style={{ fontSize: '0.9rem', color: '#744210', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
           {t('web.sos_description', { defaultValue: 'Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real. Tu seguridad es nuestra prioridad.' })}
         </p>
       </div>
@@ -197,10 +197,10 @@ export default function SafetyPage() {
 
       {/* Safety Tips */}
       <div style={{
-        background: '#f0fdf4',
+        background: 'rgba(34,197,94,0.10)',
         borderRadius: '1rem',
         padding: '1.25rem',
-        border: '1px solid #bbf7d0',
+        border: '1px solid rgba(34,197,94,0.3)',
       }}>
         <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.75rem', color: '#166534' }}>
           {t('web.safety_tips', { defaultValue: 'Consejos de seguridad' })}

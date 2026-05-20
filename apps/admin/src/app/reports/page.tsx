@@ -171,7 +171,7 @@ export default function ReportsPage() {
   // KPI cards
   const kpiCards = [
     { label: t('reports.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-primary-500', desc: t('reports.desc_active_rides') },
-    { label: t('reports.rides_today'), value: metrics?.total_rides_today ?? 0, color: 'text-neutral-900', desc: t('reports.desc_rides_today') },
+    { label: t('reports.rides_today'), value: metrics?.total_rides_today ?? 0, color: 'text-ink', desc: t('reports.desc_rides_today') },
     { label: t('reports.online_drivers'), value: metrics?.online_drivers ?? 0, color: 'text-green-600', desc: t('reports.desc_online_drivers') },
     { label: t('reports.revenue_today'), value: formatCUP(metrics?.total_revenue_today ?? 0), color: 'text-primary-500', desc: t('reports.desc_revenue_today'), isFormatted: true },
     { label: t('reports.pending_verifications'), value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600', desc: t('reports.desc_pending_verifications') },
@@ -404,8 +404,8 @@ export default function ReportsPage() {
           </div>
 
           {/* Revenue Trend */}
-          <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.revenue_trend')}</h2>
+          <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
+            <h2 className="text-lg font-bold text-ink mb-4">{t('reports.revenue_trend')}</h2>
             <div className="flex items-end gap-[2px] h-40">
               {ridesByDay.map((d, i) => (
                 <div
@@ -420,7 +420,7 @@ export default function ReportsPage() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-between mt-2 text-xs text-neutral-400">
+            <div className="flex justify-between mt-2 text-xs text-ink-subtle">
               <span>{ridesByDay[0]?.day ? new Date(ridesByDay[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' }) : ''}</span>
               <span>{ridesByDay[ridesByDay.length - 1]?.day ? new Date(ridesByDay[ridesByDay.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' }) : ''}</span>
             </div>
@@ -428,9 +428,9 @@ export default function ReportsPage() {
 
           {/* Revenue Forecast */}
           {forecastData.length > 0 && (
-            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+            <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-neutral-800">{t('reports.revenue_forecast')}</h2>
+                <h2 className="text-lg font-bold text-ink">{t('reports.revenue_forecast')}</h2>
                 <div className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">
                   {t('reports.prediction_next_7_days')}: {forecastTotal.toFixed(1)} TRC
                 </div>
@@ -458,7 +458,7 @@ export default function ReportsPage() {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between mt-2 text-xs text-neutral-400">
+              <div className="flex justify-between mt-2 text-xs text-ink-subtle">
                 <span>
                   {forecastData[0]?.day
                     ? new Date(forecastData[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' })
@@ -472,7 +472,7 @@ export default function ReportsPage() {
                 </span>
               </div>
               {/* Legend */}
-              <div className="flex items-center gap-4 mt-3 text-xs text-neutral-500">
+              <div className="flex items-center gap-4 mt-3 text-xs text-ink-subtle">
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm bg-primary-500/80" />
                   <span>{t('reports.actual')}</span>
@@ -494,18 +494,18 @@ export default function ReportsPage() {
           {/* Two-column grid: Service Type + Payment Method */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Rides by Service Type */}
-            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-              <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.rides_by_service')}</h2>
+            <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+              <h2 className="text-lg font-bold text-ink mb-4">{t('reports.rides_by_service')}</h2>
               <div className="space-y-3">
                 {ridesByService.map((s, i) => {
                   const pct = Math.round((s.count / serviceTotal) * 100);
                   return (
                     <div key={s.service_type}>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="text-neutral-700 font-medium">{s.service_type}</span>
-                        <span className="text-neutral-500">{s.count} ({pct}%)</span>
+                        <span className="text-ink font-medium">{s.service_type}</span>
+                        <span className="text-ink-muted">{s.count} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-neutral-100 rounded-full h-2.5">
+                      <div className="w-full bg-surface-sunken rounded-full h-2.5">
                         <div
                           className={`h-2.5 rounded-full ${BAR_COLORS[i % BAR_COLORS.length]}`}
                           style={{ width: `${pct}%` }}
@@ -515,14 +515,14 @@ export default function ReportsPage() {
                   );
                 })}
                 {ridesByService.length === 0 && (
-                  <p className="text-sm text-neutral-400">{t('reports.no_data')}</p>
+                  <p className="text-sm text-ink-subtle">{t('reports.no_data')}</p>
                 )}
               </div>
             </section>
 
             {/* Rides by Payment Method */}
-            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-              <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.rides_by_payment')}</h2>
+            <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+              <h2 className="text-lg font-bold text-ink mb-4">{t('reports.rides_by_payment')}</h2>
               <div className="space-y-3">
                 {ridesByPayment.map((p, i) => {
                   const pct = Math.round((p.count / paymentTotal) * 100);
@@ -534,10 +534,10 @@ export default function ReportsPage() {
                   return (
                     <div key={p.payment_method}>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="text-neutral-700 font-medium">{label}</span>
-                        <span className="text-neutral-500">{p.count} ({pct}%) — {formatCUP(p.revenue)}</span>
+                        <span className="text-ink font-medium">{label}</span>
+                        <span className="text-ink-muted">{p.count} ({pct}%) — {formatCUP(p.revenue)}</span>
                       </div>
-                      <div className="w-full bg-neutral-100 rounded-full h-2.5">
+                      <div className="w-full bg-surface-sunken rounded-full h-2.5">
                         <div
                           className={`h-2.5 rounded-full ${BAR_COLORS[i % BAR_COLORS.length]}`}
                           style={{ width: `${pct}%` }}
@@ -547,15 +547,15 @@ export default function ReportsPage() {
                   );
                 })}
                 {ridesByPayment.length === 0 && (
-                  <p className="text-sm text-neutral-400">{t('reports.no_data')}</p>
+                  <p className="text-sm text-ink-subtle">{t('reports.no_data')}</p>
                 )}
               </div>
             </section>
           </div>
 
           {/* Peak Hours */}
-          <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.peak_hours')}</h2>
+          <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
+            <h2 className="text-lg font-bold text-ink mb-4">{t('reports.peak_hours')}</h2>
             <div className="flex items-end gap-1 h-32">
               {Array.from({ length: 24 }, (_, h) => {
                 const data = peakHours.find((p) => p.hour === h);
@@ -576,7 +576,7 @@ export default function ReportsPage() {
                 );
               })}
             </div>
-            <div className="flex justify-between mt-2 text-xs text-neutral-400">
+            <div className="flex justify-between mt-2 text-xs text-ink-subtle">
               <span>0h</span>
               <span>6h</span>
               <span>12h</span>
@@ -588,32 +588,32 @@ export default function ReportsPage() {
           {/* Two-column: Top Drivers + Driver Utilization */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {/* Top Drivers */}
-            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 lg:col-span-2">
-              <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.top_drivers')}</h2>
+            <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line lg:col-span-2">
+              <h2 className="text-lg font-bold text-ink mb-4">{t('reports.top_drivers')}</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-neutral-100">
-                      <th className="text-left py-2 text-neutral-500 font-medium">#</th>
-                      <th className="text-left py-2 text-neutral-500 font-medium">{t('drivers.col_name')}</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">{t('reports.rides_label')}</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">{t('drivers.col_rating')}</th>
-                      <th className="text-right py-2 text-neutral-500 font-medium">{t('reports.revenue_label')}</th>
+                    <tr className="border-b border-line">
+                      <th className="text-left py-2 text-ink-muted font-medium">#</th>
+                      <th className="text-left py-2 text-ink-muted font-medium">{t('drivers.col_name')}</th>
+                      <th className="text-right py-2 text-ink-muted font-medium">{t('reports.rides_label')}</th>
+                      <th className="text-right py-2 text-ink-muted font-medium">{t('drivers.col_rating')}</th>
+                      <th className="text-right py-2 text-ink-muted font-medium">{t('reports.revenue_label')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {topDrivers.map((d, i) => (
-                      <tr key={d.driver_id} className="border-b border-neutral-50">
-                        <td className="py-2 text-neutral-400">{i + 1}</td>
-                        <td className="py-2 text-neutral-900 font-medium">{d.driver_name}</td>
-                        <td className="py-2 text-right text-neutral-600">{d.rides_count}</td>
-                        <td className="py-2 text-right text-neutral-600">{Number(d.rating).toFixed(1)}</td>
-                        <td className="py-2 text-right text-neutral-600">{formatCUP(d.revenue)}</td>
+                      <tr key={d.driver_id} className="border-b border-line">
+                        <td className="py-2 text-ink-subtle">{i + 1}</td>
+                        <td className="py-2 text-ink font-medium">{d.driver_name}</td>
+                        <td className="py-2 text-right text-ink-muted">{d.rides_count}</td>
+                        <td className="py-2 text-right text-ink-muted">{Number(d.rating).toFixed(1)}</td>
+                        <td className="py-2 text-right text-ink-muted">{formatCUP(d.revenue)}</td>
                       </tr>
                     ))}
                     {topDrivers.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-neutral-400">{t('reports.no_data')}</td>
+                        <td colSpan={5} className="py-8 text-center text-ink-subtle">{t('reports.no_data')}</td>
                       </tr>
                     )}
                   </tbody>
@@ -622,8 +622,8 @@ export default function ReportsPage() {
             </section>
 
             {/* Driver Utilization */}
-            <section className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-              <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.driver_utilization')}</h2>
+            <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+              <h2 className="text-lg font-bold text-ink mb-4">{t('reports.driver_utilization')}</h2>
               {utilization && (
                 <div className="space-y-4">
                   {/* Stacked bar */}
@@ -656,28 +656,28 @@ export default function ReportsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-primary-500" />
-                        <span className="text-neutral-600">{t('reports.util_busy')}</span>
+                        <span className="text-ink-muted">{t('reports.util_busy')}</span>
                       </div>
                       <span className="font-medium">{utilization.busy}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-amber-400" />
-                        <span className="text-neutral-600">{t('reports.util_idle')}</span>
+                        <span className="text-ink-muted">{t('reports.util_idle')}</span>
                       </div>
                       <span className="font-medium">{utilization.idle}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-neutral-300" />
-                        <span className="text-neutral-600">{t('reports.util_offline')}</span>
+                        <span className="text-ink-muted">{t('reports.util_offline')}</span>
                       </div>
                       <span className="font-medium">{utilization.offline}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-neutral-100">
-                    <p className="text-xs text-neutral-400">
+                  <div className="pt-2 border-t border-line">
+                    <p className="text-xs text-ink-subtle">
                       {t('reports.total_online')}: <strong>{utilization.online}</strong>
                     </p>
                   </div>
@@ -688,19 +688,19 @@ export default function ReportsPage() {
 
           {/* Wallet section */}
           <section className="mb-6">
-            <h2 className="text-lg font-bold text-neutral-800 mb-4">{t('reports.section_finance')}</h2>
+            <h2 className="text-lg font-bold text-ink mb-4">{t('reports.section_finance')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-                <p className="text-sm text-neutral-500 mb-1">{t('reports.circulation')}</p>
+              <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+                <p className="text-sm text-ink-muted mb-1">{t('reports.circulation')}</p>
                 <p className="text-2xl font-bold text-primary-500">{formatTriciCoin(walletStats?.total_in_circulation ?? 0)}</p>
               </div>
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-                <p className="text-sm text-neutral-500 mb-1">{t('reports.pending_redemptions')}</p>
+              <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+                <p className="text-sm text-ink-muted mb-1">{t('reports.pending_redemptions')}</p>
                 <p className="text-2xl font-bold text-yellow-600">{walletStats?.pending_redemptions_count ?? 0}</p>
               </div>
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
-                <p className="text-sm text-neutral-500 mb-1">{t('reports.pending_amount')}</p>
-                <p className="text-2xl font-bold text-neutral-900">{formatTriciCoin(walletStats?.pending_redemptions_amount ?? 0)}</p>
+              <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
+                <p className="text-sm text-ink-muted mb-1">{t('reports.pending_amount')}</p>
+                <p className="text-2xl font-bold text-ink">{formatTriciCoin(walletStats?.pending_redemptions_amount ?? 0)}</p>
               </div>
             </div>
           </section>

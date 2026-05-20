@@ -84,53 +84,53 @@ export default function ExchangeRatePage() {
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('exchange_rate.title')}</h1>
-      <p className="text-neutral-500 mb-6">{t('exchange_rate.subtitle')}</p>
+      <p className="text-ink-muted mb-6">{t('exchange_rate.subtitle')}</p>
 
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <p className="text-ink-subtle">{t('common.loading')}</p>
       ) : (
         <>
           {/* Current Rate Card */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+          <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
             <h2 className="text-lg font-bold mb-4">{t('exchange_rate.current_rate')}</h2>
             {currentRate ? (
               <div className="flex items-center gap-6">
                 <div className="text-4xl font-bold text-primary-600">
                   {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP
                 </div>
-                <div className="text-neutral-500">
+                <div className="text-ink-muted">
                   <p className="text-sm">1 USD = {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP</p>
                   <p className="text-sm">1 TRC = {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP</p>
-                  <p className="text-xs text-neutral-400 mt-1">
+                  <p className="text-xs text-ink-subtle mt-1">
                     {t('exchange_rate.source')}: {currentRate.source === 'eltoque_api' ? 'ElToque API' : t('exchange_rate.manual')}
                   </p>
-                  <p className="text-xs text-neutral-400">
+                  <p className="text-xs text-ink-subtle">
                     {t('exchange_rate.updated_at')}: {formatDate(currentRate.fetched_at)}
                   </p>
                 </div>
               </div>
             ) : (
-              <p className="text-neutral-400">{t('exchange_rate.no_rate')}</p>
+              <p className="text-ink-subtle">{t('exchange_rate.no_rate')}</p>
             )}
           </div>
 
           {/* Manual Override */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+          <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
             <h2 className="text-lg font-bold mb-4">{t('exchange_rate.manual_override')}</h2>
-            <p className="text-sm text-neutral-500 mb-4">{t('exchange_rate.manual_override_desc')}</p>
+            <p className="text-sm text-ink-muted mb-4">{t('exchange_rate.manual_override_desc')}</p>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-neutral-600 whitespace-nowrap">1 USD =</span>
+              <span className="text-sm text-ink-muted whitespace-nowrap">1 USD =</span>
               <input
                 type="number"
                 step="1"
                 min="1"
                 aria-label={t('exchange_rate.manual_rate_input', { defaultValue: 'Exchange rate in CUP per USD' })}
-                className="w-32 px-3 py-2 border border-neutral-300 rounded-lg text-sm text-right font-mono"
+                className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm text-right font-mono"
                 placeholder="520"
                 value={manualRate}
                 onChange={(e) => setManualRate(e.target.value)}
               />
-              <span className="text-sm text-neutral-600">CUP</span>
+              <span className="text-sm text-ink-muted">CUP</span>
               <button
                 onClick={handleSetManualRate}
                 disabled={saving || !manualRate}
@@ -153,25 +153,25 @@ export default function ExchangeRatePage() {
           </div>
 
           {/* Rate History */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100">
+          <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
             <h2 className="text-lg font-bold mb-4">{t('exchange_rate.history')}</h2>
             {history.length === 0 ? (
-              <p className="text-neutral-400 text-center py-4">{t('exchange_rate.no_history')}</p>
+              <p className="text-ink-subtle text-center py-4">{t('exchange_rate.no_history')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-neutral-200 text-left">
-                      <th className="py-2 px-3 font-medium text-neutral-600">{t('exchange_rate.col_date')}</th>
-                      <th className="py-2 px-3 font-medium text-neutral-600">{t('exchange_rate.col_rate')}</th>
-                      <th className="py-2 px-3 font-medium text-neutral-600">{t('exchange_rate.col_source')}</th>
-                      <th className="py-2 px-3 font-medium text-neutral-600">{t('exchange_rate.col_status')}</th>
+                    <tr className="border-b border-line text-left">
+                      <th className="py-2 px-3 font-medium text-ink-muted">{t('exchange_rate.col_date')}</th>
+                      <th className="py-2 px-3 font-medium text-ink-muted">{t('exchange_rate.col_rate')}</th>
+                      <th className="py-2 px-3 font-medium text-ink-muted">{t('exchange_rate.col_source')}</th>
+                      <th className="py-2 px-3 font-medium text-ink-muted">{t('exchange_rate.col_status')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {history.map((rate) => (
-                      <tr key={rate.id} className="border-b border-neutral-100 hover:bg-neutral-50">
-                        <td className="py-2 px-3 text-neutral-700">{formatDate(rate.fetched_at)}</td>
+                      <tr key={rate.id} className="border-b border-line hover:bg-surface-sunken">
+                        <td className="py-2 px-3 text-ink-muted">{formatDate(rate.fetched_at)}</td>
                         <td className="py-2 px-3 font-mono font-medium">
                           {Number(rate.usd_cup_rate).toLocaleString('es-CU')} CUP
                         </td>

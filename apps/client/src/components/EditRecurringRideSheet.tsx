@@ -100,7 +100,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
 
       {/* Route (read-only) */}
       {ride && (
-        <View className="mb-4 bg-neutral-50 rounded-xl p-3">
+        <View className="mb-4 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-3">
           <View className="flex-row items-center mb-1">
             <View className="w-2.5 h-2.5 rounded-full bg-primary-500 mr-2" />
             <Text variant="bodySmall" numberOfLines={1} className="flex-1">{ride.pickup_address}</Text>
@@ -122,10 +122,10 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
               key={day}
               onPress={() => toggleDay(day)}
               className={`w-9 h-9 rounded-full items-center justify-center ${
-                isActive ? 'bg-primary-500' : 'bg-neutral-100'
+                isActive ? 'bg-primary-500' : 'bg-neutral-100 dark:bg-neutral-800'
               }`}
             >
-              <Text className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-neutral-500'}`}>
+              <Text className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-neutral-500 dark:text-neutral-400'}`}>
                 {t(`recurring.${DAY_KEYS[day - 1]}`)}
               </Text>
             </Pressable>
@@ -138,7 +138,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
       {Platform.OS === 'android' && !showTimePicker && (
         <Pressable
           onPress={() => setShowTimePicker(true)}
-          className="bg-neutral-100 rounded-xl px-4 py-3 flex-row items-center mb-4"
+          className="bg-neutral-100 dark:bg-neutral-800 rounded-xl px-4 py-3 flex-row items-center mb-4"
         >
           <Ionicons name="time-outline" size={18} color={colors.neutral[500]} />
           <Text variant="body" className="ml-2">
@@ -166,7 +166,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
             key={slug}
             onPress={() => setServiceType(slug)}
             className={`flex-1 flex-row items-center justify-center py-2.5 rounded-xl border ${
-              serviceType === slug ? 'bg-primary-50 border-primary-500' : 'bg-neutral-50 border-neutral-200'
+              serviceType === slug ? 'bg-primary-50 border-primary-500' : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
             }`}
           >
             <Ionicons
@@ -176,7 +176,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
             />
             <Text
               variant="caption"
-              className={`ml-1.5 font-medium ${serviceType === slug ? 'text-primary-600' : 'text-neutral-600'}`}
+              className={`ml-1.5 font-medium ${serviceType === slug ? 'text-primary-600' : 'text-neutral-600 dark:text-neutral-300'}`}
             >
               {t(`service_type.${slug}` as string, { defaultValue: slug })}
             </Text>
@@ -192,7 +192,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
             key={key}
             onPress={() => setPaymentMethod(key)}
             className={`flex-1 flex-row items-center justify-center py-2.5 rounded-xl border ${
-              paymentMethod === key ? 'bg-primary-50 border-primary-500' : 'bg-neutral-50 border-neutral-200'
+              paymentMethod === key ? 'bg-primary-50 border-primary-500' : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
             }`}
           >
             <Ionicons
@@ -202,7 +202,7 @@ export function EditRecurringRideSheet({ ride, visible, onClose, onUpdated }: Ed
             />
             <Text
               variant="caption"
-              className={`ml-1.5 font-medium ${paymentMethod === key ? 'text-primary-600' : 'text-neutral-600'}`}
+              className={`ml-1.5 font-medium ${paymentMethod === key ? 'text-primary-600' : 'text-neutral-600 dark:text-neutral-300'}`}
             >
               {key === 'tricicoin' ? 'TriciCoin' : t('common:profile.payment_cash')}
             </Text>

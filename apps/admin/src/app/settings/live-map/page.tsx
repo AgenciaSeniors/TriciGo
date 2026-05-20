@@ -139,13 +139,13 @@ export default function LiveMapPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-bold">{t('live_map.title', { defaultValue: 'Mapa en Tiempo Real' })}</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-muted">
             {drivers.length} {t('live_map.drivers_online', { defaultValue: 'conductores en línea' })}
             {lastUpdated && ` · ${t('surge_dashboard.last_updated')}: ${lastUpdated.toLocaleTimeString()}`}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-neutral-500">
+          <label className="flex items-center gap-2 text-sm text-ink-muted">
             <input
               type="checkbox"
               checked={autoRefresh}
@@ -166,13 +166,13 @@ export default function LiveMapPage() {
       {/* Stats by vehicle type */}
       <div className="flex gap-3 mb-4">
         {Object.entries(onlineByType).map(([type, count]) => (
-          <div key={type} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100">
+          <div key={type} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-sunken">
             <span
               className="w-3 h-3 rounded-full"
               style={{ background: VEHICLE_COLORS[type] ?? '#999' }}
             />
             <span className="text-sm font-medium capitalize">{type}</span>
-            <span className="text-sm text-neutral-500">{count}</span>
+            <span className="text-sm text-ink-muted">{count}</span>
           </div>
         ))}
       </div>

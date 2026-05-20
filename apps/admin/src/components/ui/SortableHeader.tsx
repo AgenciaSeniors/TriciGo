@@ -14,7 +14,7 @@ export function SortableHeader({ label, sortKey, currentSortKey, sortDirection, 
   const isActive = currentSortKey === sortKey;
   return (
     <th
-      className={`cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors ${className}`}
+      className={`cursor-pointer select-none hover:bg-surface-sunken transition-colors ${className}`}
       onClick={() => onSort(sortKey)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort(sortKey); } }}
       role="button"

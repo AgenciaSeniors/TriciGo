@@ -185,10 +185,10 @@ export default function DriversPage() {
       <header className="mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">
               {t('drivers.title', { defaultValue: 'Conductores' })}
             </h1>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-muted">
               {sortedData.length} {t('drivers.in_page', { defaultValue: 'en esta página' })}
               {pendingCount > 0 && <> · <span className="text-yellow-700">{pendingCount} {t('drivers.pending_label', { defaultValue: 'pendientes' })}</span></>}
               {onlineCount > 0 && <> · <span className="text-green-700">{onlineCount} {t('drivers.online_label', { defaultValue: 'en línea' })}</span></>}
@@ -197,7 +197,7 @@ export default function DriversPage() {
           <button
             onClick={handleExport}
             disabled={sortedData.length === 0}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-line bg-surface-elevated text-sm font-medium text-ink hover:bg-surface-sunken hover:border-line-strong disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             <Download size={14} />
             {t('common.export_csv', { defaultValue: 'Exportar CSV' })}
@@ -208,20 +208,20 @@ export default function DriversPage() {
       {/* ─── Unified filter bar ─────────────────────────────── */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             placeholder={t('filters.search_driver_placeholder', { defaultValue: 'Buscar nombre o teléfono...' })}
-            className="w-full h-9 pl-9 pr-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full h-9 pl-9 pr-3 rounded-md border border-line bg-surface text-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
 
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setPage(0); }}
-          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="h-9 px-3 rounded-md border border-line bg-surface text-sm text-ink hover:border-line-strong focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">{t('drivers.filter_all', { defaultValue: 'Todos los estados' })}</option>
           <option value="pending_verification">{t('drivers.status_pending', { defaultValue: 'Pendiente' })}</option>
@@ -234,7 +234,7 @@ export default function DriversPage() {
         <select
           value={vehicleType}
           onChange={(e) => { setVehicleType(e.target.value); setPage(0); }}
-          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="h-9 px-3 rounded-md border border-line bg-surface text-sm text-ink hover:border-line-strong focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="">{t('filters.all_vehicles', { defaultValue: 'Todos los vehículos' })}</option>
           <option value="triciclo">{t('drivers.type_triciclo', { defaultValue: 'Triciclo' })}</option>
@@ -245,7 +245,7 @@ export default function DriversPage() {
         <select
           value={selectedCity}
           onChange={(e) => { setSelectedCity(e.target.value); setPage(0); }}
-          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="h-9 px-3 rounded-md border border-line bg-surface text-sm text-ink hover:border-line-strong focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="">{t('cities.all_cities', { defaultValue: 'Todas las ciudades' })}</option>
           {cities.map((c) => (
@@ -256,7 +256,7 @@ export default function DriversPage() {
         <select
           value={ratingMin}
           onChange={(e) => { setRatingMin(e.target.value); setPage(0); }}
-          className="h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm text-neutral-700 hover:border-neutral-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="h-9 px-3 rounded-md border border-line bg-surface text-sm text-ink hover:border-line-strong focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="">{t('filters.any_rating', { defaultValue: 'Cualquier rating' })}</option>
           <option value="3.0">3.0+</option>
@@ -267,7 +267,7 @@ export default function DriversPage() {
         {hasFilters && (
           <button
             onClick={clearFilters}
-            className="inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm text-neutral-600 hover:text-neutral-900 transition-colors"
+            className="inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm text-ink-muted hover:text-ink transition-colors"
           >
             <X size={14} />
             {t('filters.clear_all', { defaultValue: 'Limpiar' })}
@@ -276,16 +276,16 @@ export default function DriversPage() {
       </div>
 
       {/* ─── Desktop table ──────────────────────────────────── */}
-      <div className="hidden md:block bg-white rounded-xl border border-neutral-200/80 overflow-hidden">
+      <div className="hidden md:block bg-surface-elevated rounded-xl border border-line overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full" aria-label={t('drivers.title')}>
             <thead>
-              <tr className="border-b border-neutral-100 bg-neutral-50/50">
+              <tr className="border-b border-line bg-surface-sunken/50">
                 <th className="w-14"></th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-muted uppercase tracking-wider">
                   {t('drivers.col_name', { defaultValue: 'Conductor' })}
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-medium text-ink-muted uppercase tracking-wider">
                   {t('drivers.col_vehicle', { defaultValue: 'Vehículo' })}
                 </th>
                 <SortableHeader
@@ -294,7 +294,7 @@ export default function DriversPage() {
                   currentSortKey={sortKey as string | null}
                   sortDirection={sortDirection}
                   onSort={toggleSort as (key: string) => void}
-                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                  className="text-left px-4 py-3 text-xs font-medium text-ink-muted uppercase tracking-wider"
                 />
                 <SortableHeader
                   label={t('drivers.col_rating', { defaultValue: 'Rating' })}
@@ -302,7 +302,7 @@ export default function DriversPage() {
                   currentSortKey={sortKey as string | null}
                   sortDirection={sortDirection}
                   onSort={toggleSort as (key: string) => void}
-                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                  className="text-left px-4 py-3 text-xs font-medium text-ink-muted uppercase tracking-wider"
                 />
                 <SortableHeader
                   label={t('drivers.col_registered', { defaultValue: 'Registrado' })}
@@ -310,7 +310,7 @@ export default function DriversPage() {
                   currentSortKey={sortKey as string | null}
                   sortDirection={sortDirection}
                   onSort={toggleSort as (key: string) => void}
-                  className="text-left px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider"
+                  className="text-left px-4 py-3 text-xs font-medium text-ink-muted uppercase tracking-wider"
                 />
                 <th className="w-10"></th>
               </tr>
@@ -322,8 +322,8 @@ export default function DriversPage() {
                 <tr>
                   <td colSpan={7} className="px-4 py-16">
                     <div className="flex flex-col items-center text-center gap-2">
-                      <Users size={28} className="text-neutral-300" />
-                      <p className="text-sm font-medium text-neutral-700">
+                      <Users size={28} className="text-ink-subtle" />
+                      <p className="text-sm font-medium text-ink">
                         {t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}
                       </p>
                       {hasFilters && (
@@ -343,7 +343,7 @@ export default function DriversPage() {
                     <tr
                       key={driver.id}
                       onClick={() => router.push(`/drivers/${driver.id}`)}
-                      className="group h-14 border-b border-neutral-50 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors border-l-2 border-l-transparent hover:border-l-primary-500"
+                      className="group h-14 border-b border-line last:border-0 hover:bg-surface-sunken cursor-pointer transition-colors border-l-2 border-l-transparent hover:border-l-primary-500"
                     >
                       <td className="pl-4">
                         <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${status.gradient} flex items-center justify-center text-white text-xs font-semibold`}>
@@ -351,22 +351,22 @@ export default function DriversPage() {
                         </div>
                       </td>
                       <td className="px-4">
-                        <div className="font-medium text-sm text-neutral-900 leading-tight">
+                        <div className="font-medium text-sm text-ink leading-tight">
                           {driver.users?.full_name || t('common.no_name', { defaultValue: 'Sin nombre' })}
                         </div>
-                        <div className="text-xs text-neutral-500 mt-0.5">{driver.users?.phone ?? '—'}</div>
+                        <div className="text-xs text-ink-muted mt-0.5">{driver.users?.phone ?? '—'}</div>
                       </td>
                       <td className="px-4">
                         {vehicle ? (
                           <div className="flex items-center gap-2">
-                            <VIcon size={16} className="text-neutral-400" />
+                            <VIcon size={16} className="text-ink-subtle" />
                             <div>
-                              <div className="text-sm text-neutral-700 capitalize">{vehicle.type}</div>
-                              <div className="text-xs text-neutral-500">{vehicle.plate_number}</div>
+                              <div className="text-sm text-ink-muted capitalize">{vehicle.type}</div>
+                              <div className="text-xs text-ink-muted">{vehicle.plate_number}</div>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-sm text-neutral-400">—</span>
+                          <span className="text-sm text-ink-subtle">—</span>
                         )}
                       </td>
                       <td className="px-4">
@@ -384,19 +384,19 @@ export default function DriversPage() {
                         {driver.rating_avg > 0 ? (
                           <div className="inline-flex items-center gap-1">
                             <Star size={13} className="text-amber-500 fill-amber-500" />
-                            <span className="text-sm text-neutral-700 tabular-nums">
+                            <span className="text-sm text-ink-muted tabular-nums">
                               {Number(driver.rating_avg).toFixed(1)}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-sm text-neutral-400">—</span>
+                          <span className="text-sm text-ink-subtle">—</span>
                         )}
                       </td>
-                      <td className="px-4 text-sm text-neutral-500 tabular-nums">
+                      <td className="px-4 text-sm text-ink-muted tabular-nums">
                         {formatRelative(driver.created_at)}
                       </td>
                       <td className="pr-4">
-                        <ChevronRight size={16} className="text-neutral-300 group-hover:text-neutral-500 transition-colors" />
+                        <ChevronRight size={16} className="text-ink-subtle group-hover:text-ink-muted transition-colors" />
                       </td>
                     </tr>
                   );
@@ -410,13 +410,13 @@ export default function DriversPage() {
       {/* ─── Mobile card list ───────────────────────────────── */}
       <div className="md:hidden space-y-2">
         {loading ? (
-          <div className="bg-white rounded-xl border border-neutral-200 p-4">
+          <div className="bg-surface-elevated rounded-xl border border-line p-4">
             <AdminTableSkeleton rows={5} columns={1} />
           </div>
         ) : sortedData.length === 0 ? (
-          <div className="bg-white rounded-xl border border-neutral-200 p-8 text-center">
-            <Users size={28} className="text-neutral-300 mx-auto mb-2" />
-            <p className="text-sm font-medium text-neutral-700">{t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}</p>
+          <div className="bg-surface-elevated rounded-xl border border-line p-8 text-center">
+            <Users size={28} className="text-ink-subtle mx-auto mb-2" />
+            <p className="text-sm font-medium text-ink">{t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}</p>
           </div>
         ) : (
           sortedData.map((driver) => {
@@ -426,16 +426,16 @@ export default function DriversPage() {
               <button
                 key={driver.id}
                 onClick={() => router.push(`/drivers/${driver.id}`)}
-                className="w-full text-left bg-white rounded-xl border border-neutral-200 p-3 flex items-center gap-3 hover:bg-neutral-50 transition-colors active:scale-[0.99]"
+                className="w-full text-left bg-surface-elevated rounded-xl border border-line p-3 flex items-center gap-3 hover:bg-surface-sunken transition-colors active:scale-[0.99]"
               >
                 <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${status.gradient} flex items-center justify-center text-white text-sm font-semibold shrink-0`}>
                   {getInitials(driver.users?.full_name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-neutral-900 truncate">
+                  <div className="font-medium text-sm text-ink truncate">
                     {driver.users?.full_name || '—'}
                   </div>
-                  <div className="text-xs text-neutral-500 truncate mt-0.5">
+                  <div className="text-xs text-ink-muted truncate mt-0.5">
                     {driver.users?.phone ?? '—'} {vehicle && <>· {vehicle.plate_number}</>}
                   </div>
                   <div className="mt-1 inline-flex items-center gap-1.5">
@@ -443,7 +443,7 @@ export default function DriversPage() {
                     <span className={`text-xs ${status.text}`}>{t(STATUS_LABEL_KEYS[driver.status])}</span>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-neutral-300 shrink-0" />
+                <ChevronRight size={16} className="text-ink-subtle shrink-0" />
               </button>
             );
           })
@@ -452,7 +452,7 @@ export default function DriversPage() {
 
       {/* ─── Pagination ─────────────────────────────────────── */}
       <div className="mt-6 flex items-center justify-between">
-        <p className="text-sm text-neutral-500 tabular-nums">
+        <p className="text-sm text-ink-muted tabular-nums">
           {!loading && sortedData.length > 0 && (
             <>
               {t('common.showing', { defaultValue: 'Mostrando' })} {page * PAGE_SIZE + 1}
@@ -465,17 +465,17 @@ export default function DriversPage() {
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={!canGoPrev}
             aria-label={t('common.previous', { defaultValue: 'Anterior' })}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface-elevated text-ink hover:bg-surface-sunken disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ArrowLeft size={14} />
             {t('common.previous', { defaultValue: 'Anterior' })}
           </button>
-          <span className="text-sm text-neutral-500 tabular-nums px-2">{page + 1}</span>
+          <span className="text-sm text-ink-muted tabular-nums px-2">{page + 1}</span>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={!canGoNext}
             aria-label={t('common.next', { defaultValue: 'Siguiente' })}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium border border-line bg-surface-elevated text-ink hover:bg-surface-sunken disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {t('common.next', { defaultValue: 'Siguiente' })}
             <ArrowRight size={14} />

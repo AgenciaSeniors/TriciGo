@@ -49,8 +49,8 @@ export function ServiceTypeCard({
         padding="md"
         className={`items-center ${
           selected
-            ? 'border-primary-500 bg-primary-50'
-            : 'border-neutral-200 bg-white'
+            ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/15'
+            : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800'
         }`}
       >
         <Image

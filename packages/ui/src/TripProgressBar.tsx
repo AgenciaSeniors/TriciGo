@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, Easing, StyleSheet } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { Text } from './Text';
 
 export interface TripProgressBarProps {
@@ -40,6 +41,11 @@ export function TripProgressBar({
   etaLabel: etaLabelProp,
   arrivalLabel: arrivalLabelProp,
 }: TripProgressBarProps) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const trackColor = isDark ? '#374151' : TRACK_COLOR;
+  const textPrimary = isDark ? '#F9FAFB' : TEXT_PRIMARY;
+  const textSecondary = isDark ? '#9CA3AF' : TEXT_SECONDARY;
 
   // Clamp progress between 0 and 100
   const clampedProgress = Math.max(0, Math.min(100, progressPercent));
@@ -109,7 +115,7 @@ export function TripProgressBar({
     >
       {/* Row 1: progress bar + percentage */}
       <View style={styles.barRow}>
-        <View style={styles.track}>
+        <View style={[styles.track, { backgroundColor: trackColor }]}>
           <Animated.View
             style={[
               styles.fill,
@@ -120,23 +126,23 @@ export function TripProgressBar({
             ]}
           />
         </View>
-        <Text style={styles.percentText}>
+        <Text style={[styles.percentText, { color: textPrimary }]}>
           {Math.round(clampedProgress)}%
         </Text>
       </View>
 
       {/* Row 2: distance remaining + ETA */}
       <View style={styles.infoRow}>
-        <Text style={styles.distanceText}>{distanceLabel}</Text>
+        <Text style={[styles.distanceText, { color: textSecondary }]}>{distanceLabel}</Text>
         {etaLabel != null && (
-          <Text style={styles.etaText}>{etaLabel}</Text>
+          <Text style={[styles.etaText, { color: textPrimary }]}>{etaLabel}</Text>
         )}
       </View>
 
       {/* Row 3: arrival time, right-aligned */}
       {arrivalLabel != null && (
         <View style={styles.arrivalRow}>
-          <Text style={styles.arrivalText}>{arrivalLabel}</Text>
+          <Text style={[styles.arrivalText, { color: textSecondary }]}>{arrivalLabel}</Text>
         </View>
       )}
     </View>

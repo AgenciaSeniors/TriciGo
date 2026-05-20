@@ -636,7 +636,7 @@ export default function CorporateProfileScreen() {
                           className={`px-3 py-1.5 rounded-lg border ${
                             selected
                               ? 'bg-primary-500 border-primary-500'
-                              : 'bg-neutral-50 border-neutral-200'
+                              : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                           }`}
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: selected }}
@@ -938,7 +938,7 @@ export default function CorporateProfileScreen() {
                     </Text>
                   ) : (
                     employeeReports.map((r) => (
-                      <Card key={r.user_id} variant="filled" padding="sm" className="mb-2 bg-neutral-50">
+                      <Card key={r.user_id} variant="filled" padding="sm" className="mb-2 bg-neutral-50 dark:bg-neutral-800">
                         <View className="flex-row justify-between items-center mb-1">
                           <Text variant="bodySmall" className="font-semibold">{r.name}</Text>
                           <Text variant="caption" color="secondary">{r.phone}</Text>
@@ -999,7 +999,7 @@ export default function CorporateProfileScreen() {
               className={`flex-1 py-2 rounded-lg border items-center ${
                 newRole === role
                   ? 'bg-primary-500/10 border-primary-500'
-                  : 'bg-neutral-50 border-neutral-200'
+                  : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
               }`}
               accessibilityRole="radio"
               accessibilityState={{ selected: newRole === role }}

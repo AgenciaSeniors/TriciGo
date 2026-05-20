@@ -5,7 +5,7 @@ import { Text } from '@tricigo/ui/Text';
 
 export default function NotFoundScreen() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
+    <View className="flex-1 items-center justify-center bg-white dark:bg-neutral-900">
       <Text variant="h3">404</Text>
       <Text variant="body" color="secondary" className="mt-2 mb-4">
         Página no encontrada
