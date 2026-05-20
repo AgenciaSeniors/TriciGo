@@ -9,7 +9,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger } from '@tricigo/utils';
+import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger, buildShareUrl } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
@@ -289,14 +289,22 @@ export function RideCompleteView() {
   const handleDownloadReceipt = async () => {
     if (!activeRide || downloadingReceipt) return;
     setDownloadingReceipt(true);
+    // Receipt download was failing on every ride; the catch logged
+    // String(err) — "[object Object]" for Supabase/native errors — which
+    // hid the cause. Tag each stage so the log + Toast name the failing
+    // step and carry the real message (serialised, BUG-264 pattern).
+    let stage: 'fetch' | 'render' | 'print' | 'share' = 'fetch';
     try {
       const data = await rideService.getReceiptData(activeRide.id, 'passenger');
+      stage = 'render';
       // Override the raw payment_method with a translated label when corporate.
       const dataWithPaymentLabel = activeRide.payment_method === 'corporate'
         ? { ...data, paymentMethod: t('payment.paid_corporate', { defaultValue: 'Cuenta corporativa' }) }
         : data;
       const html = generateReceiptHTML(dataWithPaymentLabel);
+      stage = 'print';
       const { uri } = await Print.printToFileAsync({ html, base64: false });
+      stage = 'share';
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recibo TriciGo' });
       } else {
@@ -313,7 +321,10 @@ export function RideCompleteView() {
       }
     } catch (err) {
       // BUG-291: surface failures via Toast. Was silently logged.
-      logger.error('Receipt generation failed', { error: String(err) });
+      const detail = err instanceof Error
+        ? err.message
+        : (() => { try { return JSON.stringify(err); } catch { return String(err); } })();
+      logger.error('Receipt generation failed', { stage, error: detail });
       Toast.show({
         type: 'error',
         text1: t('ride.receipt_error', { defaultValue: 'No se pudo generar el recibo' }),
@@ -537,7 +548,7 @@ export function RideCompleteView() {
               variant="outline"
               size="sm"
               fullWidth
-              onPress={() => Share.share({ message: `https://tricigo.com/ride/${activeRide.share_token}` })}
+              onPress={() => { if (activeRide.share_token) Share.share({ message: buildShareUrl(activeRide.share_token) }); }}
               className="mb-2"
             />
           )}
