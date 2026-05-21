@@ -327,6 +327,17 @@ export function DriverInfoMiniCard({
 
 const styles = StyleSheet.create({
   container: {
+    // alignSelf:'stretch' overrides the searching-view parent's
+    // `items-center` so the card spans the full width of its parent
+    // (minus the 16px horizontal margins). Without it the card sized
+    // to its narrowest child (~250px) and the addresses + driver hero
+    // row got truncated/cramped on iPhone.
+    alignSelf: 'stretch',
+    // overflow:'hidden' clips the TripSummary footer to the rounded
+    // card border. Was bleeding past the visible bottom and landing
+    // visually at the same Y as the Cancel button below — caused the
+    // "Tiempo estimado / ~16 min" + "Cancelar viaje · Ns" overlap.
+    overflow: 'hidden',
     borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 16,

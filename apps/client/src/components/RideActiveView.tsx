@@ -1225,7 +1225,9 @@ export function RideActiveView() {
               }
               isCalculating={isCalculating}
               urgent={displayEtaMinutes > 0 && displayEtaMinutes <= 3}
-              variant="light"
+              /* variant defaults to 'auto' — follows the OS theme so the
+                 pill stays readable on dark mode (was a cream pill with
+                 near-invisible text under the status stepper). */
             />
           </Animated.View>
         </View>
