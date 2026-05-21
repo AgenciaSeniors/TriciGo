@@ -104,7 +104,9 @@ export const paymentService = {
       },
       body: JSON.stringify({
         user_id: req.userId,
-        amount_cup: req.amountCup,
+        // RECARGA V2: send the NET USD the user picked; the edge function
+        // computes the additive fee and tells NETOPIA the total charge.
+        amount_usd: req.amountUsd,
         recharge_type: req.rechargeType ?? 'customer',
         corporate_account_id: req.corporateAccountId,
         device_fingerprint: req.deviceFingerprint,
@@ -119,7 +121,7 @@ export const paymentService = {
       logger.error('recharge_intent_failed', {
         provider: req.provider,
         userId: req.userId,
-        amountCup: req.amountCup,
+        amountUsd: req.amountUsd,
         error: errorMsg,
       });
       throw new Error(errorMsg);
@@ -128,7 +130,7 @@ export const paymentService = {
     logger.info('recharge_intent_created', {
       provider: req.provider,
       userId: req.userId,
-      amountCup: req.amountCup,
+      amountUsd: req.amountUsd,
       intentId: json.intentId,
     });
     return { ...json, provider: req.provider } as RechargeIntentResult;

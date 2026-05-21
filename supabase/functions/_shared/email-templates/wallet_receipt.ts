@@ -23,13 +23,20 @@ export interface WalletReceiptData {
     email: string | null;
     id: string;
   };
+  /**
+   * RECARGA V2 amounts (additive fee model).
+   *   - usdRequested:  the net USD the user picked (e.g. $20).
+   *   - feeUsd:        the additive service fee (3% min $0.50).
+   *   - usdCharged:    what hit the card (= usdRequested + feeUsd).
+   *   - tcCredited:    TriciCoin (= CUP) deposited in the wallet.
+   *   - exchangeRate:  the USD→CUP snapshot at intent creation time.
+   */
   amounts: {
-    usdCharged: number;
+    usdRequested: number;
     feeUsd: number;
-    netUsd: number;
+    usdCharged: number;
     tcCredited: number;
     exchangeRate: number;
-    cupEquivalent: number;
   };
   /** Only used in admin variant */
   stripePaymentIntentId?: string | null;
@@ -62,13 +69,14 @@ function renderUser(data: WalletReceiptData): string {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 8px;">
       ${detailRow('Comprobante', receiptNo, { strong: true })}
       ${detailRow('Fecha', dateLabel, { muted: true })}
-      ${detailRow('Importe cobrado', fmtUsd(amounts.usdCharged))}
-      ${detailRow('Comisión de servicio', `−${fmtUsd(amounts.feeUsd)}`, { muted: true })}
-      ${detailRow('Importe acreditado', fmtUsd(amounts.netUsd), { strong: true })}
+      ${detailRow('Recarga solicitada', fmtUsd(amounts.usdRequested))}
+      ${detailRow('Comisión de servicio (3%)', fmtUsd(amounts.feeUsd), { muted: true })}
+      ${detailRow('Cargo total a tu tarjeta', fmtUsd(amounts.usdCharged), { strong: true })}
       ${totalRow('TriciCoin acreditados', fmtTrc(amounts.tcCredited))}
     </table>
     <p style="margin: 16px 0 0; font-family: ${FONT_STACK}; font-size: 12px; color: ${COLORS.muted}; line-height: 1.5;">
-      Equivalente referencial: <strong style="color: ${COLORS.text};">${escapeHtml(fmtCup(amounts.cupEquivalent))}</strong>
+      Equivalente referencial en CUP:
+      <strong style="color: ${COLORS.text};">${escapeHtml(fmtCup(amounts.tcCredited))}</strong>
       a la tasa del día (${amounts.exchangeRate.toFixed(2)} CUP/USD).
     </p>
   `;
@@ -99,13 +107,13 @@ function renderAdmin(data: WalletReceiptData): string {
       ${detailRow('Usuario', `${user.full_name ?? '—'} <${user.email ?? '—'}>`)}
       ${detailRow('User ID', user.id, { muted: true })}
       ${detailRow('Fecha', dateLabel)}
-      ${detailRow('USD cobrado', fmtUsd(amounts.usdCharged))}
-      ${detailRow('Comisión', fmtUsd(amounts.feeUsd))}
-      ${detailRow('Neto USD', fmtUsd(amounts.netUsd), { strong: true })}
+      ${detailRow('Recarga solicitada (neto)', fmtUsd(amounts.usdRequested), { strong: true })}
+      ${detailRow('Comisión de servicio', fmtUsd(amounts.feeUsd))}
+      ${detailRow('Cargo total a la tarjeta', fmtUsd(amounts.usdCharged), { strong: true })}
       ${detailRow('TriciCoin acreditados', fmtTrc(amounts.tcCredited), { strong: true })}
       ${detailRow('Tasa USD/CUP', amounts.exchangeRate.toFixed(2))}
-      ${detailRow('Equivalente CUP', fmtCup(amounts.cupEquivalent))}
-      ${detailRow('Stripe PI', stripePaymentIntentId ?? '—', { muted: true })}
+      ${detailRow('Equivalente CUP (referencial)', fmtCup(amounts.tcCredited))}
+      ${detailRow('Provider txn id', stripePaymentIntentId ?? '—', { muted: true })}
     </table>
   `;
 
@@ -123,7 +131,9 @@ function fmtUsd(n: number): string {
 }
 
 function fmtTrc(n: number): string {
-  return `${n.toFixed(2)} TriciCoin`;
+  // RECARGA V2: 1 TC = 1 CUP integer. Format with thousands separator and
+  // no decimals so a 10500-TC recharge reads "10.500 TriciCoin".
+  return `${Math.round(n).toLocaleString('es-CU')} TriciCoin`;
 }
 
 function fmtCup(n: number): string {

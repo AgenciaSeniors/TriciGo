@@ -276,6 +276,49 @@ export function formatCurrency(
 }
 
 // ──────────────────────────────────────────────
+// RECARGA V2 — wallet recharge fee math
+// ──────────────────────────────────────────────
+
+/** Fee percentage (RECARGA V2 — additive on top of the net amount). */
+export const RECHARGE_FEE_PCT = 0.03;
+/** Floor on the fee so micro-recharges remain economically viable. */
+export const RECHARGE_FEE_MIN_USD = 0.5;
+
+/** Recarga V2 per-customer-tier amount limits (USD). */
+export const RECHARGE_LIMITS = {
+  customer: { min: 20, max: 500 },
+  corporate: { min: 100, max: 10_000 },
+} as const;
+
+/**
+ * Compute the additive service fee for a wallet recharge of `amountUsd`.
+ * Mirror of the math in `create-netopia-payment-intent`. Kept here so
+ * UI previews (web wallet, client mobile, driver mobile) and the
+ * receipt fallback all agree on the same number to the cent.
+ *
+ *   computeRechargeFeeUsd(20)   → 0.60
+ *   computeRechargeFeeUsd(10)   → 0.50   (floor)
+ *   computeRechargeFeeUsd(0)    → 0.50   (floor — guard before callers anyway)
+ *   computeRechargeFeeUsd(NaN)  → 0      (safe under bad input)
+ */
+export function computeRechargeFeeUsd(amountUsd: number): number {
+  const amt = safeNum(amountUsd);
+  if (amt <= 0) return 0;
+  return Math.max(Number((amt * RECHARGE_FEE_PCT).toFixed(2)), RECHARGE_FEE_MIN_USD);
+}
+
+/**
+ * Total to charge the card given the user-picked NET amount. Additive
+ * model — `amountUsd + fee`. Returned rounded to cents.
+ *
+ *   computeRechargeChargeUsd(20) → 20.60
+ */
+export function computeRechargeChargeUsd(amountUsd: number): number {
+  const fee = computeRechargeFeeUsd(amountUsd);
+  return Number((safeNum(amountUsd) + fee).toFixed(2));
+}
+
+// ──────────────────────────────────────────────
 // Driver Rate Validation
 // ──────────────────────────────────────────────
 

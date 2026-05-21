@@ -37,7 +37,18 @@ function getCorsHeaders(req: Request) {
 
 interface CreateIntentRequest {
   user_id: string;
-  amount_cup: number;
+  /**
+   * RECARGA V2: the user picks the NET amount in USD that they want to
+   * receive as wallet credit. The fee is applied ADDITIVELY on top —
+   * the actual charge to the card is `amount_usd + fee_usd`. NETOPIA
+   * sees the total charge. Wallet is credited with
+   * `amount_usd × exchange_rate` (in CUP).
+   *
+   * Previously this field was `amount_cup` (the wallet credit was the
+   * input). The semantic flip was decided in the design rounds locked
+   * Oct 2026 — see docs/payment-processor/PROGRESS.md.
+   */
+  amount_usd: number;
   recharge_type?: 'customer' | 'driver_quota';
   corporate_account_id?: string;
   device_fingerprint?: string;
@@ -280,11 +291,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const body: CreateIntentRequest = await req.json();
-    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
+    const { user_id, amount_usd, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
     // Default to Spanish for the TriciGo audience. NETOPIA's hosted page
     // falls back to Romanian if the code isn't supported — if that
     // happens, change this default to 'en'.
     const uiLanguage = (language && /^[a-z]{2}$/i.test(language)) ? language.toLowerCase() : 'es';
+    const isCorporate = !!corporate_account_id;
 
     // Reject obviously-bad return URLs early so the caller learns
     // BEFORE we burn a payment_intents row + NETOPIA call.
@@ -299,9 +311,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!user_id || !Number.isFinite(amount_cup) || amount_cup <= 0 || amount_cup > 10_000_000) {
+    // RECARGA V2 limits (USD-denominated, type-aware):
+    //   - Customer: $20 .. $500
+    //   - Corporate: $100 .. $10000
+    // Decided in design round 3 / round 4. Hardcoded on purpose — the
+    // product floors and ceilings are policy, not operational config.
+    const MIN_USD = isCorporate ? 100 : 20;
+    const MAX_USD = isCorporate ? 10_000 : 500;
+
+    if (!user_id || !Number.isFinite(amount_usd) || amount_usd <= 0) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'invalid_params', detail: 'user_id required, amount_cup must be 1-10,000,000' }),
+        JSON.stringify({ ok: false, error: 'invalid_params', detail: 'user_id required, amount_usd must be positive' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -315,14 +335,16 @@ Deno.serve(async (req) => {
     }
 
     // ── Load NETOPIA config from platform_config + Deno env ───────
+    // netopia_fee_usd / netopia_fee_type / netopia_*_recharge_cup are no
+    // longer read — the fee model (3% min $0.50) is hardcoded in code
+    // and the min/max are USD-typed above. Those config rows are kept
+    // in the DB for now (cosmetic cleanup deferred); they're inert.
     const { data: configs } = await supabase
       .from('platform_config')
       .select('key, value')
       .in('key', [
         'netopia_enabled', 'netopia_environment',
         'netopia_sandbox_signature', 'netopia_live_signature',
-        'netopia_min_recharge_cup', 'netopia_max_recharge_cup',
-        'netopia_fee_usd', 'netopia_fee_type',
       ]);
 
     const configMap: Record<string, string> = {};
@@ -339,10 +361,6 @@ Deno.serve(async (req) => {
     const apiKey = env === 'live'
       ? (Deno.env.get('NETOPIA_LIVE_API_KEY') ?? '')
       : (Deno.env.get('NETOPIA_SANDBOX_API_KEY') ?? '');
-
-    const minRecharge = parseInt(configMap['netopia_min_recharge_cup'] ?? '500', 10);
-    const maxRecharge = parseInt(configMap['netopia_max_recharge_cup'] ?? '50000', 10);
-    const feeUsd = parseFloat(configMap['netopia_fee_usd'] ?? '2.00');
 
     if (!netopiaEnabled) {
       return new Response(
@@ -363,39 +381,62 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (amount_cup < minRecharge) {
+    if (amount_usd < MIN_USD) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'amount_too_low', min: minRecharge }),
+        JSON.stringify({ ok: false, error: 'amount_too_low', min_usd: MIN_USD, kind: isCorporate ? 'corporate' : 'customer' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
-    if (amount_cup > maxRecharge) {
+    if (amount_usd > MAX_USD) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'amount_too_high', max: maxRecharge }),
+        JSON.stringify({ ok: false, error: 'amount_too_high', max_usd: MAX_USD, kind: isCorporate ? 'corporate' : 'customer' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
+    // FX rate is MANDATORY (round 3 decision). Block the recharge if
+    // missing or stale (> 24h). Forces the operator to monitor the
+    // sync-exchange-rate cron — failing closed is better than crediting
+    // the wallet with the wrong amount of CUP.
     const { data: rateRow } = await supabase
-      .from('exchange_rates').select('usd_cup_rate').eq('is_current', true).single();
+      .from('exchange_rates')
+      .select('usd_cup_rate, created_at')
+      .eq('is_current', true)
+      .single();
 
-    const exchangeRate = rateRow?.usd_cup_rate ?? 520;
-    const amountUsd = Number((amount_cup / exchangeRate).toFixed(2));
-    const totalChargeUsd = Number((amountUsd + feeUsd).toFixed(2));
-
-    if (totalChargeUsd < 0.50) {
+    const FX_STALE_MS = 24 * 60 * 60 * 1000;
+    const fxTooOld = !rateRow?.created_at
+      || (Date.now() - new Date(rateRow.created_at).getTime()) > FX_STALE_MS;
+    if (!rateRow?.usd_cup_rate || fxTooOld) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'amount_too_low_usd', min_usd: 0.50, calculated_usd: totalChargeUsd }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({
+          ok: false,
+          error: 'fx_unavailable',
+          detail: 'Tipo de cambio USD→CUP no disponible o desactualizado. Intentalo más tarde.',
+        }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+    const exchangeRate = rateRow.usd_cup_rate;
+
+    // RECARGA V2 math (locked in design rounds 1 & 2):
+    //   amount_usd   = the NET that the user picked (input).
+    //   fee_usd      = MAX(amount_usd × 3%, $0.50) — additive, NOT deducted.
+    //   charge_usd   = amount_usd + fee_usd     — the actual card charge.
+    //   amount_cup   = amount_usd × exchange_rate — TC credited to wallet
+    //                  (TC = CUP, 1 TC = 1 CUP, by design round 1).
+    const feeUsd = Math.max(Number((amount_usd * 0.03).toFixed(2)), 0.50);
+    const chargeUsd = Number((amount_usd + feeUsd).toFixed(2));
+    const amountCupCredited = Math.round(amount_usd * exchangeRate);
 
     // ── Phase B1: per-user top-up velocity control (fail-open) ───
-    if (!corporate_account_id) {
+    // Customers are subject to limits. Corporate is EXEMPT (round 4):
+    // a B2B account may legitimately recharge $5k in one shot.
+    if (!isCorporate) {
       try {
         const { data: velocity, error: velocityError } = await supabase.rpc(
           'check_topup_velocity',
-          { p_user_id: user_id, p_amount_usd: amountUsd },
+          { p_user_id: user_id, p_amount_usd: amount_usd },
         );
         if (velocityError) {
           console.error('Velocity check unavailable, allowing recharge:', velocityError.message);
@@ -417,8 +458,14 @@ Deno.serve(async (req) => {
 
     const intentRow: Record<string, unknown> = {
       user_id,
-      amount_cup,
-      amount_usd: amountUsd,
+      // RECARGA V2 semantic:
+      //   amount_usd = what the user REQUESTED (net, before fee).
+      //   fee_usd    = the additive fee.
+      //   amount_cup = TC credited to the wallet (CUP).
+      // The card charge is derived as amount_usd + fee_usd; we do NOT
+      // persist it separately. NETOPIA receives the derived total.
+      amount_usd,
+      amount_cup: amountCupCredited,
       exchange_rate: exchangeRate,
       fee_usd: feeUsd,
       status: 'created',
@@ -498,11 +545,13 @@ Deno.serve(async (req) => {
         apiKey,
         posSignature,
         intentId: intent.id,
-        amountUsd: totalChargeUsd,
+        // RECARGA V2: NETOPIA charges the user the FULL amount including
+        // the additive fee (user pays amount + fee on the card).
+        amountUsd: chargeUsd,
         // NETOPIA accepts ISO 4217 codes; Romanian processor primarily
         // RON/EUR/USD. USD matches TriciGo's snapshot column and avoids
-        // an extra FX hop. If the merchant config does not enable USD,
-        // change here to 'RON' and convert (and seed an FX rate).
+        // an extra FX hop. Eduardo/Maria enable USD in the POS dashboard
+        // — without that, NETOPIA converts internally to RON on display.
         currency: 'USD',
         description: `TriciGo wallet recharge ${intent.id.slice(0, 8)}`,
         notifyUrl,
@@ -601,14 +650,17 @@ Deno.serve(async (req) => {
       })
       .eq('id', intent.id);
 
+    // RECARGA V2 response shape — see RechargeIntentResult in
+    // packages/types/src/payment.ts.
     return new Response(
       JSON.stringify({
         ok: true,
         provider: 'netopia',
         intentId: intent.id,
-        amountUsd,
-        amountCup: amount_cup,
+        amountUsdRequested: amount_usd,
         feeUsd,
+        chargeUsd,
+        amountCupCredited,
         exchangeRate,
         redirectUrl: netopiaResp.payment.paymentURL,
         environment: env,

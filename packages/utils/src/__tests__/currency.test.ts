@@ -19,6 +19,11 @@ import {
   formatCurrency,
   validateDriverRate,
   serviceTypeToVehicleType,
+  RECHARGE_FEE_PCT,
+  RECHARGE_FEE_MIN_USD,
+  RECHARGE_LIMITS,
+  computeRechargeFeeUsd,
+  computeRechargeChargeUsd,
 } from '../currency';
 
 // ============================================================
@@ -331,5 +336,82 @@ describe('serviceTypeToVehicleType', () => {
   it('returns null for unknown types', () => {
     expect(serviceTypeToVehicleType('mensajeria')).toBeNull();
     expect(serviceTypeToVehicleType('unknown')).toBeNull();
+  });
+});
+
+// ============================================================
+// RECARGA V2 — additive recharge fee math
+// ============================================================
+describe('RECHARGE_FEE_PCT / RECHARGE_FEE_MIN_USD', () => {
+  it('is 3% with a $0.50 floor', () => {
+    expect(RECHARGE_FEE_PCT).toBe(0.03);
+    expect(RECHARGE_FEE_MIN_USD).toBe(0.5);
+  });
+});
+
+describe('RECHARGE_LIMITS', () => {
+  it('exposes customer + corporate brackets matching the plan', () => {
+    // Customer: $20–$500. Corporate: $100–$10k. These thresholds
+    // are referenced by both the EF (server-authoritative) and the
+    // client previews — drift here means a UX/server mismatch.
+    expect(RECHARGE_LIMITS.customer.min).toBe(20);
+    expect(RECHARGE_LIMITS.customer.max).toBe(500);
+    expect(RECHARGE_LIMITS.corporate.min).toBe(100);
+    expect(RECHARGE_LIMITS.corporate.max).toBe(10_000);
+  });
+});
+
+describe('computeRechargeFeeUsd (additive)', () => {
+  it('returns the floor for amounts where 3% < $0.50', () => {
+    // $10 * 0.03 = $0.30 → floored to $0.50
+    expect(computeRechargeFeeUsd(10)).toBe(0.5);
+    // Customer minimum is $20 but the math still floors below that.
+    expect(computeRechargeFeeUsd(5)).toBe(0.5);
+  });
+
+  it('returns 3% for amounts where 3% >= $0.50', () => {
+    // $20 * 0.03 = $0.60 → above floor
+    expect(computeRechargeFeeUsd(20)).toBe(0.6);
+    // $50 * 0.03 = $1.50
+    expect(computeRechargeFeeUsd(50)).toBe(1.5);
+    // $200 * 0.03 = $6.00
+    expect(computeRechargeFeeUsd(200)).toBe(6);
+    // Corporate $1000 → $30 fee
+    expect(computeRechargeFeeUsd(1000)).toBe(30);
+  });
+
+  it('rounds to two decimals (no floating-point drift)', () => {
+    // $33.33 * 0.03 = 0.9999 → 1.00
+    expect(computeRechargeFeeUsd(33.33)).toBe(1.0);
+    // $16.66 * 0.03 = 0.4998 → floors to 0.50
+    expect(computeRechargeFeeUsd(16.66)).toBe(0.5);
+  });
+
+  it('treats zero, negative, and NaN as zero (safe under bad input)', () => {
+    expect(computeRechargeFeeUsd(0)).toBe(0);
+    expect(computeRechargeFeeUsd(-5)).toBe(0);
+    expect(computeRechargeFeeUsd(Number.NaN)).toBe(0);
+    expect(computeRechargeFeeUsd(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe('computeRechargeChargeUsd', () => {
+  it('totals the net amount + additive fee', () => {
+    // $20 net + $0.60 fee = $20.60 charged
+    expect(computeRechargeChargeUsd(20)).toBe(20.6);
+    // $50 net + $1.50 = $51.50
+    expect(computeRechargeChargeUsd(50)).toBe(51.5);
+    // $100 net + $3.00 = $103.00
+    expect(computeRechargeChargeUsd(100)).toBe(103);
+  });
+
+  it('applies the $0.50 floor for tiny amounts', () => {
+    // $5 + $0.50 floor = $5.50
+    expect(computeRechargeChargeUsd(5)).toBe(5.5);
+  });
+
+  it('rounds to cents (no half-cents on the receipt)', () => {
+    // $33.33 + $1.00 = $34.33 (would otherwise be 34.32999...)
+    expect(computeRechargeChargeUsd(33.33)).toBe(34.33);
   });
 });
