@@ -12,7 +12,6 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { paymentService } from '@tricigo/api/services/payment';
-import type { StripeRechargeConfig } from '@tricigo/types';
 import { formatTriciCoin, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
@@ -25,23 +24,22 @@ import { useThemeStore } from '@/stores/theme.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { RIDE_CONFIG } from '@/config/ride';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-// Lazy require Stripe SDK (native only). Fallbacks keep web build compiling.
-let useStripe: (() => {
-  initPaymentSheet: (opts: Record<string, unknown>) => Promise<{ error?: { message: string; code?: string } }>;
-  presentPaymentSheet: () => Promise<{ error?: { message: string; code?: string } }>;
-}) | null = null;
-if (Platform.OS !== 'web') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    useStripe = require('@stripe/stripe-react-native').useStripe;
-  } catch {
-    useStripe = null;
-  }
-}
+// Stripe SDK removed 2026-05-20 (NETOPIA cutover, see PROGRESS.md).
+// Recharge now opens NETOPIA's hosted payment page inside an in-app
+// browser via WebBrowser.openAuthSessionAsync (same pattern as OAuth
+// login). NETOPIA redirects back to RETURN_URL_BASE + ?intent=<id>,
+// the in-app browser closes, and we poll the intent status natively.
+//
+// RETURN_URL_BASE is a universal link first — Android/iOS will intercept
+// it and route to this app if associated domains / intent filters are
+// honored on tricigo.com (see app.json). If that linkage breaks, swap
+// to the custom scheme 'tricigo://wallet'.
+const RETURN_URL_BASE = 'https://tricigo.com/app/client/wallet';
 
 /**
  * BUG-280 — wallet filter set realigned with actual customer-side
@@ -603,13 +601,6 @@ function NativeWalletScreen() {
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('20');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
-  const [stripeConfig, setStripeConfig] = useState<StripeRechargeConfig | null>(null);
-
-  // Stripe SDK hook (null on web / if SDK not available). Platform.OS is
-  // constant for the lifetime of the component, so the conditional is
-  // effectively static — useStripe is always called or always not.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const stripe = useStripe ? useStripe() : null;
 
   // Processing guard to prevent double-submit across all wallet actions
   const [isProcessing, setIsProcessing] = useState(false);
@@ -621,26 +612,21 @@ function NativeWalletScreen() {
   const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
 
   // Fetch wallet data.
-  // ensureAccount, balance, account, exchange rate and Stripe config
-  // have no dependencies on each other — batch them into one wave.
-  // Only getTransactions blocks on account.id, so it runs after.
-  // (Stripe placeholder key 'pk_test_REPLACE_WITH_YOUR_KEY' means
-  // Stripe isn't yet provisioned for this env — UI will disable the
-  // card button with "Próximamente".)
+  // ensureAccount, balance, account, exchange rate have no dependencies
+  // on each other — batch them into one wave. Only getTransactions
+  // blocks on account.id, so it runs after.
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      const [, balanceData, account, rate, cfg] = await Promise.all([
+      const [, balanceData, account, rate] = await Promise.all([
         walletService.ensureAccount(userId),
         walletService.getBalance(userId),
         walletService.getAccount(userId),
         exchangeRateService.getUsdCupRate().catch(() => null),
-        paymentService.getStripeConfig().catch(() => null),
       ]);
       setBalance(balanceData);
       setAccountId(account?.id ?? null);
       if (rate) setExchangeRate(rate);
-      if (cfg) setStripeConfig(cfg);
 
       if (account?.id) {
         const txns = await walletService.getTransactions(account.id, 0, 20);
@@ -696,112 +682,98 @@ function NativeWalletScreen() {
 
   const MIN_RECHARGE_USD = 20;
   const MAX_RECHARGE_USD = 500;
-  const stripeReady = !!stripeConfig
-    && stripeConfig.enabled
-    && !!stripeConfig.publishableKey
-    && !stripeConfig.publishableKey.includes('REPLACE')
-    && !!stripe;
 
+  // Post-2026-05-20 cutover: mobile recharge opens the web wallet,
+  // where NETOPIA's hosted payment page runs. The native Stripe
+  // PaymentSheet path was removed because (a) NETOPIA does not ship
+  // a native SDK equivalent and (b) hosted-page redirect is the only
+  // flow the merchant POS supports. The native app keeps the bottom
+  // sheet for amount entry but hands off to the browser for the
+  // actual payment step.
   const submitRecharge = useCallback(async () => {
     if (!userId) return;
-
-    // If Stripe not configured yet, fall back to web wallet (preserves the
-    // current behaviour until real keys arrive).
-    if (!stripeReady) {
-      setRechargeSheetVisible(false);
-      Toast.show({
-        type: 'info',
-        text1: t('wallet.recharge_web_hint', {
-          defaultValue: 'Pagos con tarjeta desde la app — próximamente. Te llevamos a la versión web.',
-        }),
-      });
-      Linking.openURL('https://tricigo.com/wallet');
-      return;
-    }
-
     const usd = parseFloat(rechargeAmount);
-    if (!usd || isNaN(usd)) {
-      Toast.show({ type: 'error', text1: t('wallet.invalid_amount', { defaultValue: 'Monto inválido' }) });
-      return;
-    }
-    if (usd < MIN_RECHARGE_USD) {
+    if (!usd || isNaN(usd) || usd < MIN_RECHARGE_USD || usd > MAX_RECHARGE_USD) {
       Toast.show({
         type: 'error',
-        text1: t('wallet.recharge_below_min', {
-          defaultValue: `El mínimo es $${MIN_RECHARGE_USD} USD`,
-        }),
-      });
-      return;
-    }
-    if (usd > MAX_RECHARGE_USD) {
-      Toast.show({
-        type: 'error',
-        text1: t('wallet.recharge_above_max', {
-          defaultValue: `El máximo es $${MAX_RECHARGE_USD} USD`,
-        }),
+        text1: t('wallet.invalid_amount', { defaultValue: 'Monto inválido' }),
       });
       return;
     }
 
-    setRechargeSubmitting(true);
+    setRechargeSheetVisible(false);
     setIsProcessing(true);
+    setRechargeSubmitting(true);
     try {
-      // USD → CUP (stored internally as CUP until TRC=USD rebase happens)
+      // TriciGo persists CUP internally; NETOPIA charges in USD.
       const amountCup = Math.round(usd * exchangeRate);
 
-      // 1. Create PaymentIntent on our backend (returns Stripe client_secret)
-      const intent = await paymentService.createStripePaymentIntent(userId, amountCup, 'customer');
-      const clientSecret = (intent as { client_secret?: string; clientSecret?: string }).client_secret
-        ?? (intent as { clientSecret?: string }).clientSecret;
-      const intentId = (intent as { intentId?: string; intent_id?: string }).intentId
-        ?? (intent as { intent_id?: string }).intent_id;
-      if (!clientSecret || !intentId) throw new Error('Payment intent response incomplete');
-
-      // 2. Initialize Stripe PaymentSheet with the client secret
-      if (!stripe) throw new Error('Stripe SDK not available');
-      const initRes = await stripe.initPaymentSheet({
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'TriciGo',
-        allowsDelayedPaymentMethods: false,
+      // 1. Create the intent — edge function returns NETOPIA hosted page URL.
+      const result = await paymentService.createRechargeIntent({
+        provider: 'netopia',
+        userId,
+        amountCup,
+        returnUrl: RETURN_URL_BASE,
       });
-      if (initRes.error) throw new Error(initRes.error.message);
-
-      // 3. Present sheet to user — they enter card + confirm
-      const presentRes = await stripe.presentPaymentSheet();
-      if (presentRes.error) {
-        // User canceled — silent exit
-        if (presentRes.error.code === 'Canceled') return;
-        throw new Error(presentRes.error.message);
+      if (!result.redirectUrl) {
+        throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
       }
 
-      // 4. Poll our payment_intents table until webhook processes (credits wallet)
+      // 2. Open the hosted page in an in-app browser. Bloquea hasta que
+      //    NETOPIA redirija al dismissUrl (= nuestro returnUrl + ?intent=<id>),
+      //    momento en que el sistema cierra el browser y nos devuelve aquí.
+      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
+      const browserResult = await WebBrowser.openAuthSessionAsync(
+        result.redirectUrl,
+        dismissUrl,
+      );
+
+      // 3. Branch on the result.
+      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
+        // User cerró el browser sin completar. NO marcar failed — NETOPIA
+        // puede todavía emitir el IPN. Dejamos el intent en `pending`.
+        Toast.show({
+          type: 'info',
+          text1: t('wallet.recharge_cancelled', { defaultValue: 'Pago cancelado' }),
+        });
+        return;
+      }
+
+      // 4. browserResult.type === 'success' — poll the intent.
       Toast.show({
         type: 'info',
         text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
       });
-      const final = await paymentService.pollIntentStatus(intentId);
+      const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
       if (final.status === 'completed') {
-        setRechargeSheetVisible(false);
         Toast.show({
           type: 'success',
           text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
           text2: `$${usd.toFixed(2)} USD ≈ ${amountCup.toLocaleString()} CUP`,
         });
         await fetchData();
-      } else {
+      } else if (final.status === 'failed') {
         Toast.show({
           type: 'error',
           text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
+          text2: final.error_message ?? undefined,
+        });
+      } else {
+        // Pending — webhook todavía no llegó. Soft: el polling siguió a `pending`,
+        // el push notification del IPN cubrirá el resultado final.
+        Toast.show({
+          type: 'info',
+          text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
         });
       }
     } catch (err) {
-      logger.error('stripe_recharge_failed', { error: String(err) });
+      logger.error('netopia_recharge_failed', { error: String(err) });
       Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
       setRechargeSubmitting(false);
       setIsProcessing(false);
     }
-  }, [userId, stripeReady, stripe, rechargeAmount, exchangeRate, t, fetchData]);
+  }, [userId, rechargeAmount, exchangeRate, t, fetchData]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // BUG-280 — Monthly spending insights, fixed.
@@ -1275,12 +1247,13 @@ function NativeWalletScreen() {
           {(() => {
             // Wallet v2 PR 5: top-up preview (USD → fee → net TC → CUP).
             // Spec §10 #2: fee = 3% of charged USD, minimum $0.50.
-            // Fall back to the spec rule when stripeConfig hasn't loaded.
+            // Provider-config-driven fee was removed with the Stripe
+            // cutover; the spec rule is the source of truth for the
+            // preview. The real fee charged is whatever NETOPIA's
+            // create-intent edge function snapshots into the row.
             const usdNum = parseFloat(rechargeAmount);
             if (!Number.isFinite(usdNum) || usdNum <= 0) return null;
-            const fee = stripeConfig?.feeUsd != null
-              ? stripeConfig.feeUsd
-              : Math.max(usdNum * 0.03, 0.50);
+            const fee = Math.max(usdNum * 0.03, 0.50);
             const net = Math.max(0, usdNum - fee);
             const cupEq = Math.round(net * exchangeRate);
             const belowMin = usdNum < MIN_RECHARGE_USD;
@@ -1317,15 +1290,13 @@ function NativeWalletScreen() {
               </View>
             );
           })()}
-          {!stripeReady && (
-            <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
-              <Text variant="caption" style={{ color: '#b45309' }}>
-                {t('wallet.stripe_not_ready', {
-                  defaultValue: 'Pagos con tarjeta desde la app — próximamente. Por ahora abrimos la versión web.',
-                })}
-              </Text>
-            </View>
-          )}
+          <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
+            <Text variant="caption" style={{ color: '#b45309' }}>
+              {t('wallet.recharge_inapp_hint', {
+                defaultValue: 'Pagás con tarjeta de forma segura sin salir de la app.',
+              })}
+            </Text>
+          </View>
           {/* Apple Guideline 3.1.1 defense: explicit disclaimer that wallet
               credit redeems only for physical transportation services. This
               keeps the wallet outside the "digital goods → IAP" requirement. */}
@@ -1335,11 +1306,7 @@ function NativeWalletScreen() {
             })}
           </Text>
           <Button
-            title={
-              stripeReady
-                ? t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })
-                : t('wallet.pay_with_card_web', { defaultValue: 'Abrir versión web' })
-            }
+            title={t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })}
             size="lg"
             fullWidth
             onPress={debouncedSubmitRecharge}

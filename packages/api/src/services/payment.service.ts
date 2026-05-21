@@ -4,6 +4,11 @@
 // Tracks payment intents and initiates wallet recharges through a
 // payment provider. The recharge flow is provider-agnostic; see
 // docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
+//
+// NETOPIA is the sole live provider after the 2026-05-20 cutover.
+// EuPlatesc is reserved for Phase D3. The Stripe wrappers
+// (createStripePaymentIntent / getStripeConfig) were removed in
+// the same cutover; callers use createRechargeIntent directly.
 // ============================================================
 
 import type {
@@ -11,15 +16,13 @@ import type {
   PaymentProvider,
   RechargeIntentRequest,
   RechargeIntentResult,
-  CreateStripeIntentResponse,
   PaymentProviderConfig,
-  StripeRechargeConfig,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { logger } from '@tricigo/utils';
 
 /** Providers that have (or will have) a real recharge integration. */
-const KNOWN_PROVIDERS: PaymentProvider[] = ['stripe', 'netopia', 'euplatesc'];
+const KNOWN_PROVIDERS: PaymentProvider[] = ['netopia', 'euplatesc'];
 
 export const paymentService = {
   /**
@@ -105,6 +108,7 @@ export const paymentService = {
         recharge_type: req.rechargeType ?? 'customer',
         corporate_account_id: req.corporateAccountId,
         device_fingerprint: req.deviceFingerprint,
+        return_url_base: req.returnUrl,
       }),
     });
 
@@ -127,38 +131,6 @@ export const paymentService = {
       intentId: json.intentId,
     });
     return { ...json, provider: req.provider } as RechargeIntentResult;
-  },
-
-  /**
-   * Create a Stripe recharge intent.
-   * Back-compat wrapper over createRechargeIntent — kept so existing
-   * callers (the web wallet page) are unaffected.
-   */
-  async createStripePaymentIntent(
-    userId: string,
-    amountCup: number,
-    rechargeType: 'customer' | 'driver_quota' = 'customer',
-    corporateAccountId?: string,
-    deviceFingerprint?: string,
-  ): Promise<CreateStripeIntentResponse> {
-    const result = await this.createRechargeIntent({
-      provider: 'stripe',
-      userId,
-      amountCup,
-      rechargeType,
-      corporateAccountId,
-      deviceFingerprint,
-    });
-    return {
-      ok: true,
-      clientSecret: result.clientSecret ?? '',
-      publishableKey: result.publishableKey ?? '',
-      intentId: result.intentId,
-      amountUsd: result.amountUsd,
-      amountCup: result.amountCup,
-      feeUsd: result.feeUsd,
-      exchangeRate: result.exchangeRate,
-    };
   },
 
   /**
@@ -229,16 +201,8 @@ export const paymentService = {
   },
 
   /**
-   * Get Stripe recharge configuration.
-   * Back-compat wrapper over getPaymentProviderConfig.
-   */
-  async getStripeConfig(): Promise<StripeRechargeConfig> {
-    return this.getPaymentProviderConfig('stripe');
-  },
-
-  /**
    * The payment provider currently selected for new recharges
-   * (platform_config.active_payment_provider; defaults to 'stripe').
+   * (platform_config.active_payment_provider; defaults to 'netopia').
    */
   async getActivePaymentProvider(): Promise<PaymentProvider> {
     const supabase = getSupabaseClient();
@@ -249,7 +213,7 @@ export const paymentService = {
       .maybeSingle();
     const raw = (data as { value?: unknown } | null)?.value;
     const parsed = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : raw;
-    return (typeof parsed === 'string' ? parsed : 'stripe') as PaymentProvider;
+    return (typeof parsed === 'string' ? parsed : 'netopia') as PaymentProvider;
   },
 
   /**
