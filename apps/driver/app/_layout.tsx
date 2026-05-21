@@ -20,7 +20,6 @@ import { useLocationStore } from '@/stores/location.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
-import { DemoBanner } from '@/components/DemoBanner';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
@@ -310,8 +309,6 @@ function RootLayoutInner() {
       <ErrorBoundary onError={(error) => Sentry.captureException(error)}>
         <AppProviders>
           <RootNavigator />
-          {/* Only shows when EXPO_PUBLIC_DEMO_MODE=true. */}
-          <DemoBanner />
           <Toast />
         </AppProviders>
       </ErrorBoundary>

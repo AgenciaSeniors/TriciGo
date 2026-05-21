@@ -7,7 +7,6 @@ import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, vehicleM
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
-import { getMapFallbackCoordLngLat } from '../config/demo';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -138,9 +137,9 @@ const vehicleMarkerImages: Record<string, any> = {
 // instead of spinning a square around its center as the bearing changes.
 const NON_ROTATING_MARKERS = new Set<string>(['mensajeria']);
 
-// Demo-aware map fallback: returns São Paulo when EXPO_PUBLIC_DEMO_MODE=true,
-// Havana otherwise. Same pattern as apps/client/src/components/RideMapView.tsx.
-const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
+// Mapbox `centerCoordinate` uses [lng, lat]. The driver app is Cuba-only,
+// so the fallback when GPS is unavailable is always La Habana.
+const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const STYLE_DARK_NAV = 'mapbox://styles/mapbox/navigation-night-v1';
 const STYLE_STREETS = MAP_STYLE_LIGHT;
