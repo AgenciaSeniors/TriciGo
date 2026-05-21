@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, ScrollView } from 'react-native';
+import { View, Pressable, ScrollView, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import {
 } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { paymentService } from '@tricigo/api/services/payment';
+import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 // RECARGA V2: presets in USD. Driver-quota uses the same customer
@@ -46,7 +47,46 @@ export default function RechargeScreen() {
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // RECARGA V2 PARITY: success state. After NETOPIA returns and we've
+  // polled the intent to `completed`, we stay on this screen and show
+  // a "Ver recibo" chip once the PDF is generated (async post-webhook,
+  // ~5-10s). Mirror of the web wallet success step.
+  const [successView, setSuccessView] = useState<null | {
+    chargeUsd: number;
+    tcCredited: number;
+  }>(null);
+  const [successReceipt, setSuccessReceipt] = useState<null | {
+    receipt_no: string;
+    pdf_storage_path: string;
+  }>(null);
+  const [openingReceipt, setOpeningReceipt] = useState(false);
+
   const selectedAmount = amount ? Number(amount) : Number(customAmount);
+
+  // RECARGA V2 PARITY: open the just-generated PDF via signed URL.
+  const openSuccessReceipt = useCallback(async () => {
+    if (!successReceipt) return;
+    setOpeningReceipt(true);
+    try {
+      const url = await walletService.getReceiptSignedUrl(successReceipt.pdf_storage_path);
+      await Linking.openURL(url);
+    } catch (err) {
+      logger.error('driver_receipt_open_failed', { error: String(err) });
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }),
+      });
+    } finally {
+      setOpeningReceipt(false);
+    }
+  }, [successReceipt, t]);
+
+  const resetForm = useCallback(() => {
+    setSuccessView(null);
+    setSuccessReceipt(null);
+    setAmount('');
+    setCustomAmount('');
+  }, []);
 
   const handleRecharge = useCallback(async () => {
     if (!user?.id || selectedAmount <= 0) return;
@@ -100,12 +140,42 @@ export default function RechargeScreen() {
       });
       const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
       if (final.status === 'completed') {
+        // RECARGA V2 PARITY: surface a success view with USD + TC and a
+        // "Ver recibo" chip. The PDF is generated async post-webhook, so
+        // we poll wallet_receipts for ~12s (6 attempts × 2s). If it
+        // doesn't land in time, the driver can still download it later
+        // from wallet/index.tsx (we cached the receipts map there).
+        setSuccessView({
+          chargeUsd: result.chargeUsd,
+          tcCredited: result.amountCupCredited,
+        });
         Toast.show({
           type: 'success',
           text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
-          text2: `$${selectedAmount.toFixed(2)} USD`,
+          text2: `$${selectedAmount.toFixed(2)} USD → +${result.amountCupCredited.toLocaleString('es-CU')} TC`,
         });
-        router.back();
+
+        // Fire-and-forget receipt poll. Stops as soon as the PDF row appears.
+        void (async () => {
+          for (let i = 0; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+              const receipts = await walletService.getReceipts(user.id, 5);
+              const found = receipts.find(
+                (r) => r.payment_intent_id === result.intentId && r.pdf_storage_path,
+              );
+              if (found?.pdf_storage_path) {
+                setSuccessReceipt({
+                  receipt_no: found.receipt_no,
+                  pdf_storage_path: found.pdf_storage_path,
+                });
+                return;
+              }
+            } catch {
+              /* Non-fatal: chip just won't appear; user can download from history. */
+            }
+          }
+        })();
       } else if (final.status === 'failed') {
         Toast.show({
           type: 'error',
@@ -125,6 +195,151 @@ export default function RechargeScreen() {
       setSubmitting(false);
     }
   }, [user?.id, selectedAmount, t]);
+
+  // RECARGA V2 PARITY: render the success view once the intent settles.
+  // The form is hidden until the driver explicitly resets to recargar
+  // again or navigates back to the wallet list.
+  if (successView) {
+    return (
+      <Screen bg="dark" statusBarStyle="light-content">
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: insets.top + 8,
+            paddingBottom: insets.bottom + 16,
+            paddingHorizontal: 16,
+          }}
+        >
+          {/* Header */}
+          <View className="flex-row items-center mb-6">
+            <Pressable
+              onPress={() => router.back()}
+              className="w-11 h-11 rounded-xl items-center justify-center mr-3"
+              style={{ backgroundColor: '#252540' }}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.back', { defaultValue: 'Volver' })}
+            >
+              <Ionicons name="arrow-back" size={20} color="#fff" />
+            </Pressable>
+            <Text variant="h2" color="inverse">
+              {t('wallet.recharge', { defaultValue: 'Recargar' })}
+            </Text>
+          </View>
+
+          {/* Success card */}
+          <View
+            style={{
+              backgroundColor: '#1a1a2e',
+              borderRadius: 16,
+              padding: 24,
+              alignItems: 'center',
+              marginTop: 24,
+            }}
+          >
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: 'rgba(22,163,74,0.15)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <Ionicons name="checkmark-circle" size={40} color="#16A34A" />
+            </View>
+            <Text variant="h3" color="inverse" style={{ marginBottom: 8 }}>
+              {t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' })}
+            </Text>
+            <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 4 }}>
+              ${successView.chargeUsd.toFixed(2)} USD
+            </Text>
+            <Text
+              variant="metric"
+              style={{ color: colors.brand.orange, marginBottom: 4 }}
+            >
+              +{successView.tcCredited.toLocaleString('es-CU')} TC
+            </Text>
+            <Text variant="caption" color="tertiary" style={{ textAlign: 'center' }}>
+              {t('wallet.recharge_success_hint', {
+                defaultValue: 'Tu crédito de comisión se actualizó.',
+              })}
+            </Text>
+          </View>
+
+          {/* Receipt chip — appears once the PDF is ready (5-10s post-webhook) */}
+          {successReceipt ? (
+            <Pressable
+              onPress={openSuccessReceipt}
+              disabled={openingReceipt}
+              style={({ pressed }) => [
+                {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 14,
+                  paddingHorizontal: 20,
+                  backgroundColor: 'rgba(249,115,22,0.12)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(249,115,22,0.35)',
+                  borderRadius: 12,
+                  marginTop: 16,
+                },
+                pressed && { opacity: 0.7 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('wallet.download_receipt_aria', {
+                defaultValue: 'Descargar comprobante {{no}}',
+                no: successReceipt.receipt_no,
+              })}
+            >
+              <Ionicons name="document-text-outline" size={18} color={colors.brand.orange} />
+              <Text variant="body" style={{ color: colors.brand.orange, fontWeight: '600' }}>
+                {openingReceipt
+                  ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                  : t('wallet.view_receipt', { defaultValue: 'Ver recibo' })}{' '}
+                {successReceipt.receipt_no}
+              </Text>
+            </Pressable>
+          ) : (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                paddingVertical: 14,
+                marginTop: 16,
+              }}
+            >
+              <Text variant="caption" color="tertiary">
+                {t('wallet.receipt_generating', {
+                  defaultValue: 'Generando comprobante PDF…',
+                })}
+              </Text>
+            </View>
+          )}
+
+          <Button
+            title={t('wallet.recharge_another', { defaultValue: 'Hacer otra recarga' })}
+            onPress={resetForm}
+            variant="ghost"
+            size="lg"
+            fullWidth
+            className="mt-4"
+          />
+          <Button
+            title={t('common.back_to_wallet', { defaultValue: 'Volver a mi cuenta' })}
+            onPress={() => router.back()}
+            size="lg"
+            fullWidth
+            className="mt-2"
+          />
+        </ScrollView>
+      </Screen>
+    );
+  }
 
   return (
     <Screen bg="dark" statusBarStyle="light-content">

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -30,6 +31,15 @@ export default function WalletScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
+  // RECARGA V2 PARITY: map payment_intent_id → receipt metadata so we
+  // can render a "Descargar comprobante" button on each driver_quota
+  // recharge txn. Mirror of `apps/client/app/(tabs)/wallet.tsx`.
+  const [receiptByPiId, setReceiptByPiId] = useState<Map<string, {
+    receipt_no: string;
+    pdf_storage_path: string | null;
+  }>>(new Map());
+  const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
+
   const fetchData = useCallback(async (reset = false) => {
     if (!userId) return;
     try {
@@ -52,6 +62,25 @@ export default function WalletScreen() {
         setPage((prev) => prev + 1);
       }
       setHasMore(txData.length === PAGE_SIZE);
+
+      // RECARGA V2 PARITY: load wallet receipts so each `recharge` txn
+      // with a matching payment_intent_id surfaces a download button.
+      // Best-effort — UI hides receipts silently if this fails.
+      if (reset) {
+        try {
+          const receipts = await walletService.getReceipts(userId, 100);
+          const map = new Map<string, { receipt_no: string; pdf_storage_path: string | null }>();
+          for (const r of receipts) {
+            map.set(r.payment_intent_id, {
+              receipt_no: r.receipt_no,
+              pdf_storage_path: r.pdf_storage_path,
+            });
+          }
+          setReceiptByPiId(map);
+        } catch {
+          // Non-fatal: the txn rows just won't have a download button.
+        }
+      }
     } catch {
       // Silent — wallet is best-effort
     } finally {
@@ -59,6 +88,25 @@ export default function WalletScreen() {
       setRefreshing(false);
     }
   }, [userId, page]);
+
+  // RECARGA V2 PARITY: open the PDF via a fresh 1h signed URL.
+  // Linking.openURL hands off to the OS browser / PDF viewer so the
+  // driver can review or share the receipt outside the app.
+  const openReceiptNative = useCallback(async (storagePath: string, receiptNo: string) => {
+    setOpeningReceipt(receiptNo);
+    try {
+      const url = await walletService.getReceiptSignedUrl(storagePath);
+      await Linking.openURL(url);
+    } catch (err) {
+      console.error('Receipt open failed:', err);
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }),
+      });
+    } finally {
+      setOpeningReceipt(null);
+    }
+  }, [t]);
 
   useEffect(() => {
     fetchData(true);
@@ -138,45 +186,91 @@ export default function WalletScreen() {
     return ['ride_payment', 'tip', 'transfer_in', 'recharge', 'promo_credit'].includes(type);
   };
 
-  const renderTransaction = ({ item }: { item: LedgerTransaction & { ledger_entries?: { amount: number }[] } }) => {
+  const renderTransaction = ({ item }: {
+    item: LedgerTransaction & {
+      ledger_entries?: { amount: number }[];
+      reference_type?: string | null;
+      reference_id?: string | null;
+    };
+  }) => {
     const amount = (item as any).ledger_entries?.[0]?.amount ?? 0;
     const txColor = getTransactionColor(item.type);
+    // RECARGA V2 PARITY: only `recharge` txns whose ledger row points
+    // at a payment_intent (NETOPIA / historical Stripe) have a PDF.
+    const receipt = item.type === 'recharge'
+      && item.reference_type === 'payment_intent'
+      && item.reference_id
+      ? receiptByPiId.get(item.reference_id)
+      : null;
+    const canDownload = !!receipt?.pdf_storage_path;
     return (
-      <Pressable
-        className="flex-row items-center py-3.5 px-4"
-        style={({ pressed }) => [
-          { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
-          pressed && { backgroundColor: 'rgba(255,255,255,0.03)' },
-        ]}
-        accessibilityRole="summary"
+      <View
+        style={{ borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}
+        accessible
         accessibilityLabel={`${item.type}: ${formatCUP(Math.abs(amount))}`}
       >
-        <View
-          className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-          style={{ backgroundColor: `${txColor}12` }}
+        <Pressable
+          className="flex-row items-center py-3.5 px-4"
+          style={({ pressed }) => [pressed && { backgroundColor: 'rgba(255,255,255,0.03)' }]}
         >
-          <Ionicons
-            name={getTransactionIcon(item.type) as any}
-            size={18}
-            color={txColor}
-          />
-        </View>
-        <View className="flex-1">
-          <Text variant="body" color="inverse" className="font-medium">
-            {t(`wallet.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
+          <View
+            className="w-10 h-10 rounded-xl items-center justify-center mr-3"
+            style={{ backgroundColor: `${txColor}12` }}
+          >
+            <Ionicons
+              name={getTransactionIcon(item.type) as any}
+              size={18}
+              color={txColor}
+            />
+          </View>
+          <View className="flex-1">
+            <Text variant="body" color="inverse" className="font-medium">
+              {t(`wallet.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
+            </Text>
+            <Text variant="caption" color="secondary" className="mt-0.5">
+              {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+          <Text
+            variant="body"
+            className="font-bold tabular-nums"
+            style={{ color: txColor }}
+          >
+            {isCreditType(item.type) ? '+' : '-'}{formatCUP(Math.abs(amount))}
           </Text>
-          <Text variant="caption" color="secondary" className="mt-0.5">
-            {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
-        <Text
-          variant="body"
-          className="font-bold tabular-nums"
-          style={{ color: txColor }}
-        >
-          {isCreditType(item.type) ? '+' : '-'}{formatCUP(Math.abs(amount))}
-        </Text>
-      </Pressable>
+        </Pressable>
+        {canDownload && receipt && (
+          <Pressable
+            onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
+            disabled={openingReceipt === receipt.receipt_no}
+            style={({ pressed }) => [
+              {
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 16,
+                paddingBottom: 12,
+                marginTop: -4,
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={t('wallet.download_receipt_aria', {
+              defaultValue: 'Descargar comprobante {{no}}',
+              no: receipt.receipt_no,
+            })}
+          >
+            <Ionicons name="download-outline" size={14} color={colors.brand.orange} />
+            <Text
+              variant="caption"
+              style={{ color: colors.brand.orange, fontWeight: '600', marginLeft: 6 }}
+            >
+              {openingReceipt === receipt.receipt_no
+                ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                : `${t('wallet.download_receipt', { defaultValue: 'Comprobante' })} ${receipt.receipt_no}`}
+            </Text>
+          </Pressable>
+        )}
+      </View>
     );
   };
 
