@@ -48,6 +48,14 @@ interface CreateIntentRequest {
    * of in the system browser. Whitelisted to known TriciGo prefixes.
    */
   return_url_base?: string;
+  /**
+   * 2-char ISO 639-1 code for the NETOPIA hosted-page UI. Defaults to 'es'
+   * for the TriciGo Hispanic audience. NETOPIA documented support: 'ro',
+   * 'en' — unsupported codes silently fall back to Romanian (default) or
+   * English depending on the POS configuration. If 'es' is not honored,
+   * change the default below to 'en'.
+   */
+  language?: string;
 }
 
 /**
@@ -174,16 +182,29 @@ async function callNetopiaCardStart(args: {
     },
   };
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      // v2.x: raw API key, no "Bearer" prefix (per OpenAPI spec).
-      'Authorization': args.apiKey,
-    },
-    body: JSON.stringify(body),
-  });
+  // 15s hard timeout: NETOPIA TLS/network hangs would otherwise reach
+  // Supabase's gateway timeout (~10–25s), producing a generic 502 with
+  // no body. With this, we surface a clean error and our handler can
+  // mark the intent failed and return a structured response.
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // v2.x: raw API key, no "Bearer" prefix (per OpenAPI spec).
+        'Authorization': args.apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error('netopia request timed out after 15s');
+    }
+    throw err;
+  }
 
   const text = await resp.text();
   let parsed: NetopiaStartResponse = {};
@@ -192,7 +213,11 @@ async function callNetopiaCardStart(args: {
   } catch (_err) {
     throw new Error(`netopia returned non-JSON response (HTTP ${resp.status}): ${text.slice(0, 500)}`);
   }
-  if (!resp.ok && !parsed.error) {
+  // Only fail hard on non-2xx WITHOUT a parsed body. NETOPIA v2.x often
+  // returns 200 with both `payment.paymentURL` AND an `error` object
+  // whose code is informational (see handler below); the parser must
+  // not reject that case.
+  if (!resp.ok && !parsed.error && !parsed.payment) {
     throw new Error(`netopia HTTP ${resp.status}: ${text.slice(0, 500)}`);
   }
   return parsed;
@@ -255,7 +280,11 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const body: CreateIntentRequest = await req.json();
-    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base } = body;
+    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
+    // Default to Spanish for the TriciGo audience. NETOPIA's hosted page
+    // falls back to Romanian if the code isn't supported — if that
+    // happens, change this default to 'en'.
+    const uiLanguage = (language && /^[a-z]{2}$/i.test(language)) ? language.toLowerCase() : 'es';
 
     // Reject obviously-bad return URLs early so the caller learns
     // BEFORE we burn a payment_intents row + NETOPIA call.
@@ -478,7 +507,7 @@ Deno.serve(async (req) => {
         description: `TriciGo wallet recharge ${intent.id.slice(0, 8)}`,
         notifyUrl,
         redirectUrl: returnUrl,
-        language: 'ro',
+        language: uiLanguage,
         billing,
       });
     } catch (netopiaErr) {
@@ -491,8 +520,33 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (netopiaResp.error?.code) {
-      const msg = netopiaResp.error.message ?? netopiaResp.error.code;
+    // Breadcrumb for future debugging without leaking PII / secrets.
+    // Body of the response (billing, full customerAction) is NOT logged;
+    // just the fields needed to triage 502s.
+    console.log('[netopia] response summary', {
+      hasPaymentURL: !!netopiaResp.payment?.paymentURL,
+      ntpID: netopiaResp.payment?.ntpID,
+      status: netopiaResp.payment?.status,
+      errorCode: netopiaResp.error?.code,
+      errorMessage: netopiaResp.error?.message,
+      customerActionType: netopiaResp.customerAction?.type,
+    });
+
+    // Decision: paymentURL is the SOLE source of truth for success.
+    // NETOPIA v2.x's `/payment/card/start` always returns an `error`
+    // object — code "0"/"00"/"100"/"101" are all informational hints
+    // ("Redirect user to payment page" with code 101 is the standard
+    // response for hosted-page flow). Whitelisting codes is brittle;
+    // NETOPIA can introduce new ones tomorrow. So: if paymentURL is
+    // present, treat it as success and log `error` only for diagnostics.
+    const paymentURL = netopiaResp.payment?.paymentURL;
+
+    if (!paymentURL) {
+      // No URL → can't redirect the user → real failure. error.message
+      // (if present) is the genuine error from NETOPIA worth surfacing.
+      const msg = netopiaResp.error?.message
+        ?? netopiaResp.error?.code
+        ?? 'NETOPIA did not return a paymentURL';
       await supabase.from('payment_intents')
         .update({
           status: 'failed',
@@ -505,13 +559,23 @@ Deno.serve(async (req) => {
           ok: false,
           error: 'netopia_error',
           detail: msg,
-          netopia_code: netopiaResp.error.code,
-          netopia_details: netopiaResp.error.details,
+          netopia_code: netopiaResp.error?.code,
+          netopia_details: netopiaResp.error?.details,
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
+    if (netopiaResp.error?.code) {
+      // Informational code alongside a valid URL — log and proceed.
+      console.log(
+        `[netopia] code ${netopiaResp.error.code} with paymentURL ` +
+        `(status=${netopiaResp.payment?.status}): ${netopiaResp.error.message ?? '(no message)'}`,
+      );
+    }
+
+    // Defensive: at this point paymentURL must exist (early-return covers
+    // the empty case). The legacy guard below is kept for paranoia.
     if (!netopiaResp.payment?.paymentURL) {
       await supabase.from('payment_intents')
         .update({

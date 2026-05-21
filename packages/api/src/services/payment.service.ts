@@ -109,6 +109,7 @@ export const paymentService = {
         corporate_account_id: req.corporateAccountId,
         device_fingerprint: req.deviceFingerprint,
         return_url_base: req.returnUrl,
+        language: req.language,
       }),
     });
 
