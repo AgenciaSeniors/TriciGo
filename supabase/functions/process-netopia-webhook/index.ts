@@ -246,6 +246,27 @@ Deno.serve(async (req) => {
 
       await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, true);
 
+      // Asynchronously trigger the receipt PDF. Mirror of the Stripe webhook
+      // flow that was removed during the cutover (PR #137). The receipt EF
+      // is idempotent on payment_intent_id (UNIQUE in wallet_receipts) so
+      // re-invocation is safe. We do NOT await — receipt rendering takes a
+      // few seconds and would push us past NETOPIA's IPN timeout window.
+      // Gated by corporate_account_id because B2B recharges have their own
+      // invoicing flow and don't get the individual PDF receipt.
+      if (!existingIntent.corporate_account_id) {
+        fetch(`${supabaseUrl}/functions/v1/generate-recharge-receipt`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({ payment_intent_id: orderId }),
+        }).catch((efErr) => {
+          console.error(`[netopia] generate-recharge-receipt trigger failed for ${orderId}:`, efErr);
+        });
+      }
+
       return new Response(JSON.stringify(ACK_OK), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

@@ -136,8 +136,17 @@ Deno.serve(async (req) => {
     if (!pi) return jsonResponse({ error: 'payment_intent_not_found' }, 404);
 
     const piRow = pi as PaymentIntentRow;
-    if (piRow.payment_provider !== 'stripe') {
-      return jsonResponse({ error: 'not_stripe_recharge', provider: piRow.payment_provider }, 400);
+    // Accept any provider that produces a real wallet recharge. Today
+    // that's 'netopia' (the live provider after the 2026-05-20 cutover)
+    // and 'stripe' (historical rows pre-cutover that may still need
+    // back-filled receipts). Other providers (e.g. legacy 'tropipay')
+    // are not eligible — they predate the receipt system.
+    const RECEIPT_ELIGIBLE_PROVIDERS = new Set(['netopia', 'stripe']);
+    if (!RECEIPT_ELIGIBLE_PROVIDERS.has(piRow.payment_provider)) {
+      return jsonResponse(
+        { error: 'provider_not_receipt_eligible', provider: piRow.payment_provider },
+        400,
+      );
     }
     if (piRow.status !== 'completed' && piRow.status !== 'succeeded') {
       return jsonResponse({ error: 'payment_not_completed', status: piRow.status }, 400);
@@ -179,6 +188,7 @@ Deno.serve(async (req) => {
       user: userRow,
       amounts,
       stripePaymentIntentId: piRow.stripe_payment_intent_id ?? '',
+      paymentProvider: piRow.payment_provider,
       cardBrand: piRow.card_brand,
       cardLast4: piRow.card_last4,
       dateISO,
@@ -325,14 +335,29 @@ interface PdfArgs {
   receiptNo: string;
   user: UserRow;
   amounts: ComputedAmounts;
+  /**
+   * External provider transaction id. Historically the Stripe PI id;
+   * for NETOPIA recharges it's the ntpID. The column is named
+   * stripe_payment_intent_id on payment_intents for legacy reasons.
+   */
   stripePaymentIntentId: string;
+  /** 'netopia' | 'stripe' — controls the friendly provider label. */
+  paymentProvider: string;
   cardBrand: string | null;
   cardLast4: string | null;
   dateISO: string;
 }
 
+/** Friendly name shown on the PDF for each payment provider. */
+function providerLabel(p: string): string {
+  if (p === 'netopia') return 'NETOPIA Payments';
+  if (p === 'stripe') return 'Stripe';
+  return p;
+}
+
 async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
-  const { receiptNo, user, amounts, stripePaymentIntentId, cardBrand, cardLast4, dateISO } = args;
+  const { receiptNo, user, amounts, stripePaymentIntentId, paymentProvider, cardBrand, cardLast4, dateISO } = args;
+  const provider = providerLabel(paymentProvider);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]); // A4 in points
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
@@ -403,7 +428,9 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   // ── Section 2: transaction breakdown ───────────────────────────
   y = drawSectionHeader(page, helvBold, 'Detalle de la transacción', left, y, ink, primary);
   y = drawRow(page, helv, helvBold, 'Importe cobrado', fmtUsd(amounts.usdCharged), left, right, y, text, muted);
-  y = drawRow(page, helv, helvBold, 'Comisión de servicio', `−${fmtUsd(amounts.feeUsd)}`, left, right, y, text, muted);
+  // ASCII hyphen-minus (0x2D) — the typographic minus (U+2212) is
+  // not in WinAnsi, which pdf-lib's StandardFont Helvetica uses.
+  y = drawRow(page, helv, helvBold, 'Comisión de servicio', `-${fmtUsd(amounts.feeUsd)}`, left, right, y, text, muted);
   y = drawRow(page, helv, helvBold, 'Importe neto acreditado', fmtUsd(amounts.netUsd), left, right, y, ink, muted, true);
   y = drawTotalRow(page, helvBold, 'TriciCoin acreditados', `${amounts.tcCredited.toFixed(2)} TC`, left, right, y, primary, ink);
   y = drawHelperLine(page, helv, '1 TriciCoin = 1 USD', left, y, muted);
@@ -412,7 +439,10 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   // ── Section 3: CUP conversion (only if rate snapshotted) ───────
   y = drawSectionHeader(page, helvBold, 'Conversión a CUP (referencial)', left, y, ink, primary);
   if (amounts.exchangeRate > 0) {
-    y = drawRow(page, helv, helvBold, 'Tasa USD → CUP del día', amounts.exchangeRate.toFixed(2), left, right, y, text, muted);
+    // ASCII arrow — pdf-lib's StandardFont Helvetica uses WinAnsi
+    // which doesn't encode U+2192 (RIGHTWARDS ARROW). Same family of
+    // bug as the U+2212 minus sign in the fee row above.
+    y = drawRow(page, helv, helvBold, 'Tasa USD -> CUP del día', amounts.exchangeRate.toFixed(2), left, right, y, text, muted);
     y = drawRow(page, helv, helvBold, 'Equivalente en CUP', formatCup(amounts.cupEquivalent), left, right, y, text, muted);
   } else {
     y = drawHelperLine(page, helv, 'Tasa de cambio no disponible al momento de la recarga.', left, y, muted);
@@ -424,12 +454,12 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   const cardLine = cardBrand && cardLast4
     ? `${capitalize(cardBrand)} terminada en •••• ${cardLast4}`
     : cardBrand
-      ? `${capitalize(cardBrand)} (Stripe)`
-      : 'Tarjeta de crédito/débito (vía Stripe)';
+      ? `${capitalize(cardBrand)} (${provider})`
+      : `Tarjeta de crédito/débito (vía ${provider})`;
   page.drawText(cardLine, { x: left, y, size: 10, font: helv, color: text });
   y -= 14;
   if (stripePaymentIntentId) {
-    page.drawText(`Referencia Stripe: ${stripePaymentIntentId}`, {
+    page.drawText(`Referencia ${provider}: ${stripePaymentIntentId}`, {
       x: left, y, size: 8, font: helv, color: muted,
     });
   }
