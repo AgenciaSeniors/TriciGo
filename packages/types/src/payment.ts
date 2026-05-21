@@ -105,6 +105,13 @@ export interface RechargeIntentRequest {
    * (`https://tricigo.com/wallet`).
    */
   returnUrl?: string;
+  /**
+   * Optional 2-char ISO 639-1 code for the processor's hosted-page UI
+   * language. When omitted, the edge function defaults to 'es' (Spanish)
+   * for the TriciGo Hispanic audience. Unsupported codes fall back to
+   * Romanian (NETOPIA default) silently.
+   */
+  language?: string;
 }
 
 /**

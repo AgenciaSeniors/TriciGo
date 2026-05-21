@@ -48,6 +48,14 @@ interface CreateIntentRequest {
    * of in the system browser. Whitelisted to known TriciGo prefixes.
    */
   return_url_base?: string;
+  /**
+   * 2-char ISO 639-1 code for the NETOPIA hosted-page UI. Defaults to 'es'
+   * for the TriciGo Hispanic audience. NETOPIA documented support: 'ro',
+   * 'en' — unsupported codes silently fall back to Romanian (default) or
+   * English depending on the POS configuration. If 'es' is not honored,
+   * change the default below to 'en'.
+   */
+  language?: string;
 }
 
 /**
@@ -272,7 +280,11 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const body: CreateIntentRequest = await req.json();
-    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base } = body;
+    const { user_id, amount_cup, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
+    // Default to Spanish for the TriciGo audience. NETOPIA's hosted page
+    // falls back to Romanian if the code isn't supported — if that
+    // happens, change this default to 'en'.
+    const uiLanguage = (language && /^[a-z]{2}$/i.test(language)) ? language.toLowerCase() : 'es';
 
     // Reject obviously-bad return URLs early so the caller learns
     // BEFORE we burn a payment_intents row + NETOPIA call.
@@ -495,7 +507,7 @@ Deno.serve(async (req) => {
         description: `TriciGo wallet recharge ${intent.id.slice(0, 8)}`,
         notifyUrl,
         redirectUrl: returnUrl,
-        language: 'ro',
+        language: uiLanguage,
         billing,
       });
     } catch (netopiaErr) {
