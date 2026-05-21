@@ -26,7 +26,8 @@ describe('paymentService', () => {
     vi.clearAllMocks();
   });
 
-  // TODO: Add tests for Stripe PaymentIntent creation when implemented
+  // TODO: Add tests for createRechargeIntent (NETOPIA path) — currently only
+  // covered E2E via the sandbox dry-run, not via unit tests.
 
   // ─── getPaymentIntent ───
   describe('getPaymentIntent', () => {

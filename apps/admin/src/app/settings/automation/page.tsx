@@ -25,13 +25,6 @@ const RULES: AutomationRule[] = [
     thresholdLabel: 'automation.face_threshold',
   },
   {
-    enabledKey: 'auto_approve_redemptions_enabled',
-    thresholdKey: 'auto_approve_redemptions_max_trc',
-    titleKey: 'automation.redemption_approval',
-    descKey: 'automation.redemption_approval_desc',
-    thresholdLabel: 'automation.max_amount',
-  },
-  {
     enabledKey: 'auto_resolve_fraud_enabled',
     thresholdKey: 'auto_resolve_fraud_hours',
     titleKey: 'automation.fraud_resolve',

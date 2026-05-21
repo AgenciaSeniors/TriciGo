@@ -105,7 +105,11 @@ export default function AboutPage() {
           soporte@tricigo.com
         </a>
         <p style={{ margin: '0.75rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-          TriciGo Inc.
+          TriciGo es un servicio operado por MACH DIGITAL TECH S.R.L.
+          <br />
+          CUI 54552055 &middot; Nr. Reg. Com. J2026027319006
+          <br />
+          Str. Lungă nr. 149, Ap. P3, Brașov, Rumanía
         </p>
       </div>
     </main>

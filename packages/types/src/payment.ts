@@ -1,7 +1,12 @@
 // ============================================================
 // TriciGo — Payment Intent Types
-// Tracks payment lifecycle for wallet recharges and direct
-// ride payments via Stripe.
+// Tracks payment lifecycle for wallet recharges via the active
+// payment provider. NETOPIA Payments is the sole live provider
+// after the 2026-05-20 cutover; Stripe and TropiPay remain in the
+// PaymentProvider union as historical-data values so old rows
+// in payment_intents continue to type-check, but no new code path
+// creates them. Removing them from the union is a follow-up once
+// migration that backfills historical rows lands.
 // ============================================================
 
 export type PaymentIntentType = 'recharge' | 'ride_payment';
@@ -15,20 +20,31 @@ export type PaymentIntentStatus =
   | 'expired'
   | 'refunded';
 
-/** Payment provider used for this intent */
-export type PaymentProvider = 'stripe' | 'tropipay';
+/**
+ * Payment provider used for this intent.
+ *
+ * - `netopia`: the only provider used for new recharges (post 2026-05-20 cutover).
+ * - `stripe` / `tropipay`: legacy values preserved so historical
+ *   payment_intents rows still type-check. No code path creates these.
+ * - `euplatesc`: reserved for future Phase D3.
+ */
+export type PaymentProvider = 'netopia' | 'euplatesc' | 'stripe' | 'tropipay';
 
 export interface PaymentIntent {
   id: string;
   user_id: string;
 
-  /** Stripe PaymentIntent ID */
+  /**
+   * External provider transaction id. Historically named for Stripe;
+   * NETOPIA stores its `ntpID` here. A follow-up rename to
+   * `provider_intent_id` is documented in PAYMENT_PROVIDER_CONTRACT.md.
+   */
   stripe_payment_intent_id?: string | null;
-  /** Payment provider used ('stripe' or legacy 'tropipay') */
+  /** Which payment provider produced this row. */
   payment_provider: PaymentProvider | null;
-  /** Full payment URL (legacy, not used with Stripe Elements) */
+  /** Full payment URL (legacy column kept for historical rows). */
   payment_url: string | null;
-  /** Short URL for sharing (legacy) */
+  /** Short URL for sharing (legacy column kept for historical rows). */
   short_url: string | null;
 
   /** Amount in CUP whole units (1 TRC = 1 CUP) */
@@ -63,21 +79,59 @@ export interface PaymentIntent {
   updated_at: string;
 }
 
-/** Response from create-stripe-payment-intent edge function */
-export interface CreateStripeIntentResponse {
-  ok: true;
-  clientSecret: string;
-  intentId: string;
-  amountUsd: number;
+// ============================================================
+// Provider-agnostic recharge contract (Phase D1)
+// See docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
+// ============================================================
+
+/** Provider-agnostic input to create a wallet recharge intent. */
+export interface RechargeIntentRequest {
+  /** Which payment processor to route this recharge through. */
+  provider: PaymentProvider;
+  userId: string;
   amountCup: number;
-  feeUsd: number;
-  exchangeRate: number;
-  publishableKey: string;
+  /** 'customer' credits the rider wallet; 'driver_quota' the driver commission credit. */
+  rechargeType?: 'customer' | 'driver_quota';
+  corporateAccountId?: string;
+  /** Phase B6: basic device fingerprint of the payer's browser, for fraud analysis. */
+  deviceFingerprint?: string;
+  /**
+   * Optional override of the URL the processor redirects the user to after
+   * settlement. The edge function appends `?intent=<id>` server-side. Used by
+   * mobile apps to send the user back into the app via universal link
+   * (e.g. `https://tricigo.com/app/client/wallet`) or custom scheme
+   * (`tricigo://wallet`). Whitelisted prefixes only — see the edge function.
+   * When omitted, the edge function defaults to the web wallet
+   * (`https://tricigo.com/wallet`).
+   */
+  returnUrl?: string;
 }
 
-/** Stripe recharge config from platform_config */
-export interface StripeRechargeConfig {
+/**
+ * Provider-agnostic result of creating a recharge intent. The common
+ * fields are always present; the provider-specific fields are optional
+ * — redirect-based providers (NETOPIA, EuPlatesc) populate `redirectUrl`.
+ */
+export interface RechargeIntentResult {
+  ok: true;
+  provider: PaymentProvider;
+  /** TriciGo payment_intents row id. */
+  intentId: string;
+  amountCup: number;
+  amountUsd: number;
+  feeUsd: number;
+  exchangeRate: number;
+  /** Redirect-based providers (NETOPIA, EuPlatesc): URL to send the payer to. */
+  redirectUrl?: string;
+  /** Echoed environment ('sandbox' | 'live') for diagnostics. */
+  environment?: 'sandbox' | 'live';
+}
+
+/** Provider-agnostic recharge configuration from platform_config. */
+export interface PaymentProviderConfig {
+  provider: PaymentProvider;
   enabled: boolean;
+  /** Publishable / public key, when the provider uses one. */
   publishableKey: string;
   minRechargeCup: number;
   maxRechargeCup: number;

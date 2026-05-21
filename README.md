@@ -44,7 +44,7 @@ TriciGo/
 | Base de datos | Supabase (PostgreSQL + PostGIS + Auth + Realtime + Storage) |
 | Mapas | Mapbox GL (con soporte offline) |
 | Notificaciones | Expo Push Notifications |
-| Pagos | TropiPay (tarjetas internacionales) |
+| Pagos | Stripe (tarjetas de crédito/débito) |
 | Error tracking | Sentry |
 | Analytics | PostHog |
 | Tests | Vitest (282 tests) |
@@ -64,7 +64,7 @@ TriciGo/
 - Multi-stop: agregar hasta 3 paradas durante el viaje
 - Viajes programados
 - Chat in-ride con respuestas rapidas
-- Wallet TriciCoin + efectivo + TropiPay + corporativo
+- Créditos TriciCoin + efectivo + tarjeta (Stripe) + corporativo
 - Propinas al conductor
 - Codigos promocionales y referidos
 - Surge pricing transparente con rango de tarifa
@@ -283,7 +283,7 @@ packages/api/src/services/__tests__/
 | 04 | feature_flags | Feature flags |
 | 05 | ride_messages | Chat in-ride |
 | 06 | sprint8_promo_wallet_devices | Push tokens + promos |
-| 07 | sprint9_payment_pipeline | Payment intents + TropiPay |
+| 07 | sprint9_payment_pipeline | Payment intents |
 | 08 | wallet_recharge_requests | Solicitudes de recarga |
 | 09 | user_levels_p2p | Niveles de usuario |
 | 10 | eligibility_cancellations | Logica de cancelacion |
@@ -296,11 +296,11 @@ packages/api/src/services/__tests__/
 | 17 | exchange_rate_billing | Tasa de cambio |
 | 18 | driver_rate_fare | Tarifa personalizada del conductor |
 | 19 | referral_rewards | Programa de referidos |
-| 20 | tropipay_payment_intents | Pagos TropiPay |
+| 20 | tropipay_payment_intents | Intents de pago (legacy) |
 | 21 | pg_cron_scheduled_jobs | Jobs programados |
 | 22 | push_notification_triggers | Triggers automaticos de push |
 | 23 | cancellation_preview | Preview de penalizacion |
-| 24 | tropipay_direct_payment | Pago directo |
+| 24 | tropipay_direct_payment | Pago directo (legacy) |
 | 25 | avatar_storage | Almacenamiento de avatars |
 | 26 | rider_rating | Rating del pasajero por conductor |
 | 27 | corporate_accounts | Cuentas corporativas B2B |
@@ -308,14 +308,12 @@ packages/api/src/services/__tests__/
 | 29 | ride_waypoints | Multi-stop waypoints |
 | 30 | waypoint_driver_update | Update de waypoints por conductor |
 
-### Edge Functions (8)
+### Edge Functions (6)
 
 | Funcion | Descripcion |
 |---------|-------------|
 | `send-push` | Push notifications via Expo |
 | `send-email` | Emails transaccionales |
-| `create-tropipay-link` | Enlace de pago TropiPay |
-| `process-tropipay-webhook` | Webhook de TropiPay |
 | `create-ride-payment-link` | Enlace de pago de viaje |
 | `verify-selfie` | Verificacion facial del conductor |
 | `cancel-stale-rides` | Cancelar viajes expirados (cron) |

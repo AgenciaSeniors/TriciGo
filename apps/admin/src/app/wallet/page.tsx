@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Inbox, Wallet, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, Inbox } from 'lucide-react';
 import { WalletV2BonusPushButton } from '@/components/wallet/WalletV2BonusPushButton';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatTriciCoin } from '@tricigo/utils';
@@ -9,7 +9,6 @@ import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import type {
   LedgerTransaction,
-  WalletRedemption,
   WalletRechargeRequest,
 } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -22,10 +21,9 @@ import { exportToCsv } from '@/lib/exportCsv';
 
 const PAGE_SIZE = 20;
 
-type Tab = 'redemptions' | 'recharges' | 'ledger';
+type Tab = 'recharges' | 'ledger';
 
 type RechargeRow = WalletRechargeRequest & { user_name: string };
-type RedemptionRow = WalletRedemption & { driver_name: string };
 
 type WalletStats = {
   total_in_circulation: number;
@@ -40,8 +38,7 @@ export default function WalletPage() {
 
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('redemptions');
-  const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
+  const [tab, setTab] = useState<Tab>('recharges');
   const [recharges, setRecharges] = useState<RechargeRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,10 +54,6 @@ export default function WalletPage() {
     inputPlaceholder?: string;
   }>({ open: false, action: () => {}, title: '', message: '' });
 
-  const [sortRedemptions, setSortRedemptions] = useState<SortState | null>({
-    columnId: 'requested_at',
-    direction: 'desc',
-  });
   const [sortRecharges, setSortRecharges] = useState<SortState | null>({
     columnId: 'created_at',
     direction: 'desc',
@@ -71,7 +64,6 @@ export default function WalletPage() {
   });
 
   const TABS: StatusTab<Tab>[] = useMemo(() => [
-    { id: 'redemptions', label: t('wallet_admin.tab_redemptions', { defaultValue: 'Retiros pendientes' }), tone: 'warning' },
     { id: 'recharges', label: t('wallet_admin.tab_recharges', { defaultValue: 'Recargas pendientes' }), tone: 'info' },
     { id: 'ledger', label: t('wallet_admin.tab_ledger', { defaultValue: 'Libro mayor' }), tone: 'default' },
   ], [t]);
@@ -96,10 +88,7 @@ export default function WalletPage() {
     setLoading(true);
     setError(null);
     try {
-      if (tab === 'redemptions') {
-        const data = await adminService.getPendingRedemptions(page, PAGE_SIZE);
-        setRedemptions(data);
-      } else if (tab === 'recharges') {
+      if (tab === 'recharges') {
         const data = await adminService.getPendingRecharges(page, PAGE_SIZE);
         setRecharges(data as RechargeRow[]);
       } else {
@@ -132,10 +121,6 @@ export default function WalletPage() {
     [],
   );
 
-  const sortedRedemptions = useMemo(
-    () => sortRows(redemptions, sortRedemptions),
-    [redemptions, sortRedemptions, sortRows],
-  );
   const sortedRecharges = useMemo(
     () => sortRows(recharges, sortRecharges),
     [recharges, sortRecharges, sortRows],
@@ -144,55 +129,6 @@ export default function WalletPage() {
     () => sortRows(transactions, sortTransactions),
     [transactions, sortTransactions, sortRows],
   );
-
-  async function handleRedemption(id: string, action: 'approved' | 'rejected') {
-    if (action === 'approved') {
-      setConfirmModal({
-        open: true,
-        title: t('wallet_admin.approve_redemption_title', { defaultValue: 'Aprobar retiro' }),
-        message: t('wallet_admin.approve_redemption_msg', { defaultValue: '¿Confirmás aprobar este retiro? Se va a descontar del saldo del conductor.' }),
-        action: async () => {
-          setConfirmModal((prev) => ({ ...prev, open: false }));
-          setProcessing(id);
-          try {
-            await adminService.processRedemption(id, adminUserId, action);
-            setRedemptions((prev) => prev.filter((r) => r.id !== id));
-            const newStats = await adminService.getWalletStats();
-            setStats(newStats);
-            showToast('success', t('wallet_admin.toast_redemption_approved', { defaultValue: 'Retiro aprobado' }));
-          } catch (err) {
-            showToast('error', err instanceof Error ? err.message : t('wallet_admin.redemption_error', { defaultValue: 'No pudimos procesar el retiro.' }));
-          } finally {
-            setProcessing(null);
-          }
-        },
-      });
-    } else {
-      setRejectReason('');
-      setConfirmModal({
-        open: true,
-        title: t('wallet_admin.reject_redemption_title', { defaultValue: 'Rechazar retiro' }),
-        message: t('wallet_admin.reject_redemption_msg', { defaultValue: 'Contanos el motivo del rechazo (el conductor lo va a ver).' }),
-        variant: 'danger',
-        inputPlaceholder: t('wallet_admin.reject_reason_placeholder', { defaultValue: 'Motivo del rechazo' }),
-        action: async () => {
-          setConfirmModal((prev) => ({ ...prev, open: false }));
-          setProcessing(id);
-          try {
-            await adminService.processRedemption(id, adminUserId, action, rejectReason);
-            setRedemptions((prev) => prev.filter((r) => r.id !== id));
-            const newStats = await adminService.getWalletStats();
-            setStats(newStats);
-            showToast('success', t('wallet_admin.toast_redemption_rejected', { defaultValue: 'Retiro rechazado' }));
-          } catch (err) {
-            showToast('error', err instanceof Error ? err.message : t('wallet_admin.redemption_error', { defaultValue: 'No pudimos procesar el retiro.' }));
-          } finally {
-            setProcessing(null);
-          }
-        },
-      });
-    }
-  }
 
   async function handleRecharge(id: string, action: 'approved' | 'rejected') {
     if (action === 'approved') {
@@ -238,36 +174,6 @@ export default function WalletPage() {
       });
     }
   }
-
-  const redemptionColumns: DataColumn<RedemptionRow>[] = useMemo(
-    () => [
-      {
-        id: 'driver_name',
-        header: t('wallet_admin.col_driver', { defaultValue: 'Conductor' }),
-        cell: (r) => <span className="font-medium text-ink">{r.driver_name || '—'}</span>,
-        primary: true,
-      },
-      {
-        id: 'amount',
-        header: t('wallet_admin.col_amount', { defaultValue: 'Monto' }),
-        cell: (r) => <span className="font-medium text-ink">{formatTriciCoin(r.amount)}</span>,
-        align: 'right',
-        mono: true,
-        sortKey: 'amount',
-        width: '160px',
-        secondary: true,
-      },
-      {
-        id: 'requested_at',
-        header: t('wallet_admin.col_requested', { defaultValue: 'Solicitado' }),
-        cell: (r) => <span className="text-ink-muted">{formatAdminDate(r.requested_at)}</span>,
-        sortKey: 'requested_at',
-        hideBelow: 'lg',
-        width: '170px',
-      },
-    ],
-    [t],
-  );
 
   const rechargeColumns: DataColumn<RechargeRow>[] = useMemo(
     () => [
@@ -339,18 +245,7 @@ export default function WalletPage() {
   );
 
   const handleExport = () => {
-    if (tab === 'redemptions') {
-      exportToCsv(
-        sortedRedemptions as unknown as Record<string, unknown>[],
-        [
-          { key: 'driver_name', label: t('wallet_admin.col_driver', { defaultValue: 'Conductor' }) },
-          { key: 'amount', label: t('wallet_admin.col_amount', { defaultValue: 'Monto' }) },
-          { key: 'status', label: t('wallet_admin.col_status', { defaultValue: 'Estado' }) },
-          { key: 'requested_at', label: t('wallet_admin.col_requested', { defaultValue: 'Solicitado' }) },
-        ],
-        'wallet-redemptions',
-      );
-    } else if (tab === 'recharges') {
+    if (tab === 'recharges') {
       exportToCsv(
         sortedRecharges as unknown as Record<string, unknown>[],
         [
@@ -376,12 +271,7 @@ export default function WalletPage() {
     }
   };
 
-  const listData =
-    tab === 'redemptions'
-      ? sortedRedemptions
-      : tab === 'recharges'
-        ? sortedRecharges
-        : sortedTransactions;
+  const listData = tab === 'recharges' ? sortedRecharges : sortedTransactions;
 
   return (
     <div className="flex flex-col gap-5">
@@ -394,7 +284,7 @@ export default function WalletPage() {
             {t('wallet_admin.title', { defaultValue: 'Billeteras' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('wallet_admin.page_description', { defaultValue: 'TriciCoin en circulación, retiros, recargas y el libro mayor de movimientos.' })}
+            {t('wallet_admin.page_description', { defaultValue: 'TriciCoin en circulación, recargas y el libro mayor de movimientos.' })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -411,24 +301,12 @@ export default function WalletPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4">
         <KpiCard
           label={t('wallet_admin.kpi_circulation', { defaultValue: 'TriciCoin en circulación' })}
           value={stats ? formatTriciCoin(stats.total_in_circulation).replace('TRC', '').trim() : '—'}
           unit="TRC"
           tone="primary"
-          loading={!stats}
-        />
-        <KpiCard
-          label={t('wallet_admin.kpi_pending_count', { defaultValue: 'Retiros pendientes' })}
-          value={stats ? String(stats.pending_redemptions_count) : '—'}
-          tone={stats && stats.pending_redemptions_count > 0 ? 'warning' : 'default'}
-          loading={!stats}
-        />
-        <KpiCard
-          label={t('wallet_admin.kpi_pending_amount', { defaultValue: 'Monto pendiente' })}
-          value={stats ? formatTriciCoin(stats.pending_redemptions_amount).replace('TRC', '').trim() : '—'}
-          unit="TRC"
           loading={!stats}
         />
       </div>
@@ -442,42 +320,6 @@ export default function WalletPage() {
           setPage(0);
         }}
       />
-
-      {tab === 'redemptions' && (
-        <DataTable<RedemptionRow>
-          columns={redemptionColumns}
-          rows={sortedRedemptions}
-          keyField="id"
-          loading={loading}
-          error={error}
-          onRetry={() => void fetchTabData()}
-          empty={{
-            icon: CheckCircle2,
-            tone: 'success',
-            title: t('wallet_admin.empty_redemptions_title', { defaultValue: 'Sin retiros pendientes' }),
-            body: t('wallet_admin.empty_redemptions_body', { defaultValue: 'Ningún conductor está esperando aprobación de retiro.' }),
-          }}
-          sort={sortRedemptions}
-          onSortChange={setSortRedemptions}
-          pagination={{ page, pageSize: PAGE_SIZE, hasMore: redemptions.length === PAGE_SIZE }}
-          onPaginationChange={(next) => setPage(next.page)}
-          rowActions={[
-            {
-              label: t('wallet_admin.action_approve', { defaultValue: 'Aprobar' }),
-              onClick: (r) => {
-                if (processing !== r.id) void handleRedemption(r.id, 'approved');
-              },
-            },
-            {
-              label: t('wallet_admin.action_reject', { defaultValue: 'Rechazar' }),
-              tone: 'danger',
-              onClick: (r) => {
-                if (processing !== r.id) void handleRedemption(r.id, 'rejected');
-              },
-            },
-          ]}
-        />
-      )}
 
       {tab === 'recharges' && (
         <DataTable<RechargeRow>

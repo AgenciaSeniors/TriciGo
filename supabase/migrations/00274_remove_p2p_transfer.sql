@@ -1,0 +1,44 @@
+-- ============================================================
+-- Migration 00274: Remove the P2P wallet transfer feature
+--
+-- The 00009 "P2P Wallet Transfers" feature let users transfer
+-- TriciCoin to other users (transfer_wallet_p2p), with a phone
+-- lookup helper (find_user_by_phone) to pick the recipient. Free
+-- value transfer between users is exactly what makes a stored
+-- credit behave like e-money / a payment instrument — incompatible
+-- with TriciCoin's closed-loop design.
+--
+-- The transfer UI was already removed from web + client + driver
+-- in Sprint 1 (commit a92aaac). This migration removes the backend
+-- so TriciCoin is closed-loop at the database level too: users can
+-- no longer move credits to each other by any path, including a
+-- direct PostgREST RPC call.
+--
+-- Removes:
+--   - transfer_wallet_p2p(uuid, uuid, integer, text) — the atomic
+--     P2P transfer RPC (created in 00009, re-created with a caller
+--     gate in 00211).
+--   - find_user_by_phone(text) — the P2P recipient lookup helper
+--     (created in 00009, locked down in 00216). No live app code
+--     calls it; its only documented purpose is P2P recipient lookup.
+--
+-- NOT touched (kept on purpose):
+--   - wallet_transfers table — historical P2P transfer records stay
+--     as a read-only audit trail; no new rows can be created once
+--     the RPC is gone.
+--   - ledger_entry_type 'transfer_in' / 'transfer_out' enum values —
+--     historical ledger rows still reference them.
+--   - maybe_promote_user_level (also defined in 00009) — that is the
+--     unrelated user-levels feature and stays.
+-- ============================================================
+
+-- Step 1: drop the atomic P2P transfer RPC (latest definition in
+-- 00211_secdef_caller_gates.sql, signature
+-- transfer_wallet_p2p(p_from_user_id uuid, p_to_user_id uuid,
+-- p_amount integer, p_note text)).
+DROP FUNCTION IF EXISTS public.transfer_wallet_p2p(uuid, uuid, integer, text);
+
+-- Step 2: drop the P2P recipient lookup helper (latest definition in
+-- 00216_find_user_by_phone_lockdown.sql, signature
+-- find_user_by_phone(p_phone text)).
+DROP FUNCTION IF EXISTS public.find_user_by_phone(text);

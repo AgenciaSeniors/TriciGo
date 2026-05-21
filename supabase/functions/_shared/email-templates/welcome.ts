@@ -36,7 +36,7 @@ export function welcomeHtml(data: WelcomeData): string {
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 24px;">
       ${valuePropRow('🛺', 'Pedir un viaje en triciclo, moto, auto o confort.')}
-      ${valuePropRow('💸', 'Pagar en efectivo o con tu wallet TriciCoin.')}
+      ${valuePropRow('🎟️', 'Pagar en efectivo o con tus créditos TriciCoin.')}
       ${valuePropRow('📦', 'Enviar paquetes con nuestro servicio de mensajería.')}
     </table>
     <p style="margin: 0;">

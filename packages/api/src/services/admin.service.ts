@@ -29,7 +29,6 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
-  WalletRedemption,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
@@ -1241,80 +1240,6 @@ export const adminService = {
       driverInfo,
       customerInfo,
     };
-  },
-
-  // ==================== WALLET REDEMPTIONS ====================
-
-  async getPendingRedemptions(
-    page = 0,
-    pageSize = 20,
-  ): Promise<(WalletRedemption & { driver_name: string })[]> {
-    const supabase = getSupabaseClient();
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
-
-    // TODO: replace table name / join columns when the wallet_redemptions table is created
-    const { data, error } = await supabase
-      .from('wallet_redemptions')
-      .select('*, driver_profiles!inner(users!inner(full_name))')
-      .eq('status', 'requested')
-      .order('requested_at', { ascending: false })
-      .range(from, to);
-    if (error) throw error;
-
-    return (data ?? []).map((row: Record<string, unknown>) => {
-      const profile = row.driver_profiles as Record<string, unknown> | undefined;
-      const usr = profile?.users as Record<string, string> | undefined;
-      return {
-        ...(row as unknown as WalletRedemption),
-        driver_name: usr?.full_name ?? 'Desconocido',
-      };
-    });
-  },
-
-  async processRedemption(
-    redemptionId: string,
-    adminId: string,
-    action: 'approved' | 'rejected',
-    reason?: string,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-
-    if (action === 'approved') {
-      // BUG-132 fix: approval now goes through approve_redemption RPC,
-      // which is_admin()-gated, locks the redemption + driver_cash row,
-      // posts a balanced ledger transaction (driver_cash -amount /
-      // platform_revenue +amount), and is idempotent via the
-      // redemption_approve:<id> key. The previous bare status update
-      // left driver wallets uncharged, letting drivers redeem the
-      // same balance repeatedly.
-      const { error } = await supabase.rpc('approve_redemption', {
-        p_redemption_id: redemptionId,
-        p_admin_id: adminId,
-      });
-      if (error) throw error;
-    } else {
-      // Rejection still goes through the simple status update path —
-      // no ledger movement is needed.
-      const { error } = await supabase
-        .from('wallet_redemptions')
-        .update({
-          status: action,
-          processed_by: adminId,
-          processed_at: new Date().toISOString(),
-          rejection_reason: reason ?? null,
-        })
-        .eq('id', redemptionId);
-      if (error) throw error;
-    }
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: action === 'approved' ? 'approve_redemption' : 'reject_redemption',
-      target_type: 'wallet_redemption',
-      target_id: redemptionId,
-      reason: reason ?? null,
-    });
   },
 
   // ==================== WALLET RECHARGES ====================

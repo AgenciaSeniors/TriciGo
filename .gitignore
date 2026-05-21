@@ -27,6 +27,14 @@ android/
 .env.local
 .env.*.local
 
+# Local secrets store — payment-processor PEMs, dev credentials, anything
+# that must never reach git. Pair with the secrets-store of the platform
+# (Supabase Edge Function secrets / Vercel env vars).
+.secrets/
+*.pem
+*.cer
+*.crt
+
 # IDE
 .vscode/
 .idea/

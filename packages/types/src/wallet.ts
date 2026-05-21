@@ -81,19 +81,6 @@ export interface WalletRechargeRequest {
   created_at: string;
 }
 
-export interface WalletRedemption {
-  id: string;
-  driver_id: string;
-  amount: number;
-  // BUG-043 fix: match DB enum (redemption_status)
-  status: 'requested' | 'approved' | 'processed' | 'rejected';
-  processed_by: string | null;
-  processed_at: string | null;
-  rejection_reason: string | null;
-  requested_at: string;
-  created_at: string;
-}
-
 export type FraudAlertType =
   | 'unusual_transfer'
   | 'rapid_recharges'

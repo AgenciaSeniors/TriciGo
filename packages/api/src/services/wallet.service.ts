@@ -15,7 +15,7 @@ import type {
   DriverQuotaStatus,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
-import { validate, rechargeSchema, transferP2PSchema } from '../schemas';
+import { validate, rechargeSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
 import { NotFoundError } from '../errors';
 
@@ -226,48 +226,13 @@ export const walletService = {
     return data as WalletRechargeRequest[];
   },
 
-  // ==================== P2P TRANSFERS ====================
+  // ============ P2P TRANSFERS (legacy, read-only) ============
+  // User-to-user transfers were removed when TriciCoin became a
+  // closed-loop ride credit. `getTransfers` stays read-only so
+  // historical transfers remain visible; no new transfers are created.
 
   /**
-   * Transfer TriciCoin to another user via phone number.
-   * Calls the transfer_wallet_p2p SECURITY DEFINER function.
-   */
-  async transferP2P(
-    fromUserId: string,
-    toUserId: string,
-    amount: number,
-    note?: string,
-  ): Promise<string> {
-    const valid = validate(transferP2PSchema, { fromUserId, toUserId, amount, note });
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('transfer_wallet_p2p', {
-      p_from_user_id: valid.fromUserId,
-      p_to_user_id: valid.toUserId,
-      p_amount: valid.amount,
-      p_note: valid.note ?? null,
-    });
-    if (error) throw error;
-    logger.info('p2p_transfer', { from: valid.fromUserId, to: valid.toUserId, amount: valid.amount });
-    return data as string;
-  },
-
-  /**
-   * Find a user by phone number (for transfer recipient).
-   */
-  async findUserByPhone(
-    phone: string,
-  ): Promise<{ id: string; full_name: string; phone: string } | null> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('find_user_by_phone', {
-      p_phone: phone,
-    });
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    return (row as { id: string; full_name: string; phone: string }) ?? null;
-  },
-
-  /**
-   * Get P2P transfer history for a user.
+   * Get P2P transfer history for a user (legacy records only).
    */
   async getTransfers(userId: string): Promise<WalletTransfer[]> {
     const supabase = getSupabaseClient();

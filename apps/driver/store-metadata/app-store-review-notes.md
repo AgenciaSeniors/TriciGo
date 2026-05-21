@@ -12,7 +12,7 @@ Phone: +1 415 555 0101
 OTP code: 000000  (test override active in DEV/Apple Review accounts)
 
 Alternative:
-Email: reviewer-driver@tricigo.app
+Email: reviewer-driver@tricigo.com
 Password: <fill in before submit>
 ```
 
@@ -79,5 +79,5 @@ for service area assignment.
 
 ## Contact
 
-- App support email: conductores@tricigo.app
+- App support email: conductores@tricigo.com
 - Developer contact: edua56621636@gmail.com (technical)

@@ -1,31 +1,108 @@
-import React, { useState } from 'react';
-import { View, Pressable, ScrollView, Linking } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, logger } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
+import { paymentService } from '@tricigo/api/services/payment';
+import { useAuthStore } from '@/stores/auth.store';
 
 const PRESET_AMOUNTS = [500, 1000, 2000, 5000];
+
+// Recharge now runs through NETOPIA's hosted payment page inside an in-app
+// browser (WebBrowser.openAuthSessionAsync — same pattern as OAuth login).
+// NETOPIA redirects back to RETURN_URL_BASE + ?intent=<id>, the in-app
+// browser closes, and we poll the intent status natively. If iOS/Android
+// stop honoring the universal link, swap to the custom scheme
+// 'tricigo-driver://wallet'. See PROGRESS.md (2026-05-20 cutover).
+const RETURN_URL_BASE = 'https://tricigo.com/app/driver/wallet';
 
 export default function RechargeScreen() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
+  const user = useAuthStore((s) => s.user);
 
   const [amount, setAmount] = useState('');
   const [customAmount, setCustomAmount] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const selectedAmount = amount ? Number(amount) : Number(customAmount);
 
-  const handleRecharge = () => {
-    // Open web wallet for Stripe recharge
-    Linking.openURL('https://tricigo.com/wallet');
-  };
+  const handleRecharge = useCallback(async () => {
+    if (!user?.id || selectedAmount <= 0) return;
+
+    setSubmitting(true);
+    try {
+      // 1. Create the intent — edge function returns NETOPIA hosted page URL.
+      const result = await paymentService.createRechargeIntent({
+        provider: 'netopia',
+        userId: user.id,
+        amountCup: selectedAmount,
+        rechargeType: 'driver_quota',
+        returnUrl: RETURN_URL_BASE,
+      });
+      if (!result.redirectUrl) {
+        throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
+      }
+
+      // 2. Open the hosted page in an in-app browser. Bloquea hasta que
+      //    NETOPIA redirija al dismissUrl, momento en que el sistema cierra
+      //    el browser y nos devuelve aquí.
+      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
+      const browserResult = await WebBrowser.openAuthSessionAsync(
+        result.redirectUrl,
+        dismissUrl,
+      );
+
+      // 3. Branch on the result.
+      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
+        Toast.show({
+          type: 'info',
+          text1: t('wallet.recharge_cancelled', { defaultValue: 'Pago cancelado' }),
+        });
+        return;
+      }
+
+      // 4. browserResult.type === 'success' — poll the intent.
+      Toast.show({
+        type: 'info',
+        text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
+      });
+      const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
+      if (final.status === 'completed') {
+        Toast.show({
+          type: 'success',
+          text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
+          text2: formatCUP(selectedAmount),
+        });
+        router.back();
+      } else if (final.status === 'failed') {
+        Toast.show({
+          type: 'error',
+          text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
+          text2: final.error_message ?? undefined,
+        });
+      } else {
+        Toast.show({
+          type: 'info',
+          text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
+        });
+      }
+    } catch (err) {
+      logger.error('netopia_driver_recharge_failed', { error: String(err) });
+      Toast.show({ type: 'error', text1: getErrorMessage(err) });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [user?.id, selectedAmount, t]);
 
   return (
     <Screen bg="dark" statusBarStyle="light-content">
@@ -112,17 +189,42 @@ export default function RechargeScreen() {
           </View>
         )}
 
+        {/* Closed-loop notice — recharge credits pay platform commissions only */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 8,
+            backgroundColor: 'rgba(249,115,22,0.08)',
+            borderWidth: 1,
+            borderColor: 'rgba(249,115,22,0.25)',
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 12,
+          }}
+        >
+          <Ionicons name="information-circle-outline" size={18} color={colors.brand.orange} />
+          <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+            {t('wallet.recharge_non_refundable', {
+              defaultValue: 'Estos créditos son no reembolsables y solo sirven para pagar comisiones de plataforma.',
+            })}
+          </Text>
+        </View>
+
         <Button
           title={t('wallet.pay_with_card', { defaultValue: 'Pagar con tarjeta' })}
           onPress={handleRecharge}
-          disabled={selectedAmount <= 0}
+          disabled={selectedAmount <= 0 || submitting || !user?.id}
+          loading={submitting}
           size="lg"
           fullWidth
           className="mt-6"
         />
 
         <Text variant="caption" color="tertiary" className="mt-3 text-center">
-          {t('wallet.recharge_web_hint', { defaultValue: 'Se abrira la pagina web para completar el pago con tarjeta.' })}
+          {t('wallet.recharge_inapp_hint', {
+            defaultValue: 'Pagás de forma segura sin salir de la app.',
+          })}
         </Text>
       </ScrollView>
     </Screen>

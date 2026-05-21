@@ -30,13 +30,13 @@ KEY FEATURES
 
 - Ride history: View all your past rides with route details, price, and driver info.
 
-- Flexible payments: Pay with cash or digital wallet balance. Your choice.
+- Flexible payments: Pay with cash or trip credit balance. Your choice.
 
 - Saved places: Save home, work, and frequent locations to book rides faster.
 
 - Split fare: Share the cost with other passengers in real time.
 
-- Digital wallet: Manage your balance, view transactions, and transfer funds.
+- Trip credits: check your balance and full transaction history.
 
 WHY TRICIGO?
 
@@ -49,7 +49,7 @@ AVAILABILITY
 TriciGo is rolling out city by city. Check the app for available service zones.
 
 SUPPORT
-Questions or need help? Contact us from the app or email soporte@tricigo.app
+Questions or need help? Contact us from the app or email soporte@tricigo.com
 
 Download TriciGo and move around the city with ease!
 
@@ -60,11 +60,11 @@ Maps & Navigation (primary) / Travel & Local (secondary)
 taxi, transport, ride, pedicab, mobility, driver, trip, urban, rideshare, commute
 
 ## Privacy Policy URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Content Rating
 Everyone
 
 ## Contact Information
-- Email: soporte@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

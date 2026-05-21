@@ -4,23 +4,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
-import type { LedgerTransaction, WalletAccount, StripeRechargeConfig } from '@tricigo/types';
+import { formatTRC, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
+import type { LedgerTransaction, WalletAccount, PaymentProviderConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
-import { loadStripe, type Stripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-// BUG-280-web: filter parity with mobile wallet (apps/client).
-// Splits transfers in/out, adds Bonos (promo_credit) and Ajustes (adjustment)
-// so admin corrections + referral/promo bonuses get their own chip instead of
-// being only visible under "Todos".
+// Filter tabs for the transaction history: Recargas, Viajes, Bonos
+// (promo_credit) and Ajustes (adjustment). Legacy P2P transfers still
+// appear under "Todos" but no new transfers can be created.
 type FilterTab =
   | 'all'
   | 'recharge'
   | 'rides'
-  | 'received'
-  | 'sent'
   | 'bonus'
   | 'adjustment';
 
@@ -28,8 +23,6 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'all', label: 'Todos' },
   { key: 'recharge', label: 'Recargas' },
   { key: 'rides', label: 'Viajes' },
-  { key: 'received', label: 'Recibidas' },
-  { key: 'sent', label: 'Enviadas' },
   { key: 'bonus', label: 'Bonos' },
   { key: 'adjustment', label: 'Ajustes' },
 ];
@@ -53,8 +46,6 @@ function getFilterTypes(filter: FilterTab): string[] | null {
   switch (filter) {
     case 'recharge': return ['recharge'];
     case 'rides': return ['ride_payment', 'ride_hold', 'ride_hold_release', 'redemption'];
-    case 'received': return ['transfer_in'];
-    case 'sent': return ['transfer_out'];
     case 'bonus': return ['promo_credit'];
     case 'adjustment': return ['adjustment'];
     default: return null;
@@ -64,123 +55,31 @@ function getFilterTypes(filter: FilterTab): string[] | null {
 // ── Quick amount buttons (CUP) ──
 const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 10000];
 
-// ── Stripe checkout form (inside Elements provider) ──
-function StripeCheckoutForm({
-  amountCup,
-  feeUsd,
-  amountUsd,
-  intentId,
-  onSuccess,
-  onError,
-}: {
-  amountCup: number;
-  feeUsd: number;
-  amountUsd: number;
-  intentId: string;
-  onSuccess: () => void;
-  onError: (msg: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [processing, setProcessing] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!stripe || !elements) return;
-
-    setProcessing(true);
-    try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/wallet?recharge=success`,
-        },
-        redirect: 'if_required',
-      });
-
-      if (error) {
-        onError(error.message ?? 'Error al procesar el pago');
-        setProcessing(false);
-        return;
-      }
-
-      // Payment succeeded without redirect — poll for completion
-      const result = await paymentService.pollIntentStatus(intentId, 15, 2000);
-      if (result.status === 'completed') {
-        onSuccess();
-      } else if (result.status === 'failed') {
-        onError(result.error_message ?? 'El pago no pudo ser procesado');
-      } else {
-        // Still processing — show success anyway (webhook will handle)
-        onSuccess();
-      }
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Error inesperado');
-    } finally {
-      setProcessing(false);
+// ── Phase B6: basic device fingerprint ──
+// A dependency-free SHA-256 hash of stable browser signals, recorded
+// with the payment intent for fraud analysis and chargeback evidence.
+// Fail-open: returns undefined if anything is unavailable.
+async function computeDeviceFingerprint(): Promise<string | undefined> {
+  try {
+    if (typeof navigator === 'undefined' || typeof crypto === 'undefined' || !crypto.subtle) {
+      return undefined;
     }
+    const signals = [
+      navigator.userAgent,
+      navigator.language,
+      `${screen.width}x${screen.height}x${screen.colorDepth}`,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.platform ?? '',
+      String(navigator.hardwareConcurrency ?? ''),
+    ].join('|');
+    const bytes = new TextEncoder().encode(signals);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return undefined;
   }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <div style={{ marginBottom: '1rem' }}>
-        <div style={{
-          padding: '0.75rem',
-          background: 'var(--bg-hover)',
-          borderRadius: '0.5rem',
-          marginBottom: '0.75rem',
-          fontSize: '0.8rem',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-            <span>Recarga</span>
-            <span style={{ fontWeight: 600 }}>{formatTRC(amountCup)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-            <span>~USD</span>
-            <span>${amountUsd.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-            <span>Fee de servicio</span>
-            <span>${feeUsd.toFixed(2)}</span>
-          </div>
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            borderTop: '1px solid var(--border)', paddingTop: '0.25rem', marginTop: '0.25rem',
-            fontWeight: 700,
-          }}>
-            <span>Total a cobrar</span>
-            <span>${(amountUsd + feeUsd).toFixed(2)} USD</span>
-          </div>
-        </div>
-
-        {/*
-          Stripe Payment Element with Apple Pay + Google Pay surfaced as
-          first-class options when supported. Mobile already gets these
-          automatically via @stripe/stripe-react-native PaymentSheet (see
-          apps/client/src/lib/stripe-bootstrap.tsx — `merchant.app.tricigo.client`);
-          web previously only exposed card. Setting `wallets: 'auto'` lets
-          Stripe show the device-native wallet button when the browser
-          supports it (Safari → Apple Pay, Chrome → Google Pay) and falls
-          back to card otherwise. Requires Apple Pay domain registration
-          on the Stripe dashboard for production.
-        */}
-        <PaymentElement options={{ layout: 'tabs', wallets: { applePay: 'auto', googlePay: 'auto' } }} />
-      </div>
-
-      <button
-        type="submit"
-        disabled={!stripe || !elements || processing}
-        className="btn-base btn-primary-solid"
-        style={{
-          width: '100%',
-          opacity: processing ? 0.7 : 1,
-          cursor: processing ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {processing ? 'Procesando...' : `Pagar $${(amountUsd + feeUsd).toFixed(2)} USD`}
-      </button>
-    </form>
-  );
 }
 
 export default function WalletPage() {
@@ -203,29 +102,17 @@ export default function WalletPage() {
   const [txLoadingMore, setTxLoadingMore] = useState(false);
   const [filter, setFilter] = useState<FilterTab>('all');
 
-  // ── Stripe recharge state ──
-  const [stripeConfig, setStripeConfig] = useState<StripeRechargeConfig | null>(null);
-  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  // ── NETOPIA recharge state ──
+  // The flow: user picks an amount → we call the edge function →
+  // it returns a `redirectUrl` to the NETOPIA hosted payment page →
+  // we `window.location.href` there. After settlement, NETOPIA
+  // redirects back to /wallet?intent=<id>; we poll for `completed`.
+  const [providerConfig, setProviderConfig] = useState<PaymentProviderConfig | null>(null);
   const [rechargeAmount, setRechargeAmount] = useState('');
-  const [rechargeStep, setRechargeStep] = useState<'amount' | 'payment' | 'success'>('amount');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [rechargeIntentId, setRechargeIntentId] = useState<string | null>(null);
-  const [rechargeAmountUsd, setRechargeAmountUsd] = useState(0);
-  const [rechargeFeeUsd, setRechargeFeeUsd] = useState(0);
-  const [rechargeAmountCup, setRechargeAmountCup] = useState(0);
+  const [rechargeStep, setRechargeStep] = useState<'amount' | 'redirecting' | 'verifying' | 'success' | 'failed'>('amount');
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [rechargeLoading, setRechargeLoading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
-
-  // ── P2P Transfer state ──
-  const [transferPhone, setTransferPhone] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferNote, setTransferNote] = useState('');
-  const [transferRecipient, setTransferRecipient] = useState<{ id: string; full_name: string; phone: string } | null>(null);
-  const [transferSearching, setTransferSearching] = useState(false);
-  const [transferSending, setTransferSending] = useState(false);
-  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
-  const [transferError, setTransferError] = useState<string | null>(null);
 
   // ── Auth effect ──
   useEffect(() => {
@@ -235,7 +122,7 @@ export default function WalletPage() {
     });
   }, []);
 
-  // ── Load wallet + Stripe config ──
+  // ── Load wallet + provider config ──
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -244,20 +131,18 @@ export default function WalletPage() {
       setBalanceLoading(true);
       try {
         await walletService.ensureAccount(userId!);
-        const [bal, acct, rate, config] = await Promise.all([
+        const [bal, acct, rate, activeProvider] = await Promise.all([
           walletService.getBalance(userId!),
           walletService.getAccount(userId!),
           exchangeRateService.getUsdCupRate(),
-          paymentService.getStripeConfig(),
+          paymentService.getActivePaymentProvider(),
         ]);
+        const config = await paymentService.getPaymentProviderConfig(activeProvider);
         if (!cancelled) {
           setBalance(bal);
           setAccount(acct);
           setExchangeRate(rate);
-          setStripeConfig(config);
-          if (config.publishableKey && !config.publishableKey.includes('REPLACE')) {
-            setStripePromise(loadStripe(config.publishableKey));
-          }
+          setProviderConfig(config);
         }
       } catch (err) {
         console.error('Failed to load wallet:', err);
@@ -300,15 +185,59 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [account, loadTransactions]);
 
-  // ── Check URL params for recharge success redirect ──
+  // ── Handle return from NETOPIA hosted payment page ──
+  // NETOPIA redirects back to /wallet?intent=<id>. We poll the intent
+  // until status is completed/failed (the webhook is the authoritative
+  // event; polling is just UX to show the user the result without
+  // requiring a refresh).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('recharge') === 'success') {
-      setRechargeStep('success');
-      // Clean URL
-      window.history.replaceState({}, '', '/wallet');
-    }
+    const intentId = params.get('intent');
+    // Legacy success/cancel params from previous integrations — ignore.
+    if (!intentId) return;
+    if (intentId === 'success' || intentId === 'cancel') return;
+
+    let cancelled = false;
+    setRechargeStep('verifying');
+
+    (async () => {
+      try {
+        const intent = await paymentService.pollIntentStatus(intentId, 20, 2000);
+        if (cancelled) return;
+        if (intent.status === 'completed') {
+          setRechargeStep('success');
+          // Refresh balance + transactions so the new credit shows.
+          if (userId) {
+            try {
+              const bal = await walletService.getBalance(userId);
+              if (!cancelled) setBalance(bal);
+              if (account) {
+                const txns = await walletService.getTransactions(account.id, 0, 20);
+                if (!cancelled) setTransactions(txns as LedgerTransaction[]);
+              }
+            } catch { /* ignore — visual refresh, not critical */ }
+          }
+        } else if (intent.status === 'failed') {
+          setRechargeError(intent.error_message ?? 'El pago no pudo ser procesado');
+          setRechargeStep('failed');
+        } else {
+          // Still pending after poll exhausted — soft success (webhook will land soon)
+          setRechargeStep('success');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setRechargeError(err instanceof Error ? err.message : 'No se pudo verificar el estado del pago');
+        setRechargeStep('failed');
+      } finally {
+        // Clean the intent param from the URL so a refresh doesn't re-poll.
+        if (!cancelled) window.history.replaceState({}, '', '/wallet');
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // We intentionally run only on mount when the URL has the param.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Auth gate ──
@@ -351,115 +280,49 @@ export default function WalletPage() {
     }
   }
 
-  // ── Stripe recharge: create payment intent ──
+  // ── Start NETOPIA recharge: create intent, then redirect to hosted page ──
   async function handleStartRecharge() {
-    if (!userId) return;
+    if (!userId || !providerConfig) return;
     const amountCup = parseInt(rechargeAmount, 10);
     if (!amountCup || amountCup <= 0) return;
 
-    if (stripeConfig) {
-      if (amountCup < stripeConfig.minRechargeCup) {
-        setRechargeError(`Monto minimo: ${formatTRC(stripeConfig.minRechargeCup)}`);
-        return;
-      }
-      if (amountCup > stripeConfig.maxRechargeCup) {
-        setRechargeError(`Monto maximo: ${formatTRC(stripeConfig.maxRechargeCup)}`);
-        return;
-      }
+    if (amountCup < providerConfig.minRechargeCup) {
+      setRechargeError(`Monto minimo: ${formatTRC(providerConfig.minRechargeCup)}`);
+      return;
+    }
+    if (amountCup > providerConfig.maxRechargeCup) {
+      setRechargeError(`Monto maximo: ${formatTRC(providerConfig.maxRechargeCup)}`);
+      return;
     }
 
     setRechargeLoading(true);
     setRechargeError(null);
     try {
-      const result = await paymentService.createStripePaymentIntent(userId, amountCup);
-      setClientSecret(result.clientSecret);
-      setRechargeIntentId(result.intentId);
-      setRechargeAmountUsd(result.amountUsd);
-      setRechargeFeeUsd(result.feeUsd);
-      setRechargeAmountCup(amountCup);
-      setRechargeStep('payment');
+      const deviceFingerprint = await computeDeviceFingerprint();
+      const result = await paymentService.createRechargeIntent({
+        provider: providerConfig.provider,
+        userId,
+        amountCup,
+        deviceFingerprint,
+      });
+      if (!result.redirectUrl) {
+        throw new Error('El procesador no devolvió una URL de pago');
+      }
+      setRechargeStep('redirecting');
+      // Hand off to the NETOPIA hosted payment page. After the user
+      // completes / cancels there, NETOPIA redirects back to
+      // /wallet?intent=<id> and the useEffect above takes over.
+      window.location.href = result.redirectUrl;
     } catch (err) {
       setRechargeError(err instanceof Error ? err.message : 'Error al iniciar la recarga');
-    } finally {
       setRechargeLoading(false);
-    }
-  }
-
-  async function handleRechargeSuccess() {
-    setRechargeStep('success');
-    // Refresh balance
-    if (userId) {
-      try {
-        const bal = await walletService.getBalance(userId);
-        setBalance(bal);
-        if (account) {
-          const txns = await walletService.getTransactions(account.id, 0, 20);
-          setTransactions(txns as LedgerTransaction[]);
-        }
-      } catch { /* ignore */ }
     }
   }
 
   function handleRechargeReset() {
     setRechargeStep('amount');
     setRechargeAmount('');
-    setClientSecret(null);
-    setRechargeIntentId(null);
     setRechargeError(null);
-  }
-
-  async function handleFindRecipient() {
-    if (!transferPhone.trim()) return;
-    setTransferSearching(true);
-    setTransferRecipient(null);
-    setTransferError(null);
-    try {
-      const user = await walletService.findUserByPhone(transferPhone.trim());
-      if (user) {
-        setTransferRecipient(user);
-      } else {
-        setTransferError('No se encontro un usuario con ese numero.');
-      }
-    } catch {
-      setTransferError('Error al buscar el usuario.');
-    } finally {
-      setTransferSearching(false);
-    }
-  }
-
-  async function handleTransfer() {
-    // The user types the amount in TRC (whole units), same as mobile —
-    // we convert to cents (the unit the wallet ledger stores) right
-    // before the API call. Mobile mirrors this in
-    // apps/client/app/(tabs)/wallet.tsx:345 / :1031 (`amountNum * 100`).
-    // Previously web passed `parseInt(transferAmount)` directly, which
-    // would have been read by the backend as cents — meaning the user
-    // would have to type "1000" to send 10 TRC, very awkward UX.
-    const amountTrc = parseFloat(transferAmount);
-    if (!userId || !transferRecipient || isNaN(amountTrc) || amountTrc <= 0) return;
-    const amountCents = Math.round(amountTrc * 100);
-    setTransferSending(true);
-    setTransferSuccess(null);
-    setTransferError(null);
-    try {
-      await walletService.transferP2P(userId, transferRecipient.id, amountCents, transferNote || undefined);
-      setTransferSuccess(`Transferencia de ${formatTRC(amountCents)} enviada a ${transferRecipient.full_name}.`);
-      setTransferPhone('');
-      setTransferAmount('');
-      setTransferNote('');
-      setTransferRecipient(null);
-      const bal = await walletService.getBalance(userId);
-      setBalance(bal);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('insufficient') || msg.includes('Insufficient')) {
-        setTransferError('Saldo insuficiente para esta transferencia.');
-      } else {
-        setTransferError('Error al realizar la transferencia. Intenta de nuevo.');
-      }
-    } finally {
-      setTransferSending(false);
-    }
   }
 
   // ── Helper: get amount from joined entry ──
@@ -481,7 +344,7 @@ export default function WalletPage() {
         </Link>
 
         <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginTop: '1rem', marginBottom: '1.5rem' }}>
-          Billetera TriciCoin
+          Mis créditos de viaje
         </h1>
 
         {/* ═══ Balance card ═══ */}
@@ -499,9 +362,6 @@ export default function WalletPage() {
               <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
                 {formatTRC(balance.available)}
               </p>
-              <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>
-                ~{formatTRCasUSD(balance.available, exchangeRate)}
-              </p>
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
@@ -516,13 +376,13 @@ export default function WalletPage() {
         {/* ═══ Recharge section ═══ */}
         <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>
-            Recargar billetera
+            Comprar créditos de viaje
           </p>
 
           {rechargeStep === 'amount' && (
             <>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>
-                Recarga tu billetera con tarjeta de credito o debito via Stripe.
+                Comprá créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.
               </p>
 
               {/* Quick amounts */}
@@ -558,15 +418,15 @@ export default function WalletPage() {
                   onChange={(e) => { setRechargeAmount(e.target.value); setRechargeError(null); }}
                   className="input-base"
                   style={{ width: '100%' }}
-                  min={stripeConfig?.minRechargeCup ?? 500}
-                  max={stripeConfig?.maxRechargeCup ?? 50000}
+                  min={providerConfig?.minRechargeCup ?? 500}
+                  max={providerConfig?.maxRechargeCup ?? 50000}
                 />
               </div>
 
               {/* USD estimate */}
               {amountCupNum > 0 && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  ≈ ${estimatedUsd} USD + ${stripeConfig?.feeUsd.toFixed(2) ?? '2.00'} fee = <strong>${(parseFloat(estimatedUsd) + (stripeConfig?.feeUsd ?? 2)).toFixed(2)} USD total</strong>
+                  ≈ ${estimatedUsd} USD + ${providerConfig?.feeUsd.toFixed(2) ?? '2.00'} fee = <strong>${(parseFloat(estimatedUsd) + (providerConfig?.feeUsd ?? 2)).toFixed(2)} USD total</strong>
                 </p>
               )}
 
@@ -576,7 +436,7 @@ export default function WalletPage() {
 
               <button
                 onClick={handleStartRecharge}
-                disabled={rechargeLoading || !rechargeAmount || amountCupNum <= 0 || !stripeConfig?.enabled}
+                disabled={rechargeLoading || !rechargeAmount || amountCupNum <= 0 || !providerConfig?.enabled}
                 aria-label="Continuar al pago"
                 className="btn-base btn-primary-solid"
                 style={{
@@ -588,46 +448,67 @@ export default function WalletPage() {
                 {rechargeLoading ? 'Preparando pago...' : 'Continuar al pago'}
               </button>
 
-              {!stripeConfig?.enabled && (
+              {!providerConfig?.enabled && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0', textAlign: 'center' }}>
-                  Recargas con tarjeta no disponibles temporalmente
+                  Compra de créditos con tarjeta no disponible temporalmente
                 </p>
               )}
             </>
           )}
 
-          {rechargeStep === 'payment' && clientSecret && stripePromise && (
-            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <button
-                  onClick={handleRechargeReset}
-                  className="btn-base"
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: '0.8rem', color: 'var(--primary)', padding: 0,
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  &larr; Cambiar monto
-                </button>
+          {rechargeStep === 'redirecting' && (
+            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+              {/* Visual: brand-tinted circle with external-link SVG (no emoji). */}
+              <div
+                aria-hidden
+                style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: 'var(--primary-alpha-10)',
+                  color: 'var(--primary)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
               </div>
-              <StripeCheckoutForm
-                amountCup={rechargeAmountCup}
-                feeUsd={rechargeFeeUsd}
-                amountUsd={rechargeAmountUsd}
-                intentId={rechargeIntentId!}
-                onSuccess={handleRechargeSuccess}
-                onError={(msg) => setRechargeError(msg)}
-              />
-              {rechargeError && (
-                <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{rechargeError}</p>
-              )}
-            </Elements>
+              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Redirigiéndote al procesador…</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Vas a completar el pago de forma segura fuera de TriciGo.
+              </p>
+            </div>
+          )}
+
+          {rechargeStep === 'verifying' && (
+            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+              <div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 0.5rem' }} />
+              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Verificando tu pago…</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Esto puede tardar unos segundos.
+              </p>
+            </div>
           )}
 
           {rechargeStep === 'success' && (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>✅</div>
+              {/* Visual: success badge with checkmark SVG (no emoji). */}
+              <div
+                aria-hidden
+                style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  background: 'rgba(22, 163, 74, 0.12)',
+                  color: '#16a34a',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
               <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Recarga exitosa</p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
                 Tu saldo ha sido actualizado.
@@ -641,90 +522,42 @@ export default function WalletPage() {
               </button>
             </div>
           )}
-        </div>
 
-        {/* ═══ P2P Transfer section ═══ */}
-        <div className="wallet-section-card" style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Enviar TriciCoin</p>
-
-          <div className="wallet-input-row" style={{ marginBottom: '0.5rem' }}>
-            <input
-              type="tel"
-              placeholder="Telefono del destinatario"
-              aria-label="Telefono del destinatario"
-              value={transferPhone}
-              onChange={(e) => { setTransferPhone(e.target.value); setTransferRecipient(null); setTransferError(null); }}
-              className="input-base"
-              style={{ flex: 1 }}
-            />
-            <button
-              onClick={handleFindRecipient}
-              disabled={transferSearching || !transferPhone.trim()}
-              aria-label="Buscar destinatario"
-              className="btn-base"
-              style={{
-                background: transferSearching || !transferPhone.trim() ? 'var(--bg-hover)' : 'var(--text-primary)',
-                color: transferSearching || !transferPhone.trim() ? 'var(--text-tertiary)' : '#fff',
-                cursor: transferSearching || !transferPhone.trim() ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {transferSearching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Buscar'}
-            </button>
-          </div>
-
-          {transferRecipient && (
-            <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.5rem', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', marginBottom: '0.5rem' }}>
-              <p style={{ fontSize: '0.8rem', margin: 0 }}>
-                <span style={{ fontWeight: 600 }}>{transferRecipient.full_name}</span>
-                <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>{transferRecipient.phone}</span>
+          {rechargeStep === 'failed' && (
+            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+              {/* Visual: error badge with alert-triangle SVG (no emoji).
+                  Note: the P2P Transfer section that lived here in master was
+                  intentionally removed in Phase A (closed-loop TriciCoin) —
+                  merge conflict resolution drops it. */}
+              <div
+                aria-hidden
+                style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  background: 'rgba(220, 38, 38, 0.10)',
+                  color: '#dc2626',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Pago no completado</p>
+              <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0 0 1rem' }}>
+                {rechargeError ?? 'El pago no pudo ser procesado.'}
               </p>
+              <button
+                onClick={handleRechargeReset}
+                className="btn-base btn-secondary-outline"
+                style={{ cursor: 'pointer' }}
+              >
+                Intentar de nuevo
+              </button>
             </div>
           )}
-
-          {transferRecipient && (
-            <>
-              {/* User types whole TRC (e.g. 10 → 10 TRC). The handler
-                  converts to cents before the API call (mirrors mobile). */}
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Monto en TRC"
-                aria-label="Monto de transferencia en TRC"
-                value={transferAmount}
-                onChange={(e) => setTransferAmount(e.target.value)}
-                className="input-base"
-                style={{ marginBottom: '0.5rem' }}
-              />
-              {transferAmount && !isNaN(parseFloat(transferAmount)) && parseFloat(transferAmount) > 0 && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  = {formatTRC(Math.round(parseFloat(transferAmount) * 100))} (~{formatTRCasUSD(Math.round(parseFloat(transferAmount) * 100), exchangeRate)})
-                </p>
-              )}
-              <input
-                type="text"
-                placeholder="Nota (opcional)"
-                aria-label="Nota para la transferencia"
-                value={transferNote}
-                onChange={(e) => setTransferNote(e.target.value)}
-                className="input-base"
-                style={{ marginBottom: '0.5rem' }}
-              />
-              <button
-                onClick={handleTransfer}
-                disabled={transferSending || !transferAmount || parseInt(transferAmount) <= 0}
-                aria-label="Enviar transferencia"
-                className="btn-base btn-primary-solid"
-                style={{ width: '100%' }}
-              >
-                {transferSending ? 'Enviando...' : 'Enviar'}
-              </button>
-            </>
-          )}
-
-          {transferSuccess && <p style={{ fontSize: '0.8rem', color: '#16a34a', margin: '0.5rem 0 0' }}>{transferSuccess}</p>}
-          {transferError && <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{transferError}</p>}
         </div>
 
         {/* ═══ Transaction history ═══ */}

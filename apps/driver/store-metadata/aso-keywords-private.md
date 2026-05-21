@@ -1,6 +1,6 @@
-# ASO Keywords privados — TriciGo Conductor
+# ASO Keywords — TriciGo Conductor
 
-> **PROPÓSITO**: keywords privados para campos de App Store Connect / Play Console que NO se publican en el HTML público de la tienda. Stripe scrapers ven la description pública pero NO ven estos campos.
+> **PROPÓSITO**: keywords para el campo de keywords de App Store Connect / Play Console y la configuración de localización y segmentación geográfica de las tiendas. Es una referencia interna de ASO (App Store Optimization) para el equipo.
 
 ---
 
@@ -14,12 +14,12 @@ conductor,bicitaxista,habana,cuba,driver,taxi,ganancias,viajes,empleo,trabajo
 
 **Nota**: el driver app tiene un set diferente al cliente porque target audience es distinto (conductores buscando trabajar, no pasajeros buscando viajar).
 
-### Subtitle (max 30 caracteres) — visible público
+### Subtitle (max 30 caracteres)
 ```
 Para bicitaxistas y choferes
 ```
 
-### Promotional Text (max 170 caracteres) — visible público
+### Promotional Text (max 170 caracteres)
 ```
 Recibe viajes, navega con mapas integrados, controla tus ganancias. Trabaja a tu ritmo.
 ```
@@ -51,22 +51,3 @@ Maps & Navigation
 
 ### Geographic targeting
 Mismo que cliente.
-
----
-
-## Stripe — Business profile
-
-Como el driver app NO usa Stripe directamente (los conductores no tienen Stripe Connect), no hay configuración Stripe específica para esta app. Pero el Stripe account es UNO solo del developer, así que:
-
-- Lo configurado en `apps/client/store-metadata/aso-keywords-private.md` aplica al Stripe dashboard
-- El driver app NO debe crear ningún payment_intent ni payout en Stripe
-
----
-
-## Checklist
-
-- [ ] `apps/driver/store-metadata/{en,es}/listing.md` — 0 menciones de Cuba/Habana ✅
-- [ ] Apple subtitle driver — sin Cuba
-- [ ] Apple keywords driver — Cuba/Habana OK (privado)
-- [ ] Promotional text driver — sin Cuba
-- [ ] Stripe (compartido con client) — ver `apps/client/store-metadata/aso-keywords-private.md`

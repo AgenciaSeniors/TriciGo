@@ -82,6 +82,18 @@ export default function TermsOfServicePage() {
       <Section title={t('terms.payments_title')}>
         <p>{t('terms.payments_text')}</p>
       </Section>
+      <Section title={t('terms.tricicoin_nature_title')}>
+        <p>{t('terms.tricicoin_nature_text')}</p>
+      </Section>
+      <Section title={t('terms.aml_title')}>
+        <p>{t('terms.aml_text')}</p>
+      </Section>
+      <Section title={t('terms.pci_title')}>
+        <p>{t('terms.pci_text')}</p>
+      </Section>
+      <Section title={t('terms.descriptor_title')}>
+        <p>{t('terms.descriptor_text')}</p>
+      </Section>
       <Section title={t('terms.cancellations_title')}>
         <p>{t('terms.cancellations_text')}</p>
       </Section>

@@ -33,7 +33,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 • Historial de viajes — Consulta todos tus viajes anteriores con detalles de ruta, precio y conductor.
 
-• Métodos de pago flexibles — Paga en efectivo o con saldo digital. Tú eliges.
+• Métodos de pago flexibles — Paga en efectivo o con crédito de viaje. Tú eliges.
 
 • Lugares favoritos — Guarda tu casa, trabajo y lugares frecuentes para pedir viajes más rápido.
 
@@ -41,7 +41,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 • Divide el costo — Comparte la tarifa con otros pasajeros en tiempo real.
 
-• Billetera con filtros — Filtra tu historial por recargas, viajes o transferencias.
+• Créditos de viaje — consultá tu saldo e historial de movimientos.
 
 • Blog TriciGo — Lee noticias y novedades del servicio directamente desde la app.
 
@@ -56,7 +56,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 TriciGo se despliega ciudad por ciudad. Revisa la app para ver las zonas de servicio disponibles.
 
 📞 SOPORTE
-¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.app
+¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.com
 
 Descarga TriciGo y muévete por la ciudad como nunca antes. ¡Tu viaje te espera! 🚲
 
@@ -67,11 +67,11 @@ Maps & Navigation (principal) / Travel & Local (secundaria)
 bicitaxi, taxi, transporte, movilidad, triciclo, ride, conductor, viaje, urbano, rideshare
 
 ## Política de privacidad URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Clasificación de contenido
 Todos (Everyone)
 
 ## Información de contacto
-- Email: soporte@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

@@ -1,12 +1,28 @@
 // ============================================================
 // TriciGo — Payment Service
 // Client-side service for payment operations.
-// Tracks payment intents and initiates Stripe recharges.
+// Tracks payment intents and initiates wallet recharges through a
+// payment provider. The recharge flow is provider-agnostic; see
+// docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
+//
+// NETOPIA is the sole live provider after the 2026-05-20 cutover.
+// EuPlatesc is reserved for Phase D3. The Stripe wrappers
+// (createStripePaymentIntent / getStripeConfig) were removed in
+// the same cutover; callers use createRechargeIntent directly.
 // ============================================================
 
-import type { PaymentIntent, CreateStripeIntentResponse, StripeRechargeConfig } from '@tricigo/types';
+import type {
+  PaymentIntent,
+  PaymentProvider,
+  RechargeIntentRequest,
+  RechargeIntentResult,
+  PaymentProviderConfig,
+} from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { logger } from '@tricigo/utils';
+
+/** Providers that have (or will have) a real recharge integration. */
+const KNOWN_PROVIDERS: PaymentProvider[] = ['netopia', 'euplatesc'];
 
 export const paymentService = {
   /**
@@ -61,18 +77,14 @@ export const paymentService = {
     return data as PaymentIntent[];
   },
 
-  // ==================== STRIPE ====================
+  // ==================== RECHARGE INTENTS ====================
 
   /**
-   * Create a Stripe PaymentIntent via the edge function.
-   * Returns the client_secret for Stripe Elements to confirm payment.
+   * Create a wallet recharge intent through a payment provider.
+   * Provider-agnostic: routes to the `create-<provider>-payment-intent`
+   * edge function. See docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
    */
-  async createStripePaymentIntent(
-    userId: string,
-    amountCup: number,
-    rechargeType: 'customer' | 'driver_quota' = 'customer',
-    corporateAccountId?: string,
-  ): Promise<CreateStripeIntentResponse> {
+  async createRechargeIntent(req: RechargeIntentRequest): Promise<RechargeIntentResult> {
     const supabase = getSupabaseClient();
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -81,7 +93,7 @@ export const paymentService = {
       ?? process.env.EXPO_PUBLIC_SUPABASE_URL
       ?? '';
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/create-stripe-payment-intent`, {
+    const res = await fetch(`${supabaseUrl}/functions/v1/create-${req.provider}-payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -91,27 +103,39 @@ export const paymentService = {
           ?? '',
       },
       body: JSON.stringify({
-        user_id: userId,
-        amount_cup: amountCup,
-        recharge_type: rechargeType,
-        corporate_account_id: corporateAccountId,
+        user_id: req.userId,
+        amount_cup: req.amountCup,
+        recharge_type: req.rechargeType ?? 'customer',
+        corporate_account_id: req.corporateAccountId,
+        device_fingerprint: req.deviceFingerprint,
+        return_url_base: req.returnUrl,
       }),
     });
 
     const json = await res.json();
     if (!res.ok || !json.ok) {
-      const errorMsg = json.detail ?? json.error ?? 'Failed to create payment intent';
-      logger.error('stripe_create_intent_failed', { userId, amountCup, error: errorMsg });
+      const errorMsg = json.detail ?? json.error ?? 'Failed to create recharge intent';
+      logger.error('recharge_intent_failed', {
+        provider: req.provider,
+        userId: req.userId,
+        amountCup: req.amountCup,
+        error: errorMsg,
+      });
       throw new Error(errorMsg);
     }
 
-    logger.info('stripe_intent_created', { userId, amountCup, intentId: json.intentId });
-    return json as CreateStripeIntentResponse;
+    logger.info('recharge_intent_created', {
+      provider: req.provider,
+      userId: req.userId,
+      amountCup: req.amountCup,
+      intentId: json.intentId,
+    });
+    return { ...json, provider: req.provider } as RechargeIntentResult;
   },
 
   /**
    * Poll a payment intent status until completed or failed.
-   * Useful after Stripe Elements confirms — wait for webhook to process.
+   * Useful after the checkout UI confirms — wait for the webhook.
    */
   async pollIntentStatus(
     intentId: string,
@@ -136,21 +160,25 @@ export const paymentService = {
     return intent;
   },
 
+  // ==================== PROVIDER CONFIG ====================
+
   /**
-   * Get Stripe recharge configuration from platform_config.
+   * Get recharge configuration for a payment provider from platform_config.
+   * Reads the provider-namespaced keys `<provider>_enabled`,
+   * `<provider>_publishable_key`, `<provider>_min_recharge_cup`, etc.
    */
-  async getStripeConfig(): Promise<StripeRechargeConfig> {
+  async getPaymentProviderConfig(provider: PaymentProvider): Promise<PaymentProviderConfig> {
     const supabase = getSupabaseClient();
     const { data: configs } = await supabase
       .from('platform_config')
       .select('key, value')
       .in('key', [
-        'stripe_enabled',
-        'stripe_publishable_key',
-        'stripe_min_recharge_cup',
-        'stripe_max_recharge_cup',
-        'stripe_fee_usd',
-        'stripe_fee_type',
+        `${provider}_enabled`,
+        `${provider}_publishable_key`,
+        `${provider}_min_recharge_cup`,
+        `${provider}_max_recharge_cup`,
+        `${provider}_fee_usd`,
+        `${provider}_fee_type`,
       ]);
 
     const configMap: Record<string, string> = {};
@@ -162,12 +190,39 @@ export const paymentService = {
     });
 
     return {
-      enabled: configMap['stripe_enabled'] !== 'false',
-      publishableKey: configMap['stripe_publishable_key'] ?? '',
-      minRechargeCup: parseInt(configMap['stripe_min_recharge_cup'] ?? '500', 10),
-      maxRechargeCup: parseInt(configMap['stripe_max_recharge_cup'] ?? '50000', 10),
-      feeUsd: parseFloat(configMap['stripe_fee_usd'] ?? '2.00'),
-      feeType: (configMap['stripe_fee_type'] as 'fixed' | 'percentage') ?? 'fixed',
+      provider,
+      enabled: configMap[`${provider}_enabled`] !== 'false',
+      publishableKey: configMap[`${provider}_publishable_key`] ?? '',
+      minRechargeCup: parseInt(configMap[`${provider}_min_recharge_cup`] ?? '500', 10),
+      maxRechargeCup: parseInt(configMap[`${provider}_max_recharge_cup`] ?? '50000', 10),
+      feeUsd: parseFloat(configMap[`${provider}_fee_usd`] ?? '2.00'),
+      feeType: (configMap[`${provider}_fee_type`] as 'fixed' | 'percentage') ?? 'fixed',
     };
+  },
+
+  /**
+   * The payment provider currently selected for new recharges
+   * (platform_config.active_payment_provider; defaults to 'netopia').
+   */
+  async getActivePaymentProvider(): Promise<PaymentProvider> {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from('platform_config')
+      .select('value')
+      .eq('key', 'active_payment_provider')
+      .maybeSingle();
+    const raw = (data as { value?: unknown } | null)?.value;
+    const parsed = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : raw;
+    return (typeof parsed === 'string' ? parsed : 'netopia') as PaymentProvider;
+  },
+
+  /**
+   * Payment providers currently enabled for recharges.
+   */
+  async getEnabledPaymentProviders(): Promise<PaymentProvider[]> {
+    const configs = await Promise.all(
+      KNOWN_PROVIDERS.map((p) => this.getPaymentProviderConfig(p)),
+    );
+    return configs.filter((c) => c.enabled).map((c) => c.provider);
   },
 };

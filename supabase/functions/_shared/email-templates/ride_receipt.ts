@@ -164,11 +164,11 @@ function humanizeService(slug: string): string {
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Efectivo',
-  tricicoin: 'TriciCoin (wallet)',
-  mixed: 'Mixto (TriciCoin + efectivo)',
+  tricicoin: 'Créditos TriciCoin',
+  mixed: 'Mixto (créditos TriciCoin + efectivo)',
   stripe: 'Tarjeta',
   corporate: 'Cuenta corporativa',
-  tropipay: 'TropiPay',
+  tropipay: 'Tarjeta',
 };
 
 function humanizePayment(slug: string): string {
