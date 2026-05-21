@@ -32,10 +32,13 @@ import {
   SUPPORT_EMAIL,
   WEB_ORIGIN,
 } from '../_shared/brand.ts';
+// Import directly from the template module (not the registry index) so this
+// function's deploy bundle stays narrow — we don't need welcome / win_back /
+// ride_receipt / driver_under_review here.
 import {
   walletReceiptHtml,
   walletReceiptSubject,
-} from '../_shared/email-templates/index.ts';
+} from '../_shared/email-templates/wallet_receipt.ts';
 
 // ── Constants from spec §10 ──
 const FEE_PCT = 0.03;
@@ -90,13 +93,22 @@ interface ExistingReceipt {
   email_sent_at_admin: string | null;
 }
 
+/**
+ * RECARGA V2 amounts shape. Semantics:
+ *   - usdRequested:  what the user picked. Source of truth for "value
+ *                    received" in the receipt.
+ *   - feeUsd:        the additive service fee (3% min $0.50).
+ *   - usdCharged:    what hit the card (= usdRequested + feeUsd).
+ *   - tcCredited:    the TC actually deposited in the wallet (= amount_cup;
+ *                    1 TC = 1 CUP since the wallet uses CUP centavos).
+ *   - exchangeRate:  the USD→CUP snapshot at intent-creation time.
+ */
 interface ComputedAmounts {
-  usdCharged: number;
+  usdRequested: number;
   feeUsd: number;
-  netUsd: number;
+  usdCharged: number;
   tcCredited: number;
   exchangeRate: number;
-  cupEquivalent: number;
 }
 
 // ── HTTP entrypoint ──
@@ -213,17 +225,24 @@ Deno.serve(async (req) => {
     if (uploadErr) throw new Error(`storage_upload_failed: ${uploadErr.message}`);
 
     // 7. Insert or update wallet_receipts row
+    // RECARGA V2 semantic mapping into the legacy column names:
+    //   - usd_charged    = the FULL charge (additive: requested + fee)
+    //   - net_usd        = what was credited as USD-equivalent (= usdRequested)
+    //   - tc_credited    = TC deposited (= amount_cup; 1 TC = 1 CUP)
+    //   - cup_equivalent = same as tc_credited under the TC=CUP model
+    // We don't drop net_usd/cup_equivalent columns to preserve historical
+    // rows; their new meaning is documented above.
     const receiptRow = {
       user_id: piRow.user_id,
       payment_intent_id: piRow.id,
       receipt_no: receiptNo,
       usd_charged: amounts.usdCharged.toFixed(2),
       fee_usd: amounts.feeUsd.toFixed(2),
-      net_usd: amounts.netUsd.toFixed(2),
+      net_usd: amounts.usdRequested.toFixed(2),
       tc_credited: amounts.tcCredited.toFixed(2),
       exchange_rate: amounts.exchangeRate.toFixed(2),
       exchange_at: dateISO,
-      cup_equivalent: amounts.cupEquivalent.toFixed(2),
+      cup_equivalent: amounts.tcCredited.toFixed(2),
       stripe_payment_intent_id: piRow.stripe_payment_intent_id ?? '',
       card_brand: piRow.card_brand,
       card_last4: piRow.card_last4,
@@ -316,19 +335,23 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 function computeAmounts(pi: PaymentIntentRow): ComputedAmounts {
-  const usdCharged = Number(pi.amount_usd ?? 0);
+  // RECARGA V2 semantic:
+  //   pi.amount_usd  = what the user requested (net, before fee)
+  //   pi.fee_usd     = the additive service fee snapshotted at intent time
+  //   pi.amount_cup  = TC credited to the wallet (= CUP centavos)
+  //   pi.exchange_rate = USD→CUP rate used at intent time
+  // The constants FEE_PCT/FEE_MIN_USD are only a fallback for very old
+  // intents that don't have fee_usd set; new intents always carry it.
+  const usdRequested = Number(pi.amount_usd ?? 0);
   const exchangeRate = Number(pi.exchange_rate ?? 0);
-  // Spec §10 #2: 3% of USD charged, minimum $0.50.
-  // Prefer the fee_usd already snapshotted on the PI (set by Stripe webhook)
-  // to avoid drift if the constant changes later.
   const feeUsd = pi.fee_usd != null && Number(pi.fee_usd) > 0
     ? Number(pi.fee_usd)
-    : Math.max(usdCharged * FEE_PCT, FEE_MIN_USD);
-  const netUsd = Math.max(0, usdCharged - feeUsd);
-  // Spec §1: 1 TriciCoin ≡ 1 USD.
-  const tcCredited = netUsd;
-  const cupEquivalent = exchangeRate > 0 ? netUsd * exchangeRate : 0;
-  return { usdCharged, feeUsd, netUsd, tcCredited, exchangeRate, cupEquivalent };
+    : Math.max(usdRequested * FEE_PCT, FEE_MIN_USD);
+  const usdCharged = Number((usdRequested + feeUsd).toFixed(2));
+  // tcCredited comes straight from the row (the credit RPC sets amount_cup
+  // = usdRequested × exchangeRate at the time of crediting).
+  const tcCredited = Number(pi.amount_cup ?? 0);
+  return { usdRequested, feeUsd, usdCharged, tcCredited, exchangeRate };
 }
 
 interface PdfArgs {
@@ -404,7 +427,10 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   page.drawText('RECARGA CONFIRMADA', {
     x: left, y: y - 22, size: 10, font: helvBold, color: rgb(1, 1, 1),
   });
-  const tcLabel = `${amounts.tcCredited.toFixed(2)} TriciCoin acreditados`;
+  // RECARGA V2: TC = CUP (no decimals). Format with es-CU grouping so
+  // 10500 reads as "10.500 TC". 1 TC == 1 CUP, so the wallet "TriciCoin"
+  // figure equals the CUP equivalent at the snapshot rate.
+  const tcLabel = `${formatTcAmount(amounts.tcCredited)} TriciCoin acreditados`;
   page.drawText(tcLabel, {
     x: left, y: y - 46, size: 18, font: helvBold, color: rgb(1, 1, 1),
   });
@@ -425,27 +451,29 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   }
   y -= 18;
 
-  // ── Section 2: transaction breakdown ───────────────────────────
+  // ── Section 2: transaction breakdown (RECARGA V2 — additive fee) ──
+  // The math is now:
+  //   recarga solicitada (lo que el user pidió) + comisión = cargo a la tarjeta
+  // and the wallet receives `tcCredited` TriciCoin (1:1 with CUP at the
+  // snapshot rate). The old "Importe neto acreditado" line is gone —
+  // semantically the credited net is `usdRequested`, but we surface it
+  // as TC directly to avoid double-accounting USD and TC on the same row.
   y = drawSectionHeader(page, helvBold, 'Detalle de la transacción', left, y, ink, primary);
-  y = drawRow(page, helv, helvBold, 'Importe cobrado', fmtUsd(amounts.usdCharged), left, right, y, text, muted);
-  // ASCII hyphen-minus (0x2D) — the typographic minus (U+2212) is
-  // not in WinAnsi, which pdf-lib's StandardFont Helvetica uses.
-  y = drawRow(page, helv, helvBold, 'Comisión de servicio', `-${fmtUsd(amounts.feeUsd)}`, left, right, y, text, muted);
-  y = drawRow(page, helv, helvBold, 'Importe neto acreditado', fmtUsd(amounts.netUsd), left, right, y, ink, muted, true);
-  y = drawTotalRow(page, helvBold, 'TriciCoin acreditados', `${amounts.tcCredited.toFixed(2)} TC`, left, right, y, primary, ink);
-  y = drawHelperLine(page, helv, '1 TriciCoin = 1 USD', left, y, muted);
-  y -= 16;
-
-  // ── Section 3: CUP conversion (only if rate snapshotted) ───────
-  y = drawSectionHeader(page, helvBold, 'Conversión a CUP (referencial)', left, y, ink, primary);
+  y = drawRow(page, helv, helvBold, 'Recarga solicitada', fmtUsd(amounts.usdRequested), left, right, y, text, muted);
+  y = drawRow(page, helv, helvBold, 'Comisión de servicio (3%)', fmtUsd(amounts.feeUsd), left, right, y, text, muted);
+  y = drawRow(page, helv, helvBold, 'Cargo total a tu tarjeta', fmtUsd(amounts.usdCharged), left, right, y, ink, muted, true);
+  y = drawTotalRow(page, helvBold, 'TriciCoin acreditados', `${formatTcAmount(amounts.tcCredited)} TC`, left, right, y, primary, ink);
   if (amounts.exchangeRate > 0) {
-    // ASCII arrow — pdf-lib's StandardFont Helvetica uses WinAnsi
-    // which doesn't encode U+2192 (RIGHTWARDS ARROW). Same family of
-    // bug as the U+2212 minus sign in the fee row above.
-    y = drawRow(page, helv, helvBold, 'Tasa USD -> CUP del día', amounts.exchangeRate.toFixed(2), left, right, y, text, muted);
-    y = drawRow(page, helv, helvBold, 'Equivalente en CUP', formatCup(amounts.cupEquivalent), left, right, y, text, muted);
+    y = drawHelperLine(
+      page,
+      helv,
+      `(equivalente a ${formatCup(amounts.tcCredited)} al tipo del día: ${amounts.exchangeRate.toFixed(2)} CUP/USD)`,
+      left,
+      y,
+      muted,
+    );
   } else {
-    y = drawHelperLine(page, helv, 'Tasa de cambio no disponible al momento de la recarga.', left, y, muted);
+    y = drawHelperLine(page, helv, '1 TriciCoin = 1 CUP', left, y, muted);
   }
   y -= 18;
 
@@ -654,7 +682,15 @@ function formatDateLong(iso: string): string {
 }
 
 function formatCup(cup: number): string {
-  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 2 }).format(cup) + ' CUP';
+  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 0 }).format(Math.round(cup)) + ' CUP';
+}
+
+// RECARGA V2: TC = CUP. The wallet stores integer CUP, so format with
+// the es-CU thousands separator and zero decimals. The internal
+// representation may include a trailing .00 (from numeric columns),
+// hence the Math.round to drop float noise before grouping.
+function formatTcAmount(tc: number): string {
+  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 0 }).format(Math.round(tc));
 }
 
 function capitalize(s: string): string {

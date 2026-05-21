@@ -10,12 +10,24 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP, getErrorMessage, logger } from '@tricigo/utils';
+import {
+  formatCUP,
+  getErrorMessage,
+  logger,
+  computeRechargeFeeUsd,
+  computeRechargeChargeUsd,
+  RECHARGE_LIMITS,
+} from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { paymentService } from '@tricigo/api/services/payment';
 import { useAuthStore } from '@/stores/auth.store';
 
-const PRESET_AMOUNTS = [500, 1000, 2000, 5000];
+// RECARGA V2: presets in USD. Driver-quota uses the same customer
+// defaults (rounds 1-4). User picks NET amount; fee is additive 3%
+// min $0.50; wallet credited in CUP at the FX rate of the day.
+const PRESET_AMOUNTS_USD = [20, 50, 100, 200];
+const MIN_RECHARGE_USD = RECHARGE_LIMITS.customer.min;
+const MAX_RECHARGE_USD = RECHARGE_LIMITS.customer.max;
 
 // Recharge now runs through NETOPIA's hosted payment page inside an in-app
 // browser (WebBrowser.openAuthSessionAsync — same pattern as OAuth login).
@@ -38,14 +50,24 @@ export default function RechargeScreen() {
 
   const handleRecharge = useCallback(async () => {
     if (!user?.id || selectedAmount <= 0) return;
+    if (selectedAmount < MIN_RECHARGE_USD || selectedAmount > MAX_RECHARGE_USD) {
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.invalid_amount', { defaultValue: 'Monto fuera de rango' }),
+        text2: `${MIN_RECHARGE_USD}-${MAX_RECHARGE_USD} USD`,
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
       // 1. Create the intent — edge function returns NETOPIA hosted page URL.
+      // RECARGA V2: send the NET USD; server adds the 3% min $0.50 fee
+      // and tells NETOPIA the full charge.
       const result = await paymentService.createRechargeIntent({
         provider: 'netopia',
         userId: user.id,
-        amountCup: selectedAmount,
+        amountUsd: selectedAmount,
         rechargeType: 'driver_quota',
         returnUrl: RETURN_URL_BASE,
       });
@@ -81,7 +103,7 @@ export default function RechargeScreen() {
         Toast.show({
           type: 'success',
           text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
-          text2: formatCUP(selectedAmount),
+          text2: `$${selectedAmount.toFixed(2)} USD`,
         });
         router.back();
       } else if (final.status === 'failed') {
@@ -130,9 +152,9 @@ export default function RechargeScreen() {
           {t('wallet.recharge_desc', { defaultValue: 'Selecciona o ingresa el monto que deseas recargar.' })}
         </Text>
 
-        {/* Preset amounts */}
+        {/* Preset amounts (USD) */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-          {PRESET_AMOUNTS.map((preset) => {
+          {PRESET_AMOUNTS_USD.map((preset) => {
             const isSelected = amount === String(preset);
             return (
               <Pressable
@@ -154,25 +176,25 @@ export default function RechargeScreen() {
                   pressed && { transform: [{ scale: 0.97 }] },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={`${formatCUP(preset)}`}
+                accessibilityLabel={`$${preset} USD`}
               >
                 <Text
                   variant="metric"
                   style={{ color: isSelected ? colors.brand.orange : '#fff' }}
                 >
-                  {formatCUP(preset)}
+                  ${preset}
                 </Text>
               </Pressable>
             );
           })}
         </View>
 
-        {/* Custom amount */}
+        {/* Custom amount (USD) */}
         <Text variant="bodySmall" color="secondary" className="mb-2">
           {t('wallet.or_custom', { defaultValue: 'O ingresa un monto personalizado:' })}
         </Text>
         <Input
-          label={t('wallet.custom_amount', { defaultValue: 'Monto personalizado (CUP)' })}
+          label={t('wallet.custom_amount_usd', { defaultValue: 'Monto personalizado (USD)' })}
           placeholder="0"
           value={customAmount}
           onChangeText={(v) => { setCustomAmount(v); setAmount(''); }}
@@ -180,14 +202,18 @@ export default function RechargeScreen() {
           variant="dark"
         />
 
-        {/* Fee info */}
-        {selectedAmount > 0 && (
-          <View style={{ backgroundColor: '#1a1a2e', borderRadius: 12, padding: 12, marginTop: 12 }}>
-            <Text variant="caption" color="secondary">
-              ≈ ${(selectedAmount / 520).toFixed(2)} USD + $2.00 fee = ${((selectedAmount / 520) + 2).toFixed(2)} USD total
-            </Text>
-          </View>
-        )}
+        {/* Charge breakdown (additive fee) */}
+        {selectedAmount > 0 && (() => {
+          const fee = computeRechargeFeeUsd(selectedAmount);
+          const charge = computeRechargeChargeUsd(selectedAmount).toFixed(2);
+          return (
+            <View style={{ backgroundColor: '#1a1a2e', borderRadius: 12, padding: 12, marginTop: 12 }}>
+              <Text variant="caption" color="secondary">
+                Pagarás ${charge} USD (incluye ${fee.toFixed(2)} de comisión de servicio)
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* Closed-loop notice — recharge credits pay platform commissions only */}
         <View

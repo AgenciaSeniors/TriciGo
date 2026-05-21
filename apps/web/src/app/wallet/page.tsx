@@ -4,7 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, DEFAULT_EXCHANGE_RATE, getRelativeDay, formatTime } from '@tricigo/utils';
+import {
+  formatTRC,
+  DEFAULT_EXCHANGE_RATE,
+  getRelativeDay,
+  formatTime,
+  computeRechargeFeeUsd,
+  computeRechargeChargeUsd,
+  RECHARGE_LIMITS,
+} from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount, PaymentProviderConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -52,8 +60,15 @@ function getFilterTypes(filter: FilterTab): string[] | null {
   }
 }
 
-// ── Quick amount buttons (CUP) ──
-const QUICK_AMOUNTS = [500, 1000, 2000, 5000, 10000];
+// ── Quick amount buttons (USD) — RECARGA V2 ──
+// Customer presets. Corporate gets a richer set when a corporate
+// account context is detected; that branch is wired below.
+const QUICK_AMOUNTS_CUSTOMER = [20, 50, 100, 200];
+const QUICK_AMOUNTS_CORPORATE = [100, 250, 500, 1000];
+const MIN_RECHARGE_USD_CUSTOMER = RECHARGE_LIMITS.customer.min;
+const MAX_RECHARGE_USD_CUSTOMER = RECHARGE_LIMITS.customer.max;
+const MIN_RECHARGE_USD_CORPORATE = RECHARGE_LIMITS.corporate.min;
+const MAX_RECHARGE_USD_CORPORATE = RECHARGE_LIMITS.corporate.max;
 
 // ── Phase B6: basic device fingerprint ──
 // A dependency-free SHA-256 hash of stable browser signals, recorded
@@ -112,6 +127,12 @@ export default function WalletPage() {
   const [rechargeStep, setRechargeStep] = useState<'amount' | 'redirecting' | 'verifying' | 'success' | 'failed'>('amount');
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [rechargeLoading, setRechargeLoading] = useState(false);
+  // RECARGA V2: track the just-completed intent so the success step can
+  // surface a "Ver recibo" chip linking to /wallet/receipts. The PDF
+  // EF runs async after the webhook so the file may not be ready the
+  // very second the user lands on success — the receipts page handles
+  // the "in process" state gracefully.
+  const [successIntentId, setSuccessIntentId] = useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
 
   // ── Auth effect ──
@@ -206,6 +227,7 @@ export default function WalletPage() {
         const intent = await paymentService.pollIntentStatus(intentId, 20, 2000);
         if (cancelled) return;
         if (intent.status === 'completed') {
+          setSuccessIntentId(intentId);
           setRechargeStep('success');
           // Refresh balance + transactions so the new credit shows.
           if (userId) {
@@ -223,6 +245,7 @@ export default function WalletPage() {
           setRechargeStep('failed');
         } else {
           // Still pending after poll exhausted — soft success (webhook will land soon)
+          setSuccessIntentId(intentId);
           setRechargeStep('success');
         }
       } catch (err) {
@@ -281,17 +304,19 @@ export default function WalletPage() {
   }
 
   // ── Start NETOPIA recharge: create intent, then redirect to hosted page ──
+  // RECARGA V2: user picks NET USD; the server adds a 3% min $0.50 fee
+  // and tells NETOPIA the full charge (amountUsd + feeUsd).
   async function handleStartRecharge() {
     if (!userId || !providerConfig) return;
-    const amountCup = parseInt(rechargeAmount, 10);
-    if (!amountCup || amountCup <= 0) return;
+    const amountUsd = parseFloat(rechargeAmount);
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
 
-    if (amountCup < providerConfig.minRechargeCup) {
-      setRechargeError(`Monto minimo: ${formatTRC(providerConfig.minRechargeCup)}`);
+    if (amountUsd < MIN_RECHARGE_USD_CUSTOMER) {
+      setRechargeError(`Monto mínimo: $${MIN_RECHARGE_USD_CUSTOMER} USD`);
       return;
     }
-    if (amountCup > providerConfig.maxRechargeCup) {
-      setRechargeError(`Monto maximo: ${formatTRC(providerConfig.maxRechargeCup)}`);
+    if (amountUsd > MAX_RECHARGE_USD_CUSTOMER) {
+      setRechargeError(`Monto máximo: $${MAX_RECHARGE_USD_CUSTOMER} USD`);
       return;
     }
 
@@ -302,7 +327,7 @@ export default function WalletPage() {
       const result = await paymentService.createRechargeIntent({
         provider: providerConfig.provider,
         userId,
-        amountCup,
+        amountUsd,
         deviceFingerprint,
       });
       if (!result.redirectUrl) {
@@ -323,6 +348,7 @@ export default function WalletPage() {
     setRechargeStep('amount');
     setRechargeAmount('');
     setRechargeError(null);
+    setSuccessIntentId(null);
   }
 
   // ── Helper: get amount from joined entry ──
@@ -332,8 +358,12 @@ export default function WalletPage() {
     return entries[0].amount;
   }
 
-  const amountCupNum = parseInt(rechargeAmount, 10) || 0;
-  const estimatedUsd = amountCupNum > 0 ? (amountCupNum / exchangeRate).toFixed(2) : '0.00';
+  // RECARGA V2: input is USD net. Derive fee + charge for preview using
+  // the shared helpers so the on-screen math is byte-identical to what
+  // the server (create-netopia-payment-intent) charges.
+  const amountUsdNum = parseFloat(rechargeAmount) || 0;
+  const previewFeeUsd = amountUsdNum > 0 ? computeRechargeFeeUsd(amountUsdNum) : 0;
+  const previewChargeUsd = amountUsdNum > 0 ? computeRechargeChargeUsd(amountUsdNum) : 0;
 
   return (
     <>
@@ -385,9 +415,9 @@ export default function WalletPage() {
                 Comprá créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.
               </p>
 
-              {/* Quick amounts */}
+              {/* Quick amounts (USD) */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                {QUICK_AMOUNTS.map((amt) => (
+                {QUICK_AMOUNTS_CUSTOMER.map((amt) => (
                   <button
                     key={amt}
                     onClick={() => { setRechargeAmount(String(amt)); setRechargeError(null); }}
@@ -403,30 +433,31 @@ export default function WalletPage() {
                       fontFamily: 'inherit',
                     }}
                   >
-                    {formatTRC(amt)}
+                    ${amt}
                   </button>
                 ))}
               </div>
 
-              {/* Custom amount */}
+              {/* Custom amount (USD) */}
               <div style={{ marginBottom: '0.5rem' }}>
                 <input
                   type="number"
-                  placeholder="Monto en CUP"
-                  aria-label="Monto de recarga en CUP"
+                  placeholder="Monto en USD"
+                  aria-label="Monto de recarga en USD"
                   value={rechargeAmount}
                   onChange={(e) => { setRechargeAmount(e.target.value); setRechargeError(null); }}
                   className="input-base"
                   style={{ width: '100%' }}
-                  min={providerConfig?.minRechargeCup ?? 500}
-                  max={providerConfig?.maxRechargeCup ?? 50000}
+                  min={MIN_RECHARGE_USD_CUSTOMER}
+                  max={MAX_RECHARGE_USD_CUSTOMER}
+                  step="1"
                 />
               </div>
 
-              {/* USD estimate */}
-              {amountCupNum > 0 && (
+              {/* Charge breakdown (additive fee) */}
+              {amountUsdNum > 0 && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  ≈ ${estimatedUsd} USD + ${providerConfig?.feeUsd.toFixed(2) ?? '2.00'} fee = <strong>${(parseFloat(estimatedUsd) + (providerConfig?.feeUsd ?? 2)).toFixed(2)} USD total</strong>
+                  Pagarás <strong>${previewChargeUsd.toFixed(2)} USD</strong> (incluye ${previewFeeUsd.toFixed(2)} de comisión de servicio)
                 </p>
               )}
 
@@ -436,13 +467,13 @@ export default function WalletPage() {
 
               <button
                 onClick={handleStartRecharge}
-                disabled={rechargeLoading || !rechargeAmount || amountCupNum <= 0 || !providerConfig?.enabled}
+                disabled={rechargeLoading || !rechargeAmount || amountUsdNum <= 0 || !providerConfig?.enabled}
                 aria-label="Continuar al pago"
                 className="btn-base btn-primary-solid"
                 style={{
                   width: '100%',
                   cursor: rechargeLoading || !rechargeAmount ? 'not-allowed' : 'pointer',
-                  opacity: rechargeLoading || !rechargeAmount || amountCupNum <= 0 ? 0.6 : 1,
+                  opacity: rechargeLoading || !rechargeAmount || amountUsdNum <= 0 ? 0.6 : 1,
                 }}
               >
                 {rechargeLoading ? 'Preparando pago...' : 'Continuar al pago'}
@@ -513,13 +544,36 @@ export default function WalletPage() {
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
                 Tu saldo ha sido actualizado.
               </p>
-              <button
-                onClick={handleRechargeReset}
-                className="btn-base btn-secondary-outline"
-                style={{ cursor: 'pointer' }}
+              {/* RECARGA V2: surface the receipt as soon as the user lands on success.
+                  The PDF generation runs async post-webhook (a few seconds), so the
+                  receipts page handles the "still generating" state — clicking
+                  here always works, even if the file isn't ready yet. */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                }}
               >
-                Realizar otra recarga
-              </button>
+                {successIntentId && (
+                  <Link
+                    href="/wallet/receipts"
+                    aria-label="Ver mis comprobantes de recarga"
+                    className="btn-base btn-primary-solid"
+                    style={{ cursor: 'pointer', textDecoration: 'none' }}
+                  >
+                    Ver recibo
+                  </Link>
+                )}
+                <button
+                  onClick={handleRechargeReset}
+                  className="btn-base btn-secondary-outline"
+                  style={{ cursor: 'pointer' }}
+                >
+                  Realizar otra recarga
+                </button>
+              </div>
             </div>
           )}
 

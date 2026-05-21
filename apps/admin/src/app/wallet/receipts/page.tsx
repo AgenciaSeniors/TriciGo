@@ -106,7 +106,7 @@ export default function AdminReceiptsPage() {
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
             {t('receipts.description', {
-              defaultValue: 'Recibos PDF generados para cada recarga Stripe. Auditoría 7 años.',
+              defaultValue: 'Recibos PDF generados para cada recarga con tarjeta. Auditoría 7 años.',
             })}
           </p>
         </div>
@@ -150,7 +150,7 @@ export default function AdminReceiptsPage() {
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t('receipts.search_placeholder', { defaultValue: 'Buscar por nº TG- o Stripe PI' })}
+            placeholder={t('receipts.search_placeholder', { defaultValue: 'Buscar por nº TG- o ID de transacción' })}
             className="h-9 w-full rounded-lg border border-line bg-surface pl-8 pr-3 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
           />
         </div>
@@ -202,7 +202,7 @@ export default function AdminReceiptsPage() {
                   title={t('receipts.empty_title', { defaultValue: 'Sin comprobantes' })}
                   description={search
                     ? t('receipts.empty_search', { defaultValue: 'Ninguno coincide con la búsqueda.' })
-                    : t('receipts.empty_body', { defaultValue: 'Las recargas Stripe completadas aparecerán aquí.' })}
+                    : t('receipts.empty_body', { defaultValue: 'Las recargas con tarjeta completadas aparecerán aquí.' })}
                 />
               </td></tr>
             ) : (

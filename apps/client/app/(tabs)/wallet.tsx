@@ -12,7 +12,20 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { paymentService } from '@tricigo/api/services/payment';
-import { formatTriciCoin, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, getRelativeDay, triggerHaptic, triggerSelection, getErrorMessage, logger } from '@tricigo/utils';
+import {
+  formatTriciCoin,
+  formatUSD,
+  trcToUsd,
+  DEFAULT_EXCHANGE_RATE,
+  getRelativeDay,
+  triggerHaptic,
+  triggerSelection,
+  getErrorMessage,
+  logger,
+  computeRechargeFeeUsd,
+  computeRechargeChargeUsd,
+  RECHARGE_LIMITS,
+} from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
@@ -680,8 +693,10 @@ function NativeWalletScreen() {
 
   const MAX_RECHARGE_CUP = RIDE_CONFIG.MAX_RECHARGE_AMOUNT;
 
-  const MIN_RECHARGE_USD = 20;
-  const MAX_RECHARGE_USD = 500;
+  // RECARGA V2 limits — sourced from @tricigo/utils so client + server
+  // (create-netopia-payment-intent EF) read from the same constants.
+  const MIN_RECHARGE_USD = RECHARGE_LIMITS.customer.min;
+  const MAX_RECHARGE_USD = RECHARGE_LIMITS.customer.max;
 
   // Post-2026-05-20 cutover: mobile recharge opens the web wallet,
   // where NETOPIA's hosted payment page runs. The native Stripe
@@ -705,14 +720,13 @@ function NativeWalletScreen() {
     setIsProcessing(true);
     setRechargeSubmitting(true);
     try {
-      // TriciGo persists CUP internally; NETOPIA charges in USD.
-      const amountCup = Math.round(usd * exchangeRate);
-
-      // 1. Create the intent — edge function returns NETOPIA hosted page URL.
+      // RECARGA V2: pass the NET USD amount. The edge function computes
+      // the additive fee (3% min $0.50) and tells NETOPIA the full
+      // charge. The wallet gets credited with `amountUsd × FX` in CUP.
       const result = await paymentService.createRechargeIntent({
         provider: 'netopia',
         userId,
-        amountCup,
+        amountUsd: usd,
         returnUrl: RETURN_URL_BASE,
       });
       if (!result.redirectUrl) {
@@ -749,7 +763,7 @@ function NativeWalletScreen() {
         Toast.show({
           type: 'success',
           text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
-          text2: `$${usd.toFixed(2)} USD ≈ ${amountCup.toLocaleString()} CUP`,
+          text2: `+${result.amountCupCredited.toLocaleString()} TC`,
         });
         await fetchData();
       } else if (final.status === 'failed') {
@@ -1245,37 +1259,30 @@ function NativeWalletScreen() {
             keyboardType="numeric"
           />
           {(() => {
-            // Wallet v2 PR 5: top-up preview (USD → fee → net TC → CUP).
-            // Spec §10 #2: fee = 3% of charged USD, minimum $0.50.
-            // Provider-config-driven fee was removed with the Stripe
-            // cutover; the spec rule is the source of truth for the
-            // preview. The real fee charged is whatever NETOPIA's
-            // create-intent edge function snapshots into the row.
+            // RECARGA V2 preview — additive fee model.
+            //   User picks NET USD ($X). Fee = MAX($X * 3%, $0.50) is
+            //   added on top. The card is charged $X + fee. The wallet
+            //   is credited with X × FX (in CUP). One source of truth
+            //   for the math: @tricigo/utils → computeRecharge*Usd.
             const usdNum = parseFloat(rechargeAmount);
             if (!Number.isFinite(usdNum) || usdNum <= 0) return null;
-            const fee = Math.max(usdNum * 0.03, 0.50);
-            const net = Math.max(0, usdNum - fee);
-            const cupEq = Math.round(net * exchangeRate);
+            const fee = computeRechargeFeeUsd(usdNum);
+            const charge = computeRechargeChargeUsd(usdNum);
+            const cupCredited = Math.round(usdNum * exchangeRate);
             const belowMin = usdNum < MIN_RECHARGE_USD;
             return (
               <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
                 <Text variant="bodySmall" className="font-semibold" style={{ color: colors.brand.orange }}>
-                  {t('wallet.recharge_preview_total', {
-                    defaultValue: 'Recargás ${{usd}} USD = {{tc}} TriciCoin',
-                    usd: usdNum.toFixed(2),
-                    tc: net.toFixed(2),
-                  })}
-                </Text>
-                <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
-                  ≈ ${net.toFixed(2)} {t('wallet.recharge_preview_net', {
-                    defaultValue: 'netos (después del 3% de comisión: -${{fee}})',
+                  {t('wallet.recharge_preview_charge', {
+                    defaultValue: 'Pagás ${{charge}} USD (incluye ${{fee}} de comisión)',
+                    charge: charge.toFixed(2),
                     fee: fee.toFixed(2),
                   })}
                 </Text>
-                <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                  {t('wallet.recharge_preview_cup', {
-                    defaultValue: 'Equivale a {{cup}} CUP al cambio de hoy (1 USD = {{rate}} CUP)',
-                    cup: cupEq.toLocaleString(),
+                <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
+                  {t('wallet.recharge_preview_credit', {
+                    defaultValue: 'Acreditás {{cup}} TriciCoin (≈ {{cup}} CUP al cambio de hoy: {{rate}} CUP/USD)',
+                    cup: cupCredited.toLocaleString(),
                     rate: Math.round(exchangeRate).toLocaleString(),
                   })}
                 </Text>

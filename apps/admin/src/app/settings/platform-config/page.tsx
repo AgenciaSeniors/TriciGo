@@ -10,15 +10,20 @@ type ConfigEntry = { key: string; value: string };
 
 /** Well-known config keys with input type + help text key */
 const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> = {
-  // ── Stripe payments ──
+  // ── Payment provider registry ──
+  active_payment_provider: { type: 'text', helpKey: 'platform_config.active_payment_provider_help' },
+  // ── NETOPIA Payments (post 2026-05-20 cutover) ──
+  netopia_enabled: { type: 'text', helpKey: 'platform_config.netopia_enabled_help' },
+  netopia_environment: { type: 'text', helpKey: 'platform_config.netopia_environment_help' },
+  netopia_sandbox_signature: { type: 'text', helpKey: 'platform_config.netopia_sandbox_signature_help' },
+  netopia_live_signature: { type: 'text', helpKey: 'platform_config.netopia_live_signature_help' },
+  netopia_min_recharge_cup: { type: 'number', helpKey: 'platform_config.netopia_min_recharge_cup_help' },
+  netopia_max_recharge_cup: { type: 'number', helpKey: 'platform_config.netopia_max_recharge_cup_help' },
+  netopia_fee_usd: { type: 'number', helpKey: 'platform_config.netopia_fee_usd_help' },
+  netopia_fee_type: { type: 'text', helpKey: 'platform_config.netopia_fee_type_help' },
+  // ── Stripe legacy (kept as a row but no longer used) ──
   stripe_enabled: { type: 'text', helpKey: 'platform_config.stripe_enabled_help' },
-  stripe_publishable_key: { type: 'text', helpKey: 'platform_config.stripe_publishable_key_help' },
-  stripe_secret_key: { type: 'text', helpKey: 'platform_config.stripe_secret_key_help' },
-  stripe_webhook_secret: { type: 'text', helpKey: 'platform_config.stripe_webhook_secret_help' },
-  stripe_min_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_min_recharge_cup_help' },
-  stripe_max_recharge_cup: { type: 'number', helpKey: 'platform_config.stripe_max_recharge_cup_help' },
-  stripe_fee_usd: { type: 'number', helpKey: 'platform_config.stripe_fee_usd_help' },
-  stripe_fee_type: { type: 'text', helpKey: 'platform_config.stripe_fee_type_help' },
+  // ── Other ──
   cash_enabled: { type: 'text', helpKey: 'platform_config.cash_enabled_help' },
   wallet_enabled: { type: 'text', helpKey: 'platform_config.wallet_enabled_help' },
   // ── Platform config ──

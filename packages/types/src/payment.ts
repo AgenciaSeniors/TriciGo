@@ -89,7 +89,14 @@ export interface RechargeIntentRequest {
   /** Which payment processor to route this recharge through. */
   provider: PaymentProvider;
   userId: string;
-  amountCup: number;
+  /**
+   * RECARGA V2: the NET amount in USD the user wants to receive as
+   * wallet credit. The processor applies a 3% min $0.50 fee
+   * ADDITIVELY, so the actual card charge is `amountUsd + feeUsd`.
+   * Limits depend on intent type: customer $20..$500, corporate
+   * $100..$10000. Decided in design rounds 1-4.
+   */
+  amountUsd: number;
   /** 'customer' credits the rider wallet; 'driver_quota' the driver commission credit. */
   rechargeType?: 'customer' | 'driver_quota';
   corporateAccountId?: string;
@@ -124,9 +131,14 @@ export interface RechargeIntentResult {
   provider: PaymentProvider;
   /** TriciGo payment_intents row id. */
   intentId: string;
-  amountCup: number;
-  amountUsd: number;
+  /** What the user REQUESTED (net, before fee). */
+  amountUsdRequested: number;
+  /** Additive fee in USD. 3% of `amountUsdRequested`, floor $0.50. */
   feeUsd: number;
+  /** Total charged to the card = `amountUsdRequested + feeUsd`. */
+  chargeUsd: number;
+  /** TC credited to the wallet (= amountUsdRequested × exchangeRate, in CUP). */
+  amountCupCredited: number;
   exchangeRate: number;
   /** Redirect-based providers (NETOPIA, EuPlatesc): URL to send the payer to. */
   redirectUrl?: string;

@@ -169,7 +169,8 @@ export default function CorporatePage() {
     }
   };
 
-  // TODO: Replace with Stripe PaymentIntent creation
+  // TODO: wire to paymentService.createRechargeIntent with the corporate
+  // account id (provider routed via active_payment_provider in platform_config).
   const handleRecharge = async (_accountId: string) => {
     setError(t('common:wallet.recharge_coming_soon', { defaultValue: 'Coming soon' }));
   };

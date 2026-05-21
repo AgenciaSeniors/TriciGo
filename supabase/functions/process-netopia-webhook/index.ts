@@ -73,9 +73,14 @@ interface NetopiaIPNBody {
 const ACK_OK = { code: '0', message: 'OK' };
 
 /** Map NETOPIA numeric status to our payment_intents.status. */
-function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'unknown' {
+function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'refunded' | 'unknown' {
   // Per spec: 3=paid, 5=confirmed; 12=invalid account / rejected; 15=3DS required.
+  // 4 = refunded/reversed in NETOPIA's v2 spec (admin-initiated from the
+  // POS dashboard). If the actual code differs in production we widen
+  // this check from the IPN payload — keeping it narrow for now so we
+  // don't accidentally drain a wallet on an unexpected status value.
   if (s === 3 || s === 5) return 'paid';
+  if (s === 4) return 'refunded';
   if (s === 12) return 'failed';
   if (s === 15) return 'pending'; // 3DS still in flight
   return 'unknown';
@@ -215,10 +220,10 @@ Deno.serve(async (req) => {
         console.warn(`[netopia] Card metadata update skipped: ${metaErr}`);
       }
 
-      // Call the credit RPC. Today it's process_stripe_recharge —
-      // PAYMENT_PROVIDER_CONTRACT.md §3 plans the rename to
-      // process_recharge_payment in a follow-up migration. The RPC
-      // itself is provider-agnostic.
+      // Call the credit RPC. As of migration 00282 the canonical name
+      // is `process_recharge_payment`; `process_stripe_recharge` still
+      // exists as a thin wrapper for backwards compat but should no
+      // longer be referenced by new code.
       const webhookPayload = {
         netopia_ntp_id: ntpId,
         amount: ipn.payment?.amount,
@@ -227,7 +232,7 @@ Deno.serve(async (req) => {
       };
 
       const { data: txnId, error: processError } = await supabase.rpc(
-        'process_stripe_recharge',
+        'process_recharge_payment',
         {
           p_payment_intent_id: orderId,
           p_webhook_payload: webhookPayload,
@@ -295,6 +300,72 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (status === 'refunded') {
+      // Admin-initiated refund from NETOPIA's POS dashboard. We can only
+      // refund what was previously credited — if the intent never
+      // completed, there's nothing to reverse.
+      if (existingIntent.status !== 'completed') {
+        console.warn(
+          `[netopia] Refund IPN for non-completed intent ${orderId} (status=${existingIntent.status}) — ignoring`,
+        );
+        return new Response(JSON.stringify(ACK_OK), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // RPC is idempotent on idempotency_key='recharge_refund_<intent>'.
+      // Replays of the same refund IPN are no-ops on the wallet side.
+      const refundPayload = {
+        netopia_ntp_id: ntpId,
+        amount: ipn.payment?.amount,
+        currency: ipn.payment?.currency,
+        netopia_status: ipn.payment?.status,
+        netopia_message: ipn.payment?.message,
+      };
+
+      const { error: refundError } = await supabase.rpc('process_recharge_refund', {
+        p_payment_intent_id: orderId,
+        p_webhook_payload: refundPayload,
+      });
+
+      if (refundError) {
+        // If the RPC reports already-refunded, ACK and move on. Anything
+        // else is an unexpected failure we want to retry by returning 5xx.
+        if (/already refunded|idempotency/i.test(refundError.message)) {
+          console.log(`[netopia] Refund replay for ${orderId} — already processed`);
+          return new Response(JSON.stringify(ACK_OK), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        console.error('[netopia] Refund RPC failed:', refundError);
+        return new Response(
+          JSON.stringify({ error: 'refund_error', detail: refundError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Stash the webhook payload alongside the existing one — the
+      // original 'paid' IPN is preserved by storing the refund under a
+      // new column would be cleaner, but we don't have one yet, so we
+      // overwrite. Acceptable for now; audit trail lives in the new
+      // ledger_transactions row.
+      await supabase
+        .from('payment_intents')
+        .update({
+          webhook_payload: ipn as unknown as Record<string, unknown>,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      await sendRefundNotification(supabase, existingIntent.user_id, existingIntent.amount_cup);
+
+      console.log(`[netopia] Refund processed for ${orderId}`);
+
+      return new Response(JSON.stringify(ACK_OK), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // status === 'pending' (3DS still in flight) or 'unknown' — just ACK,
     // do not change wallet state. A subsequent IPN with status=paid/failed
     // will land here once 3DS resolves.
@@ -355,5 +426,47 @@ async function sendPaymentNotification(
     });
   } catch (err) {
     console.error('[netopia] Error sending payment notification:', err);
+  }
+}
+
+/**
+ * Send a push notification about a refunded recharge. The wallet has
+ * already been debited by `process_recharge_refund` at this point —
+ * this is just the user-facing announcement.
+ */
+async function sendRefundNotification(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  amountCup: number,
+): Promise<void> {
+  try {
+    const { data: devices } = await supabase
+      .from('user_devices')
+      .select('push_token')
+      .eq('user_id', userId)
+      .not('push_token', 'is', null);
+
+    const tokens = (devices ?? [])
+      .map((d: { push_token: string | null }) => d.push_token)
+      .filter(Boolean) as string[];
+
+    if (tokens.length === 0) return;
+
+    const formattedAmount = amountCup.toLocaleString();
+    const messages = tokens.map((token) => ({
+      to: token,
+      title: 'Recarga reembolsada',
+      body: `Tu recarga de ${formattedAmount} CUP fue reembolsada. Si tienes dudas, escríbenos a soporte@tricigo.com.`,
+      sound: 'default' as const,
+      data: { type: 'wallet_recharge_refund', provider: 'netopia' },
+    }));
+
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messages),
+    });
+  } catch (err) {
+    console.error('[netopia] Error sending refund notification:', err);
   }
 }
