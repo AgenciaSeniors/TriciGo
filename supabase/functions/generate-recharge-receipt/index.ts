@@ -32,10 +32,13 @@ import {
   SUPPORT_EMAIL,
   WEB_ORIGIN,
 } from '../_shared/brand.ts';
+// Import directly from the template module (not the registry index) so this
+// function's deploy bundle stays narrow — we don't need welcome / win_back /
+// ride_receipt / driver_under_review here.
 import {
   walletReceiptHtml,
   walletReceiptSubject,
-} from '../_shared/email-templates/index.ts';
+} from '../_shared/email-templates/wallet_receipt.ts';
 
 // ── Constants from spec §10 ──
 const FEE_PCT = 0.03;
