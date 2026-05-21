@@ -174,16 +174,29 @@ async function callNetopiaCardStart(args: {
     },
   };
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      // v2.x: raw API key, no "Bearer" prefix (per OpenAPI spec).
-      'Authorization': args.apiKey,
-    },
-    body: JSON.stringify(body),
-  });
+  // 15s hard timeout: NETOPIA TLS/network hangs would otherwise reach
+  // Supabase's gateway timeout (~10–25s), producing a generic 502 with
+  // no body. With this, we surface a clean error and our handler can
+  // mark the intent failed and return a structured response.
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // v2.x: raw API key, no "Bearer" prefix (per OpenAPI spec).
+        'Authorization': args.apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error('netopia request timed out after 15s');
+    }
+    throw err;
+  }
 
   const text = await resp.text();
   let parsed: NetopiaStartResponse = {};
@@ -192,7 +205,11 @@ async function callNetopiaCardStart(args: {
   } catch (_err) {
     throw new Error(`netopia returned non-JSON response (HTTP ${resp.status}): ${text.slice(0, 500)}`);
   }
-  if (!resp.ok && !parsed.error) {
+  // Only fail hard on non-2xx WITHOUT a parsed body. NETOPIA v2.x often
+  // returns 200 with both `payment.paymentURL` AND an `error` object
+  // whose code is informational (see handler below); the parser must
+  // not reject that case.
+  if (!resp.ok && !parsed.error && !parsed.payment) {
     throw new Error(`netopia HTTP ${resp.status}: ${text.slice(0, 500)}`);
   }
   return parsed;
@@ -491,8 +508,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (netopiaResp.error?.code) {
-      const msg = netopiaResp.error.message ?? netopiaResp.error.code;
+    // Breadcrumb for future debugging without leaking PII / secrets.
+    // Body of the response (billing, full customerAction) is NOT logged;
+    // just the fields needed to triage 502s.
+    console.log('[netopia] response summary', {
+      hasPaymentURL: !!netopiaResp.payment?.paymentURL,
+      ntpID: netopiaResp.payment?.ntpID,
+      status: netopiaResp.payment?.status,
+      errorCode: netopiaResp.error?.code,
+      errorMessage: netopiaResp.error?.message,
+      customerActionType: netopiaResp.customerAction?.type,
+    });
+
+    // Decision: paymentURL is the source of truth, not error.code.
+    // NETOPIA v2.x returns `error.code = "00" | "100" | ...` on SUCCESS
+    // when there's an action to take (commonly "Redirect user to payment
+    // page" alongside a valid paymentURL). Earlier we treated any
+    // non-empty error.code as failure → 502 even when NETOPIA was happy.
+    // Now we only fail when there's no usable URL.
+    const paymentURL = netopiaResp.payment?.paymentURL;
+    const netopiaCode = netopiaResp.error?.code;
+    const INFORMATIONAL_CODES = new Set(['', '0', '00', '100']);
+    const isInformational = !netopiaCode || INFORMATIONAL_CODES.has(netopiaCode);
+
+    if (!paymentURL) {
+      // No URL → can't redirect the user → real failure. error.message
+      // (if present) is now a genuine error message worth surfacing.
+      const msg = netopiaResp.error?.message
+        ?? netopiaResp.error?.code
+        ?? 'NETOPIA did not return a paymentURL';
       await supabase.from('payment_intents')
         .update({
           status: 'failed',
@@ -505,13 +549,44 @@ Deno.serve(async (req) => {
           ok: false,
           error: 'netopia_error',
           detail: msg,
-          netopia_code: netopiaResp.error.code,
-          netopia_details: netopiaResp.error.details,
+          netopia_code: netopiaResp.error?.code,
+          netopia_details: netopiaResp.error?.details,
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
+    if (paymentURL && !isInformational) {
+      // URL present but with a non-informational error code we don't yet
+      // recognize. Surface to logs so we can add it to INFORMATIONAL_CODES
+      // if it turns out to be benign — but for safety, treat as failure.
+      console.warn(`[netopia] unknown non-informational error code "${netopiaCode}" with paymentURL present — failing for safety`);
+      const msg = netopiaResp.error?.message ?? `Unknown NETOPIA code: ${netopiaCode}`;
+      await supabase.from('payment_intents')
+        .update({
+          status: 'failed',
+          error_message: `netopia: ${msg}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', intent.id);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: 'netopia_error',
+          detail: msg,
+          netopia_code: netopiaCode,
+        }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (paymentURL && netopiaCode && isInformational) {
+      // Informational code alongside a valid URL — log and proceed.
+      console.log(`[netopia] informational code ${netopiaCode}: ${netopiaResp.error?.message ?? '(no message)'}`);
+    }
+
+    // Defensive: at this point paymentURL must exist (early-return covers
+    // the empty case). The legacy guard below is kept for paranoia.
     if (!netopiaResp.payment?.paymentURL) {
       await supabase.from('payment_intents')
         .update({
