@@ -250,9 +250,9 @@ export default function ReviewScreen() {
 
         {/* OFAC defense disclaimer: clarify the legal nature of the
             wallet so the relationship between the driver, the platform,
-            and Stripe is unambiguous. The driver is an independent
-            service provider; the wallet is internal account credit, not
-            an international monetary transfer. */}
+            and the payment processor is unambiguous. The driver is an
+            independent service provider; the wallet is internal account
+            credit, not an international monetary transfer. */}
         <Card forceDark variant="surface" padding="md" className="mb-4">
           <View className="flex-row items-start gap-2">
             <Ionicons

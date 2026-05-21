@@ -215,10 +215,10 @@ Deno.serve(async (req) => {
         console.warn(`[netopia] Card metadata update skipped: ${metaErr}`);
       }
 
-      // Call the credit RPC. Today it's process_stripe_recharge —
-      // PAYMENT_PROVIDER_CONTRACT.md §3 plans the rename to
-      // process_recharge_payment in a follow-up migration. The RPC
-      // itself is provider-agnostic.
+      // Call the credit RPC. As of migration 00282 the canonical name
+      // is `process_recharge_payment`; `process_stripe_recharge` still
+      // exists as a thin wrapper for backwards compat but should no
+      // longer be referenced by new code.
       const webhookPayload = {
         netopia_ntp_id: ntpId,
         amount: ipn.payment?.amount,
@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
       };
 
       const { data: txnId, error: processError } = await supabase.rpc(
-        'process_stripe_recharge',
+        'process_recharge_payment',
         {
           p_payment_intent_id: orderId,
           p_webhook_payload: webhookPayload,

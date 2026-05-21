@@ -279,7 +279,8 @@ export default function CorporateProfileScreen() {
     }
   };
 
-  // TODO: Replace with Stripe PaymentIntent creation
+  // TODO: wire to paymentService.createRechargeIntent with the corporate
+  // account id (provider routed via active_payment_provider in platform_config).
   const handleRecharge = async (_accountId: string) => {
     Alert.alert(
       t('common:coming_soon', { defaultValue: 'Coming soon' }),

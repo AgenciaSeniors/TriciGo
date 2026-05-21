@@ -23,7 +23,6 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppProviders } from '@/providers/app-providers';
-import { StripeBootstrap } from '@/lib/stripe-bootstrap';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
@@ -265,13 +264,14 @@ function RootLayoutInner() {
         }
       }}>
       <AppProviders>
-        <StripeBootstrap>
-          <RootNavigator />
-          {/* DemoBanner only renders when EXPO_PUBLIC_DEMO_MODE=true.
-              Otherwise it returns null — zero overhead in prod builds. */}
-          <DemoBanner />
-          <Toast />
-        </StripeBootstrap>
+        {/* StripeBootstrap wrapper removed 2026-05-21 (post NETOPIA cutover).
+            Mobile recharge runs through WebBrowser.openAuthSessionAsync against
+            NETOPIA's hosted page — no native SDK provider needed. */}
+        <RootNavigator />
+        {/* DemoBanner only renders when EXPO_PUBLIC_DEMO_MODE=true.
+            Otherwise it returns null — zero overhead in prod builds. */}
+        <DemoBanner />
+        <Toast />
       </AppProviders>
       {/* BUG-289 — animated splash overlay (orange gradient, white pin
           + wordmark, dot loader, "Cuba" tagline). Sits above everything
