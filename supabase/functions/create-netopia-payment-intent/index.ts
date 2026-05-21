@@ -531,6 +531,32 @@ Deno.serve(async (req) => {
     const INFORMATIONAL_CODES = new Set(['', '0', '00', '100']);
     const isInformational = !netopiaCode || INFORMATIONAL_CODES.has(netopiaCode);
 
+    // ── DEBUG (temporary, until 502 is diagnosed) ─────────────────
+    // Echo a sanitized view of the NETOPIA response in the failure path
+    // so we can see the actual shape from the browser console without
+    // needing Supabase function-log access. Sanitization: drop billing
+    // (PII), drop full customerAction (may contain auth tokens), keep
+    // structure + scalar fields.
+    function sanitizeForDebug(r: NetopiaStartResponse) {
+      return {
+        payment: r.payment ? {
+          method: r.payment.method,
+          ntpID: r.payment.ntpID,
+          status: r.payment.status,
+          amount: r.payment.amount,
+          currency: r.payment.currency,
+          paymentURL: r.payment.paymentURL,
+        } : null,
+        customerAction: r.customerAction ? {
+          type: r.customerAction.type,
+          hasUrl: !!r.customerAction.url,
+          hasFormData: !!r.customerAction.formData,
+          hasAuthToken: !!r.customerAction.authenticationToken,
+        } : null,
+        error: r.error ?? null,
+      };
+    }
+
     if (!paymentURL) {
       // No URL → can't redirect the user → real failure. error.message
       // (if present) is now a genuine error message worth surfacing.
@@ -551,6 +577,7 @@ Deno.serve(async (req) => {
           detail: msg,
           netopia_code: netopiaResp.error?.code,
           netopia_details: netopiaResp.error?.details,
+          debug_response: sanitizeForDebug(netopiaResp),
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
@@ -575,6 +602,7 @@ Deno.serve(async (req) => {
           error: 'netopia_error',
           detail: msg,
           netopia_code: netopiaCode,
+          debug_response: sanitizeForDebug(netopiaResp),
         }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );

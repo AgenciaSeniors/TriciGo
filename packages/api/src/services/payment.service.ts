@@ -120,6 +120,11 @@ export const paymentService = {
         userId: req.userId,
         amountCup: req.amountCup,
         error: errorMsg,
+        // TEMPORARY: surface the full server response (including
+        // debug_response from the edge function) so we can diagnose the
+        // current NETOPIA 502 from the browser console. Remove once the
+        // root cause is identified.
+        serverResponse: json,
       });
       throw new Error(errorMsg);
     }
