@@ -16,7 +16,6 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService, getSupabaseClient, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
-import { getMapFallbackLatLng } from '@/config/demo';
 import {
   HAVANA_CENTER,
   trackEvent,
