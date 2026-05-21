@@ -299,7 +299,7 @@ export default function DriverDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="flex items-center gap-2 text-neutral-400">
+        <div className="flex items-center gap-2 text-ink-subtle">
           <Clock size={16} className="animate-spin" />
           {t('common.loading', { defaultValue: 'Cargando...' })}
         </div>
@@ -310,8 +310,8 @@ export default function DriverDetailPage() {
   if (!driver) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3">
-        <AlertTriangle size={32} className="text-neutral-300" />
-        <p className="text-sm text-neutral-500">
+        <AlertTriangle size={32} className="text-ink-subtle" />
+        <p className="text-sm text-ink-muted">
           {apiError
             ? t('drivers.error_loading', { defaultValue: 'Error al cargar datos del conductor' })
             : t('drivers.driver_not_found', { defaultValue: 'Conductor no encontrado' })}
@@ -340,7 +340,7 @@ export default function DriverDetailPage() {
       <header className="mb-6">
         <button
           onClick={() => router.push('/drivers')}
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors mb-3"
+          className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors mb-3"
         >
           <ArrowLeft size={14} />
           {t('drivers.back_to_list', { defaultValue: 'Conductores' })}
@@ -353,7 +353,7 @@ export default function DriverDetailPage() {
             </div>
             <div>
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+                <h1 className="text-2xl font-semibold tracking-tight text-ink">
                   {profile.users.full_name || '—'}
                 </h1>
                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
@@ -361,15 +361,15 @@ export default function DriverDetailPage() {
                   {t(STATUS_LABEL_KEY[status])}
                 </div>
               </div>
-              <p className="text-sm text-neutral-500 mt-1 flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm text-ink-muted mt-1 flex items-center gap-1.5 flex-wrap">
                 <Phone size={12} />
                 {profile.users.phone}
                 {profile.users.email && <>
-                  <span className="text-neutral-300">·</span>
+                  <span className="text-ink-subtle">·</span>
                   <Mail size={12} />
                   {profile.users.email}
                 </>}
-                <span className="text-neutral-300">·</span>
+                <span className="text-ink-subtle">·</span>
                 <Calendar size={12} />
                 {formatAdminDate(profile.created_at)}
               </p>
@@ -380,13 +380,13 @@ export default function DriverDetailPage() {
           <div className="relative" ref={actionsMenuRef}>
             <button
               onClick={() => setActionsMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-line bg-surface-elevated text-sm font-medium text-ink hover:bg-surface-sunken transition-colors"
             >
               {t('drivers.actions', { defaultValue: 'Acciones' })}
               <MoreVertical size={14} />
             </button>
             {actionsMenuOpen && (
-              <div className="absolute right-0 mt-1 w-56 rounded-lg border border-neutral-200 bg-white shadow-lg overflow-hidden z-20">
+              <div className="absolute right-0 mt-1 w-56 rounded-lg border border-line bg-surface-elevated shadow-lg overflow-hidden z-20">
                 {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
                   <button
                     onClick={handleApprove}
@@ -396,7 +396,7 @@ export default function DriverDetailPage() {
                   >
                     <CheckCircle2 size={14} />
                     {t('drivers.action_approve', { defaultValue: 'Aprobar conductor' })}
-                    {!allDocsVerified && <span className="ml-auto text-xs text-neutral-400">{verifiedDocsCount}/{totalDocsCount}</span>}
+                    {!allDocsVerified && <span className="ml-auto text-xs text-ink-subtle">{verifiedDocsCount}/{totalDocsCount}</span>}
                   </button>
                 )}
                 {(status === 'under_review' || status === 'pending_verification') && (
@@ -421,7 +421,7 @@ export default function DriverDetailPage() {
                 )}
 
                 {/* Wallet ops — always available */}
-                <div className="border-t border-neutral-100 my-1" />
+                <div className="border-t border-line my-1" />
                 <button
                   onClick={() => { setWalletModalOpen(true); setActionsMenuOpen(false); }}
                   disabled={actionLoading}
@@ -449,12 +449,12 @@ export default function DriverDetailPage() {
         {/* ─── LEFT COLUMN ──────────────────────────────── */}
         <div className="lg:col-span-3 space-y-6">
           {/* Documents */}
-          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+              <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider">
                 {t('drivers.documents_section', { defaultValue: 'Documentos' })}
               </h2>
-              <div className="text-xs text-neutral-500 tabular-nums">
+              <div className="text-xs text-ink-muted tabular-nums">
                 {verifiedDocsCount}/{totalDocsCount || 5} {t('drivers.verified', { defaultValue: 'verificados' })}
               </div>
             </div>
@@ -472,14 +472,14 @@ export default function DriverDetailPage() {
                     className={`rounded-lg border p-3 ${
                       docVerified ? 'border-green-200/80 bg-green-50/30' :
                       docRejected ? 'border-red-200/80 bg-red-50/30' :
-                      'border-neutral-200/80 bg-white'
+                      'border-line bg-surface-elevated'
                     }`}
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <FileText size={14} className="text-neutral-400" />
-                        <p className="text-sm font-medium text-neutral-900">
+                        <FileText size={14} className="text-ink-subtle" />
+                        <p className="text-sm font-medium text-ink">
                           {DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]) : docType}
                         </p>
                       </div>
@@ -505,10 +505,10 @@ export default function DriverDetailPage() {
                           return isPdf ? (
                             <button
                               onClick={() => window.open(url, '_blank')}
-                              className="w-full h-28 flex flex-col items-center justify-center bg-neutral-100 border border-neutral-200 rounded-md mb-2 hover:bg-neutral-200 transition-colors gap-1.5 group"
+                              className="w-full h-28 flex flex-col items-center justify-center bg-surface-sunken border border-line rounded-md mb-2 hover:bg-surface-sunken transition-colors gap-1.5 group"
                             >
                               <FileText size={24} className="text-red-500" />
-                              <span className="text-[10px] text-neutral-600 font-medium truncate max-w-[90%]">
+                              <span className="text-[10px] text-ink-muted font-medium truncate max-w-[90%]">
                                 {doc.file_name || 'PDF'}
                               </span>
                               <span className="text-[10px] text-primary-600 group-hover:underline inline-flex items-center gap-1">
@@ -532,13 +532,13 @@ export default function DriverDetailPage() {
                           </div>
                         )}
                         {!url && (
-                          <div className="w-full h-28 bg-neutral-100 rounded-md mb-2 flex items-center justify-center">
-                            <Clock size={14} className="text-neutral-400 animate-spin" />
+                          <div className="w-full h-28 bg-surface-sunken rounded-md mb-2 flex items-center justify-center">
+                            <Clock size={14} className="text-ink-subtle animate-spin" />
                           </div>
                         )}
 
                         {/* Meta */}
-                        <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-2">
+                        <div className="flex items-center justify-between text-[10px] text-ink-muted mb-2">
                           <span>{formatAdminDate(doc.uploaded_at)}</span>
                           {doc.face_match_score != null && (
                             <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
@@ -567,7 +567,7 @@ export default function DriverDetailPage() {
                               value={docNotes[doc.id] || ''}
                               onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
                               placeholder={t('verification.verification_notes', { defaultValue: 'Notas (opcional para aprobar, requerida para rechazar)' })}
-                              className="w-full border border-neutral-200 rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full border border-line bg-surface text-ink rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
                             />
                             <div className="flex gap-1.5">
                               <button
@@ -591,9 +591,9 @@ export default function DriverDetailPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="w-full h-28 bg-neutral-50 border border-dashed border-neutral-200 rounded-md flex flex-col items-center justify-center">
-                        <FileText size={20} className="text-neutral-300 mb-1" />
-                        <span className="text-[10px] text-neutral-400">{t('drivers.not_uploaded', { defaultValue: 'Sin subir' })}</span>
+                      <div className="w-full h-28 bg-surface-sunken border border-dashed border-line rounded-md flex flex-col items-center justify-center">
+                        <FileText size={20} className="text-ink-subtle mb-1" />
+                        <span className="text-[10px] text-ink-subtle">{t('drivers.not_uploaded', { defaultValue: 'Sin subir' })}</span>
                       </div>
                     )}
                   </div>
@@ -604,24 +604,24 @@ export default function DriverDetailPage() {
 
           {/* Selfie Checks */}
           {selfieChecks.length > 0 && (
-            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+            <section className="bg-surface-elevated rounded-xl border border-line p-5">
+              <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
                 {t('verification.selfie_checks', { defaultValue: 'Verificaciones de selfie' })}
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-neutral-100">
-                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Fecha</th>
-                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Estado</th>
-                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Match</th>
-                      <th className="text-left py-2 text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Liveness</th>
+                    <tr className="border-b border-line">
+                      <th className="text-left py-2 text-[10px] font-medium text-ink-muted uppercase tracking-wider">Fecha</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-ink-muted uppercase tracking-wider">Estado</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-ink-muted uppercase tracking-wider">Match</th>
+                      <th className="text-left py-2 text-[10px] font-medium text-ink-muted uppercase tracking-wider">Liveness</th>
                     </tr>
                   </thead>
                   <tbody>
                     {selfieChecks.map((check) => (
-                      <tr key={check.id} className="border-b border-neutral-50 last:border-0 h-11">
-                        <td className="text-sm text-neutral-700">{formatAdminDate(check.requested_at)}</td>
+                      <tr key={check.id} className="border-b border-line last:border-0 h-11">
+                        <td className="text-sm text-ink-muted">{formatAdminDate(check.requested_at)}</td>
                         <td>
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
                             check.status === 'passed' ? 'bg-green-100 text-green-700' :
@@ -645,7 +645,7 @@ export default function DriverDetailPage() {
                               {Math.round(check.face_match_score * 100)}%
                             </span>
                           ) : (
-                            <span className="text-sm text-neutral-400">—</span>
+                            <span className="text-sm text-ink-subtle">—</span>
                           )}
                         </td>
                         <td>
@@ -654,7 +654,7 @@ export default function DriverDetailPage() {
                               ? <CheckCircle2 size={14} className="text-green-600" />
                               : <XCircle size={14} className="text-red-600" />
                           ) : (
-                            <span className="text-sm text-neutral-400">—</span>
+                            <span className="text-sm text-ink-subtle">—</span>
                           )}
                         </td>
                       </tr>
@@ -667,21 +667,21 @@ export default function DriverDetailPage() {
 
           {/* Score history timeline */}
           {scoreEvents.length > 0 && (
-            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+            <section className="bg-surface-elevated rounded-xl border border-line p-5">
+              <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
                 {t('drivers.score_history', { defaultValue: 'Historial de puntuación' })}
               </h2>
               <div className="space-y-1">
                 {(showAllEvents ? scoreEvents : scoreEvents.slice(0, 10)).map((evt) => (
-                  <div key={evt.id} className="flex items-center gap-3 py-1.5 border-b border-neutral-50 last:border-0">
+                  <div key={evt.id} className="flex items-center gap-3 py-1.5 border-b border-line last:border-0">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${
                       evt.delta > 0 ? 'bg-green-500' : evt.delta < 0 ? 'bg-red-500' : 'bg-neutral-300'
                     }`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-neutral-700 truncate capitalize">
+                      <p className="text-sm text-ink-muted truncate capitalize">
                         {evt.event_type.replace(/_/g, ' ')}
                       </p>
-                      <p className="text-[10px] text-neutral-400">{formatAdminDate(evt.created_at)}</p>
+                      <p className="text-[10px] text-ink-subtle">{formatAdminDate(evt.created_at)}</p>
                     </div>
                     <span className={`text-sm font-medium tabular-nums shrink-0 ${
                       evt.delta > 0 ? 'text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
@@ -708,8 +708,8 @@ export default function DriverDetailPage() {
         {/* ─── RIGHT COLUMN ─────────────────────────────── */}
         <aside className="lg:col-span-2 space-y-6 lg:sticky lg:top-6 self-start">
           {/* Personal info */}
-          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
+            <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
               {t('drivers.personal_info', { defaultValue: 'Perfil' })}
             </h2>
             <dl className="space-y-2.5">
@@ -731,18 +731,18 @@ export default function DriverDetailPage() {
 
             {/* Top review tags */}
             {topTags.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-neutral-100">
-                <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">
+              <div className="mt-4 pt-4 border-t border-line">
+                <p className="text-[10px] text-ink-muted uppercase tracking-wider mb-2">
                   {t('drivers.top_review_tags', { defaultValue: 'Tags más comunes' })}
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {topTags.slice(0, 5).map((tag) => (
                     <span
                       key={tag.tag_key}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-[10px] text-neutral-700"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-sunken text-[10px] text-ink-muted"
                     >
                       {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
-                      <span className="text-neutral-400">{tag.count}</span>
+                      <span className="text-ink-subtle">{tag.count}</span>
                     </span>
                   ))}
                 </div>
@@ -752,22 +752,22 @@ export default function DriverDetailPage() {
 
           {/* Vehicle */}
           {vehicle && (
-            <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-              <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+            <section className="bg-surface-elevated rounded-xl border border-line p-5">
+              <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
                 {t('drivers.vehicle_section', { defaultValue: 'Vehículo' })}
               </h2>
-              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-line">
                 <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
                   <VIcon size={20} className="text-primary-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-neutral-900 capitalize">
+                  <p className="text-sm font-semibold text-ink capitalize">
                     {(() => {
                       const key = VEHICLE_TYPE_KEY[vehicle.type];
                       return key ? t(key) : vehicle.type;
                     })()}
                   </p>
-                  <p className="text-xs text-neutral-500">{vehicle.make} {vehicle.model}</p>
+                  <p className="text-xs text-ink-muted">{vehicle.make} {vehicle.model}</p>
                 </div>
               </div>
               <dl className="space-y-2.5">
@@ -786,8 +786,8 @@ export default function DriverDetailPage() {
           )}
 
           {/* Metrics */}
-          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
+            <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
               {t('drivers.metrics', { defaultValue: 'Métricas' })}
             </h2>
             <div className="grid grid-cols-3 gap-3">
@@ -806,7 +806,7 @@ export default function DriverDetailPage() {
               />
             </div>
             {/* Match score mini */}
-            <div className="mt-3 pt-3 border-t border-neutral-100">
+            <div className="mt-3 pt-3 border-t border-line">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-neutral-500">{t('drivers.match_score', { defaultValue: 'Match score' })}</span>
                 <span className={`text-sm font-semibold tabular-nums ${
@@ -816,7 +816,7 @@ export default function DriverDetailPage() {
                   {Number(profile.match_score ?? 50).toFixed(1)}
                 </span>
               </div>
-              <div className="mt-1.5 h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
+              <div className="mt-1.5 h-1.5 w-full bg-surface-sunken rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all ${
                     Number(profile.match_score ?? 50) >= 70 ? 'bg-green-500' :
@@ -841,7 +841,7 @@ export default function DriverDetailPage() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   {churnRisk.risk_level === 'high' ? <TrendingDown size={14} className="text-red-600" /> : <TrendingUp size={14} className={churnRisk.risk_level === 'medium' ? 'text-amber-600' : 'text-green-600'} />}
-                  <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-700">
+                  <h3 className="text-xs font-medium uppercase tracking-wider text-ink-muted">
                     {t('drivers.churn_risk', { defaultValue: 'Riesgo de abandono' })}
                   </h3>
                 </div>
@@ -855,10 +855,10 @@ export default function DriverDetailPage() {
                 </span>
               </div>
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-2xl font-bold text-neutral-900 tabular-nums">{churnRisk.churn_risk_score}</span>
+                <span className="text-2xl font-bold text-ink tabular-nums">{churnRisk.churn_risk_score}</span>
                 <span className="text-xs text-neutral-500">/100</span>
               </div>
-              <p className="text-xs text-neutral-600">
+              <p className="text-xs text-ink-muted">
                 {churnRisk.days_since_last_ride} {t('drivers.days_since_ride_short', { defaultValue: 'días sin viaje' })}
                 {churnRisk.earnings_this_week > 0 && <> · {formatCUP(churnRisk.earnings_this_week)} esta semana</>}
               </p>
@@ -866,8 +866,8 @@ export default function DriverDetailPage() {
           )}
 
           {/* Financial */}
-          <section className="bg-white rounded-xl border border-neutral-200/80 p-5">
-            <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
+            <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
               {t('drivers.financial_eligibility', { defaultValue: 'Estado financiero' })}
             </h2>
             <div className="flex items-center gap-2">
@@ -900,9 +900,9 @@ export default function DriverDetailPage() {
             if (e.target === e.currentTarget) { setShowReasonModal(null); setReason(''); }
           }}
         >
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl">
-            <div className="p-5 border-b border-neutral-100">
-              <h3 className="text-lg font-semibold text-neutral-900">
+          <div className="bg-surface-elevated rounded-xl w-full max-w-lg shadow-xl">
+            <div className="p-5 border-b border-line">
+              <h3 className="text-lg font-semibold text-ink">
                 {showReasonModal === 'reject'
                   ? t('drivers.reject_reason_title', { defaultValue: 'Rechazar conductor' })
                   : t('drivers.suspend_reason_title', { defaultValue: 'Suspender conductor' })}
@@ -933,7 +933,7 @@ export default function DriverDetailPage() {
 
               <textarea
                 autoFocus
-                className="w-full border border-neutral-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full border border-line bg-surface text-ink rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 rows={4}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -942,10 +942,10 @@ export default function DriverDetailPage() {
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-neutral-100 bg-neutral-50/50 rounded-b-xl">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-line bg-surface-sunken/50 rounded-b-xl">
               <button
                 onClick={() => { setShowReasonModal(null); setReason(''); }}
-                className="px-4 h-9 rounded-md text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
+                className="px-4 h-9 rounded-md text-sm font-medium text-ink hover:bg-surface-sunken transition-colors"
               >
                 {t('common.cancel', { defaultValue: 'Cancelar' })}
               </button>
@@ -1068,7 +1068,7 @@ function Field({
         {Icon && <Icon size={11} className="text-neutral-400" />}
         {label}
       </dt>
-      <dd className={`text-sm text-neutral-900 text-right ${mono ? 'font-mono' : ''}`}>{value}</dd>
+      <dd className={`text-sm text-ink text-right ${mono ? 'font-mono' : ''}`}>{value}</dd>
     </div>
   );
 }
@@ -1076,7 +1076,7 @@ function Field({
 function Metric({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
     <div className="text-center">
-      <div className="flex items-center justify-center gap-1 text-lg font-bold text-neutral-900 tabular-nums">
+      <div className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular-nums">
         {icon}
         {value}
       </div>

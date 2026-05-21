@@ -21,7 +21,7 @@ const statusClasses: Record<CorporateAccountStatus, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   approved: 'bg-green-100 text-green-800',
   suspended: 'bg-red-100 text-red-800',
-  rejected: 'bg-neutral-200 text-neutral-600',
+  rejected: 'bg-surface-sunken text-ink-muted',
 };
 
 export default function BusinessDetailPage() {
@@ -135,11 +135,11 @@ export default function BusinessDetailPage() {
   }
 
   if (loading) {
-    return <div className="text-center py-12 text-neutral-500">{t('common.loading', { defaultValue: 'Cargando...' })}</div>;
+    return <div className="text-center py-12 text-ink-muted">{t('common.loading', { defaultValue: 'Cargando...' })}</div>;
   }
 
   if (!account) {
-    return <div className="text-center py-12 text-neutral-500">{t('businesses.not_found', { defaultValue: 'Empresa no encontrada' })}</div>;
+    return <div className="text-center py-12 text-ink-muted">{t('businesses.not_found', { defaultValue: 'Empresa no encontrada' })}</div>;
   }
 
   const budgetPct = account.monthly_budget_trc > 0
@@ -205,32 +205,32 @@ export default function BusinessDetailPage() {
       {/* Info cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Contact */}
-        <div className="bg-white border rounded-xl p-5">
-          <h3 className="text-sm font-medium text-neutral-500 mb-3">{t('businesses.contact', { defaultValue: 'Contacto' })}</h3>
+        <div className="bg-surface-elevated border-line rounded-xl p-5">
+          <h3 className="text-sm font-medium text-ink-muted mb-3">{t('businesses.contact', { defaultValue: 'Contacto' })}</h3>
           <p className="font-medium">{account.contact_phone}</p>
-          {account.contact_email && <p className="text-sm text-neutral-600">{account.contact_email}</p>}
-          {account.tax_id && <p className="text-sm text-neutral-500 mt-1">RIF: {account.tax_id}</p>}
-          <p className="text-xs text-neutral-400 mt-2">{t('common.created_at', { defaultValue: 'Creado' })}: {formatAdminDate(account.created_at)}</p>
+          {account.contact_email && <p className="text-sm text-ink-muted">{account.contact_email}</p>}
+          {account.tax_id && <p className="text-sm text-ink-muted mt-1">RIF: {account.tax_id}</p>}
+          <p className="text-xs text-ink-subtle mt-2">{t('common.created_at', { defaultValue: 'Creado' })}: {formatAdminDate(account.created_at)}</p>
         </div>
 
         {/* Wallet */}
-        <div className="bg-white border rounded-xl p-5">
-          <h3 className="text-sm font-medium text-neutral-500 mb-3">{t('businesses.wallet_title')}</h3>
+        <div className="bg-surface-elevated border-line rounded-xl p-5">
+          <h3 className="text-sm font-medium text-ink-muted mb-3">{t('businesses.wallet_title')}</h3>
           <p className="text-2xl font-bold">{formatTriciCoin(balance.available)}</p>
-          <p className="text-xs text-neutral-500">{t('businesses.held', { defaultValue: 'Retenido' })}: {formatTriciCoin(balance.held)}</p>
+          <p className="text-xs text-ink-muted">{t('businesses.held', { defaultValue: 'Retenido' })}: {formatTriciCoin(balance.held)}</p>
           {account.monthly_budget_trc > 0 && (
             <div className="mt-3">
-              <div className="flex justify-between text-xs text-neutral-500 mb-1">
+              <div className="flex justify-between text-xs text-ink-muted mb-1">
                 <span>{t('businesses.budget_usage')}</span>
                 <span>{budgetPct}%</span>
               </div>
-              <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-surface-sunken rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${budgetPct > 90 ? 'bg-red-500' : 'bg-primary-500'}`}
                   style={{ width: `${Math.min(100, budgetPct)}%` }}
                 />
               </div>
-              <p className="text-xs text-neutral-500 mt-1">
+              <p className="text-xs text-ink-muted mt-1">
                 {formatTriciCoin(account.current_month_spent)} / {formatTriciCoin(account.monthly_budget_trc)}
               </p>
             </div>
@@ -238,24 +238,24 @@ export default function BusinessDetailPage() {
         </div>
 
         {/* Policies */}
-        <div className="bg-white border rounded-xl p-5">
-          <h3 className="text-sm font-medium text-neutral-500 mb-3">{t('businesses.policy_title')}</h3>
+        <div className="bg-surface-elevated border-line rounded-xl p-5">
+          <h3 className="text-sm font-medium text-ink-muted mb-3">{t('businesses.policy_title')}</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-neutral-500">{t('businesses.per_ride_cap', { defaultValue: 'Máximo/viaje' })}</span>
+              <span className="text-ink-muted">{t('businesses.per_ride_cap', { defaultValue: 'Máximo/viaje' })}</span>
               <span className="font-medium">
                 {account.per_ride_cap_trc > 0 ? formatTriciCoin(account.per_ride_cap_trc) : t('businesses.unlimited', { defaultValue: 'Ilimitado' })}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-neutral-500">{t('businesses.services', { defaultValue: 'Servicios' })}</span>
+              <span className="text-ink-muted">{t('businesses.services', { defaultValue: 'Servicios' })}</span>
               <span className="font-medium">
                 {account.allowed_service_types.length > 0 ? account.allowed_service_types.join(', ') : t('businesses.all', { defaultValue: 'Todos' })}
               </span>
             </div>
             {account.allowed_hours_start && account.allowed_hours_end && (
               <div className="flex justify-between">
-                <span className="text-neutral-500">{t('businesses.hours', { defaultValue: 'Horario' })}</span>
+                <span className="text-ink-muted">{t('businesses.hours', { defaultValue: 'Horario' })}</span>
                 <span className="font-medium">{account.allowed_hours_start} - {account.allowed_hours_end}</span>
               </div>
             )}
@@ -264,12 +264,12 @@ export default function BusinessDetailPage() {
       </div>
 
       {/* Commission override */}
-      <div className="bg-white border rounded-xl p-5">
+      <div className="bg-surface-elevated border-line rounded-xl p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h3 className="text-sm font-medium text-neutral-500 mb-1">Comisión variable</h3>
-            <p className="text-xs text-neutral-500 max-w-md">
-              Default plataforma: <span className="font-medium text-neutral-700">15%</span>. Reduce solo para acuerdos especiales —
+            <h3 className="text-sm font-medium text-ink-muted mb-1">Comisión variable</h3>
+            <p className="text-xs text-ink-muted max-w-md">
+              Default plataforma: <span className="font-medium text-ink">15%</span>. Reduce solo para acuerdos especiales —
               el pasajero paga menos pero el conductor cobra lo mismo. Dejá vacío para usar el default.
             </p>
           </div>
@@ -285,7 +285,7 @@ export default function BusinessDetailPage() {
               aria-label="Comisión por viaje (%)"
               onChange={(e) => setCommissionInput(e.target.value)}
             />
-            <span className="text-sm text-neutral-500">%</span>
+            <span className="text-sm text-ink-muted">%</span>
             <button
               className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               onClick={handleSaveCommission}
@@ -304,23 +304,23 @@ export default function BusinessDetailPage() {
 
       {/* Fleet review (only for is_fleet_owner accounts) */}
       {account.is_fleet_owner && adminUserId && (
-        <div className="bg-white border rounded-xl p-5">
-          <h3 className="text-sm font-medium text-neutral-500 mb-3">Flota — conductores</h3>
+        <div className="bg-surface-elevated border-line rounded-xl p-5">
+          <h3 className="text-sm font-medium text-ink-muted mb-3">Flota — conductores</h3>
           <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} />
         </div>
       )}
 
       {/* Employees */}
-      <div className="bg-white border rounded-xl p-5">
-        <h3 className="text-sm font-medium text-neutral-500 mb-3">
+      <div className="bg-surface-elevated border-line rounded-xl p-5">
+        <h3 className="text-sm font-medium text-ink-muted mb-3">
           {t('businesses.employees_title')} ({employees.length})
         </h3>
         {employees.length === 0 ? (
-          <p className="text-sm text-neutral-400">{t('businesses.no_employees', { defaultValue: 'Sin empleados' })}</p>
+          <p className="text-sm text-ink-subtle">{t('businesses.no_employees', { defaultValue: 'Sin empleados' })}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-neutral-500">
+              <tr className="border-b text-left text-ink-muted">
                 <th className="pb-2">{t('common.name', { defaultValue: 'Nombre' })}</th>
                 <th className="pb-2">{t('common.phone', { defaultValue: 'Teléfono' })}</th>
                 <th className="pb-2">{t('common.role', { defaultValue: 'Rol' })}</th>
@@ -331,14 +331,14 @@ export default function BusinessDetailPage() {
               {employees.map((emp) => (
                 <tr key={emp.id} className="border-b last:border-0">
                   <td className="py-2">{emp.users?.full_name ?? '-'}</td>
-                  <td className="py-2 text-neutral-600">{emp.users?.phone ?? '-'}</td>
+                  <td className="py-2 text-ink-muted">{emp.users?.phone ?? '-'}</td>
                   <td className="py-2">
                     <span className={`px-2 py-0.5 rounded text-xs ${emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
                       {emp.role}
                     </span>
                   </td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${emp.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-200 text-neutral-500'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs ${emp.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-sunken text-ink-muted'}`}>
                       {emp.is_active ? t('common.active', { defaultValue: 'Activo' }) : t('common.inactive', { defaultValue: 'Inactivo' })}
                     </span>
                   </td>
@@ -350,14 +350,14 @@ export default function BusinessDetailPage() {
       </div>
 
       {/* Recent corporate rides */}
-      <div className="bg-white border rounded-xl p-5">
-        <h3 className="text-sm font-medium text-neutral-500 mb-3">{t('businesses.rides_title')}</h3>
+      <div className="bg-surface-elevated border-line rounded-xl p-5">
+        <h3 className="text-sm font-medium text-ink-muted mb-3">{t('businesses.rides_title')}</h3>
         {rides.length === 0 ? (
-          <p className="text-sm text-neutral-400">{t('businesses.no_rides', { defaultValue: 'Sin viajes corporativos' })}</p>
+          <p className="text-sm text-ink-subtle">{t('businesses.no_rides', { defaultValue: 'Sin viajes corporativos' })}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-neutral-500">
+              <tr className="border-b text-left text-ink-muted">
                 <th className="pb-2">{t('common.date', { defaultValue: 'Fecha' })}</th>
                 <th className="pb-2">{t('businesses.fare', { defaultValue: 'Tarifa' })}</th>
               </tr>
@@ -365,7 +365,7 @@ export default function BusinessDetailPage() {
             <tbody>
               {rides.map((ride) => (
                 <tr key={ride.id} className="border-b last:border-0">
-                  <td className="py-2 text-neutral-600">{formatAdminDate(ride.created_at)}</td>
+                  <td className="py-2 text-ink-muted">{formatAdminDate(ride.created_at)}</td>
                   <td className="py-2 font-mono">{formatTriciCoin(ride.fare_trc)}</td>
                 </tr>
               ))}
@@ -377,7 +377,7 @@ export default function BusinessDetailPage() {
       {/* Reject modal */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="reject-modal-title" className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div role="dialog" aria-modal="true" aria-labelledby="reject-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
             <h3 id="reject-modal-title" className="text-lg font-bold mb-4">{t('businesses.reject')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
@@ -389,7 +389,7 @@ export default function BusinessDetailPage() {
             />
             <div className="flex gap-2 justify-end">
               <button
-                className="px-4 py-2 text-sm bg-neutral-100 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-sunken text-ink rounded-lg"
                 onClick={() => setShowRejectModal(false)}
               >
                 {t('common.cancel', { defaultValue: 'Cancelar' })}
@@ -409,7 +409,7 @@ export default function BusinessDetailPage() {
       {/* Suspend modal */}
       {showSuspendModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="suspend-modal-title" className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div role="dialog" aria-modal="true" aria-labelledby="suspend-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
             <h3 id="suspend-modal-title" className="text-lg font-bold mb-4">{t('businesses.suspend')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
@@ -421,7 +421,7 @@ export default function BusinessDetailPage() {
             />
             <div className="flex gap-2 justify-end">
               <button
-                className="px-4 py-2 text-sm bg-neutral-100 rounded-lg"
+                className="px-4 py-2 text-sm bg-surface-sunken text-ink rounded-lg"
                 onClick={() => setShowSuspendModal(false)}
               >
                 {t('common.cancel', { defaultValue: 'Cancelar' })}

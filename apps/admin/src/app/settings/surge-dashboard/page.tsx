@@ -124,7 +124,7 @@ export default function SurgeDashboardPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">{t('surge_dashboard.title')}</h1>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-neutral-500">
+          <label className="flex items-center gap-2 text-sm text-ink-muted">
             <input
               type="checkbox"
               checked={autoRefresh}
@@ -143,7 +143,7 @@ export default function SurgeDashboardPage() {
       </div>
 
       {lastUpdated && (
-        <p className="text-xs text-neutral-400 mb-4">
+        <p className="text-xs text-ink-subtle mb-4">
           {t('surge_dashboard.last_updated')}: {lastUpdated.toLocaleTimeString()}
         </p>
       )}
@@ -168,10 +168,10 @@ export default function SurgeDashboardPage() {
                 {!['clear', 'clouds', 'drizzle', 'rain', 'heavy_rain', 'storm', 'extreme'].includes(weather.condition) && '\uD83C\uDF24\uFE0F'}
               </span>
               <div>
-                <h3 className="font-semibold text-neutral-800">{t('surge_dashboard.weather')}</h3>
-                <p className="text-sm text-neutral-600 capitalize">{weather.description}</p>
+                <h3 className="font-semibold text-ink">{t('surge_dashboard.weather')}</h3>
+                <p className="text-sm text-ink-muted capitalize">{weather.description}</p>
                 {weather.temp > 0 && (
-                  <p className="text-xs text-neutral-400">{t('surge_dashboard.weather_temp')}: {weather.temp}°C</p>
+                  <p className="text-xs text-ink-subtle">{t('surge_dashboard.weather_temp')}: {weather.temp}°C</p>
                 )}
               </div>
             </div>
@@ -192,7 +192,7 @@ export default function SurgeDashboardPage() {
                 </div>
               )}
               {weather.lastCheck && (
-                <p className="text-xs text-neutral-400 mt-1">
+                <p className="text-xs text-ink-subtle mt-1">
                   {t('surge_dashboard.weather_last_check')}: {new Date(weather.lastCheck).toLocaleTimeString()}
                 </p>
               )}
@@ -209,18 +209,18 @@ export default function SurgeDashboardPage() {
           </h3>
           <div className="space-y-2">
             {predictions.map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+              <div key={p.id} className="flex items-center justify-between bg-surface-elevated rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">
                   <span className="text-amber-600 font-mono text-sm">
                     {String(p.hour_of_day).padStart(2, '0')}:00
                   </span>
-                  <span className="text-sm text-neutral-600">
+                  <span className="text-sm text-ink-muted">
                     {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][p.day_of_week]}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-amber-700">{p.predicted_multiplier}x</span>
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-ink-subtle">
                     {Math.round(p.confidence * 100)}% conf
                   </span>
                 </div>
@@ -232,22 +232,22 @@ export default function SurgeDashboardPage() {
 
       {/* Live Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4">
-          <div className="text-xs font-medium text-neutral-500 mb-1">{t('surge_dashboard.searching_rides')}</div>
-          <div className="text-3xl font-bold text-neutral-800">{metrics.searching_rides}</div>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4">
+          <div className="text-xs font-medium text-ink-muted mb-1">{t('surge_dashboard.searching_rides')}</div>
+          <div className="text-3xl font-bold text-ink">{metrics.searching_rides}</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4">
-          <div className="text-xs font-medium text-neutral-500 mb-1">{t('surge_dashboard.in_progress_rides')}</div>
-          <div className="text-3xl font-bold text-neutral-800">{metrics.in_progress_rides}</div>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4">
+          <div className="text-xs font-medium text-ink-muted mb-1">{t('surge_dashboard.in_progress_rides')}</div>
+          <div className="text-3xl font-bold text-ink">{metrics.in_progress_rides}</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4">
-          <div className="text-xs font-medium text-neutral-500 mb-1">{t('surge_dashboard.online_drivers')}</div>
-          <div className="text-3xl font-bold text-neutral-800">{metrics.online_drivers}</div>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4">
+          <div className="text-xs font-medium text-ink-muted mb-1">{t('surge_dashboard.online_drivers')}</div>
+          <div className="text-3xl font-bold text-ink">{metrics.online_drivers}</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4">
-          <div className="text-xs font-medium text-neutral-500 mb-1">{t('surge_dashboard.demand_ratio')}</div>
-          <div className="text-3xl font-bold text-neutral-800">{demandRatio}</div>
-          <div className="text-xs text-neutral-400 mt-1">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4">
+          <div className="text-xs font-medium text-ink-muted mb-1">{t('surge_dashboard.demand_ratio')}</div>
+          <div className="text-3xl font-bold text-ink">{demandRatio}</div>
+          <div className="text-xs text-ink-subtle mt-1">
             {metrics.searching_rides} / {metrics.online_drivers}
           </div>
         </div>
@@ -257,9 +257,9 @@ export default function SurgeDashboardPage() {
       <h2 className="text-lg font-semibold mb-3">{t('surge_dashboard.zone_surge')}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {loading && surgeStatus.length === 0 ? (
-          <div className="col-span-full text-center text-neutral-400 py-8">{t('common.loading')}</div>
+          <div className="col-span-full text-center text-ink-subtle py-8">{t('common.loading')}</div>
         ) : surgeStatus.length === 0 ? (
-          <div className="col-span-full text-center text-neutral-400 py-8">{t('surge_dashboard.no_surge')}</div>
+          <div className="col-span-full text-center text-ink-subtle py-8">{t('surge_dashboard.no_surge')}</div>
         ) : (
           surgeStatus.map((s) => (
             <div
@@ -282,15 +282,15 @@ export default function SurgeDashboardPage() {
       </div>
 
       {/* Surge Zones (manual) link */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-neutral-700">{t('settings.surge_zones')}</h3>
-            <p className="text-sm text-neutral-400">{t('settings.surge_zones_desc')}</p>
+            <h3 className="font-semibold text-ink">{t('settings.surge_zones')}</h3>
+            <p className="text-sm text-ink-subtle">{t('settings.surge_zones_desc')}</p>
           </div>
           <Link
             href="/settings/surge-zones"
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200 transition-colors"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 transition-colors"
           >
             {t('common.view')} &rarr;
           </Link>

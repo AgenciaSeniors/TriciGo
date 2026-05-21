@@ -92,21 +92,21 @@ export default function FeatureFlagsPage() {
       </div>
 
       {showCreate && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100 mb-6">
+        <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
           <div className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('feature_flags.label_key')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('feature_flags.label_key')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 placeholder={t('feature_flags.key_placeholder')}
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-neutral-700 mb-1">{t('feature_flags.label_description')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('feature_flags.label_description')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 placeholder={t('feature_flags.description_placeholder')}
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
@@ -121,7 +121,7 @@ export default function FeatureFlagsPage() {
             </button>
             <button
               onClick={() => setShowCreate(false)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
             >
               {t('common.cancel')}
             </button>
@@ -130,21 +130,21 @@ export default function FeatureFlagsPage() {
       )}
 
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <p className="text-ink-subtle">{t('common.loading')}</p>
       ) : flags.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-8 text-center">
-          <p className="text-neutral-400">{t('feature_flags.no_flags')}</p>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-8 text-center">
+          <p className="text-ink-subtle">{t('feature_flags.no_flags')}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {flags.map((flag) => (
             <div
               key={flag.id}
-              className="bg-white rounded-xl p-5 shadow-sm border border-neutral-100 flex items-center justify-between"
+              className="bg-surface-elevated rounded-xl p-5 shadow-sm border border-line flex items-center justify-between"
             >
               <div>
-                <p className="font-mono text-sm font-medium text-neutral-900">{flag.key}</p>
-                <p className="text-sm text-neutral-500 mt-0.5">{flag.description || t('feature_flags.no_description')}</p>
+                <p className="font-mono text-sm font-medium text-ink">{flag.key}</p>
+                <p className="text-sm text-ink-muted mt-0.5">{flag.description || t('feature_flags.no_description')}</p>
               </div>
               <button
                 onClick={() => handleToggle(flag)}
@@ -152,11 +152,11 @@ export default function FeatureFlagsPage() {
                 aria-checked={flag.value}
                 aria-label={`Toggle ${flag.key}`}
                 className={`relative w-12 h-6 rounded-full transition-colors ${
-                  flag.value ? 'bg-primary-500' : 'bg-neutral-300'
+                  flag.value ? 'bg-primary-500' : 'bg-line-strong'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white dark:bg-neutral-100 rounded-full shadow transition-transform ${
                     flag.value ? 'translate-x-6' : 'translate-x-0'
                   }`}
                 />

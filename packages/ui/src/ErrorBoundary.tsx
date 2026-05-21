@@ -55,23 +55,23 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       };
 
       return (
-        <View className="flex-1 justify-center items-center bg-white p-6">
-          <View accessibilityElementsHidden className="w-20 h-20 rounded-full bg-primary-50 items-center justify-center mb-4">
+        <View className="flex-1 justify-center items-center bg-white dark:bg-neutral-900 p-6">
+          <View accessibilityElementsHidden className="w-20 h-20 rounded-full bg-primary-50 dark:bg-primary-500/15 items-center justify-center mb-4">
             <Ionicons name="warning-outline" size={40} color={colors.brand.orange} />
           </View>
-          <Text className="text-lg font-semibold text-neutral-900 mt-2">
+          <Text className="text-lg font-semibold text-neutral-900 dark:text-neutral-50 mt-2">
             {labels.title}
           </Text>
-          <Text className="text-sm text-neutral-500 mt-2 text-center">
+          <Text className="text-sm text-neutral-500 dark:text-neutral-400 mt-2 text-center">
             {labels.message}
           </Text>
           <Pressable
-            className="mt-6 px-6 py-3 bg-neutral-900 rounded-lg active:bg-neutral-800"
+            className="mt-6 px-6 py-3 bg-neutral-900 dark:bg-neutral-100 rounded-lg active:bg-neutral-800 dark:active:bg-neutral-200"
             onPress={this.handleRetry}
             accessibilityRole="button"
             accessibilityLabel={labels.retry}
           >
-            <Text className="text-white text-base font-semibold">
+            <Text className="text-white dark:text-neutral-900 text-base font-semibold">
               {labels.retry}
             </Text>
           </Pressable>

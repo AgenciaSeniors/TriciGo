@@ -109,7 +109,7 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
           accessibilityRole="button"
           accessibilityLabel={t('common.back', { defaultValue: 'Back', ns: 'rider' })}
         >
-          <Ionicons name="arrow-back" size={24} color="#1F2937" />
+          <Ionicons name="arrow-back" size={24} color={tokens.ink.primary} />
         </Pressable>
         <Text style={styles.headerTitle}>
           {t('ride.driver_profile_title', { defaultValue: 'Driver profile' })}

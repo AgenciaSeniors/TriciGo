@@ -1280,7 +1280,7 @@ function NativeWalletScreen() {
                   })}
                 </Text>
                 {belowMin && (
-                  <Text variant="caption" style={{ marginTop: 6, color: '#b45309', fontWeight: '600' }}>
+                  <Text variant="caption" style={{ marginTop: 6, color: isDark ? '#fbbf24' : '#b45309', fontWeight: '600' }}>
                     {t('wallet.recharge_min_warning', {
                       defaultValue: 'Mínimo ${{min}} USD por recarga.',
                       min: MIN_RECHARGE_USD,
@@ -1290,8 +1290,13 @@ function NativeWalletScreen() {
               </View>
             );
           })()}
+          {/* Post-NETOPIA cutover: the banner is now always shown — the
+              recharge flow always uses NETOPIA's in-app browser. The
+              dark-mode color tip (isDark ? amber-300 : amber-700) was
+              imported from PR #138's resolution of the previous Stripe
+              version. */}
           <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
-            <Text variant="caption" style={{ color: '#b45309' }}>
+            <Text variant="caption" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
               {t('wallet.recharge_inapp_hint', {
                 defaultValue: 'Pagás con tarjeta de forma segura sin salir de la app.',
               })}

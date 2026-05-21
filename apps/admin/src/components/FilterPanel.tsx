@@ -40,7 +40,7 @@ export function FilterPanel({
         onClick={() => setExpanded((v) => !v)}
         aria-label={toggleLabel}
         aria-expanded={expanded}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white border border-neutral-200 hover:border-neutral-300 transition-colors"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-surface-elevated border border-line hover:border-line-strong transition-colors"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -55,11 +55,11 @@ export function FilterPanel({
 
       {/* Expanded filter panel */}
       {expanded && (
-        <div className="mt-3 p-4 bg-white rounded-xl border border-neutral-200 shadow-sm">
+        <div className="mt-3 p-4 bg-surface-elevated rounded-xl border border-line shadow-sm">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {fields.map((field) => (
               <div key={field.key}>
-                <label className="block text-xs font-medium text-neutral-500 mb-1">
+                <label className="block text-xs font-medium text-ink-muted mb-1">
                   {field.label}
                 </label>
                 {field.type === 'select' ? (
@@ -67,7 +67,7 @@ export function FilterPanel({
                     value={values[field.key] ?? ''}
                     onChange={(e) => onChange(field.key, e.target.value)}
                     aria-label={field.label}
-                    className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    className="w-full px-3 py-2 rounded-lg border border-line text-sm bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   >
                     <option value="">{field.placeholder ?? '—'}</option>
                     {field.options?.map((opt) => (
@@ -82,7 +82,7 @@ export function FilterPanel({
                     value={values[field.key] ?? ''}
                     onChange={(e) => onChange(field.key, e.target.value)}
                     aria-label={field.label}
-                    className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    className="w-full px-3 py-2 rounded-lg border border-line text-sm bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 ) : (
                   <input
@@ -91,7 +91,7 @@ export function FilterPanel({
                     onChange={(e) => onChange(field.key, e.target.value)}
                     placeholder={field.placeholder}
                     aria-label={field.label}
-                    className="w-full px-3 py-2 rounded-lg border border-neutral-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    className="w-full px-3 py-2 rounded-lg border border-line text-sm bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 )}
               </div>
@@ -100,7 +100,7 @@ export function FilterPanel({
 
           {/* Active filter chips + clear */}
           {activeCount > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-neutral-100">
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-line">
               {fields
                 .filter((f) => values[f.key])
                 .map((f) => {
@@ -127,7 +127,7 @@ export function FilterPanel({
               <button
                 onClick={onClear}
                 aria-label={clearLabel}
-                className="text-xs text-neutral-500 hover:text-neutral-700 underline ml-2"
+                className="text-xs text-ink-muted hover:text-ink underline ml-2"
               >
                 {clearLabel}
               </button>

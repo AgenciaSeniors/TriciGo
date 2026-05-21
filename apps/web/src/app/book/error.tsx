@@ -30,7 +30,7 @@ export default function BookError({
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
         Error al cargar la reserva
       </h2>
-      <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '0.875rem', maxWidth: 400 }}>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.875rem', maxWidth: 400 }}>
         Hubo un problema cargando esta página. Intenta recargar para obtener la versión más reciente.
       </p>
       <div style={{ display: 'flex', gap: '0.75rem' }}>

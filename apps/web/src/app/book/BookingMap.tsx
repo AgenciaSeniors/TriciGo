@@ -959,7 +959,7 @@ export default function BookingMap({
               left: '0.75rem',
               right: '0.75rem',
               bottom: '5.5rem', // Above the bottom address bar
-              background: '#fff',
+              background: 'var(--bg-card)',
               borderRadius: '0.75rem',
               padding: '0.75rem 0.875rem',
               boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
@@ -975,7 +975,7 @@ export default function BookingMap({
                   style={{
                     fontSize: '0.875rem',
                     fontWeight: 600,
-                    color: '#1a1a2e',
+                    color: 'var(--text-primary)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -987,7 +987,7 @@ export default function BookingMap({
                   <div
                     style={{
                       fontSize: '0.75rem',
-                      color: '#888',
+                      color: 'var(--text-tertiary)',
                       marginTop: 2,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -1007,7 +1007,7 @@ export default function BookingMap({
                   border: 0,
                   cursor: 'pointer',
                   padding: 4,
-                  color: '#888',
+                  color: 'var(--text-tertiary)',
                   fontSize: '1rem',
                   lineHeight: 1,
                 }}

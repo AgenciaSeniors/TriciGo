@@ -104,7 +104,7 @@ export default function LiveMapPage() {
 
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-line">
         <h1 className="text-xl font-bold">
           {t('live_map.title', { defaultValue: 'Mapa en vivo' })}
         </h1>
@@ -140,7 +140,7 @@ export default function LiveMapPage() {
         )}
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-neutral-400">{t('common.loading')}</p>
+            <p className="text-ink-subtle">{t('common.loading')}</p>
           </div>
         ) : (
           <MapContainer
@@ -171,9 +171,9 @@ export default function LiveMapPage() {
                   <PopupDynamic>
                     <div className="text-xs">
                       <p className="font-bold">{statusLabels[ride.status] ?? ride.status}</p>
-                      <p className="text-neutral-500 mt-1">{ride.pickup_address ?? 'Pickup'}</p>
-                      <p className="text-neutral-500">{ride.dropoff_address ?? 'Dropoff'}</p>
-                      <p className="text-neutral-400 mt-1">{ride.service_type}</p>
+                      <p className="text-ink-muted mt-1">{ride.pickup_address ?? 'Pickup'}</p>
+                      <p className="text-ink-muted">{ride.dropoff_address ?? 'Dropoff'}</p>
+                      <p className="text-ink-subtle mt-1">{ride.service_type}</p>
                     </div>
                   </PopupDynamic>
                 </CircleMarkerDynamic>
@@ -184,28 +184,28 @@ export default function LiveMapPage() {
       </div>
 
       {/* Ride list sidebar */}
-      <div className="h-48 border-t border-neutral-100 overflow-y-auto bg-white">
+      <div className="h-48 border-t border-line overflow-y-auto bg-surface-elevated">
         <div className="px-4 py-2">
-          <p className="text-xs font-semibold text-neutral-500">
+          <p className="text-xs font-semibold text-ink-muted">
             {t('live_map.active_rides', { defaultValue: 'Viajes activos' })}: {filteredRides.length}
           </p>
         </div>
         {filteredRides.length === 0 ? (
-          <p className="px-4 py-2 text-sm text-neutral-400">
+          <p className="px-4 py-2 text-sm text-ink-subtle">
             {t('live_map.no_active_rides', { defaultValue: 'No hay viajes activos' })}
           </p>
         ) : (
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-neutral-100">
-                <th className="text-left px-4 py-2 font-semibold text-neutral-500">{t('rides.col_status')}</th>
-                <th className="text-left px-4 py-2 font-semibold text-neutral-500">{t('rides.col_route')}</th>
-                <th className="text-left px-4 py-2 font-semibold text-neutral-500">{t('rides.col_fare')}</th>
+              <tr className="border-b border-line">
+                <th className="text-left px-4 py-2 font-semibold text-ink-muted">{t('rides.col_status')}</th>
+                <th className="text-left px-4 py-2 font-semibold text-ink-muted">{t('rides.col_route')}</th>
+                <th className="text-left px-4 py-2 font-semibold text-ink-muted">{t('rides.col_fare')}</th>
               </tr>
             </thead>
             <tbody>
               {filteredRides.map((ride) => (
-                <tr key={ride.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={ride.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-2">
                     <span
                       className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
@@ -217,10 +217,10 @@ export default function LiveMapPage() {
                       {statusLabels[ride.status] ?? ride.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-neutral-600 max-w-xs truncate">
+                  <td className="px-4 py-2 text-ink-muted max-w-xs truncate">
                     {ride.pickup_address ?? '?'} → {ride.dropoff_address ?? '?'}
                   </td>
-                  <td className="px-4 py-2 text-neutral-600">
+                  <td className="px-4 py-2 text-ink-muted">
                     {ride.estimated_fare_cup ? `${(ride.estimated_fare_cup / 100).toFixed(0)} CUP` : '—'}
                   </td>
                 </tr>

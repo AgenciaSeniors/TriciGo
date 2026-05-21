@@ -326,7 +326,7 @@ export default function NotificationsPage() {
       {error && (
         <div style={{
           padding: '1rem',
-          background: '#fef2f2',
+          background: 'rgba(239,68,68,0.12)',
           borderRadius: '0.75rem',
           marginBottom: '1rem',
           textAlign: 'center',

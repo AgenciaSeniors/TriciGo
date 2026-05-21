@@ -12,7 +12,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -138,11 +138,16 @@ export default function RideDetailScreen() {
 
   const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
   const fareCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
+  // BUG-293 parity: only payment_method='tricicoin' denominates in TRC.
+  // final_fare_trc is set for every ride (1:1 CUP peg) so it can't pick
+  // the currency — that's why cash rides were shown as "TRC". Mirror
+  // rides.tsx and RideCompleteView.
+  const showTrc = ride.payment_method === 'tricicoin';
   const isCompleted = ride.status === 'completed';
 
   const handleShare = () => {
     if (ride.share_token) {
-      Share.share({ message: `https://tricigo.com/ride/${ride.share_token}` });
+      Share.share({ message: buildShareUrl(ride.share_token) });
     }
   };
 
@@ -220,14 +225,21 @@ export default function RideDetailScreen() {
         <Card variant="elevated" padding="lg" className="mb-4">
           <Text variant="h4" className="mb-3">{t('ride.fare_breakdown')}</Text>
 
-          {ride.final_fare_trc != null && ride.estimated_fare_trc != null && ride.final_fare_trc !== ride.estimated_fare_trc && (
-            <View className="flex-row justify-between mb-2">
-              <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
-              <Text variant="bodySmall" color="secondary" className="line-through">
-                {formatTRC(ride.estimated_fare_trc)}
-              </Text>
-            </View>
-          )}
+          {(() => {
+            // Strike-through the original estimate when the final differs,
+            // in the currency actually charged (BUG-293 parity).
+            const estFare = showTrc ? ride.estimated_fare_trc : ride.estimated_fare_cup;
+            const finFare = showTrc ? ride.final_fare_trc : ride.final_fare_cup;
+            if (finFare == null || estFare == null || finFare === estFare) return null;
+            return (
+              <View className="flex-row justify-between mb-2">
+                <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
+                <Text variant="bodySmall" color="secondary" className="line-through">
+                  {showTrc ? formatTRC(estFare) : formatCUP(estFare)}
+                </Text>
+              </View>
+            );
+          })()}
 
           {pricing && (
             <>
@@ -255,9 +267,9 @@ export default function RideDetailScreen() {
 
           <View className="h-px bg-neutral-200 my-2" />
           <View className="flex-row justify-between items-end">
-            <Text variant="h4">{ride.final_fare_trc != null ? t('ride.final_fare') : t('ride.estimated_fare')}</Text>
+            <Text variant="h4">{ride.final_fare_cup != null ? t('ride.final_fare') : t('ride.estimated_fare')}</Text>
             <View className="items-end">
-              <Text variant="h3" color="accent">{fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}</Text>
+              <Text variant="h3" color="accent">{showTrc && fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup)}</Text>
               <Text variant="caption" color="secondary">
                 {'\u2248'} {formatUSD(trcToUsd(fareTrc ?? fareCup, ride.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE))}
               </Text>
@@ -388,7 +400,7 @@ export default function RideDetailScreen() {
 
         {/* Prominent action CTAs for completed rides */}
         {isCompleted && (disputesEnabled || lostFoundEnabled) && (!dispute || !lostItem) && (
-          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50">
+          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50 dark:bg-neutral-800">
             <View className="gap-3">
               {disputesEnabled && !dispute && (
                 <Pressable

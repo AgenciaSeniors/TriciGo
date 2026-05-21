@@ -213,7 +213,7 @@ export default function DriverProfilePage() {
           display: 'flex',
           margin: '0 0 1.25rem',
           padding: '1rem',
-          background: 'var(--bg-secondary)',
+          background: 'var(--bg-light)',
           borderRadius: 'var(--radius-md)',
           gap: '1rem',
         }}
@@ -248,7 +248,7 @@ export default function DriverProfilePage() {
             <article
               key={review.id}
               style={{
-                background: 'var(--bg-elevated, white)',
+                background: 'var(--bg-card)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)',
                 padding: '0.875rem',

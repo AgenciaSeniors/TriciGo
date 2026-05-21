@@ -34,6 +34,7 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { CancelRideSheet } from '@/components/CancelRideSheet';
 import { SafetySheet } from '@/components/SafetySheet';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
+import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { ConfettiOverlay } from '@/components/ConfettiOverlay';
 import { ArrivalCard } from '@/components/ArrivalCard';
 import { ProximityBanner } from '@/components/ProximityBanner';
@@ -361,6 +362,7 @@ export function RideActiveView() {
   // lives here.
   const [addStopVisible, setAddStopVisible] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
 
   // X1.6: Use refs for subscription channels to ensure proper cleanup on ride change
   const waypointChannelRef = useRef<ReturnType<typeof rideService.subscribeToWaypoints> | null>(null);
@@ -648,6 +650,24 @@ export function RideActiveView() {
   }, [activeRide?.status, cancellationFeePreview, t]);
 
   if (!activeRide) return null;
+
+  // Bug fix: render ONLY the map picker when active. Mounting it as an
+  // overlay on top of RideActiveView would put two Mapbox MapViews on
+  // screen at once — on Android they fight for gestures and the picker
+  // freezes (the same trap index.tsx documents for its 'selecting' step).
+  if (mapPickerVisible) {
+    return (
+      <ConfirmLocationScreen
+        mode="dropoff"
+        initialLocation={activeRide.dropoff_location}
+        onConfirm={(address, location) => {
+          setMapPickerVisible(false);
+          handleAddStop(address, location);
+        }}
+        onClose={() => setMapPickerVisible(false)}
+      />
+    );
+  }
 
   const canCancel =
     activeRide.status === 'accepted' ||
@@ -1430,6 +1450,7 @@ export function RideActiveView() {
         <AddressSearchInput
           placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
           onSelect={handleAddStop}
+          onPickOnMap={() => { setAddStopVisible(false); setMapPickerVisible(true); }}
         />
         {estimatingStop && (
           <View className="flex-row items-center justify-center mt-3">

@@ -727,7 +727,7 @@ export default function BookPage() {
   if (authLoading || !isAuthenticated) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#999' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: '#00C853' }}>Go</span>
           </div>
@@ -895,8 +895,8 @@ export default function BookPage() {
                 style={{
                   padding: '0.5rem 0.75rem',
                   borderRadius: '0.5rem',
-                  background: '#f0fdf4',
-                  border: '1px solid #86efac',
+                  background: 'rgba(34,197,94,0.12)',
+                  border: '1px solid rgba(34,197,94,0.3)',
                   fontSize: '0.85rem',
                 }}
               >
@@ -925,8 +925,8 @@ export default function BookPage() {
                 style={{
                   padding: '0.5rem 0.75rem',
                   borderRadius: '0.5rem',
-                  background: '#fef2f2',
-                  border: '1px solid #fca5a5',
+                  background: 'rgba(239,68,68,0.12)',
+                  border: '1px solid rgba(239,68,68,0.3)',
                   fontSize: '0.85rem',
                 }}
               >
@@ -958,8 +958,8 @@ export default function BookPage() {
                     style={{
                       padding: '0.5rem 0.75rem',
                       borderRadius: '0.5rem',
-                      background: '#fffbeb',
-                      border: '1px solid #fcd34d',
+                      background: 'rgba(245,158,11,0.12)',
+                      border: '1px solid rgba(245,158,11,0.3)',
                       fontSize: '0.85rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -1298,7 +1298,7 @@ export default function BookPage() {
                 >
                   <div style={{
                     width: 40, height: 22, borderRadius: 11, position: 'relative',
-                    background: deliveryDetails.client_accompanies ? 'var(--primary)' : '#ccc',
+                    background: deliveryDetails.client_accompanies ? 'var(--primary)' : 'var(--border)',
                     transition: 'background 0.2s', flexShrink: 0,
                   }}>
                     <div style={{
@@ -1417,7 +1417,7 @@ export default function BookPage() {
                   })}
                 </p>
               )}
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#bbb' }}>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
                 1 USD = {selectedEstimate?.exchange_rate_usd_cup ?? 0} CUP
               </p>
 
@@ -1435,7 +1435,7 @@ export default function BookPage() {
                       style={{
                         flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
                         border: !selectedCorporateId ? '2px solid var(--primary)' : '1px solid var(--border)',
-                        background: !selectedCorporateId ? '#FFF5F0' : 'var(--bg-card)',
+                        background: !selectedCorporateId ? 'var(--primary-alpha-10)' : 'var(--bg-card)',
                         cursor: 'pointer', fontSize: '0.8rem', fontWeight: !selectedCorporateId ? 700 : 400,
                       }}
                     >
@@ -1453,7 +1453,7 @@ export default function BookPage() {
                           style={{
                             flex: 1, minWidth: 80, padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
                             border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
-                            background: isSelected ? '#FFF5F0' : 'var(--bg-card)',
+                            background: isSelected ? 'var(--primary-alpha-10)' : 'var(--bg-card)',
                             cursor: 'pointer', fontSize: '0.8rem', fontWeight: isSelected ? 700 : 400,
                             textAlign: 'center',
                           }}
@@ -1469,7 +1469,7 @@ export default function BookPage() {
                     })}
                   </div>
                   {selectedCorporateId && (
-                    <div style={{ marginTop: '0.5rem', background: '#FFF5F0', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+                    <div style={{ marginTop: '0.5rem', background: 'var(--primary-alpha-10)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 500 }}>
                         {t('book.riding_as_corporate', {
                           defaultValue: 'Viaje a cargo de {{company}}',
@@ -1508,7 +1508,7 @@ export default function BookPage() {
                         paymentMethod === 'cash'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'cash' ? '#FFF5F0' : 'var(--bg-card)',
+                      background: paymentMethod === 'cash' ? 'var(--primary-alpha-10)' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'cash' ? 700 : 400,
@@ -1529,7 +1529,7 @@ export default function BookPage() {
                         paymentMethod === 'tricicoin'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'tricicoin' ? '#FFF5F0' : 'var(--bg-card)',
+                      background: paymentMethod === 'tricicoin' ? 'var(--primary-alpha-10)' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'tricicoin' ? 700 : 400,
@@ -1555,7 +1555,7 @@ export default function BookPage() {
                         paymentMethod === 'mixed'
                           ? '2px solid var(--primary)'
                           : '1px solid var(--border)',
-                      background: paymentMethod === 'mixed' ? '#FFF5F0' : 'var(--bg-card)',
+                      background: paymentMethod === 'mixed' ? 'var(--primary-alpha-10)' : 'var(--bg-card)',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
                       fontWeight: paymentMethod === 'mixed' ? 700 : 400,
@@ -1566,8 +1566,8 @@ export default function BookPage() {
                 </div>
                 {/* Mixed payment slider */}
                 {paymentMethod === 'mixed' && selectedEstimate && (
-                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
-                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.35rem' }}>
+                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'var(--bg-light)', borderRadius: '0.5rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                       {t('book.wallet_percentage', { defaultValue: 'Porcentaje desde wallet' })}
                     </label>
                     <input
@@ -1585,7 +1585,7 @@ export default function BookPage() {
                       }}
                       style={{ width: '100%', accentColor: 'var(--primary)' }}
                     />
-                    <p style={{ fontSize: '0.8rem', color: '#374151', textAlign: 'center', margin: '0.35rem 0 0' }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', margin: '0.35rem 0 0' }}>
                       {(() => {
                         const totalFare = selectedEstimate.estimated_fare_cup;
                         const walletPart = Math.round(totalFare * walletRatio);

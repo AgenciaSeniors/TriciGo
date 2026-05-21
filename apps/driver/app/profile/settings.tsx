@@ -23,8 +23,6 @@
  *
  * Behavior preserved verbatim:
  *   - All AsyncStorage keys + persistence logic unchanged.
- *   - Theme tab pill (3-way Light / Dark / System) kept inline because
- *     the UI is one-off (not a list-row pattern).
  *   - Notification category sub-toggles still use the smaller (scale
  *     0.85) switch + tertiary icon styling for visual hierarchy.
  *   - Auto-accept eligibility check + Switch wiring identical.
@@ -45,12 +43,10 @@ import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import type { ThemeMode } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
-import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { SettingsRow } from '@/components/settings/SettingsRow';
@@ -63,12 +59,6 @@ const NOTIF_CATEGORIES = [
   { key: '@tricigo/notif_chat', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
   { key: '@tricigo/notif_wallet', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
   { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
-];
-
-const THEME_OPTIONS: { value: ThemeMode; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'light', labelKey: 'profile.theme_light', icon: 'sunny-outline' },
-  { value: 'dark', labelKey: 'profile.theme_dark', icon: 'moon-outline' },
-  { value: 'system', labelKey: 'profile.theme_system', icon: 'phone-portrait-outline' },
 ];
 
 const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
@@ -107,7 +97,6 @@ export default function DriverSettingsScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const profile = useDriverStore((s) => s.profile);
-  const themeMode = useThemeStore((s) => s.mode);
 
   // Existing state
   const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
@@ -301,74 +290,6 @@ export default function DriverSettingsScreen() {
 
         {/* ── Group 1: Pantalla ────────────────────────────────────────── */}
         <SettingsGroup title={t('profile.section_display', { defaultValue: 'Pantalla' })}>
-          {/* Theme tabs (special UI — kept inline) */}
-          <Card theme="light" variant="surface" padding="md" className="mb-3">
-            <View className="flex-row items-center mb-3">
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: midnightEmber.radius.input,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 12,
-                  backgroundColor: midnightEmber.screen.bg.sunken,
-                }}
-              >
-                <Ionicons
-                  name="color-palette-outline"
-                  size={18}
-                  color={midnightEmber.accent[500]}
-                />
-              </View>
-              <Text variant="body" color="primary">
-                {t('profile.appearance', { defaultValue: 'Modo de pantalla' })}
-              </Text>
-            </View>
-            <View
-              className="flex-row rounded-xl overflow-hidden border"
-              style={{ borderColor: midnightEmber.screen.line.default }}
-            >
-              {THEME_OPTIONS.map((option) => {
-                const active = themeMode === option.value;
-                return (
-                  // V3 — press feedback + a11y state for the theme segmented
-                  // control. The active variant is already visually obvious
-                  // (filled accent bg, inverse text), but inactive tabs gave
-                  // no tactile ack on tap. opacity 0.7 on press provides the
-                  // <100ms feedback HIG/MD recommend.
-                  <Pressable
-                    key={option.value}
-                    onPress={() => setThemeMode(option.value)}
-                    className="flex-1 py-3 items-center flex-row justify-center"
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={t(option.labelKey, { defaultValue: option.value })}
-                    style={({ pressed }) => ({
-                      backgroundColor: active
-                        ? midnightEmber.accent[500]
-                        : midnightEmber.screen.bg.canvas,
-                      opacity: pressed ? 0.7 : 1,
-                    })}
-                  >
-                    <Ionicons
-                      name={option.icon}
-                      size={16}
-                      color={active ? midnightEmber.screen.text.inverse : midnightEmber.screen.text.tertiary}
-                    />
-                    <Text
-                      variant="caption"
-                      color={active ? 'inverse' : 'secondary'}
-                      className="ml-1.5"
-                    >
-                      {t(option.labelKey, { defaultValue: option.value })}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Card>
-
           {/* Language (uses MenuRow shared) */}
           <Card theme="light" variant="surface" padding="md" className="mb-3">
             <MenuRow

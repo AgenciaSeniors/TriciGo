@@ -163,7 +163,7 @@ export default function TicketDetailScreen() {
 
           {/* Input bar */}
           {!isClosed ? (
-            <View className="flex-row items-end px-4 py-3 border-t border-neutral-100 bg-white">
+            <View className="flex-row items-end px-4 py-3 border-t border-neutral-100 bg-white dark:bg-neutral-900">
               <View className="flex-1 mr-2">
                 <Input
                   placeholder={t('profile.ticket_message_placeholder')}
@@ -182,7 +182,7 @@ export default function TicketDetailScreen() {
               />
             </View>
           ) : (
-            <View className="px-4 py-3 border-t border-neutral-100 bg-neutral-50">
+            <View className="px-4 py-3 border-t border-neutral-100 bg-neutral-50 dark:bg-neutral-900">
               <Text variant="bodySmall" color="tertiary" className="text-center">
                 {t('profile.ticket_closed_message', { status: STATUS_LABELS[ticket?.status ?? 'closed'] })}
               </Text>

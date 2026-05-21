@@ -10,6 +10,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { WebMapView } from './WebMapView';
 import { getInitials, buildShareUrl } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 
 /* ── CSS keyframes for active ride animations ── */
 const WEB_ACTIVE_CSS = `
@@ -129,6 +130,29 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
 
   const font = { fontFamily: 'Montserrat, system-ui, sans-serif' };
 
+  // Theme-aware palette — mirrors the app's cubanDark tokens. Brand orange,
+  // semantic status colors (green/amber/red) and the map area stay fixed.
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
+  const c = isDark
+    ? {
+        bg: '#0A0E1A',
+        surface: '#11172A',
+        elevated: '#18203A',
+        text: '#F4F0EA',
+        textMuted: '#B7C4CF',
+        textSubtle: '#6B7F8F',
+        border: 'rgba(244,240,234,0.10)',
+      }
+    : {
+        bg: '#f0f0f0',
+        surface: '#fff',
+        elevated: '#f9fafb',
+        text: '#1a1a1a',
+        textMuted: '#6b7280',
+        textSubtle: '#9ca3af',
+        border: '#e5e5e5',
+      };
+
   if (Platform.OS !== 'web') return null;
 
   return (
@@ -137,7 +161,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
         <style dangerouslySetInnerHTML={{ __html: WEB_ACTIVE_CSS }} />
 
         {/* ═══ LEFT: Map ═══ */}
-        <div style={{ flex: 1, position: 'relative', background: '#f0f0f0' }}>
+        <div style={{ flex: 1, position: 'relative', background: c.bg }}>
           <WebMapView
             pickup={pickupLocation}
             dropoff={dropoffLocation}
@@ -168,8 +192,8 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
           width: 380,
           minWidth: 340,
           maxWidth: 420,
-          backgroundColor: '#fff',
-          borderLeft: '1px solid #e5e5e5',
+          backgroundColor: c.surface,
+          borderLeft: `1px solid ${c.border}`,
           overflowY: 'auto' as const,
           padding: '28px 22px',
           display: 'flex',
@@ -180,10 +204,10 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
 
           {/* Status header */}
           <div style={{ marginBottom: 20, animation: 'war-fadeIn 0.3s ease both' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: c.textSubtle, textTransform: 'uppercase' as const, letterSpacing: '0.04em', marginBottom: 4 }}>
               {t('ride.eta', { defaultValue: 'Estimated time' })}
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1a1a1a', margin: 0, letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: c.text, margin: 0, letterSpacing: '-0.02em' }}>
               {statusHeader}
             </h2>
           </div>
@@ -200,7 +224,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: 10 }}>
                     <div style={{
                       width: 24, height: 24, borderRadius: 12,
-                      backgroundColor: isActive ? colors.brand.orange : '#e5e5e5',
+                      backgroundColor: isActive ? colors.brand.orange : c.elevated,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       border: isCurrent ? `2px solid ${colors.brand.orange}` : 'none',
                       boxShadow: isCurrent ? `0 0 0 3px rgba(255,77,0,0.2)` : 'none',
@@ -213,7 +237,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
                     {!isLast && (
                       <div style={{
                         width: 2, height: 16,
-                        backgroundColor: i < currentIdx ? colors.brand.orange : '#e5e5e5',
+                        backgroundColor: i < currentIdx ? colors.brand.orange : c.border,
                         transition: 'background-color 0.3s ease',
                       }} />
                     )}
@@ -222,7 +246,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
                   <span style={{
                     fontSize: 13,
                     fontWeight: isCurrent ? 700 : 400,
-                    color: isActive ? '#1a1a1a' : '#9ca3af',
+                    color: isActive ? c.text : c.textSubtle,
                     lineHeight: '24px',
                     transition: 'all 0.3s ease',
                   }}>
@@ -260,11 +284,11 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
           {/* Driver card */}
           {rideWithDriver && (
             <div style={{
-              backgroundColor: '#f9fafb',
+              backgroundColor: c.elevated,
               borderRadius: 12,
               padding: 16,
               marginBottom: 16,
-              border: '1px solid #e5e5e5',
+              border: `1px solid ${c.border}`,
               animation: 'war-fadeIn 0.3s ease both 0.15s',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -290,20 +314,20 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
                   </div>
                 )}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a1a' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: c.text }}>
                     {rideWithDriver.driver_name}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#6b7280' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: c.textMuted }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                     <span>{rideWithDriver.driver_rating?.toFixed(1) ?? '—'}</span>
                     {rideWithDriver.driver_total_rides != null && (
-                      <span style={{ marginLeft: 4, fontSize: 11, color: '#9ca3af' }}>
+                      <span style={{ marginLeft: 4, fontSize: 11, color: c.textSubtle }}>
                         ({rideWithDriver.driver_total_rides} trips)
                       </span>
                     )}
                   </div>
                   {(rideWithDriver.vehicle_make || rideWithDriver.vehicle_model) && (
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
+                    <div style={{ fontSize: 12, color: c.textSubtle, marginTop: 2 }}>
                       {[rideWithDriver.vehicle_color, rideWithDriver.vehicle_make, rideWithDriver.vehicle_model].filter(Boolean).join(' ')}
                     </div>
                   )}
@@ -330,7 +354,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
           {/* Route summary (pickup → dropoff) */}
           <div style={{
             borderRadius: 10,
-            border: '1px solid #f0f0f0',
+            border: `1px solid ${c.border}`,
             padding: '12px 14px',
             marginBottom: 16,
             animation: 'war-fadeIn 0.3s ease both 0.2s',
@@ -338,14 +362,14 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 2 }}>
                 <div style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' }} />
-                <div style={{ width: 1, height: 20, backgroundColor: '#d1d5db', margin: '2px 0' }} />
+                <div style={{ width: 1, height: 20, backgroundColor: c.border, margin: '2px 0' }} />
                 <div style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' }} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a1a', marginBottom: 6, lineHeight: '14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: c.text, marginBottom: 6, lineHeight: '14px' }}>
                   {activeRide?.pickup_address ?? t('ride.pickup')}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a1a', lineHeight: '14px' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: c.text, lineHeight: '14px' }}>
                   {activeRide?.dropoff_address ?? t('ride.dropoff')}
                 </div>
               </div>
@@ -377,10 +401,10 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
               onClick={() => { if (activeRide?.id) window.location.href = `/chat/${activeRide.id}`; }}
               style={{
                 flex: 1, padding: '10px 12px',
-                backgroundColor: '#f3f4f6',
+                backgroundColor: c.elevated,
                 border: 'none', borderRadius: 8,
                 cursor: 'pointer', fontWeight: 600,
-                fontSize: 13, color: '#374151',
+                fontSize: 13, color: c.text,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 ...font,
               }}
@@ -397,9 +421,9 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 padding: '10px 12px',
-                backgroundColor: '#f3f4f6',
+                backgroundColor: c.elevated,
                 borderRadius: 8, marginBottom: 16,
-                textDecoration: 'none', color: '#374151',
+                textDecoration: 'none', color: c.text,
                 fontWeight: 600, fontSize: 13,
                 animation: 'war-fadeIn 0.3s ease both 0.3s',
                 ...font,
@@ -417,7 +441,7 @@ export function WebActiveRideView({ onReset }: WebActiveRideViewProps) {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             padding: '8px 0', marginBottom: 4,
-            fontSize: 11, color: '#9ca3af', fontWeight: 500,
+            fontSize: 11, color: c.textSubtle, fontWeight: 500,
             animation: 'war-fadeIn 0.4s ease both 0.35s',
           }}>
             <div style={{

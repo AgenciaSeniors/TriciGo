@@ -15,7 +15,7 @@ type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
 const levelBadgeClasses: Record<UserLevel, string> = {
   bronce: 'bg-amber-100 text-amber-800',
-  plata: 'bg-neutral-200 text-neutral-700',
+  plata: 'bg-surface-sunken text-ink-muted',
   oro: 'bg-yellow-100 text-yellow-800',
 };
 
@@ -149,7 +149,7 @@ export default function UserDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <p className="text-ink-subtle">{t('common.loading')}</p>
       </div>
     );
   }
@@ -157,7 +157,7 @@ export default function UserDetailPage() {
   if (!detail) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-neutral-400">{t('users.user_not_found')}</p>
+        <p className="text-ink-subtle">{t('users.user_not_found')}</p>
       </div>
     );
   }
@@ -175,7 +175,7 @@ export default function UserDetailPage() {
           <div className="flex items-center gap-2 mt-2">
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                roleBadgeClasses[user.role] ?? 'bg-neutral-100 text-neutral-600'
+                roleBadgeClasses[user.role] ?? 'bg-surface-sunken text-ink-muted'
               }`}
             >
               {user.role}
@@ -189,7 +189,7 @@ export default function UserDetailPage() {
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
                 user.is_active
                   ? 'bg-green-50 text-green-700'
-                  : 'bg-neutral-100 text-neutral-500'
+                  : 'bg-surface-sunken text-ink-muted'
               }`}
             >
               {user.is_active ? t('common.active') : t('common.inactive')}
@@ -224,38 +224,38 @@ export default function UserDetailPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Personal Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6">
           <h2 className="text-lg font-bold mb-4">{t('users.personal_info')}</h2>
           <dl className="space-y-3">
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_name')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_name')}</dt>
               <dd className="text-sm font-medium">{user.full_name || '—'}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_phone')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_phone')}</dt>
               <dd className="text-sm font-medium">{user.phone}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_email')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_email')}</dt>
               <dd className="text-sm font-medium">{user.email || '—'}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_language')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_language')}</dt>
               <dd className="text-sm font-medium">{LANG_KEY[user.preferred_language] ? t(LANG_KEY[user.preferred_language]!) : user.preferred_language}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_registered')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_registered')}</dt>
               <dd className="text-sm font-medium">{formatAdminDate(user.created_at)}</dd>
             </div>
           </dl>
         </div>
 
         {/* Stats & Level */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6">
           <h2 className="text-lg font-bold mb-4">{t('users.stats_section')}</h2>
           <dl className="space-y-3">
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_current_level')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_current_level')}</dt>
               <dd>
                 <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${levelBadgeClasses[currentLevel]}`}>
                   {LEVEL_LABEL_KEY[currentLevel] ? t(LEVEL_LABEL_KEY[currentLevel]!) : currentLevel}
@@ -263,28 +263,28 @@ export default function UserDetailPage() {
               </dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_completed_rides')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_completed_rides')}</dt>
               <dd className="text-sm font-medium">{user.total_rides ?? 0}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_total_spent')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_total_spent')}</dt>
               <dd className="text-sm font-medium">{formatCurrency(user.total_spent ?? 0)}</dd>
             </div>
             <div>
-              <dt className="text-sm text-neutral-500">{t('users.label_cancellations')}</dt>
+              <dt className="text-sm text-ink-muted">{t('users.label_cancellations')}</dt>
               <dd className="text-sm font-medium">{user.cancellation_count ?? 0}</dd>
             </div>
             {topTags.length > 0 && (
               <div>
-                <dt className="text-sm text-neutral-500 mb-1">{t('users.top_review_tags')}</dt>
+                <dt className="text-sm text-ink-muted mb-1">{t('users.top_review_tags')}</dt>
                 <dd className="flex flex-wrap gap-1">
                   {topTags.slice(0, 5).map((tag) => (
                     <span
                       key={tag.tag_key}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-xs text-neutral-600"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-sunken text-xs text-ink-muted"
                     >
                       {t(`drivers.tag_${tag.tag_key}`, { defaultValue: tag.tag_key })}
-                      <span className="text-neutral-400">({tag.count})</span>
+                      <span className="text-ink-subtle">({tag.count})</span>
                     </span>
                   ))}
                 </dd>
@@ -293,14 +293,14 @@ export default function UserDetailPage() {
           </dl>
 
           {/* Level override */}
-          <div className="mt-6 pt-4 border-t border-neutral-100">
-            <p className="text-sm font-semibold text-neutral-700 mb-2">{t('users.change_level')}</p>
+          <div className="mt-6 pt-4 border-t border-line">
+            <p className="text-sm font-semibold text-ink mb-2">{t('users.change_level')}</p>
             <div className="flex items-center gap-2">
               <select
                 value={selectedLevel}
                 onChange={(e) => setSelectedLevel(e.target.value as UserLevel)}
                 aria-label={t('users.change_level')}
-                className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className="border border-line bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
               >
                 <option value="bronce">{t('users.level_bronze')}</option>
                 <option value="plata">{t('users.level_silver')}</option>
@@ -319,50 +319,50 @@ export default function UserDetailPage() {
       </div>
 
       {/* Wallet */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-8">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-8">
         <h2 className="text-lg font-bold mb-4">{t('users.wallet_section')}</h2>
         {wallet ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="bg-neutral-50 rounded-lg p-4">
-              <p className="text-xs text-neutral-500 mb-1">{t('users.label_available_balance')}</p>
+            <div className="bg-surface-sunken rounded-lg p-4">
+              <p className="text-xs text-ink-muted mb-1">{t('users.label_available_balance')}</p>
               <p className="text-lg font-bold text-primary-500">{formatCurrency(wallet.balance)}</p>
             </div>
-            <div className="bg-neutral-50 rounded-lg p-4">
-              <p className="text-xs text-neutral-500 mb-1">{t('users.label_held_balance')}</p>
-              <p className="text-lg font-bold text-neutral-700">{formatCurrency(wallet.held_balance)}</p>
+            <div className="bg-surface-sunken rounded-lg p-4">
+              <p className="text-xs text-ink-muted mb-1">{t('users.label_held_balance')}</p>
+              <p className="text-lg font-bold text-ink">{formatCurrency(wallet.held_balance)}</p>
             </div>
-            <div className="bg-neutral-50 rounded-lg p-4">
-              <p className="text-xs text-neutral-500 mb-1">{t('users.label_wallet_status')}</p>
+            <div className="bg-surface-sunken rounded-lg p-4">
+              <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
               <p className={`text-lg font-bold ${wallet.is_active ? 'text-green-600' : 'text-red-600'}`}>
                 {wallet.is_active ? t('users.wallet_active') : t('users.wallet_inactive')}
               </p>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-neutral-400">{t('users.no_wallet')}</p>
+          <p className="text-sm text-ink-subtle">{t('users.no_wallet')}</p>
         )}
       </div>
 
       {/* Transfers */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6">
         <h2 className="text-lg font-bold mb-4">{t('users.transfers_section')}</h2>
         {transfers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-neutral-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_date')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_type')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_amount')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_note')}</th>
+                <tr className="border-b border-line">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_date')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_type')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_amount')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_note')}</th>
                 </tr>
               </thead>
               <tbody>
                 {transfers.map((tx) => {
                   const isSender = tx.from_user_id === id;
                   return (
-                    <tr key={tx.id} className="border-b border-neutral-50">
-                      <td className="px-4 py-3 text-sm text-neutral-600">
+                    <tr key={tx.id} className="border-b border-line">
+                      <td className="px-4 py-3 text-sm text-ink-muted">
                         {formatAdminDate(tx.created_at)}
                       </td>
                       <td className="px-4 py-3">
@@ -379,7 +379,7 @@ export default function UserDetailPage() {
                       <td className={`px-4 py-3 text-sm font-medium ${isSender ? 'text-red-600' : 'text-green-600'}`}>
                         {isSender ? '-' : '+'}{formatCurrency(tx.amount)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-neutral-500">
+                      <td className="px-4 py-3 text-sm text-ink-muted">
                         {tx.note || '—'}
                       </td>
                     </tr>
@@ -389,33 +389,33 @@ export default function UserDetailPage() {
             </table>
           </div>
         ) : (
-          <p className="text-sm text-neutral-400">{t('users.no_transfers')}</p>
+          <p className="text-sm text-ink-subtle">{t('users.no_transfers')}</p>
         )}
       </div>
 
       {/* Cancellation Penalties */}
       {penalties.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mt-8">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mt-8">
           <h2 className="text-lg font-bold mb-4">{t('users.penalties_section')}</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-neutral-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_date')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_amount')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-500">{t('users.col_reason')}</th>
+                <tr className="border-b border-line">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_date')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_amount')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-ink-muted">{t('users.col_reason')}</th>
                 </tr>
               </thead>
               <tbody>
                 {penalties.map((p) => (
-                  <tr key={p.id} className="border-b border-neutral-50">
-                    <td className="px-4 py-3 text-sm text-neutral-600">
+                  <tr key={p.id} className="border-b border-line">
+                    <td className="px-4 py-3 text-sm text-ink-muted">
                       {formatAdminDate(p.created_at)}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-red-600">
                       {p.amount > 0 ? `-${formatCurrency(p.amount)}` : t('users.no_charge')}
                     </td>
-                    <td className="px-4 py-3 text-sm text-neutral-500">
+                    <td className="px-4 py-3 text-sm text-ink-muted">
                       {p.reason || '—'}
                     </td>
                   </tr>
@@ -447,21 +447,21 @@ export default function UserDetailPage() {
       {/* Block User Modal */}
       {blockModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md mx-4">
             <h3 id="block-user-title" className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
-            <p className="text-sm text-neutral-600 mb-4">{t('users.block_confirm')}</p>
+            <p className="text-sm text-ink-muted mb-4">{t('users.block_confirm')}</p>
             <textarea
               value={blockReason}
               onChange={(e) => setBlockReason(e.target.value)}
               placeholder={t('users.block_reason')}
               aria-label={t('users.block_reason')}
-              className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-primary-500"
+              className="w-full border border-line bg-surface text-ink rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-primary-500"
               rows={3}
             />
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setBlockModalOpen(false); setBlockReason(''); }}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-100 transition-colors"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-ink-muted hover:bg-surface-sunken transition-colors"
               >
                 {t('common.cancel')}
               </button>

@@ -5,6 +5,7 @@ import {
   Text,
   type TextInputProps,
 } from 'react-native';
+import { useColorScheme } from 'nativewind';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -17,8 +18,10 @@ export interface InputProps extends TextInputProps {
 }
 
 export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
-  ({ label, error, hint, leftIcon, rightIcon, variant = 'light', className, ...props }, ref) => {
-    const isDark = variant === 'dark';
+  ({ label, error, hint, leftIcon, rightIcon, variant, className, ...props }, ref) => {
+    const { colorScheme } = useColorScheme();
+    // `variant` is an explicit override; without it, follow the active theme.
+    const isDark = variant ? variant === 'dark' : colorScheme === 'dark';
 
     const borderColor = error
       ? 'border-error'

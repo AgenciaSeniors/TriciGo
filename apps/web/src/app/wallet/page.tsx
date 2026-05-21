@@ -525,7 +525,10 @@ export default function WalletPage() {
 
           {rechargeStep === 'failed' && (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              {/* Visual: error badge with alert-triangle SVG (no emoji). */}
+              {/* Visual: error badge with alert-triangle SVG (no emoji).
+                  Note: the P2P Transfer section that lived here in master was
+                  intentionally removed in Phase A (closed-loop TriciCoin) —
+                  merge conflict resolution drops it. */}
               <div
                 aria-hidden
                 style={{

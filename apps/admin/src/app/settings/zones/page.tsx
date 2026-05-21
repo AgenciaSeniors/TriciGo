@@ -93,43 +93,43 @@ export default function ZonesPage() {
       )}
       <h1 className="text-3xl font-bold mb-6">{t('zones.title')}</h1>
 
-      <p className="text-sm text-neutral-500 mb-4">
+      <p className="text-sm text-ink-muted mb-4">
         {t('zones.map_note')}
       </p>
 
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_name')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_type')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_surge_multiplier')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('zones.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_name')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_type')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_surge_multiplier')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {zones.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-neutral-400">
+                <td colSpan={5} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('zones.no_zones')}
                 </td>
               </tr>
             ) : (
               zones.map((z) => (
-                <tr key={z.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={z.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-3 font-medium">
                     {editingId === z.id ? (
                       <input
                         aria-label={t('zones.col_name')}
-                        className="w-40 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-40 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.name}
                         onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                       />
                     ) : z.name}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[z.type] ?? 'bg-neutral-100 text-neutral-700'}`}>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[z.type] ?? 'bg-surface-sunken text-ink-muted'}`}>
                       {TYPE_LABEL_KEY[z.type] ? t(TYPE_LABEL_KEY[z.type]!) : z.type}
                     </span>
                   </td>
@@ -138,7 +138,7 @@ export default function ZonesPage() {
                       <input
                         type="number"
                         aria-label={t('zones.col_surge_multiplier')}
-                        className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.surge_multiplier}
                         onChange={(e) => setEditForm((f) => ({ ...f, surge_multiplier: parseFloat(e.target.value) || 1 }))}
                         step="0.05"
@@ -174,7 +174,7 @@ export default function ZonesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
                         >
                           {t('common.cancel')}
                         </button>

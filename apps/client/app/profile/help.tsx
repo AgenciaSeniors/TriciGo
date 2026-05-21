@@ -301,13 +301,13 @@ export default function HelpScreen() {
                 key={cat.value}
                 onPress={() => setCategory(cat.value)}
                 className={`px-3 py-1.5 rounded-full ${
-                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-100'
+                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-100 dark:bg-neutral-800'
                 }`}
               >
                 <Text
                   variant="caption"
                   className={`font-medium ${
-                    category === cat.value ? 'text-white' : 'text-neutral-600'
+                    category === cat.value ? 'text-white' : 'text-neutral-600 dark:text-neutral-300'
                   }`}
                 >
                   {t(cat.key)}

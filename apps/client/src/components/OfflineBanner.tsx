@@ -116,7 +116,7 @@ export function OfflineBanner() {
                 {formatTimeAgo(m.timestamp)}
               </Text>
               {m.retries > 0 && (
-                <Text variant="caption" className="text-red-800 font-medium">
+                <Text variant="caption" className="text-red-800 dark:text-red-300 font-medium">
                   {m.retries}/3
                 </Text>
               )}

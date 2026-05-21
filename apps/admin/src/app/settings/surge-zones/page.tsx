@@ -116,23 +116,23 @@ export default function SurgeZonesPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-6">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-6">
           <h2 className="text-lg font-bold mb-4">{t('surge_zones.new_rule_title')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_zone_id')}</label>
+              <label className="text-sm text-ink-muted mb-1 block">{t('surge_zones.label_zone_id')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 placeholder={t('surge_zones.zone_placeholder')}
                 value={form.zone_id}
                 onChange={(e) => setForm((f) => ({ ...f, zone_id: e.target.value }))}
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_multiplier')}</label>
+              <label className="text-sm text-ink-muted mb-1 block">{t('surge_zones.label_multiplier')}</label>
               <input
                 type="number"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.multiplier}
                 onChange={(e) => setForm((f) => ({ ...f, multiplier: parseFloat(e.target.value) || 1 }))}
                 step="0.1"
@@ -141,28 +141,28 @@ export default function SurgeZonesPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_reason')}</label>
+              <label className="text-sm text-ink-muted mb-1 block">{t('surge_zones.label_reason')}</label>
               <input
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 placeholder={t('surge_zones.reason_placeholder')}
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_start')}</label>
+              <label className="text-sm text-ink-muted mb-1 block">{t('surge_zones.label_start')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.starts_at}
                 onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
               />
             </div>
             <div>
-              <label className="text-sm text-neutral-500 mb-1 block">{t('surge_zones.label_end')}</label>
+              <label className="text-sm text-ink-muted mb-1 block">{t('surge_zones.label_end')}</label>
               <input
                 type="datetime-local"
-                className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-sm focus:outline-none focus:border-primary-500"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm focus:outline-none focus:border-primary-500"
                 value={form.ends_at}
                 onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}
               />
@@ -179,34 +179,34 @@ export default function SurgeZonesPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_multiplier')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_reason')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_start')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_end')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('surge_zones.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('surge_zones.col_multiplier')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('surge_zones.col_reason')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('surge_zones.col_start')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('surge_zones.col_end')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('surge_zones.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {surges.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-neutral-400">
+                <td colSpan={6} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('surge_zones.no_rules')}
                 </td>
               </tr>
             ) : (
               surges.map((s) => (
-                <tr key={s.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={s.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-3">
                     <span className="text-yellow-600 font-bold">{Number(s.multiplier).toFixed(1)}x</span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-600">{s.reason || '—'}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatAdminDate(s.starts_at)}</td>
-                  <td className="px-4 py-3 text-neutral-500 text-xs">{formatAdminDate(s.ends_at)}</td>
+                  <td className="px-4 py-3 text-ink-muted">{s.reason || '—'}</td>
+                  <td className="px-4 py-3 text-ink-muted text-xs">{formatAdminDate(s.starts_at)}</td>
+                  <td className="px-4 py-3 text-ink-muted text-xs">{formatAdminDate(s.ends_at)}</td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(s)}

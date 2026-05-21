@@ -91,7 +91,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--bg-primary, #ffffff)',
+        background: 'var(--bg)',
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-tertiary, #999)' }}>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>

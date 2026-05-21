@@ -15,6 +15,7 @@ import {
 } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 
 /* ─── Types ─── */
 
@@ -237,6 +238,33 @@ export function WebAddressInput({
   const mapboxCacheRef = useRef<Map<string, SearchBoxResult[]>>(new Map());
   const internalRef = useRef<TextInput>(null);
   const ref = externalRef ?? internalRef;
+
+  // Theme-aware palette — mirrors the app's cubanDark tokens. Brand orange
+  // (focus border, highlight, spinner) stays fixed.
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
+  const c = isDark
+    ? {
+        surface: '#11172A',
+        elevated: '#18203A',
+        pressed: '#1E2740',
+        sectionBg: '#0E1322',
+        text: '#F4F0EA',
+        textSubtle: '#6B7F8F',
+        textFaint: '#4A5A6B',
+        border: 'rgba(244,240,234,0.10)',
+        divider: 'rgba(244,240,234,0.06)',
+      }
+    : {
+        surface: '#fff',
+        elevated: '#f5f5f5',
+        pressed: '#f5f5f5',
+        sectionBg: '#fafafa',
+        text: '#1a1a1a',
+        textSubtle: '#9ca3af',
+        textFaint: '#d1d5db',
+        border: '#e5e5e5',
+        divider: '#f0f0f0',
+      };
 
   // Sync external value
   useEffect(() => {
@@ -584,10 +612,10 @@ export function WebAddressInput({
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: '#fff',
+          backgroundColor: c.surface,
           borderRadius: 10,
           borderWidth: 1,
-          borderColor: (showingDropdown || showingSaved) ? colors.brand.orange : '#e5e5e5',
+          borderColor: (showingDropdown || showingSaved) ? colors.brand.orange : c.border,
           paddingHorizontal: 12,
           height: 46,
         }}
@@ -606,12 +634,12 @@ export function WebAddressInput({
             }, 200);
           }}
           placeholder={placeholder}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={c.textSubtle}
           autoFocus={autoFocus}
           style={{
             flex: 1,
             fontSize: 14,
-            color: '#1a1a1a',
+            color: c.text,
             outlineStyle: 'none',
             fontFamily: 'Montserrat, system-ui, sans-serif',
           } as any}
@@ -619,7 +647,7 @@ export function WebAddressInput({
         {loading && <ActivityIndicator size="small" color={colors.brand.orange} style={{ marginLeft: 8 }} />}
         {selected && !loading && (
           <Pressable onPress={handleClear} style={{ marginLeft: 8, padding: 4 }}>
-            <Text style={{ fontSize: 16, color: '#9ca3af' }}>✕</Text>
+            <Text style={{ fontSize: 16, color: c.textSubtle }}>✕</Text>
           </Pressable>
         )}
       </View>
@@ -632,21 +660,21 @@ export function WebAddressInput({
             top: 50,
             left: 0,
             right: 0,
-            backgroundColor: '#fff',
+            backgroundColor: c.surface,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#e5e5e5',
+            borderColor: c.border,
             maxHeight: 300,
             shadowColor: '#000',
-            shadowOpacity: 0.12,
+            shadowOpacity: isDark ? 0.5 : 0.12,
             shadowRadius: 12,
             elevation: 4,
             zIndex: 20,
             overflow: 'hidden',
           } as any}
         >
-          <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fafafa' }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
+          <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: c.sectionBg }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: c.textSubtle, textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
               Calles que cruzan {cubanContext?.main}
             </Text>
           </View>
@@ -660,17 +688,17 @@ export function WebAddressInput({
                   alignItems: 'center',
                   paddingHorizontal: 14,
                   paddingVertical: 11,
-                  backgroundColor: pressed || i === activeIndex ? '#f5f5f5' : '#fff',
+                  backgroundColor: pressed || i === activeIndex ? c.pressed : c.surface,
                   borderBottomWidth: i < crossStreets.length - 1 ? 1 : 0,
-                  borderBottomColor: '#f0f0f0',
+                  borderBottomColor: c.divider,
                 })}
               >
                 <Text style={{ fontSize: 18, marginRight: 10 }}>🔀</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#1a1a1a' }} numberOfLines={1}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }} numberOfLines={1}>
                     {cubanContext?.main} e/ {cubanContext?.cross1} y {street}
                   </Text>
-                  <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+                  <Text style={{ fontSize: 11, color: c.textSubtle, marginTop: 1 }}>
                     {street}
                   </Text>
                 </View>
@@ -688,13 +716,13 @@ export function WebAddressInput({
             top: 50,
             left: 0,
             right: 0,
-            backgroundColor: '#fff',
+            backgroundColor: c.surface,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#e5e5e5',
+            borderColor: c.border,
             maxHeight: 300,
             shadowColor: '#000',
-            shadowOpacity: 0.12,
+            shadowOpacity: isDark ? 0.5 : 0.12,
             shadowRadius: 12,
             elevation: 4,
             zIndex: 20,
@@ -713,29 +741,29 @@ export function WebAddressInput({
                     alignItems: 'center',
                     paddingHorizontal: 14,
                     paddingVertical: 11,
-                    backgroundColor: pressed || i === activeIndex ? '#f5f5f5' : '#fff',
+                    backgroundColor: pressed || i === activeIndex ? c.pressed : c.surface,
                     borderBottomWidth: i < results.length - 1 ? 1 : 0,
-                    borderBottomColor: '#f0f0f0',
+                    borderBottomColor: c.divider,
                   })}
                 >
                   <Text style={{ fontSize: 18, marginRight: 10 }}>{getIcon(r.category)}</Text>
                   <View style={{ flex: 1 }}>
                     {Platform.OS === 'web' ? (
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {renderHighlight(r.place_name || r.address)}
                       </div>
                     ) : (
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#1a1a1a' }} numberOfLines={1}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }} numberOfLines={1}>
                         {r.place_name || r.address}
                       </Text>
                     )}
                     {secondary && (
-                      <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }} numberOfLines={1}>
+                      <Text style={{ fontSize: 11, color: c.textSubtle, marginTop: 2 }} numberOfLines={1}>
                         {secondary}
                       </Text>
                     )}
                     {r.source === 'supabase' && (
-                      <Text style={{ fontSize: 9, color: '#d1d5db', marginTop: 1 }}>
+                      <Text style={{ fontSize: 9, color: c.textFaint, marginTop: 1 }}>
                         Local
                       </Text>
                     )}
@@ -744,7 +772,7 @@ export function WebAddressInput({
               );
             }) : (
               <View style={{ paddingHorizontal: 14, paddingVertical: 20, alignItems: 'center' }}>
-                <Text style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>
+                <Text style={{ fontSize: 13, color: c.textSubtle, textAlign: 'center' }}>
                   No encontramos resultados. Intenta con otro término.
                 </Text>
               </View>
@@ -761,13 +789,13 @@ export function WebAddressInput({
             top: 50,
             left: 0,
             right: 0,
-            backgroundColor: '#fff',
+            backgroundColor: c.surface,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: '#e5e5e5',
+            borderColor: c.border,
             maxHeight: 300,
             shadowColor: '#000',
-            shadowOpacity: 0.12,
+            shadowOpacity: isDark ? 0.5 : 0.12,
             shadowRadius: 12,
             elevation: 4,
             zIndex: 20,
@@ -778,8 +806,8 @@ export function WebAddressInput({
             {/* Saved locations */}
             {savedLocations && savedLocations.length > 0 && (
               <>
-                <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fafafa' }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
+                <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: c.sectionBg }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: c.textSubtle, textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
                     Guardados
                   </Text>
                 </View>
@@ -792,17 +820,17 @@ export function WebAddressInput({
                       alignItems: 'center',
                       paddingHorizontal: 14,
                       paddingVertical: 11,
-                      backgroundColor: pressed ? '#f5f5f5' : '#fff',
+                      backgroundColor: pressed ? c.pressed : c.surface,
                       borderBottomWidth: 1,
-                      borderBottomColor: '#f0f0f0',
+                      borderBottomColor: c.divider,
                     })}
                   >
                     <Text style={{ fontSize: 18, marginRight: 10 }}>{getSavedIcon(loc.label)}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#1a1a1a' }} numberOfLines={1}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }} numberOfLines={1}>
                         {loc.label}
                       </Text>
-                      <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }} numberOfLines={1}>
+                      <Text style={{ fontSize: 11, color: c.textSubtle, marginTop: 1 }} numberOfLines={1}>
                         {loc.address}
                       </Text>
                     </View>
@@ -814,8 +842,8 @@ export function WebAddressInput({
             {/* Recent addresses */}
             {recentAddresses && recentAddresses.length > 0 && (
               <>
-                <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fafafa' }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
+                <View style={{ paddingHorizontal: 14, paddingVertical: 8, backgroundColor: c.sectionBg }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: c.textSubtle, textTransform: 'uppercase' as any, letterSpacing: 0.5 }}>
                     Recientes
                   </Text>
                 </View>
@@ -828,14 +856,14 @@ export function WebAddressInput({
                       alignItems: 'center',
                       paddingHorizontal: 14,
                       paddingVertical: 11,
-                      backgroundColor: pressed ? '#f5f5f5' : '#fff',
+                      backgroundColor: pressed ? c.pressed : c.surface,
                       borderBottomWidth: i < recentAddresses.length - 1 ? 1 : 0,
-                      borderBottomColor: '#f0f0f0',
+                      borderBottomColor: c.divider,
                     })}
                   >
                     <Text style={{ fontSize: 18, marginRight: 10 }}>🕐</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '500', color: '#1a1a1a' }} numberOfLines={1}>
+                      <Text style={{ fontSize: 13, fontWeight: '500', color: c.text }} numberOfLines={1}>
                         {addr.address}
                       </Text>
                     </View>

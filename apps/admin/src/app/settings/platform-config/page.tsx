@@ -100,13 +100,13 @@ export default function PlatformConfigPage() {
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('platform_config.title')}</h1>
-      <p className="text-neutral-500 mb-6">{t('platform_config.subtitle')}</p>
+      <p className="text-ink-muted mb-6">{t('platform_config.subtitle')}</p>
 
       {loading ? (
-        <p className="text-neutral-400">{t('common.loading')}</p>
+        <p className="text-ink-subtle">{t('common.loading')}</p>
       ) : configs.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-8 text-center">
-          <p className="text-neutral-400">No configuration entries found</p>
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-8 text-center">
+          <p className="text-ink-subtle">No configuration entries found</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -117,18 +117,18 @@ export default function PlatformConfigPage() {
             return (
               <div
                 key={config.key}
-                className="bg-white rounded-xl p-6 shadow-sm border border-neutral-100"
+                className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <p className="font-semibold text-neutral-900">
+                    <p className="font-semibold text-ink">
                       {getLabel(config.key)}
                     </p>
-                    <p className="font-mono text-xs text-neutral-400 mt-0.5">
+                    <p className="font-mono text-xs text-ink-subtle mt-0.5">
                       {config.key}
                     </p>
                     {known && (
-                      <p className="text-sm text-neutral-500 mt-1">
+                      <p className="text-sm text-ink-muted mt-1">
                         {t(known.helpKey)}
                       </p>
                     )}
@@ -138,7 +138,7 @@ export default function PlatformConfigPage() {
                       type={known?.type ?? 'text'}
                       step={known?.type === 'number' ? 'any' : undefined}
                       aria-label={getLabel(config.key)}
-                      className="w-32 px-3 py-2 border border-neutral-300 rounded-lg text-sm text-right font-mono"
+                      className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm text-right font-mono"
                       value={editValues[config.key] ?? config.value}
                       onChange={(e) =>
                         setEditValues((prev) => ({

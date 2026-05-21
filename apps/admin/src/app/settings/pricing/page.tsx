@@ -46,7 +46,7 @@ function getTimeBand(start: string | null | undefined, end: string | null | unde
 function TimeBandBadge({ start, end, t }: { start: string | null | undefined; end: string | null | undefined; t: (key: string, opts?: Record<string, string>) => string }) {
   const band = getTimeBand(start, end);
   if (!band) {
-    if (!start && !end) return <span className="text-neutral-400 text-xs">{t('pricing.time_band_24h')}</span>;
+    if (!start && !end) return <span className="text-ink-subtle text-xs">{t('pricing.time_band_24h')}</span>;
     return <span className="text-xs">{start} - {end}</span>;
   }
   const configs: Record<string, { emoji: string; label: string; color: string }> = {
@@ -79,15 +79,15 @@ function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) =>
   ];
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-4 mb-6">
-      <h3 className="text-sm font-semibold text-neutral-700 mb-3">{t('pricing.pricing_matrix')}</h3>
+    <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-4 mb-6">
+      <h3 className="text-sm font-semibold text-ink mb-3">{t('pricing.pricing_matrix')}</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-neutral-100">
-              <th className="text-left py-2 px-2 font-medium text-neutral-500">Servicio</th>
+            <tr className="border-b border-line">
+              <th className="text-left py-2 px-2 font-medium text-ink-muted">Servicio</th>
               {bands.map((b) => (
-                <th key={b.key} className="text-center py-2 px-2 font-medium text-neutral-500">
+                <th key={b.key} className="text-center py-2 px-2 font-medium text-ink-muted">
                   {b.emoji} {b.label}
                 </th>
               ))}
@@ -95,8 +95,8 @@ function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) =>
           </thead>
           <tbody>
             {serviceTypes.map((svc) => (
-              <tr key={svc} className="border-b border-neutral-50">
-                <td className="py-2 px-2 font-semibold text-neutral-700">{serviceLabels[svc]}</td>
+              <tr key={svc} className="border-b border-line">
+                <td className="py-2 px-2 font-semibold text-ink">{serviceLabels[svc]}</td>
                 {bands.map((b) => {
                   const rule = rules.find(
                     (r) =>
@@ -104,11 +104,11 @@ function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) =>
                       r.time_window_start &&
                       r.time_window_start.substring(0, 5) === b.start,
                   );
-                  if (!rule) return <td key={b.key} className="text-center py-2 px-2 text-neutral-300">—</td>;
+                  if (!rule) return <td key={b.key} className="text-center py-2 px-2 text-ink-subtle">—</td>;
                   return (
                     <td key={b.key} className="text-center py-2 px-2">
                       <div className="font-mono font-semibold">{formatCUP(rule.base_fare_cup)}</div>
-                      <div className="text-neutral-400">{formatCUP(rule.per_km_rate_cup)}/km</div>
+                      <div className="text-ink-subtle">{formatCUP(rule.per_km_rate_cup)}/km</div>
                     </td>
                   );
                 })}
@@ -285,7 +285,7 @@ export default function PricingPage() {
       <input
         type="number"
         aria-label={labelMap[field] ?? field}
-        className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
+        className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
         value={((editForm[field] as number) ?? 0) / 100}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
         step="0.01"
@@ -302,7 +302,7 @@ export default function PricingPage() {
       <input
         type="number"
         aria-label={labelMap[field] ?? field}
-        className="w-16 px-2 py-1 border border-neutral-300 rounded text-sm"
+        className="w-16 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
         value={(editForm[field] as number) ?? ''}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value ? parseFloat(e.target.value) : null }))}
         step={step}
@@ -340,13 +340,13 @@ export default function PricingPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 mb-6">
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-6">
           <h3 className="text-lg font-semibold mb-4">{t('pricing.new_rule_title')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_service_type')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_service_type')}<span className="text-red-500 ml-1">*</span></label>
               <select
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.service_type ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.service_type ? 'border-red-500' : 'border-line'}`}
                 value={createForm.service_type}
                 onChange={(e) => { setCreateForm((f) => ({ ...f, service_type: e.target.value })); setFormErrors((prev) => { const { service_type, ...rest } = prev; return rest; }); }}
               >
@@ -356,9 +356,9 @@ export default function PricingPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_zone')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_zone')}</label>
               <select
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 value={createForm.zone_id}
                 onChange={(e) => setCreateForm((f) => ({ ...f, zone_id: e.target.value }))}
               >
@@ -369,10 +369,10 @@ export default function PricingPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_base_fare')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_base_fare')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.base_fare_cup ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.base_fare_cup ? 'border-red-500' : 'border-line'}`}
                 value={createForm.base_fare_cup / 100 || ''}
                 onChange={(e) => { setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { base_fare_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
@@ -380,10 +380,10 @@ export default function PricingPage() {
               {formErrors.base_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.base_fare_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_km')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_km')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.per_km_rate_cup ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_km_rate_cup ? 'border-red-500' : 'border-line'}`}
                 value={createForm.per_km_rate_cup / 100 || ''}
                 onChange={(e) => { setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_km_rate_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
@@ -391,10 +391,10 @@ export default function PricingPage() {
               {formErrors.per_km_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_km_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_per_min')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_min')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.per_minute_rate_cup ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_minute_rate_cup ? 'border-red-500' : 'border-line'}`}
                 value={createForm.per_minute_rate_cup / 100 || ''}
                 onChange={(e) => { setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_minute_rate_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
@@ -402,10 +402,10 @@ export default function PricingPage() {
               {formErrors.per_minute_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_minute_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_min_fare')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_min_fare')}<span className="text-red-500 ml-1">*</span></label>
               <input
                 type="number"
-                className={`w-full px-3 py-2 border rounded-lg text-sm ${formErrors.min_fare_cup ? 'border-red-500' : 'border-neutral-300'}`}
+                className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.min_fare_cup ? 'border-red-500' : 'border-line'}`}
                 value={createForm.min_fare_cup / 100 || ''}
                 onChange={(e) => { setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { min_fare_cup, ...rest } = prev; return rest; }); }}
                 step="0.01"
@@ -413,25 +413,25 @@ export default function PricingPage() {
               {formErrors.min_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.min_fare_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_time_start')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_time_start')}</label>
               <input
                 type="time"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 value={createForm.time_window_start}
                 onChange={(e) => setCreateForm((f) => ({ ...f, time_window_start: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_time_end')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_time_end')}</label>
               <input
                 type="time"
-                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
                 value={createForm.time_window_end}
                 onChange={(e) => setCreateForm((f) => ({ ...f, time_window_end: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-600 mb-1">{t('pricing.label_days')}</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_days')}</label>
               <div className="flex gap-1 flex-wrap mt-1">
                 {DAY_LABELS.map((label, idx) => {
                   const selected = createForm.day_of_week.includes(idx);
@@ -442,7 +442,7 @@ export default function PricingPage() {
                       aria-label={`${label} ${selected ? '(selected)' : ''}`}
                       aria-pressed={selected}
                       className={`px-2 py-1 rounded text-xs font-medium ${
-                        selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
+                        selected ? 'bg-primary-500 text-white' : 'bg-surface-sunken text-ink-muted'
                       }`}
                       onClick={() => {
                         const next = selected
@@ -468,7 +468,7 @@ export default function PricingPage() {
             </button>
             <button
               onClick={() => { setShowCreate(false); setFormErrors({}); }}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
             >
               {t('common.cancel')}
             </button>
@@ -487,7 +487,7 @@ export default function PricingPage() {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               filter === tab.value
                 ? 'bg-primary-500 text-white'
-                : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300'
+                : 'bg-surface-elevated text-ink-muted border-line hover:border-line-strong'
             }`}
           >
             {t(tab.labelKey)}
@@ -495,33 +495,33 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-x-auto">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-x-auto">
         <table className="w-full text-sm min-w-[900px]">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_zone')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_service')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_base')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_km')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_per_min')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_min')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_surge')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_time_window')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('pricing.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_zone')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_service')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_base')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_per_km')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_per_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_surge')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_time_window')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-12 text-neutral-400">
+                <td colSpan={10} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('pricing.no_rules')}
                 </td>
               </tr>
             ) : (
               filtered.map((r) => (
-                <tr key={r.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-                  <td className="px-4 py-3 text-neutral-500">
+                <tr key={r.id} className="border-b border-line hover:bg-surface-sunken">
+                  <td className="px-4 py-3 text-ink-muted">
                     {r.zone_id ? (zoneMap.get(r.zone_id) ?? t('pricing.zone_label')) : t('pricing.global_zone')}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">{r.service_type}</td>
@@ -554,7 +554,7 @@ export default function PricingPage() {
                           <input
                             type="time"
                             aria-label={t('pricing.label_time_start')}
-                            className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
+                            className="w-24 px-1 py-0.5 border border-line bg-surface text-ink rounded text-xs"
                             value={editForm.time_window_start ?? ''}
                             onChange={(e) => setEditForm((f) => ({ ...f, time_window_start: e.target.value || null }))}
                           />
@@ -562,7 +562,7 @@ export default function PricingPage() {
                           <input
                             type="time"
                             aria-label={t('pricing.label_time_end')}
-                            className="w-24 px-1 py-0.5 border border-neutral-300 rounded text-xs"
+                            className="w-24 px-1 py-0.5 border border-line bg-surface text-ink rounded text-xs"
                             value={editForm.time_window_end ?? ''}
                             onChange={(e) => setEditForm((f) => ({ ...f, time_window_end: e.target.value || null }))}
                           />
@@ -577,7 +577,7 @@ export default function PricingPage() {
                                 aria-label={`${label} ${selected ? '(selected)' : ''}`}
                                 aria-pressed={selected}
                                 className={`px-1 py-0.5 rounded text-[10px] ${
-                                  selected ? 'bg-primary-500 text-white' : 'bg-neutral-100 text-neutral-500'
+                                  selected ? 'bg-primary-500 text-white' : 'bg-surface-sunken text-ink-muted'
                                 }`}
                                 onClick={() => {
                                   const current = editForm.day_of_week ?? [];
@@ -595,7 +595,7 @@ export default function PricingPage() {
                       <div>
                         <TimeBandBadge start={r.time_window_start} end={r.time_window_end} t={t} />
                         {r.day_of_week && r.day_of_week.length > 0 && (
-                          <div className="text-neutral-400 mt-0.5 text-[10px]">
+                          <div className="text-ink-subtle mt-0.5 text-[10px]">
                             {r.day_of_week.map((d) => DAY_LABELS[d]).join(', ')}
                           </div>
                         )}
@@ -625,7 +625,7 @@ export default function PricingPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
                         >
                           {t('common.cancel')}
                         </button>
@@ -660,18 +660,18 @@ export default function PricingPage() {
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
           aria-label={t('common.previous')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
+          className="px-4 py-2 rounded-lg text-sm border border-line text-ink disabled:opacity-30"
         >
           {t('common.previous')}
         </button>
-        <span className="text-sm text-neutral-500" aria-live="polite">
+        <span className="text-sm text-ink-muted" aria-live="polite">
           {t('common.page')} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={!canGoNext}
           aria-label={t('common.next')}
-          className="px-4 py-2 rounded-lg text-sm border border-neutral-200 disabled:opacity-30"
+          className="px-4 py-2 rounded-lg text-sm border border-line text-ink disabled:opacity-30"
         >
           {t('common.next')}
         </button>

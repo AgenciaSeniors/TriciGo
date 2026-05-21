@@ -85,7 +85,7 @@ export default function ServiceTypesPage() {
       <input
         type="number"
         aria-label={labelMap[field] ?? field}
-        className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
+        className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
         value={((editForm[field] as number) ?? 0) / 100}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
         step="0.01"
@@ -107,37 +107,37 @@ export default function ServiceTypesPage() {
       )}
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
-      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 border-b border-neutral-100">
+          <thead className="bg-surface-sunken border-b border-line">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_slug')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_name_es')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_base')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_per_km')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_per_min')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_min')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_passengers')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('service_types.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_slug')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_name_es')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_base')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_per_km')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_per_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_min')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_passengers')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('service_types.col_active')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {configs.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-12 text-neutral-400">
+                <td colSpan={9} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('service_types.no_service_types')}
                 </td>
               </tr>
             ) : (
               configs.map((c) => (
-                <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50">
+                <tr key={c.id} className="border-b border-line hover:bg-surface-sunken">
                   <td className="px-4 py-3 font-mono text-xs">{c.slug}</td>
                   <td className="px-4 py-3">
                     {editingId === c.id ? (
                       <input
                         aria-label={t('service_types.col_name_es')}
-                        className="w-32 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-32 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.name_es ?? ''}
                         onChange={(e) => setEditForm((f) => ({ ...f, name_es: e.target.value }))}
                       />
@@ -160,7 +160,7 @@ export default function ServiceTypesPage() {
                       <input
                         type="number"
                         aria-label={t('service_types.col_passengers')}
-                        className="w-14 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        className="w-14 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
                         value={editForm.max_passengers ?? 1}
                         onChange={(e) => setEditForm((f) => ({ ...f, max_passengers: parseInt(e.target.value) || 1 }))}
                         min={1}
@@ -191,7 +191,7 @@ export default function ServiceTypesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
                         >
                           {t('common.cancel')}
                         </button>
