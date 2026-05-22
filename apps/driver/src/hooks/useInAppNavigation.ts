@@ -3,6 +3,7 @@ import * as Speech from 'expo-speech';
 import {
   fetchNavigationRoute,
   haversineDistance,
+  distanceToPolyline,
   type NavigationStep,
   type NavigationRouteResult,
   type GeoPoint,
@@ -30,10 +31,21 @@ import {
 const PRE_ANNOUNCE_DISTANCE_M = 200;
 const IMMINENT_ANNOUNCE_DISTANCE_M = 50;
 const STEP_ADVANCE_THRESHOLD_M = 20;
-/** Re-route when driver deviates more than this distance from route */
-const REROUTE_THRESHOLD_M = 50;
-/** Minimum interval between re-route attempts */
-const REROUTE_COOLDOWN_MS = 10_000;
+/**
+ * Re-route when driver deviates more than this distance from route.
+ * BUG-298: lowered from 50 to 35m. Cuban urban driving has many parallel
+ * streets 30-40m apart; the previous 50m threshold missed real deviations
+ * onto a parallel street. Aligned with the client `DEVIATION_M = 35`.
+ */
+const REROUTE_THRESHOLD_M = 35;
+/**
+ * Minimum interval between re-route attempts.
+ * BUG-298: lowered from 10_000 to 4_000ms. Previous value gave ~19s worst
+ * case (1s detect + 10s cooldown + 8s fetch) between a deviation and a new
+ * route being visible — too slow when the driver has already turned. Now
+ * ~8s worst case, aligned with the client `MIN_INTERVAL_MS`.
+ */
+const REROUTE_COOLDOWN_MS = 4_000;
 
 export interface InAppNavState {
   /** Whether navigation is active */
@@ -295,17 +307,29 @@ export function useInAppNavigation(
       }
     }
 
-    // Check if driver deviated from route — trigger reroute
-    const currentStepGeom = currentStep?.geometry;
-    if (currentStepGeom && currentStepGeom.length > 0) {
-      let minDistToRoute = Infinity;
-      for (const coord of currentStepGeom) {
-        const d = haversineDistance(driverLocation, {
-          latitude: coord[0],
-          longitude: coord[1],
-        });
-        if (d < minDistToRoute) minDistToRoute = d;
-      }
+    // Check if driver deviated from route — trigger reroute.
+    //
+    // BUG-298: measure perpendicular distance to the FULL route polyline
+    // (not vertex-distance to the current step's geometry).
+    //
+    // Old behavior: iterated `currentStep.geometry` vertices and used
+    // `haversineDistance(driver, vertex)`. Two problems:
+    //   1. Vertex-distance overestimates when step segments are long: a
+    //      driver 100m perpendicular to a 200m segment can be 141m from
+    //      the nearest vertex → false positive (rerouting when on-route).
+    //   2. If the driver cuts a corner past the current step, the current
+    //      step's geometry stays behind them, so the deviation against
+    //      the OLD step keeps growing without considering segments ahead.
+    //
+    // New behavior: use `distanceToPolyline` against `route.coordinates`
+    // (full route), matching what the client RideMapView already does in
+    // `useDriverToPickupRoute.ts` (BUG-279).
+    const routeCoords = route?.coordinates;
+    if (routeCoords && routeCoords.length >= 2) {
+      const routePolyline: GeoPoint[] = routeCoords.map(
+        (pair: [number, number]) => ({ latitude: pair[0], longitude: pair[1] }),
+      );
+      const minDistToRoute = distanceToPolyline(driverLocation, routePolyline);
 
       const now = Date.now();
       if (
@@ -316,6 +340,12 @@ export function useInAppNavigation(
       ) {
         lastRerouteRef.current = now;
         setIsRerouting(true);
+        // eslint-disable-next-line no-console
+        console.log('[useInAppNavigation] reroute', {
+          off_m: Math.round(minDistToRoute),
+          threshold_m: REROUTE_THRESHOLD_M,
+          since_last_ms: now - (lastRerouteRef.current - REROUTE_COOLDOWN_MS),
+        });
         fetchRoute(driverLocation, destinationRef.current)
           .then((newRoute) => {
             if (newRoute && newRoute.steps.length > 0) {

@@ -3,7 +3,7 @@ import { View, Text, Animated, Pressable, StyleSheet, Platform, Image } from 're
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, vehicleMarkerRotationOffset } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
@@ -922,9 +922,39 @@ function RideMapViewInner(
         snappedDriver?.latitude ?? driverLocation.latitude,
       ]
     : null;
-  const effectiveDriverHeading: number =
-    snappedDriver?.bearing ??
-    (typeof driverHeading === 'number' && Number.isFinite(driverHeading) ? driverHeading : 0);
+
+  // BUG-298: smooth the effective bearing with EMA to dampen the discrete
+  // jumps that happen when `snapDriverToRoute` switches polyline segments
+  // along a curve. Without this, the marker rotation "ticks" 5-15° on each
+  // segment change in a smooth curve. The same EMA also bridges the gap
+  // when snap goes from active → null (driver deviates) so the icon doesn't
+  // flip instantly to raw GPS heading.
+  //
+  // Also: the CAMERA now reads `effectiveDriverHeading` instead of the
+  // raw `driverHeading`, so the marker icon and the street geometry below
+  // it always rotate in sync (BUG-298 root cause: camera was on raw GPS
+  // heading, marker was on snapped polyline bearing — divergence in curves).
+  //
+  // Implementation: useState + useEffect rather than useMemo with a ref
+  // mutation. Mutating a ref inside useMemo is an anti-pattern — in
+  // StrictMode (Expo dev default) useMemo runs twice per render, which
+  // would apply the EMA twice and over-smooth. useEffect runs once per
+  // commit, after the render, so the ref + state always stay coherent.
+  // Trade-off: 1 extra render per GPS update (1Hz), which is negligible.
+  const lastSmoothedHeadingRef = useRef<number | null>(null);
+  const [effectiveDriverHeading, setEffectiveDriverHeading] = useState<number>(0);
+
+  useEffect(() => {
+    const target =
+      snappedDriver?.bearing ??
+      (typeof driverHeading === 'number' && Number.isFinite(driverHeading)
+        ? driverHeading
+        : null);
+    if (target == null) return;
+    const next = smoothHeading(target, lastSmoothedHeadingRef.current);
+    lastSmoothedHeadingRef.current = next;
+    setEffectiveDriverHeading(next);
+  }, [snappedDriver?.bearing, driverHeading]);
 
   // Default center: driver location > Havana
   const defaultCenter: [number, number] = driverLocation
@@ -954,7 +984,13 @@ function RideMapViewInner(
   const tripCameraProfile = useMemo(() => {
     if (!followMode || !driverLocation) return null;
     const driverCoord = toCoord(driverLocation);
-    const heading = driverHeading ?? 0;
+    // BUG-298: camera bearing must match the marker bearing. Previously this
+    // was `driverHeading` (raw GPS+EMA from useDriverLocation), while the
+    // marker was rotated by `effectiveDriverHeading` (snap-to-route bearing).
+    // The two values diverge in curves, making the icon appear "rotated wrong"
+    // relative to the street pinted below. Unifying both to the snapped+EMA
+    // heading keeps the icon visually aligned with the route polyline.
+    const heading = effectiveDriverHeading;
 
     switch (rideStatus) {
       case 'accepted':
@@ -1030,7 +1066,12 @@ function RideMapViewInner(
     followMode,
     driverLocation?.latitude,
     driverLocation?.longitude,
+    // BUG-298: camera now reads `effectiveDriverHeading` (snapped+smoothed)
+    // instead of raw `driverHeading`. Keep both in deps so the camera
+    // re-evaluates when either the snap bearing or the raw GPS heading
+    // changes (the latter still feeds the smoothing when snap is null).
     driverHeading,
+    effectiveDriverHeading,
     rideStatus,
   ]);
 

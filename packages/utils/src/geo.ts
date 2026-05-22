@@ -256,6 +256,48 @@ export function bearingBetween(from: GeoPoint, to: GeoPoint): number {
 }
 
 /**
+ * Default smoothing factor for heading EMA. Lower = more inertia (smoother
+ * but laggier on real turns); higher = more responsive (snappier but
+ * noisier). 0.4 is calibrated for 1 Hz GPS updates in Cuban urban driving.
+ */
+export const HEADING_SMOOTHING_ALPHA = 0.4;
+
+/**
+ * Exponential moving average for heading angle, handling the 359° → 1°
+ * wrap case via signed shortest-path delta.
+ *
+ * Used to dampen:
+ *   - GPS heading jitter on slow / stationary drivers
+ *   - Noise from short-distance bearing calcs (a bearing between two
+ *     coords 2m apart has ±20° noise at typical urban GPS accuracy of
+ *     5-10m — EMA smooths that into a stable signal).
+ *   - Discrete jumps when `snapDriverToRoute` switches segments along a
+ *     curved polyline (each segment has a fixed bearing; the jump
+ *     between consecutive segments is visible as a "tick" in the marker
+ *     rotation without smoothing).
+ *
+ * Promoted from `apps/driver/src/hooks/useDriverLocation.ts` (BUG-267 v3)
+ * so RideMapView (driver + client) can reuse it to smooth `snapDriverToRoute`
+ * bearings between segment changes (BUG-298).
+ *
+ * @param raw   incoming heading in degrees [0, 360)
+ * @param prev  previous smoothed heading, or null for first sample
+ * @param alpha smoothing factor in (0, 1]; defaults to `HEADING_SMOOTHING_ALPHA`
+ * @returns smoothed heading in degrees [0, 360)
+ */
+export function smoothHeading(
+  raw: number,
+  prev: number | null,
+  alpha: number = HEADING_SMOOTHING_ALPHA,
+): number {
+  if (prev === null || !Number.isFinite(prev)) return raw;
+  let delta = raw - prev;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return (prev + alpha * delta + 360) % 360;
+}
+
+/**
  * BUG-293: snap a driver position to the nearest point on a route polyline
  * and return that segment's bearing.
  *
