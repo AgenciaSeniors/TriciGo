@@ -14,6 +14,7 @@ import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { isValidPlateNumber, sanitizeText, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 import type { VehicleType, PackageCategory, ServiceTypeSlug } from '@tricigo/types';
@@ -467,6 +468,10 @@ export default function VehicleInfoScreen() {
                 className="mt-2 mb-8"
               />
             </AnimatedCard>
+
+            {/* BUG-299: escape hatch — driver can switch accounts at any
+                onboarding step. Without this they're trapped after OTP. */}
+            <SwitchAccountFooter />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

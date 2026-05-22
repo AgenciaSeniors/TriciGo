@@ -7,9 +7,10 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { authService, driverService } from '@tricigo/api';
+import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useLogout } from '@/hooks/useLogout';
 
 // Central support contact. Update here if ops phone/whatsapp changes.
 const SUPPORT_WHATSAPP = '+5356621636'; // WhatsApp ops line
@@ -17,9 +18,7 @@ const SUPPORT_WHATSAPP = '+5356621636'; // WhatsApp ops line
 export default function PendingScreen() {
   const { t } = useTranslation('driver');
   const user = useAuthStore((s) => s.user);
-  const resetAuth = useAuthStore((s) => s.reset);
   const setProfile = useDriverStore((s) => s.setProfile);
-  const resetDriver = useDriverStore((s) => s.reset);
   const [driverStatus, setDriverStatus] = useState<string>('under_review');
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [suspensionReason, setSuspensionReason] = useState<string | null>(null);
@@ -32,11 +31,9 @@ export default function PendingScreen() {
       .catch(() => Linking.openURL(`tel:${SUPPORT_WHATSAPP}`).catch(() => {}));
   }, [t]);
 
-  const doLogout = useCallback(async () => {
-    try { await authService.signOut(); } catch { /* best-effort */ }
-    resetAuth();
-    resetDriver();
-  }, [resetAuth, resetDriver]);
+  // BUG-299: shared logout hook — same logic now used by SwitchAccountFooter
+  // in personal-info / vehicle-info / documents / review.
+  const doLogout = useLogout();
 
   const checkStatus = useCallback(async () => {
     if (!user?.id) return;

@@ -14,6 +14,7 @@ import { authService, driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import type { VehicleType } from '@tricigo/types';
 
 function useSteps() {
@@ -295,6 +296,10 @@ export default function ReviewScreen() {
             })}
           </Text>
         )}
+
+        {/* BUG-299: escape hatch — driver can switch accounts at any
+            onboarding step. Without this they're trapped after OTP. */}
+        <SwitchAccountFooter />
       </View>
     </Screen>
   );
