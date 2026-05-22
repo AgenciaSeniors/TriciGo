@@ -60,7 +60,18 @@ export function BalanceBadge({
   // rendering with the CUP equivalent as a muted subtitle. Legacy mode
   // (formatTriciCoin) is preserved when the new prop is absent so existing
   // call sites don't change behavior.
-  const isUsdMode = balanceUsdCents != null;
+  //
+  // BUG-wallet-desync: balance_usd_cents puede quedar en 0 o stale por
+  // flows que actualizan `balance` sin tocar el USD snapshot (Stripe /
+  // NETOPIA / PR #144 move / ride payments — la migración 00242 instaló
+  // la columna pero no agregó trigger que mantenga sync; lo hace la 00285).
+  // Mientras la migración 00285 no esté aplicada (o para accounts cuyo
+  // snapshot quedó stale), preferimos el `balance` legacy CUP-pegged
+  // cuando es positivo pero el USD snapshot dice 0. El modo USD real
+  // solo aplica cuando ambos son coherentes.
+  const hasFreshUsd = balanceUsdCents != null && balanceUsdCents > 0;
+  const hasLegacyOnly = !hasFreshUsd && balance > 0;
+  const isUsdMode = hasFreshUsd && !hasLegacyOnly;
   const primaryText = isUsdMode
     ? formatTriciCoinUsd(balanceUsdCents ?? 0)
     : formatTriciCoin(balance);
