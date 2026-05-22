@@ -597,6 +597,15 @@ export function useRideActions() {
         estimated_fare_cup: selectedFare?.estimated_fare_cup,
         estimated_distance_m: selectedFare?.estimated_distance_m,
         estimated_duration_s: selectedFare?.estimated_duration_s,
+        // BUG-fare-audit B1/L2: pasar el breakdown del estimate snapshot a
+        // createRide para que el RPC use los mismos rates al cobrar
+        // (parity surge + pricing_rule_id + per_km/per_min). Si selectedFare
+        // está incompleto, el RPC cae al fallback service_type_configs.
+        base_fare_cup: selectedFare?.base_fare_cup,
+        per_km_rate_cup: selectedFare?.per_km_rate_cup,
+        per_minute_rate_cup: selectedFare?.per_minute_rate_cup,
+        surge_multiplier: selectedFare?.surge_multiplier,
+        pricing_rule_id: selectedFare?.pricing_rule_id || undefined,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         // BUG-068: Validate discount is non-negative before sending
         discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discountAmount ?? 0) : undefined,

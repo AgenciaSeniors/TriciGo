@@ -67,6 +67,16 @@ export interface CreateRideParams {
   estimated_fare_cup?: number;
   estimated_distance_m?: number;
   estimated_duration_s?: number;
+  /** Breakdown que vio el rider al confirmar el viaje. Si se proveen,
+   *  `createRide` persiste un `ride_pricing_snapshots` row con
+   *  `snapshot_type='estimate'` y `complete_ride_and_pay` los usa al
+   *  cobrar (parity surge + pricing_rule_id + rates). Si no, el RPC cae
+   *  a `service_type_configs` defaults (comportamiento actual). */
+  base_fare_cup?: number;
+  per_km_rate_cup?: number;
+  per_minute_rate_cup?: number;
+  surge_multiplier?: number;
+  pricing_rule_id?: string;
   scheduled_at?: string;
   promo_code_id?: string;
   discount_amount_cup?: number;
@@ -476,6 +486,11 @@ export const rideService = {
         exchange_rate_usd_cup: exchangeRate,
         estimated_distance_m: validParams.estimated_distance_m ?? 0,
         estimated_duration_s: validParams.estimated_duration_s ?? 0,
+        // BUG-fare-audit L2: surge snapshoteado al crear el ride en vez
+        // del fetch live que hacía `complete_ride_and_pay`. Si el rider
+        // confirma con surge 1.2× y la zona sale de surge mid-viaje, el
+        // final cobra el 1.2× que se prometió, no el 1.0× live.
+        surge_multiplier: validParams.surge_multiplier ?? 1,
         scheduled_at: validParams.scheduled_at ?? null,
         is_scheduled: !!validParams.scheduled_at,
         promo_code_id: validParams.promo_code_id ?? null,
@@ -525,6 +540,54 @@ export const rideService = {
 
     // Insert waypoints if provided
     const rideData = data as Ride;
+
+    // BUG-fare-audit B1: persistir el breakdown del estimate como snapshot
+    // canónico. `complete_ride_and_pay` lo lee al cobrar (via
+    // `ride_pricing_snapshots` WHERE snapshot_type='estimate') para que el
+    // final use exactamente los rates que el rider vio (incluye surge,
+    // pricing_rule_id y per_km/per_min). Evita que cambios futuros de
+    // pricing_rules o platform_config retroactive a este ride. Best-effort:
+    // si falla, el RPC cae al fallback service_type_configs.
+    const hasEstimateBreakdown =
+      validParams.base_fare_cup != null &&
+      validParams.per_km_rate_cup != null &&
+      validParams.per_minute_rate_cup != null;
+    if (hasEstimateBreakdown) {
+      try {
+        const subtotalEstimate = validParams.estimated_fare_cup ?? 0;
+        const surgeMult = validParams.surge_multiplier ?? 1;
+        // El commission_rate del snapshot estimate queda como referencia
+        // histórica (no lo usa el RPC para el cálculo del platform-side —
+        // ese sigue leyendo `platform_config.commission_rate` live). 0.15
+        // es el default histórico.
+        const commissionRate = 0.15;
+        const commissionAmount = Math.round(subtotalEstimate * commissionRate);
+        await supabase.from('ride_pricing_snapshots').insert({
+          ride_id: rideData.id,
+          snapshot_type: 'estimate',
+          base_fare: validParams.base_fare_cup,
+          per_km_rate: validParams.per_km_rate_cup,
+          per_minute_rate: validParams.per_minute_rate_cup,
+          distance_m: validParams.estimated_distance_m ?? 0,
+          duration_s: validParams.estimated_duration_s ?? 0,
+          surge_multiplier: surgeMult,
+          subtotal: subtotalEstimate,
+          commission_rate: commissionRate,
+          commission_amount: commissionAmount,
+          total: subtotalEstimate,
+          pricing_rule_id: validParams.pricing_rule_id || null,
+          exchange_rate_usd_cup: exchangeRate,
+        });
+      } catch (snapErr) {
+        // Best-effort: snapshot failure does not block the ride. The RPC
+        // will fall back to service_type_configs at completion.
+        logger.warn('estimate_snapshot_insert_failed', {
+          rideId: rideData.id,
+          error: (snapErr as Error).message,
+        });
+      }
+    }
+
     if (validParams.waypoints && validParams.waypoints.length > 0) {
       const waypointRows = validParams.waypoints.map((wp) => ({
         ride_id: rideData.id,
