@@ -475,6 +475,10 @@ Deno.serve(async (req) => {
       status: 'created',
       payment_provider: 'netopia',
       intent_type: 'recharge',
+      // Migration 00284 routing: 'customer' → customer_cash (default),
+      // 'driver_quota' → driver_quota account. Whitelisted to avoid
+      // bad data — anything else falls back to 'customer'.
+      recharge_type: recharge_type === 'driver_quota' ? 'driver_quota' : 'customer',
     };
     if (corporate_account_id) {
       intentRow.corporate_account_id = corporate_account_id;
