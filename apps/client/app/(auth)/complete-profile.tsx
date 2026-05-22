@@ -14,6 +14,7 @@ import { authService } from '@tricigo/api';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
+import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
 
 export default function CompleteProfileScreen() {
   const { t } = useTranslation('common');
@@ -190,6 +191,13 @@ export default function CompleteProfileScreen() {
             size="lg"
             className="mt-4"
           />
+
+          {/* BUG-299b: escape hatch — user who signed in with the wrong
+              OAuth account (or otherwise wants to switch) can close the
+              session here. Without this, the only way out was to complete
+              the form (irreversible: name gets bound to current account)
+              or reinstall the app. */}
+          <SwitchAccountFooter />
         </View>
       </KeyboardAvoidingView>
     </Screen>
