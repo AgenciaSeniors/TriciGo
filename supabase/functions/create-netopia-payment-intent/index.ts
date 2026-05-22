@@ -292,14 +292,15 @@ Deno.serve(async (req) => {
 
     const body: CreateIntentRequest = await req.json();
     const { user_id, amount_usd, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
-    // NETOPIA's hosted page documents support for 'ro' and 'en' only.
-    // Any other code (incl. 'es') silently falls back to Romanian, which
-    // is unreadable for the Hispanic audience. Restrict the override to
-    // the supported set; default to English so the buttons ("Pay",
-    // card-field labels) are at least globally readable.
-    const NETOPIA_SUPPORTED_LANGS = new Set(['ro', 'en']);
+    // NETOPIA documents support for these checkout languages (per support
+    // article 44148357382033 — Cum pot afișa pagina de plată într-o altă
+    // limbă decât româna). Default to Spanish for the TriciGo audience.
+    // If the v2.x API silently falls back to Romanian for the 'Pay' button
+    // despite an officially-supported code, that's a NETOPIA-side issue
+    // (open ticket); the code keeps doing the right thing.
+    const NETOPIA_SUPPORTED_LANGS = new Set(['ro', 'en', 'it', 'hu', 'bg', 'ru', 'es', 'fr', 'de']);
     const requested = language?.toLowerCase();
-    const uiLanguage = requested && NETOPIA_SUPPORTED_LANGS.has(requested) ? requested : 'en';
+    const uiLanguage = requested && NETOPIA_SUPPORTED_LANGS.has(requested) ? requested : 'es';
     const isCorporate = !!corporate_account_id;
 
     // Reject obviously-bad return URLs early so the caller learns
