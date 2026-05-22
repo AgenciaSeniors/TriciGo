@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -1784,6 +1784,10 @@ function IdleView() {
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const userLocationSet = useRef(false);
   const [walletBalance, setWalletBalance] = useState(0);
+  // BUG-wallet-desync Cambio 4: usar exchange rate live en lugar del
+  // hardcode /500 del BalanceHeroCard. Si el fetch falla, mantiene 500
+  // (comportamiento previo) → sin regresión.
+  const [usdCupRate, setUsdCupRate] = useState(500);
   // Home content feed — promotions + blog posts + campañas shown on idle view
   // (after recents, before services). See docs/superpowers/specs/
   // 2026-04-29-home-content-cards-design.md.
@@ -1899,6 +1903,13 @@ function IdleView() {
         const bal = await walletService.getBalance(user.id);
         if (!cancelled) setWalletBalance(bal.available);
       } catch (err) { logger.warn('Failed to load wallet', { error: String(err) }); }
+      // BUG-wallet-desync Cambio 4: traer exchange rate vigente para
+      // que el USD mostrado debajo del balance refleje el rate real
+      // (antes hardcoded /500). Best-effort: si falla, queda el default 500.
+      try {
+        const rate = await exchangeRateService.getUsdCupRate();
+        if (!cancelled && rate > 0) setUsdCupRate(rate);
+      } catch { /* best-effort, queda en 500 */ }
       if (!cancelled) setInitialLoading(false);
     })();
     return () => { cancelled = true; };
@@ -2215,7 +2226,7 @@ function IdleView() {
         {/* ── Balance ── */}
         <BalanceHeroCard
           balanceTc={walletBalance}
-          balanceUsd={walletBalance / 500}
+          balanceUsd={walletBalance / usdCupRate}
           mode={mode}
           label={t('home.balance_label', { defaultValue: 'Saldo disponible' })}
           onPress={() => router.push('/wallet' as never)}
