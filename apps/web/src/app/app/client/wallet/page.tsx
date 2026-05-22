@@ -11,20 +11,26 @@
 // opens the app directly — this page never renders.
 //
 // If the link is opened on a device without the app installed (or
-// universal link verification failed) this page renders with two
-// paths:
-//   1. "Abrir en TriciGo" — deep-link to `tricigo://wallet?intent=<id>`
-//      (custom scheme), guaranteed to open the app if installed even
-//      when universal link verification is off.
-//   2. "Continuar en el navegador" — fall back to the web wallet at
-//      `/wallet?intent=<id>` to finish the recharge there.
+// universal link verification failed) this page renders a single
+// path: "Abrir en TriciGo" — deep-link to
+// `tricigo://wallet?intent=<id>` (custom scheme), which is
+// guaranteed to open the app if installed even when universal link
+// verification is off.
 //
-// Desktop browsers go straight to (2) since they cannot open the app.
+// The "Continuar en el navegador" web fallback was removed (mirrors
+// the driver bridge fix in commit 9caab52 / PR #145). The recharge
+// is already processed server-side by the time the user reaches
+// this bridge — the web fallback used to drop mobile users into a
+// confusing web wallet that required a separate login, with no
+// added benefit. Better to nudge them back into the app where the
+// balance is already credited.
+//
+// Desktop browsers redirect to /wallet upfront since they cannot
+// open the app at all.
 // ============================================================
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 function isMobileUA(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -55,7 +61,6 @@ export default function ClientAppWalletBridge() {
   const customSchemeUrl = intent
     ? `tricigo://wallet?intent=${encodeURIComponent(intent)}`
     : 'tricigo://wallet';
-  const webFallbackUrl = intent ? `/wallet?intent=${encodeURIComponent(intent)}` : '/wallet';
 
   return (
     <main className="page-main" style={{ justifyContent: 'center' }}>
@@ -145,18 +150,6 @@ export default function ClientAppWalletBridge() {
           >
             Abrir en TriciGo
           </a>
-
-          <Link
-            href={webFallbackUrl}
-            className="btn-base btn-secondary-outline"
-            style={{
-              width: '100%',
-              minHeight: 48,
-              fontSize: '0.9375rem',
-            }}
-          >
-            Continuar en el navegador
-          </Link>
         </div>
 
         {/* Footnote */}
@@ -169,7 +162,7 @@ export default function ClientAppWalletBridge() {
             lineHeight: 1.4,
           }}
         >
-          Si no tenés la app, podés terminar la recarga directamente en el navegador.
+          Si la app no se abrió automáticamente, tocá el botón de arriba o abrila manualmente — el saldo ya está acreditado en tu cuenta.
         </p>
       </div>
     </main>
