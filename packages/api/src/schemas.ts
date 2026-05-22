@@ -31,6 +31,14 @@ export const createRideSchema = z.object({
   estimated_fare_cup: z.number().positive().max(1000000).optional(),
   estimated_distance_m: z.number().positive().optional(),
   estimated_duration_s: z.number().positive().optional(),
+  // Breakdown del estimate snapshot — opcional. Si se proveen, createRide
+  // persiste un `ride_pricing_snapshots` row con `snapshot_type='estimate'`
+  // que `complete_ride_and_pay` lee al cobrar (parity estimate↔final).
+  base_fare_cup: z.number().nonnegative().max(1000000).optional(),
+  per_km_rate_cup: z.number().nonnegative().max(100000).optional(),
+  per_minute_rate_cup: z.number().nonnegative().max(100000).optional(),
+  surge_multiplier: z.number().min(0.5).max(5).optional(),
+  pricing_rule_id: z.string().optional(),
   scheduled_at: z.string().datetime().optional(),
   promo_code_id: uuidSchema.optional(),
   discount_amount_cup: z.number().nonnegative().optional(),

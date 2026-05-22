@@ -904,6 +904,14 @@ function WebHomeScreen() {
         estimated_fare_cup: freshEstimate.estimated_fare_cup,
         estimated_distance_m: freshEstimate.estimated_distance_m,
         estimated_duration_s: freshEstimate.estimated_duration_s,
+        // BUG-fare-audit B1/L2: pasar el breakdown del estimate snapshot
+        // (mismo patrón que useRide.confirmRide). createRide lo persiste
+        // en `ride_pricing_snapshots` y el RPC lo lee al cobrar.
+        base_fare_cup: freshEstimate.base_fare_cup,
+        per_km_rate_cup: freshEstimate.per_km_rate_cup,
+        per_minute_rate_cup: freshEstimate.per_minute_rate_cup,
+        surge_multiplier: freshEstimate.surge_multiplier,
+        pricing_rule_id: freshEstimate.pricing_rule_id || undefined,
         ...(isScheduled && scheduleDate && { scheduled_at: new Date(scheduleDate).toISOString() }),
         ...(promoResult?.valid && promoResult.promoId && { promo_code_id: promoResult.promoId, discount_amount_cup: promoResult.discount }),
         ...(serviceType === 'mensajeria' && {
