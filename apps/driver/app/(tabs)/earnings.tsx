@@ -52,6 +52,7 @@ import { useDriverPeakHours } from '@/hooks/useDriverPeakHours';
 import { EarningsByZoneChart } from '@/components/EarningsByZoneChart';
 import { useDriverEarningsByZone } from '@/hooks/useDriverEarningsByZone';
 import { useEarningsData, getDateRange, type Period } from '@/hooks/useEarningsData';
+import { tripNetEarnings } from '@/utils/tripNetEarnings';
 import { EarningsHeader } from '@/components/earnings/EarningsHeader';
 import { PeriodTabs } from '@/components/earnings/PeriodTabs';
 import { EarningsGoalCard } from '@/components/earnings/EarningsGoalCard';
@@ -64,8 +65,17 @@ import { RecentActivitySection } from '@/components/earnings/RecentActivitySecti
  * Aggregate completed trips by their day-of-week label so the
  * `EarningsBarChart` can render one bar per day. Kept here because the
  * orchestrator is the only consumer.
+ *
+ * BUG-fare-audit B5: each bar now reports NET earnings (fare − commission
+ * + tip) via `tripNetEarnings`, matching the today/prev totals from
+ * useEarningsData and the receipt PDF — previously each bar showed gross
+ * `final_fare_cup`, which made the chart sum higher than the headline
+ * "Hoy" stat just above it.
  */
-function groupTripsByDay(trips: Ride[]): Map<string, { earnings: number; count: number }> {
+function groupTripsByDay(
+  trips: Ride[],
+  commissionRate: number,
+): Map<string, { earnings: number; count: number }> {
   const grouped = new Map<string, { earnings: number; count: number }>();
   for (const trip of trips) {
     const dateKey = new Date(trip.completed_at ?? trip.created_at).toLocaleDateString('es-CU', {
@@ -73,7 +83,7 @@ function groupTripsByDay(trips: Ride[]): Map<string, { earnings: number; count: 
       month: '2-digit',
     });
     const existing = grouped.get(dateKey) ?? { earnings: 0, count: 0 };
-    existing.earnings += trip.final_fare_cup ?? trip.estimated_fare_cup;
+    existing.earnings += tripNetEarnings(trip, commissionRate);
     existing.count += 1;
     grouped.set(dateKey, existing);
   }
@@ -172,7 +182,7 @@ function NativeEarningsScreen() {
 
   // Convert dailyData to BarChartDataPoint[]
   const chartData: BarChartDataPoint[] = useMemo(() => {
-    const dailyData = groupTripsByDay(periodTrips);
+    const dailyData = groupTripsByDay(periodTrips, commissionRate);
     const today = new Date().toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit' });
     return Array.from(dailyData.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -181,7 +191,7 @@ function NativeEarningsScreen() {
         value: val.earnings,
         isToday: label === today,
       }));
-  }, [periodTrips]);
+  }, [periodTrips, commissionRate]);
 
   // Trend percentage
   const trendPct = useMemo(() => {
