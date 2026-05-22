@@ -292,10 +292,15 @@ Deno.serve(async (req) => {
 
     const body: CreateIntentRequest = await req.json();
     const { user_id, amount_usd, recharge_type = 'customer', corporate_account_id, device_fingerprint, return_url_base, language } = body;
-    // Default to Spanish for the TriciGo audience. NETOPIA's hosted page
-    // falls back to Romanian if the code isn't supported — if that
-    // happens, change this default to 'en'.
-    const uiLanguage = (language && /^[a-z]{2}$/i.test(language)) ? language.toLowerCase() : 'es';
+    // NETOPIA documents support for these checkout languages (per support
+    // article 44148357382033 — Cum pot afișa pagina de plată într-o altă
+    // limbă decât româna). Default to Spanish for the TriciGo audience.
+    // If the v2.x API silently falls back to Romanian for the 'Pay' button
+    // despite an officially-supported code, that's a NETOPIA-side issue
+    // (open ticket); the code keeps doing the right thing.
+    const NETOPIA_SUPPORTED_LANGS = new Set(['ro', 'en', 'it', 'hu', 'bg', 'ru', 'es', 'fr', 'de']);
+    const requested = language?.toLowerCase();
+    const uiLanguage = requested && NETOPIA_SUPPORTED_LANGS.has(requested) ? requested : 'es';
     const isCorporate = !!corporate_account_id;
 
     // Reject obviously-bad return URLs early so the caller learns
@@ -471,6 +476,10 @@ Deno.serve(async (req) => {
       status: 'created',
       payment_provider: 'netopia',
       intent_type: 'recharge',
+      // Migration 00284 routing: 'customer' → customer_cash (default),
+      // 'driver_quota' → driver_quota account. Whitelisted to avoid
+      // bad data — anything else falls back to 'customer'.
+      recharge_type: recharge_type === 'driver_quota' ? 'driver_quota' : 'customer',
     };
     if (corporate_account_id) {
       intentRow.corporate_account_id = corporate_account_id;

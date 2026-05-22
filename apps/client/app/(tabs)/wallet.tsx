@@ -698,6 +698,23 @@ function NativeWalletScreen() {
   const MIN_RECHARGE_USD = RECHARGE_LIMITS.customer.min;
   const MAX_RECHARGE_USD = RECHARGE_LIMITS.customer.max;
 
+  // Wallet v2 PR 4: native receipt opener uses Linking.openURL (web build
+  // never reaches NativeWalletScreen, so window.open is not needed here).
+  // Declared BEFORE submitRecharge so the latter can pass it as a deps
+  // (the success-step poll Toast uses it as the onPress handler).
+  const openReceiptNative = useCallback(async (storagePath: string, receiptNo: string) => {
+    setOpeningReceipt(receiptNo);
+    try {
+      const url = await walletService.getReceiptSignedUrl(storagePath);
+      await Linking.openURL(url);
+    } catch (err) {
+      logger.error('Receipt open failed', { error: String(err) });
+      Toast.show({ type: 'error', text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }) });
+    } finally {
+      setOpeningReceipt(null);
+    }
+  }, [t]);
+
   // Post-2026-05-20 cutover: mobile recharge opens the web wallet,
   // where NETOPIA's hosted payment page runs. The native Stripe
   // PaymentSheet path was removed because (a) NETOPIA does not ship
@@ -737,26 +754,20 @@ function NativeWalletScreen() {
       //    NETOPIA redirija al dismissUrl (= nuestro returnUrl + ?intent=<id>),
       //    momento en que el sistema cierra el browser y nos devuelve aquí.
       const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      const browserResult = await WebBrowser.openAuthSessionAsync(
+      await WebBrowser.openAuthSessionAsync(
         result.redirectUrl,
         dismissUrl,
       );
 
-      // 3. Branch on the result.
-      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
-        // User cerró el browser sin completar. NO marcar failed — NETOPIA
-        // puede todavía emitir el IPN. Dejamos el intent en `pending`.
-        Toast.show({
-          type: 'info',
-          text1: t('wallet.recharge_cancelled', { defaultValue: 'Pago cancelado' }),
-        });
-        return;
-      }
-
-      // 4. browserResult.type === 'success' — poll the intent.
+      // 3. ALWAYS poll the intent — browser dismissal type is NOT a
+      //    reliable success/cancel signal. If the universal link fails
+      //    to open the app, the user closes the browser manually and
+      //    we get `dismiss`/`cancel` even though NETOPIA already
+      //    processed the IPN. The DB is the source of truth.
+      //    (Same fix as driver in apps/driver/app/wallet/recharge.tsx.)
       Toast.show({
         type: 'info',
-        text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
+        text1: t('wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
       });
       const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
       if (final.status === 'completed') {
@@ -766,6 +777,47 @@ function NativeWalletScreen() {
           text2: `+${result.amountCupCredited.toLocaleString()} TC`,
         });
         await fetchData();
+        // RECARGA V2 PARITY: the receipt PDF is generated async by the
+        // webhook (~5-10s after the intent settles). Poll wallet_receipts
+        // for up to ~12s; once we see the row, splice it into the inline
+        // map (so the historial row immediately gets its download button)
+        // and surface a tappable Toast so the user can open the PDF in
+        // one tap without scrolling to the new txn.
+        void (async () => {
+          for (let i = 0; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+              const receipts = await walletService.getReceipts(userId, 5);
+              const found = receipts.find(
+                (r) => r.payment_intent_id === result.intentId && r.pdf_storage_path,
+              );
+              if (found?.pdf_storage_path) {
+                setReceiptByPiId((prev) => {
+                  const next = new Map(prev);
+                  next.set(found.payment_intent_id, {
+                    receipt_no: found.receipt_no,
+                    pdf_storage_path: found.pdf_storage_path,
+                  });
+                  return next;
+                });
+                Toast.show({
+                  type: 'success',
+                  text1: t('wallet.recharge_receipt_ready', {
+                    defaultValue: 'Comprobante listo',
+                  }),
+                  text2: t('wallet.tap_to_view_receipt', {
+                    defaultValue: 'Tocá para ver el PDF',
+                  }),
+                  onPress: () => openReceiptNative(found.pdf_storage_path!, found.receipt_no),
+                  visibilityTime: 8000,
+                });
+                return;
+              }
+            } catch {
+              /* Non-fatal: user can still download from the txn list. */
+            }
+          }
+        })();
       } else if (final.status === 'failed') {
         Toast.show({
           type: 'error',
@@ -773,11 +825,15 @@ function NativeWalletScreen() {
           text2: final.error_message ?? undefined,
         });
       } else {
-        // Pending — webhook todavía no llegó. Soft: el polling siguió a `pending`,
-        // el push notification del IPN cubrirá el resultado final.
+        // status='pending' / 'created' / 'processing' — webhook still in
+        // flight (or user closed the browser before paying). Push notif
+        // covers the final outcome; show a soft "verifying" with hint.
         Toast.show({
           type: 'info',
           text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
+          text2: t('wallet.recharge_pending_hint', {
+            defaultValue: 'Te avisaremos por notificación cuando termine.',
+          }),
         });
       }
     } catch (err) {
@@ -787,7 +843,7 @@ function NativeWalletScreen() {
       setRechargeSubmitting(false);
       setIsProcessing(false);
     }
-  }, [userId, rechargeAmount, exchangeRate, t, fetchData]);
+  }, [userId, rechargeAmount, exchangeRate, t, fetchData, openReceiptNative, MAX_RECHARGE_USD, MIN_RECHARGE_USD]);
   const debouncedSubmitRecharge = useDebouncePress(submitRecharge);
 
   // BUG-280 — Monthly spending insights, fixed.
@@ -858,21 +914,6 @@ function NativeWalletScreen() {
     { key: 'bonus', label: t('wallet.filter_bonus', { defaultValue: 'Bonos' }) },
     { key: 'adjustment', label: t('wallet.filter_adjustment', { defaultValue: 'Ajustes' }) },
   ];
-
-  // Wallet v2 PR 4: native receipt opener uses Linking.openURL (web build
-  // never reaches NativeWalletScreen, so window.open is not needed here).
-  const openReceiptNative = useCallback(async (storagePath: string, receiptNo: string) => {
-    setOpeningReceipt(receiptNo);
-    try {
-      const url = await walletService.getReceiptSignedUrl(storagePath);
-      await Linking.openURL(url);
-    } catch (err) {
-      logger.error('Receipt open failed', { error: String(err) });
-      Toast.show({ type: 'error', text1: t('wallet.receipt_open_failed', { defaultValue: 'No pudimos abrir el comprobante' }) });
-    } finally {
-      setOpeningReceipt(null);
-    }
-  }, [t]);
 
   const renderTransaction = ({ item, index }: { item: TransactionWithAmount; index: number }) => {
     const amount = item.ledger_entries?.[0]?.amount ?? 0;

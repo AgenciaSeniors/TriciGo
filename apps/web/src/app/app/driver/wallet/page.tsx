@@ -11,7 +11,6 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 function isMobileUA(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -40,7 +39,11 @@ export default function DriverAppWalletBridge() {
   const customSchemeUrl = intent
     ? `tricigo-driver://wallet?intent=${encodeURIComponent(intent)}`
     : 'tricigo-driver://wallet';
-  const webFallbackUrl = intent ? `/wallet?intent=${encodeURIComponent(intent)}` : '/wallet';
+  // No web fallback here: the driver wallet only exists in the mobile
+  // app (no `/wallet/driver` web surface). If the universal link to
+  // `tricigo-driver://` fails to open the app, the only correct path
+  // is for the driver to open the app manually — the recharge is
+  // already credited server-side by the time we land on this page.
 
   return (
     <main className="page-main" style={{ justifyContent: 'center' }}>
@@ -134,7 +137,10 @@ export default function DriverAppWalletBridge() {
           </p>
         </div>
 
-        {/* CTAs */}
+        {/* CTAs — only the open-in-app action. The recharge is already
+            credited server-side by the webhook; the browser fallback that
+            used to live here pointed at /wallet (rider surface), which
+            confused drivers, so it was removed in PR #145. */}
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
           <a
             href={customSchemeUrl}
@@ -148,18 +154,6 @@ export default function DriverAppWalletBridge() {
           >
             Abrir en TriciGo Conductor
           </a>
-
-          <Link
-            href={webFallbackUrl}
-            className="btn-base btn-secondary-outline"
-            style={{
-              width: '100%',
-              minHeight: 48,
-              fontSize: '0.9375rem',
-            }}
-          >
-            Continuar en el navegador
-          </Link>
         </div>
 
         {/* Footnote */}
@@ -172,7 +166,7 @@ export default function DriverAppWalletBridge() {
             lineHeight: 1.4,
           }}
         >
-          Si no tenés la app, podés terminar la recarga directamente en el navegador.
+          Si la app no se abrió automáticamente, tocá el botón de arriba o abrila manualmente — el saldo ya está acreditado en tu cuenta.
         </p>
       </div>
     </main>
