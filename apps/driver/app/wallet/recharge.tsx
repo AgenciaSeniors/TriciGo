@@ -119,24 +119,26 @@ export default function RechargeScreen() {
       //    NETOPIA redirija al dismissUrl, momento en que el sistema cierra
       //    el browser y nos devuelve aquí.
       const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      const browserResult = await WebBrowser.openAuthSessionAsync(
+      await WebBrowser.openAuthSessionAsync(
         result.redirectUrl,
         dismissUrl,
       );
 
-      // 3. Branch on the result.
-      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
-        Toast.show({
-          type: 'info',
-          text1: t('wallet.recharge_cancelled', { defaultValue: 'Pago cancelado' }),
-        });
-        return;
-      }
-
-      // 4. browserResult.type === 'success' — poll the intent.
+      // 3. ALWAYS poll the intent — the browser dismissal `type` is NOT
+      //    a reliable success/cancel signal:
+      //      - `success` happens when the universal link bounces back
+      //        to the app (best case).
+      //      - `cancel`/`dismiss` happens when the user closes the
+      //        browser MANUALLY, which is what happens whenever the
+      //        universal link to `tricigo-driver://` fails to open the
+      //        app (e.g. an APK without the right intentFilters, the
+      //        assetlinks.json not resolving, system-browser quirks).
+      //    In both cases NETOPIA may have already processed the IPN —
+      //    the `payment_intents` row in the DB is the source of truth.
+      //    See plan section "Bug 4" (rol-eres-un-auditor-immutable-platypus.md).
       Toast.show({
         type: 'info',
-        text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
+        text1: t('wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
       });
       const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
       if (final.status === 'completed') {
@@ -183,9 +185,15 @@ export default function RechargeScreen() {
           text2: final.error_message ?? undefined,
         });
       } else {
+        // status='pending' / 'created' / 'processing' — webhook still in
+        // flight (or user closed the browser before paying). Push will
+        // cover the eventual outcome; show a soft "verifying" message.
         Toast.show({
           type: 'info',
           text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
+          text2: t('wallet.recharge_pending_hint', {
+            defaultValue: 'Te avisaremos por notificación cuando termine.',
+          }),
         });
       }
     } catch (err) {

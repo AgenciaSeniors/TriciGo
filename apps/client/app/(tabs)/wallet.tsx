@@ -754,26 +754,20 @@ function NativeWalletScreen() {
       //    NETOPIA redirija al dismissUrl (= nuestro returnUrl + ?intent=<id>),
       //    momento en que el sistema cierra el browser y nos devuelve aquí.
       const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      const browserResult = await WebBrowser.openAuthSessionAsync(
+      await WebBrowser.openAuthSessionAsync(
         result.redirectUrl,
         dismissUrl,
       );
 
-      // 3. Branch on the result.
-      if (browserResult.type === 'cancel' || browserResult.type === 'dismiss') {
-        // User cerró el browser sin completar. NO marcar failed — NETOPIA
-        // puede todavía emitir el IPN. Dejamos el intent en `pending`.
-        Toast.show({
-          type: 'info',
-          text1: t('wallet.recharge_cancelled', { defaultValue: 'Pago cancelado' }),
-        });
-        return;
-      }
-
-      // 4. browserResult.type === 'success' — poll the intent.
+      // 3. ALWAYS poll the intent — browser dismissal type is NOT a
+      //    reliable success/cancel signal. If the universal link fails
+      //    to open the app, the user closes the browser manually and
+      //    we get `dismiss`/`cancel` even though NETOPIA already
+      //    processed the IPN. The DB is the source of truth.
+      //    (Same fix as driver in apps/driver/app/wallet/recharge.tsx.)
       Toast.show({
         type: 'info',
-        text1: t('wallet.processing_recharge', { defaultValue: 'Procesando recarga...' }),
+        text1: t('wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
       });
       const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
       if (final.status === 'completed') {
@@ -831,11 +825,15 @@ function NativeWalletScreen() {
           text2: final.error_message ?? undefined,
         });
       } else {
-        // Pending — webhook todavía no llegó. Soft: el polling siguió a `pending`,
-        // el push notification del IPN cubrirá el resultado final.
+        // status='pending' / 'created' / 'processing' — webhook still in
+        // flight (or user closed the browser before paying). Push notif
+        // covers the final outcome; show a soft "verifying" with hint.
         Toast.show({
           type: 'info',
           text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
+          text2: t('wallet.recharge_pending_hint', {
+            defaultValue: 'Te avisaremos por notificación cuando termine.',
+          }),
         });
       }
     } catch (err) {
