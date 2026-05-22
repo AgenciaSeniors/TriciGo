@@ -228,6 +228,28 @@ function RideMapViewInner({
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();
 
+  // Diagnostic mount log — user reported a ~700px black area where the map
+  // should be during the rider `searching` state on iOS. The map renders
+  // fine in accepted/driver_en_route/arrived_at_pickup, so the failure is
+  // mount-time / state-specific. This log captures the inputs Mapbox got
+  // at first render so we can correlate with Sentry / console logs without
+  // shipping a heavier instrumentation pass.
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('[RideMapView] mount', {
+        hasMapboxGL: !!MapboxGL,
+        hasToken: !!process.env.EXPO_PUBLIC_MAPBOX_TOKEN,
+        platform: Platform.OS,
+        height,
+        fullscreen: !!fullscreen,
+        hasPickup: !!pickupLocation,
+        hasDropoff: !!dropoffLocation,
+        rideStatus: rideStatus ?? null,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ant-march animation — 60fps via requestAnimationFrame + setState throttled
   const [dashStep, setDashStep] = useState(0);
   const dashStepRef = useRef(0);
