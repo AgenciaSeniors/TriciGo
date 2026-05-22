@@ -75,6 +75,7 @@ export interface CreateRideParams {
   base_fare_cup?: number;
   per_km_rate_cup?: number;
   per_minute_rate_cup?: number;
+  min_fare_cup?: number;
   surge_multiplier?: number;
   pricing_rule_id?: string;
   scheduled_at?: string;
@@ -401,6 +402,10 @@ export const rideService = {
       base_fare_cup: baseFare,
       per_minute_rate_cup: perMinRate,
       min_fare_applied: fareResult.minFareApplied,
+      // BUG-fare-audit-followup Cambio 3: exponer el min_fare efectivo
+      // (puede venir de la pricing rule o del service default) para que
+      // el client lo pase a createRide y el RPC lo use como floor.
+      min_fare_cup: minFare,
       exchange_rate_usd_cup: exchangeRate,
       fare_range_min_cup: fareRange.minFareCup,
       fare_range_max_cup: fareRange.maxFareCup,
@@ -556,18 +561,60 @@ export const rideService = {
       try {
         const subtotalEstimate = validParams.estimated_fare_cup ?? 0;
         const surgeMult = validParams.surge_multiplier ?? 1;
-        // El commission_rate del snapshot estimate queda como referencia
-        // histórica (no lo usa el RPC para el cálculo del platform-side —
-        // ese sigue leyendo `platform_config.commission_rate` live). 0.15
-        // es el default histórico.
-        const commissionRate = 0.15;
+
+        // BUG-fare-audit-followup Cambio 2: leer commission_rate del
+        // platform_config en lugar de hardcodear 0.15. Si el default
+        // cambia entre el pedido y el completion, el snapshot ahora
+        // captura el valor real del momento — la migración 00283 lo lee
+        // en `complete_ride_and_pay`. Best-effort: si falla, queda 0.15.
+        let commissionRate = 0.15;
+        try {
+          const { data: cfg } = await supabase
+            .from('platform_config')
+            .select('value')
+            .eq('key', 'commission_rate')
+            .maybeSingle();
+          const raw = cfg?.value;
+          const parsed = raw != null ? parseFloat(String(raw).replace(/"/g, '')) : NaN;
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) commissionRate = parsed;
+        } catch { /* best-effort: queda 0.15 */ }
+
+        // BUG-fare-audit-followup Cambio 4: snapshotear la commission_rate
+        // del corporate account (si aplica). Acompañada del default
+        // platform en `default_commission_rate_snapshot` para que la
+        // lógica del 00236 (corporate override) sea estable ante cambios
+        // mid-trip. Si el ride no es corporate, queda null.
+        let corporateCommissionRate: number | null = null;
+        if (validParams.corporate_account_id) {
+          try {
+            const { data: corp } = await supabase
+              .from('corporate_accounts')
+              .select('commission_percent')
+              .eq('id', validParams.corporate_account_id)
+              .maybeSingle();
+            const pct = (corp as { commission_percent?: number | string } | null)?.commission_percent;
+            if (pct != null) {
+              const parsed = typeof pct === 'string' ? parseFloat(pct) : pct;
+              if (!isNaN(parsed) && parsed > 0 && parsed < 100) {
+                corporateCommissionRate = parsed / 100;
+              }
+            }
+          } catch { /* best-effort: queda null, RPC lee live */ }
+        }
+
         const commissionAmount = Math.round(subtotalEstimate * commissionRate);
+        // BUG-fare-audit-followup Cambio 3+4: agregar min_fare,
+        // corporate_commission_rate, default_commission_rate_snapshot al
+        // INSERT. Estas columnas las agrega la migración 00283; si todavía
+        // no se aplicó en prod, el INSERT falla con "columna desconocida"
+        // y el catch externo deja todo en best-effort (sin romper el ride).
         await supabase.from('ride_pricing_snapshots').insert({
           ride_id: rideData.id,
           snapshot_type: 'estimate',
           base_fare: validParams.base_fare_cup,
           per_km_rate: validParams.per_km_rate_cup,
           per_minute_rate: validParams.per_minute_rate_cup,
+          min_fare: validParams.min_fare_cup ?? null,
           distance_m: validParams.estimated_distance_m ?? 0,
           duration_s: validParams.estimated_duration_s ?? 0,
           surge_multiplier: surgeMult,
@@ -577,10 +624,13 @@ export const rideService = {
           total: subtotalEstimate,
           pricing_rule_id: validParams.pricing_rule_id || null,
           exchange_rate_usd_cup: exchangeRate,
+          corporate_commission_rate: corporateCommissionRate,
+          default_commission_rate_snapshot: commissionRate,
         });
       } catch (snapErr) {
         // Best-effort: snapshot failure does not block the ride. The RPC
-        // will fall back to service_type_configs at completion.
+        // will fall back to service_type_configs / live commission rates
+        // at completion (mismo comportamiento que pre-PR #147).
         logger.warn('estimate_snapshot_insert_failed', {
           rideId: rideData.id,
           error: (snapErr as Error).message,

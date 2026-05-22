@@ -604,6 +604,10 @@ export function useRideActions() {
         base_fare_cup: selectedFare?.base_fare_cup,
         per_km_rate_cup: selectedFare?.per_km_rate_cup,
         per_minute_rate_cup: selectedFare?.per_minute_rate_cup,
+        // BUG-fare-audit-followup Cambio 3: snapshotear min_fare para que
+        // el RPC use el floor del estimate cuando aplica (pricing rule con
+        // min_fare > service default).
+        min_fare_cup: selectedFare?.min_fare_cup,
         surge_multiplier: selectedFare?.surge_multiplier,
         pricing_rule_id: selectedFare?.pricing_rule_id || undefined,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
