@@ -97,6 +97,11 @@ export interface FareEstimate {
   per_minute_rate_cup: number;
   /** Whether minimum fare was applied (raw calc was below min) */
   min_fare_applied: boolean;
+  /** Effective min fare floor used (CUP/TRC whole units). When the
+   *  pricing rule defines a min_fare it overrides the service default.
+   *  Snapshoteado al crear el ride en `ride_pricing_snapshots.min_fare`
+   *  para que `complete_ride_and_pay` use el mismo floor al cobrar. */
+  min_fare_cup?: number;
   /** Exchange rate used: 1 USD = X CUP/TRC (from eltoque) */
   exchange_rate_usd_cup: number;
   /** Minimum expected fare in CUP/TRC (considering traffic variance) */

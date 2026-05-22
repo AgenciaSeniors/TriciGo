@@ -910,6 +910,8 @@ function WebHomeScreen() {
         base_fare_cup: freshEstimate.base_fare_cup,
         per_km_rate_cup: freshEstimate.per_km_rate_cup,
         per_minute_rate_cup: freshEstimate.per_minute_rate_cup,
+        // BUG-fare-audit-followup Cambio 3: ver useRide.ts:609 para contexto.
+        min_fare_cup: freshEstimate.min_fare_cup,
         surge_multiplier: freshEstimate.surge_multiplier,
         pricing_rule_id: freshEstimate.pricing_rule_id || undefined,
         ...(isScheduled && scheduleDate && { scheduled_at: new Date(scheduleDate).toISOString() }),

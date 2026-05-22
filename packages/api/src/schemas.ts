@@ -37,6 +37,10 @@ export const createRideSchema = z.object({
   base_fare_cup: z.number().nonnegative().max(1000000).optional(),
   per_km_rate_cup: z.number().nonnegative().max(100000).optional(),
   per_minute_rate_cup: z.number().nonnegative().max(100000).optional(),
+  // Min fare snapshoteado en el estimate (B6 follow-up). El RPC lo
+  // usa como floor del cálculo final cuando el snapshot está presente,
+  // sino cae al `service_type_configs.min_fare_cup` live.
+  min_fare_cup: z.number().nonnegative().max(100000).optional(),
   surge_multiplier: z.number().min(0.5).max(5).optional(),
   pricing_rule_id: z.string().optional(),
   scheduled_at: z.string().datetime().optional(),

@@ -575,17 +575,55 @@ export function useDriverRideActions() {
               try {
                 const fresh = await rideService.getRideWithDriver(activeTrip.id);
                 if (fresh?.status === 'completed' && fresh.final_fare_cup) {
+                  // BUG-fare-audit-followup: enriquecer el reconstruct con el
+                  // snapshot final del `ride_pricing_snapshots` para que
+                  // commission_amount + driver_earnings + surge salgan reales
+                  // (antes quedaban 0/1 y la UI mostraba ganancias incorrectas
+                  // cuando el RPC ya había completado pero la respuesta no
+                  // llegó al cliente). Best-effort: si el fetch falla, caemos
+                  // al fallback ?? 0.
+                  let snapCommission = 0;
+                  let snapSurge: number | null = null;
+                  let snapPricingRuleId: string | null = null;
+                  try {
+                    const snap = await rideService.getPricingSnapshot(activeTrip.id);
+                    if (snap) {
+                      snapCommission = snap.commission_amount ?? 0;
+                      snapSurge = snap.surge_multiplier ?? null;
+                      snapPricingRuleId = snap.pricing_rule_id ?? null;
+                    }
+                  } catch { /* best-effort */ }
+                  const finalFare = fresh.final_fare_cup;
+                  // Cast via unknown porque la reconstrucción no puede
+                  // conocer quota_balance_after post-hoc (sale del RPC
+                  // en el happy path); el shape recovered es suficiente
+                  // para los consumers (TripCompleteView, navigation a
+                  // ride/[id]) pero TS no puede probarlo en una sola
+                  // pasada.
                   result = {
-                    final_fare_cup: fresh.final_fare_cup,
+                    final_fare_cup: finalFare,
                     final_fare_trc: fresh.final_fare_trc ?? 0,
+                    final_fare_usd: fresh.final_fare_usd ?? 0,
                     exchange_rate_usd_cup: fresh.exchange_rate_usd_cup ?? 1,
-                    commission_amount: 0,
-                    driver_earnings: 0,
+                    commission_amount: snapCommission,
+                    driver_earnings: finalFare - snapCommission,
                     payment_method: fresh.payment_method ?? 'cash',
                     share_token: fresh.share_token ?? '',
-                    surge_multiplier: 1,
+                    surge_multiplier: snapSurge ?? fresh.surge_multiplier ?? 1,
+                    driver_custom_rate_cup: fresh.driver_custom_rate_cup ?? null,
                     payment_status: fresh.payment_status ?? 'not_applicable',
-                  } as Awaited<ReturnType<typeof driverService.completeRide>>;
+                    quota_deduction_amount: fresh.quota_deduction_amount ?? 0,
+                    quota_balance_after: 0,
+                    // PR #147 fields exposed by complete_ride_and_pay return.
+                    wait_time_charge_cup: fresh.wait_time_charge_cup ?? 0,
+                    pricing_rule_id: snapPricingRuleId,
+                    estimate_snapshot_present: null,
+                    // Preexisting 00247 field — línea 615 abajo lo lee para
+                    // mostrar el modal de justificación de distancia exceso.
+                    // Antes quedaba undefined y el modal nunca aparecía si
+                    // caíamos en este recovery path.
+                    excess_distance_uncharged_m: fresh.excess_distance_uncharged_m ?? 0,
+                  } as unknown as Awaited<ReturnType<typeof driverService.completeRide>>;
                   break;
                 }
               } catch { /* fall through to retry */ }
