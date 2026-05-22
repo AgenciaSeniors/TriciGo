@@ -30,6 +30,7 @@ import { reviewService } from '@tricigo/api/services/review';
 import { questService } from '@tricigo/api/services/quest';
 import type { Ride, QuestWithProgress, LedgerTransaction } from '@tricigo/types';
 import { useDriverStore } from '@/stores/driver.store';
+import { tripNetEarnings } from '@/utils/tripNetEarnings';
 
 export type Period = 'day' | 'week' | 'month';
 
@@ -154,10 +155,14 @@ export function useEarningsData({
       setBalance(balanceData.available);
       setPeriodTrips(trips);
 
-      // Today's earnings — filter from existing data instead of a second API call
+      // Today's earnings — filter from existing data instead of a second API call.
+      // BUG-fare-audit B5: sum NET (fare − commission + tip) via tripNetEarnings
+      // so the dashboard total matches what the driver actually takes home.
+      // Previously summed gross `final_fare_cup`, which misrepresented earnings
+      // by ~15% (the commission) and ignored tips entirely.
       if (period === 'day') {
         let todayTotal = 0;
-        for (const trip of trips) todayTotal += trip.final_fare_cup ?? trip.estimated_fare_cup;
+        for (const trip of trips) todayTotal += tripNetEarnings(trip, commissionRate);
         setTodayEarnings(todayTotal);
       } else {
         const todayStart = new Date();
@@ -166,7 +171,7 @@ export function useEarningsData({
         for (const trip of trips) {
           const completedAt = new Date(trip.completed_at ?? trip.created_at);
           if (completedAt >= todayStart) {
-            todayTotal += trip.final_fare_cup ?? trip.estimated_fare_cup;
+            todayTotal += tripNetEarnings(trip, commissionRate);
           }
         }
         setTodayEarnings(todayTotal);
@@ -211,7 +216,8 @@ export function useEarningsData({
       );
       let prevTotal = 0;
       for (const trip of prevTrips) {
-        prevTotal += trip.final_fare_cup ?? trip.estimated_fare_cup;
+        // BUG-fare-audit B5: sum net (matches the today/dashboard accumulator).
+        prevTotal += tripNetEarnings(trip, commissionRate);
       }
       setPrevPeriodEarnings(prevTotal);
     } catch {

@@ -181,7 +181,11 @@ export function TripCompleteView() {
             }}
           >
             {t('trip.earned_this_ride', {
-              amount: `$${Math.round((activeTrip.final_fare_cup || 0) * 0.85).toLocaleString()}`,
+              /* BUG-fare-audit B4: usar el `netEarnings` ya computado arriba
+                 (línea 83) con la commissionRate live en lugar de hardcodear
+                 0.85. Antes el hero mostraba un número y el breakdown otro
+                 cuando la rate real ≠ 15%. */
+              amount: `$${netEarnings.toLocaleString()}`,
             })}
           </Text>
         )}

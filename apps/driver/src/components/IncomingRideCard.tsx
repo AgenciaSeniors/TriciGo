@@ -50,7 +50,7 @@ import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { presenceService, trackValidationEvent } from '@tricigo/api';
+import { presenceService, trackValidationEvent, walletService } from '@tricigo/api';
 import { midnightEmber } from '@tricigo/theme';
 import { useLocationStore } from '@/stores/location.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -123,6 +123,22 @@ function IncomingRideCardInner({
     };
   }, [ride.id, driverLat, driverLng, driverProfile?.id, user?.full_name]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // BUG-fare-audit B4: commission rate live from platform_config in place
+  // of the previous hardcoded 0.85. Default 0.15 keeps the math identical
+  // to the old hardcode when the platform really is at 15%, so no
+  // regression while the fetch is in flight or if it fails silently.
+  const [commissionRate, setCommissionRate] = useState(0.15);
+  useEffect(() => {
+    walletService.getConfigValue('commission_rate')
+      .then((val) => {
+        if (val) {
+          const parsed = parseFloat(String(val).replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) setCommissionRate(parsed);
+        }
+      })
+      .catch(() => { /* best-effort: queda en 0.15 */ });
+  }, []);
+
   const pickupDistanceKm = useMemo(() => {
     if (!driverLat || !driverLng || !ride.pickup_location?.latitude || !ride.pickup_location?.longitude) return null;
     const meters = haversineDistance(
@@ -132,11 +148,15 @@ function IncomingRideCardInner({
     return Math.round(meters / 100) / 10;
   }, [driverLat, driverLng, ride.pickup_location]);
 
-  // ── Net earnings (fare − 15% commission) ──────────────
+  // ── Net earnings (fare − platform commission live) ────
   // BUG-225: la tarifa source-of-truth es el campo del servidor.
   // El cálculo local solo es fallback para rides legacy sin el campo.
   // BUG-221: el backend usa duración NEUTRA 40 km/h, no
   // `estimated_duration_s` (que ahora es per-vehículo).
+  // BUG-fare-audit B4: commission rate viene de platform_config (state
+  // `commissionRate` arriba); el hardcode 0.85 anterior mostraba un
+  // número falso cuando la rate real no era 15%, y discrepaba con
+  // TripCompleteView/Detail/Receipt que sí leen la rate real.
   const driverFare = useMemo(() => {
     if (ride.estimated_fare_cup != null && ride.estimated_fare_cup > 0) {
       return { cup: ride.estimated_fare_cup, trc: ride.estimated_fare_trc };
@@ -165,8 +185,8 @@ function IncomingRideCardInner({
 
   const netEarnings = useMemo(() => {
     const fare = driverFare.cup || 0;
-    return Math.round(fare * 0.85);
-  }, [driverFare.cup]);
+    return Math.round(fare * (1 - commissionRate));
+  }, [driverFare.cup, commissionRate]);
 
   // ── Profit tier solo decide el tiempo de auto-accept,
   //    NO un color visual (eso era el rainbow legacy). ──
