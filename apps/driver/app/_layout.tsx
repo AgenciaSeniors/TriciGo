@@ -66,8 +66,8 @@ function initMapbox() {
 initMapbox();
 
 /**
- * BUG-006 (cold-start gray map definitive fix): pre-warm Android's
- * DNS resolver so Mapbox can fetch its config_service on first launch.
+ * BUG-006 (cold-start gray map): pre-warm Android's DNS resolver so
+ * Mapbox can fetch its config_service on first launch.
  *
  * Forensic evidence (logcat after `pm clear` cold start):
  *   10:09:13.751  MapboxInitializer create()
@@ -76,19 +76,17 @@ initMapbox();
  *                  HTTP error: net::ERR_NAME_NOT_RESOLVED, attempt 0 of 2
  *
  * Mapbox retries only 2 times then gives up — the map renders gray
- * because no style/glyphs/tiles can be downloaded. After the user
- * closes and reopens the app, Android's DNS cache still holds the
- * api.mapbox.com → IP mapping, so the second launch works.
+ * because no style/glyphs/tiles can be downloaded.
  *
- * Fix: kick off two no-op fetches as soon as the JS bundle loads.
- * They're fire-and-forget — we only need the side effect of populating
- * the OS DNS resolver cache. By the time React mounts and a MapView
- * tries to fetch its style, api.mapbox.com is resolved.
+ * BUG-006 v2 (definitive fix): the **canonical** pre-warm now lives in
+ * `useMapboxReady()` (apps/driver/src/hooks/useMapboxReady.ts) which is
+ * called by `RideMapView`. That hook AWAITS the DNS lookup before
+ * unblocking the MapView render — eliminates the race entirely.
  *
- * setTimeout(0) instead of immediate so we don't block module init on
- * non-essential network. Two hosts: api.mapbox.com (config + tiles)
- * and events.mapbox.com (telemetry — even though we disable it, RN
- * Mapbox still pings it on first launch).
+ * This `setTimeout(0) + fetch()` is kept as DEFENSE-IN-DEPTH for any
+ * non-RideMapView callers and to start populating the OS DNS cache as
+ * early as possible (before the React tree even mounts). It's
+ * fire-and-forget and harmless if the hook also runs.
  */
 if (Platform.OS !== 'web') {
   setTimeout(() => {
