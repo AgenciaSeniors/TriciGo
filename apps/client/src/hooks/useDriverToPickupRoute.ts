@@ -20,10 +20,20 @@ import type { GeoPoint } from '@tricigo/utils';
  *      of the destination (e.g. arriving — the line would be useless).
  */
 
-/** Re-fetch immediately when driver is this many meters off the current polyline. */
-const DEVIATION_M = 50;
-/** Minimum time between fetches when driver is on-route (just to avoid spam). */
-const MIN_INTERVAL_MS = 5_000;
+/**
+ * Re-fetch immediately when driver is this many meters off the current polyline.
+ * BUG-298: lowered from 50 to 35m. Cuban urban driving has many parallel
+ * streets 30-40m apart; the previous 50m threshold missed real deviations
+ * onto a parallel street. Aligned with the driver `REROUTE_THRESHOLD_M = 35`.
+ */
+const DEVIATION_M = 35;
+/**
+ * Minimum time between fetches when driver is on-route (just to avoid spam).
+ * BUG-298: lowered from 5_000 to 3_000ms. Combined with the lower
+ * `DEVIATION_M`, this cuts the worst-case "deviation detected → new route
+ * visible" latency from ~14s to ~7s for the rider's view of the driver.
+ */
+const MIN_INTERVAL_MS = 3_000;
 /** Skip route fetch if driver is very close to the target. */
 const NEAR_TARGET_M = 50;
 

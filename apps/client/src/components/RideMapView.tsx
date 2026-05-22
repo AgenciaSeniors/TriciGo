@@ -3,7 +3,7 @@ import { View, Text, Animated, Platform, useColorScheme, Image, TouchableOpacity
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, vehicleMarkerRotationOffset } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
@@ -288,29 +288,73 @@ function RideMapViewInner({
     routeCoordinates,
   ]);
 
-  const animatedDriver =
-    driverLocation &&
-    Number.isFinite(driverLocation.latitude) &&
-    Number.isFinite(driverLocation.longitude)
-      ? {
-          latitude: snappedDriver?.latitude ?? driverLocation.latitude,
-          longitude: snappedDriver?.longitude ?? driverLocation.longitude,
-          // Bearing precedence (BUG-293):
-          //   1. polyline segment bearing (most stable visually — always
-          //      aligned with the road the driver is on)
-          //   2. explicit driverHeading prop (GPS hardware or computed
-          //      bearing from useDriverLocation v3)
-          //   3. heading on driverLocation object (legacy fallback)
-          //   4. 0 (north — last resort)
-          heading:
-            (snappedDriver != null ? snappedDriver.bearing : null) ??
-            (Number.isFinite(driverHeading) ? (driverHeading as number) : null) ??
-            (Number.isFinite((driverLocation as { heading?: number | null }).heading)
-              ? ((driverLocation as { heading?: number | null }).heading as number)
-              : null) ??
-            0,
-        }
-      : null;
+  // BUG-298: smooth the effective bearing with EMA to dampen the discrete
+  // jumps that happen when `snapDriverToRoute` switches polyline segments
+  // along a curve. Without this, the marker rotation "ticks" 5-15° on each
+  // segment change in a smooth curve. Since the client camera also reads
+  // `animatedDriver.heading` (see cameraProfile), smoothing here also
+  // keeps the icon and the street geometry in sync.
+  //
+  // Implementation: heading goes through useState + useEffect rather than
+  // useMemo + ref mutation (anti-pattern: StrictMode runs useMemo twice
+  // → ref overwritten twice → over-smoothing in dev). Position stays in
+  // useMemo because it's a pure derivation.
+  const lastSmoothedHeadingRef = useRef<number | null>(null);
+  const [smoothedDriverHeading, setSmoothedDriverHeading] = useState<number>(0);
+
+  useEffect(() => {
+    if (
+      !driverLocation ||
+      !Number.isFinite(driverLocation.latitude) ||
+      !Number.isFinite(driverLocation.longitude)
+    ) {
+      return;
+    }
+    // Bearing precedence (BUG-293):
+    //   1. polyline segment bearing (most stable visually — always
+    //      aligned with the road the driver is on)
+    //   2. explicit driverHeading prop (GPS hardware or computed
+    //      bearing from useDriverLocation v3)
+    //   3. heading on driverLocation object (legacy fallback)
+    const rawTarget =
+      (snappedDriver != null ? snappedDriver.bearing : null) ??
+      (Number.isFinite(driverHeading) ? (driverHeading as number) : null) ??
+      (Number.isFinite((driverLocation as { heading?: number | null }).heading)
+        ? ((driverLocation as { heading?: number | null }).heading as number)
+        : null);
+
+    if (rawTarget == null) return;
+    const next = smoothHeading(rawTarget, lastSmoothedHeadingRef.current);
+    lastSmoothedHeadingRef.current = next;
+    setSmoothedDriverHeading(next);
+  }, [
+    driverLocation?.latitude,
+    driverLocation?.longitude,
+    (driverLocation as { heading?: number | null } | null)?.heading,
+    snappedDriver?.bearing,
+    driverHeading,
+  ]);
+
+  const animatedDriver = useMemo(() => {
+    if (
+      !driverLocation ||
+      !Number.isFinite(driverLocation.latitude) ||
+      !Number.isFinite(driverLocation.longitude)
+    ) {
+      return null;
+    }
+    return {
+      latitude: snappedDriver?.latitude ?? driverLocation.latitude,
+      longitude: snappedDriver?.longitude ?? driverLocation.longitude,
+      heading: smoothedDriverHeading,
+    };
+  }, [
+    driverLocation?.latitude,
+    driverLocation?.longitude,
+    snappedDriver?.latitude,
+    snappedDriver?.longitude,
+    smoothedDriverHeading,
+  ]);
   // DEBUG-271: log every time the marker coordinate changes so we can
   // see in the rider's Metro log whether the prop chain is delivering
   // fresh positions to MarkerView.

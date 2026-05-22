@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
+import { smoothHeading } from '@tricigo/utils';
 import {
   initLocationBuffer,
   bufferLocation,
@@ -61,19 +62,10 @@ function distanceMeters(
   return R * c;
 }
 
-// Exponential moving average for heading angle. Handles the 359° → 1°
-// wrap case by computing the signed shortest-path delta. Used to dampen
-// GPS heading jitter AND the noise from short-distance bearing calcs
-// (a bearing between two coords 2m apart has ±20° noise at typical
-// urban GPS accuracy of 5-10m — EMA smooths that into a stable signal).
-const HEADING_SMOOTHING_ALPHA = 0.4;
-function smoothHeading(raw: number, prev: number | null): number {
-  if (prev === null || !Number.isFinite(prev)) return raw;
-  let delta = raw - prev;
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return (prev + HEADING_SMOOTHING_ALPHA * delta + 360) % 360;
-}
+// BUG-298: `smoothHeading` + `HEADING_SMOOTHING_ALPHA` moved to
+// `packages/utils/src/geo.ts` so RideMapView (driver + client) can reuse
+// the same EMA when smoothing bearings from `snapDriverToRoute` between
+// polyline segments. Imported above from `@tricigo/utils`.
 
 export function useDriverLocationTracking(
   driverId: string | null,

@@ -9,6 +9,8 @@ import {
   HAVANA_CENTER,
   fetchRoute,
   clearRouteCache,
+  smoothHeading,
+  HEADING_SMOOTHING_ALPHA,
 } from '../geo';
 
 describe('haversineDistance', () => {
@@ -262,5 +264,77 @@ describe('routeCache invalidation on close-by destinations', () => {
     await fetchRoute(casa, dest);
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('smoothHeading (BUG-298)', () => {
+  it('returns the raw value when prev is null (first sample)', () => {
+    expect(smoothHeading(45, null)).toBe(45);
+    expect(smoothHeading(0, null)).toBe(0);
+    expect(smoothHeading(359, null)).toBe(359);
+  });
+
+  it('returns the raw value when prev is NaN or non-finite', () => {
+    expect(smoothHeading(90, NaN)).toBe(90);
+    expect(smoothHeading(90, Infinity)).toBe(90);
+  });
+
+  it('uses HEADING_SMOOTHING_ALPHA by default (0.4 toward target)', () => {
+    // raw=100, prev=0, alpha=0.4 → 0 + 0.4*(100) = 40
+    expect(smoothHeading(100, 0)).toBeCloseTo(40, 5);
+  });
+
+  it('respects an explicit alpha argument', () => {
+    expect(smoothHeading(100, 0, 0.5)).toBeCloseTo(50, 5);
+    expect(smoothHeading(100, 0, 1.0)).toBeCloseTo(100, 5);
+    expect(smoothHeading(100, 0, 0)).toBeCloseTo(0, 5); // never converges
+  });
+
+  it('takes the short way around the 359→1 wrap', () => {
+    // From 350° to 10° the shortest delta is +20°, not -340°.
+    // alpha=0.4 → 350 + 0.4 * 20 = 358
+    const result = smoothHeading(10, 350);
+    expect(result).toBeCloseTo(358, 5);
+  });
+
+  it('takes the short way around the 10→350 wrap (opposite direction)', () => {
+    // From 10° to 350° the shortest delta is -20°, not +340°.
+    // alpha=0.4 → 10 + 0.4 * (-20) = 2 → (2 + 360) % 360 = 2
+    const result = smoothHeading(350, 10);
+    expect(result).toBeCloseTo(2, 5);
+  });
+
+  it('keeps the result in [0, 360)', () => {
+    // Repeated smoothing near the boundary should never produce negative
+    // or out-of-range outputs.
+    let h: number | null = null;
+    for (const raw of [10, 350, 5, 355, 0, 359]) {
+      h = smoothHeading(raw, h);
+      expect(h).toBeGreaterThanOrEqual(0);
+      expect(h).toBeLessThan(360);
+    }
+  });
+
+  it('converges geometrically toward a stable target (alpha 0.4)', () => {
+    // Simulate a 90° turn: prev=0, raw=90 sustained.
+    // alpha=0.4 → each step closes 40% of the gap. After 5 samples:
+    //   1: 36.000   2: 57.600   3: 70.560   4: 78.336   5: 83.002
+    // i.e. ~7° from target. After 8 samples should be within 3°.
+    let h: number | null = 0;
+    for (let i = 0; i < 5; i++) {
+      h = smoothHeading(90, h);
+    }
+    expect(h!).toBeCloseTo(83.0016, 3);
+
+    for (let i = 0; i < 3; i++) {
+      h = smoothHeading(90, h);
+    }
+    // After 8 samples: 90 - 0.6^8 * 90 ≈ 88.49
+    expect(h!).toBeGreaterThan(87);
+    expect(h!).toBeLessThan(90);
+  });
+
+  it('exports HEADING_SMOOTHING_ALPHA = 0.4 (BUG-267 calibration)', () => {
+    expect(HEADING_SMOOTHING_ALPHA).toBe(0.4);
   });
 });
