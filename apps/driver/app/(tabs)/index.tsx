@@ -23,6 +23,7 @@ import {
   logger,
   getErrorMessage,
   triggerHaptic,
+  havanaMidnightUtc,
 } from '@tricigo/utils';
 import { openNavigation } from '@/utils/navigation';
 import { useLocationStore } from '@/stores/location.store';
@@ -259,46 +260,26 @@ function NativeDriverHomeScreen() {
   // Re-runs every 60s + whenever a trip ends so the home reflects the
   // most recent completion without manual reload.
   //
-  // BUG-249v2: simplified the "today" boundary computation — earlier
-  // approach round-tripped through toLocaleString which is fragile when
-  // the device clock is not on Havana TZ. Instead we compute "midnight
-  // Havana, today" using only UTC arithmetic: take now, subtract the
-  // Havana offset (UTC-4 during DST, UTC-5 otherwise), strip time, and
-  // re-add. This is robust regardless of device timezone.
+  // BUG-249v2 → extracted to `havanaMidnightUtc()` in @tricigo/utils.
+  // Previously this useEffect inlined ~25 lines computing "midnight Havana,
+  // today" with manual offset arithmetic + Intl.DateTimeFormat parsing.
+  // The helper has the same robustness (handles DST + device TZ drift) but
+  // with formatToParts + a UTC-noon probe (more explicit), full DST tests
+  // in `packages/utils/src/__tests__/date.test.ts`, and is reusable in the
+  // client app + admin.
   useEffect(() => {
     if (!profile?.id) return;
     const COMMISSION_RATE = 0.15;
     const fetchEarnings = async () => {
       try {
         const supabase = getSupabaseClient();
-        // Havana is UTC-4 during DST (Mar→Nov), UTC-5 otherwise. Use
-        // Intl to get the actual current offset robustly.
-        const havanaOffsetHrs = (() => {
-          const fmt = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Havana',
-            timeZoneName: 'shortOffset',
-          });
-          const parts = fmt.formatToParts(new Date());
-          const tzn = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT-5';
-          const m = tzn.match(/GMT([+-]?\d+)/);
-          return m && m[1] ? parseInt(m[1], 10) : -5;
-        })();
-        // Now in Havana wall-clock time as ms-since-epoch:
-        const nowUtcMs = Date.now();
-        const havanaNowMs = nowUtcMs + havanaOffsetHrs * 3600_000;
-        // Strip to midnight in Havana wall-clock:
-        const havanaMidnightWall = new Date(havanaNowMs);
-        havanaMidnightWall.setUTCHours(0, 0, 0, 0);
-        // Convert that wall-clock midnight back to UTC:
-        const havanaMidnightUtc = new Date(
-          havanaMidnightWall.getTime() - havanaOffsetHrs * 3600_000,
-        );
+        const sinceUtc = havanaMidnightUtc();
         const { data, error } = await supabase
           .from('rides')
           .select('final_fare_cup, completed_at')
           .eq('driver_id', profile.id)
           .eq('status', 'completed')
-          .gte('completed_at', havanaMidnightUtc.toISOString());
+          .gte('completed_at', sinceUtc.toISOString());
         if (error) {
           console.warn('[home/earnings] query error', error.message);
           return;
@@ -312,7 +293,7 @@ function NativeDriverHomeScreen() {
         const amount = Math.round(gross * (1 - COMMISSION_RATE));
         console.log('[home/earnings] fetched', {
           driver_id: profile.id,
-          since_utc: havanaMidnightUtc.toISOString(),
+          since_utc: sinceUtc.toISOString(),
           trips,
           gross,
           amount,

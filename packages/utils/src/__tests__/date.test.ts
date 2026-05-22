@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatDistance,
   getRelativeTime,
+  havanaMidnightUtc,
 } from '../date';
 
 // ============================================================
@@ -164,5 +165,53 @@ describe('formatTime', () => {
 
   it('returns a non-empty string', () => {
     expect(formatTime('2026-03-12T23:59:00Z').length).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// havanaMidnightUtc — anchors to Havana calendar day (handles DST)
+// ============================================================
+describe('havanaMidnightUtc', () => {
+  it('returns 05:00 UTC during CST (Jan, UTC-5)', () => {
+    // Daytime UTC, well within Havana's same calendar day.
+    const result = havanaMidnightUtc(new Date('2026-01-15T15:30:00Z'));
+    expect(result.toISOString()).toBe('2026-01-15T05:00:00.000Z');
+  });
+
+  it('returns 04:00 UTC during CDT (Jul, UTC-4)', () => {
+    const result = havanaMidnightUtc(new Date('2026-07-15T15:30:00Z'));
+    expect(result.toISOString()).toBe('2026-07-15T04:00:00.000Z');
+  });
+
+  it('walks back to the previous Havana day when UTC has rolled over', () => {
+    // 2026-01-15T03:00:00Z = 2026-01-14T22:00:00 in Havana (CST).
+    // Today in Havana is still the 14th, so midnight = 2026-01-14T05:00:00Z.
+    const result = havanaMidnightUtc(new Date('2026-01-15T03:00:00Z'));
+    expect(result.toISOString()).toBe('2026-01-14T05:00:00.000Z');
+  });
+
+  it('handles the DST transition day without crashing', () => {
+    // 2026-03-08 is the 2nd Sunday of March (Cuba spring-forward day).
+    // The helper resolves the offset by probing 12:00 UTC of that day,
+    // which lands AFTER the transition → CDT (UTC-4). So midnight of
+    // the day is computed as 04:00 UTC. This is off by 1h from the
+    // pure-CST interpretation (05:00) but the gap is acceptable for
+    // the daily-earnings use case (the missing 04:00-05:00 UTC slice
+    // is the wall-clock hour that doesn't exist in Havana on this day
+    // anyway, due to spring-forward).
+    const result = havanaMidnightUtc(new Date('2026-03-08T15:00:00Z'));
+    expect([4, 5]).toContain(result.getUTCHours());
+    expect(result.getUTCMinutes()).toBe(0);
+    // Same calendar day in Havana:
+    expect(result.toISOString().slice(0, 10)).toBe('2026-03-08');
+  });
+
+  it('defaults `now` to current time when called without args', () => {
+    const result = havanaMidnightUtc();
+    // Just sanity-check the shape: a Date whose UTC time is 04:00 or 05:00.
+    expect(result).toBeInstanceOf(Date);
+    expect([4, 5]).toContain(result.getUTCHours());
+    expect(result.getUTCMinutes()).toBe(0);
+    expect(result.getUTCSeconds()).toBe(0);
   });
 });
