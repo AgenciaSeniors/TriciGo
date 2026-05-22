@@ -15,6 +15,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, CUBA_PROVINCES, CUBA_MUNICIPALITIES } from '@tricigo/utils';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
@@ -509,6 +510,10 @@ export default function PersonalInfoScreen() {
                 className="mt-2 mb-8"
               />
             </AnimatedCard>
+
+            {/* BUG-299: escape hatch — driver can switch accounts at any
+                onboarding step. Without this they're trapped after OTP. */}
+            <SwitchAccountFooter />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

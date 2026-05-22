@@ -15,6 +15,7 @@ import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
 import type { DocumentType } from '@tricigo/types';
 
@@ -266,6 +267,10 @@ export default function DocumentsScreen() {
           onPress={() => router.push('/onboarding/review')}
           disabled={!allUploaded}
         />
+
+        {/* BUG-299: escape hatch — driver can switch accounts at any
+            onboarding step. Without this they're trapped after OTP. */}
+        <SwitchAccountFooter />
       </View>
     </Screen>
   );
