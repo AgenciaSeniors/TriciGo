@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { View, Text, Animated, Pressable, StyleSheet, Platform, Image } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef, useImperativeHandle, useCallback, forwardRef } from 'react';
+import { View, Text, Animated, Pressable, StyleSheet, Platform, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -7,6 +7,7 @@ import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHe
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
+import { useMapboxReady } from '../hooks/useMapboxReady';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -729,6 +730,16 @@ function RideMapViewInner(
     return () => clearInterval(interval);
   }, [tokenApplied]);
 
+  // BUG-006 v2 (gray map cold-start fix): wait for NetInfo + DNS prewarm
+  // to api.mapbox.com BEFORE mounting the native MapView. This supersedes
+  // the `setTimeout(0) + fetch()` fire-and-forget in _layout.tsx which
+  // couldn't guarantee timing. `mapInstanceKey` is used to force a full
+  // re-mount of the MapView when `onDidFailLoadingMap` fires (SDK retries
+  // internally only 2x; re-mount gives it a fresh budget with DNS now
+  // resolved).
+  const { ready: mapboxReady, error: mapboxNetError, retry: retryMapboxReady } = useMapboxReady();
+  const [mapInstanceKey, setMapInstanceKey] = useState(0);
+
   const { t } = useTranslation('driver');
   const cameraRef = useRef<any>(null);
   const [markerImageError, setMarkerImageError] = useState(false);
@@ -738,6 +749,18 @@ function RideMapViewInner(
   // its dark background and the user sees a pure-black rectangle. We
   // render <MapFallbackGrid /> on top until onDidFinishLoadingStyle fires.
   const [styleLoaded, setStyleLoaded] = useState(false);
+
+  // BUG-006 v2: auto-retry handler. When Mapbox SDK reports it failed to
+  // load (style/tile fetch ERR_NAME_NOT_RESOLVED or similar), bump the
+  // MapView key to force a complete re-mount + re-run the DNS prewarm.
+  // Without this the SDK gave up after 2 internal retries and stayed gray
+  // until the user manually killed the app.
+  const handleMapLoadFailure = useCallback((reason: string) => {
+    console.warn('[RideMapView]', reason, '— forcing MapView re-mount + DNS prewarm retry');
+    setStyleLoaded(false);
+    setMapInstanceKey((n) => n + 1);
+    retryMapboxReady();
+  }, [retryMapboxReady]);
 
   // Pulse animation for driver marker (native only)
   const useNative = Platform.OS !== 'web';
@@ -1147,6 +1170,45 @@ function RideMapViewInner(
   }
 
   // ── Native: Use @rnmapbox/maps ──────────────────────────────────────────────
+  // BUG-006 v2 gate: wait for NetInfo + DNS prewarm before instantiating
+  // the native MapView. Without this the SDK can race with cold-start DNS
+  // resolution and render permanently gray. The MapFallbackGrid is the
+  // same placeholder used by BUG-209 — visually consistent. If `mapboxNetError`
+  // is set (e.g. no network), show a retry button overlaid.
+  if (!mapboxReady) {
+    return (
+      <View style={[webFallbackStyles.container, { height }]}>
+        <View style={webFallbackStyles.gradientBase} />
+        <View style={webFallbackStyles.gradientOverlay} />
+        <View style={webFallbackStyles.gridContainer} pointerEvents="none">
+          {[0.15, 0.3, 0.45, 0.6, 0.75, 0.9].map((pos, i) => (
+            <View key={`h${i}`} style={[webFallbackStyles.gridLineH, { top: `${pos * 100}%` as any }]} />
+          ))}
+          {[0.12, 0.28, 0.42, 0.58, 0.72, 0.88].map((pos, i) => (
+            <View key={`v${i}`} style={[webFallbackStyles.gridLineV, { left: `${pos * 100}%` as any }]} />
+          ))}
+          <View style={webFallbackStyles.diagonalLine} />
+        </View>
+        <View style={webFallbackStyles.glowOrange} pointerEvents="none" />
+        <View style={webFallbackStyles.glowOrange2} pointerEvents="none" />
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }} pointerEvents="box-none">
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: '#fff', marginTop: 12, fontSize: 14 }}>
+            {mapboxNetError === 'no_network' ? 'Sin conexión' : 'Preparando mapa…'}
+          </Text>
+          {mapboxNetError === 'no_network' && (
+            <Pressable
+              onPress={retryMapboxReady}
+              style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Reintentar</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   // BUG-209 (6) v2: while the token-retry effect (above) is still trying,
   // show the stylized grid placeholder so the user sees SOMETHING instead
   // of a flash of gray Mapbox tile. The state-driven gate ensures we
@@ -1180,6 +1242,11 @@ function RideMapViewInner(
       accessibilityRole="image"
     >
       <MapboxGL.MapView
+        // BUG-006 v2: `key` change forces full re-mount of the native
+        // MapView. `handleMapLoadFailure` bumps this key when the SDK
+        // gives up after its 2 internal retries — gives Mapbox a fresh
+        // budget with DNS now resolved by our prewarm hook.
+        key={mapInstanceKey}
         style={{ flex: 1 }}
         accessible={false}
         accessibilityElementsHidden
@@ -1190,10 +1257,15 @@ function RideMapViewInner(
         compassEnabled={false}
         onDidFinishLoadingStyle={() => setStyleLoaded(true)}
         onDidFailLoadingMap={() => {
-          // First-install network race or invalid token. The fallback
-          // grid stays visible; the user can still tap CONECTARSE.
-          // Logged here so it shows up in adb logcat for diagnosis.
-          console.warn('[RideMapView] onDidFailLoadingMap — Mapbox style/tile fetch failed');
+          // First-install network race or DNS not yet resolved. BUG-006 v2:
+          // bump key + retry prewarm so the SDK gets another shot instead
+          // of staying gray forever until app restart.
+          handleMapLoadFailure('onDidFailLoadingMap — Mapbox style/tile fetch failed');
+        }}
+        onMapLoadingError={(e: any) => {
+          // BUG-006 v2: also handle the generic load error (different
+          // event in some SDK versions). Same auto-recovery path.
+          handleMapLoadFailure(`onMapLoadingError — ${String(e?.nativeEvent?.error ?? e?.message ?? e)}`);
         }}
         // BUG-291 v2: onRegionWillChange is deprecated in @rnmapbox/maps v10
         // AND fires with isUserInteraction=true on programmatic camera moves
