@@ -342,6 +342,90 @@ Cuando hice `git fetch origin master`, el HEAD del branch local saltó silencios
 
 Cuando el usuario diga ambiguo "haz el merge a master" después de varias sesiones, **siempre listar el estado actual de PRs abiertos + branches sin merger** antes de hacer un merge. No asumir cuál mergear, dejar que elija.
 
+### NETOPIA webhook: el atomic claim debe permitir `failed → paid` (bug confirmado en prod 2026-05-23)
+
+**Bug crítico documentado.** El intent `d3fc744f` (driver_quota $20 USD, 2026-05-23 03:26 UTC) reveló que NETOPIA puede enviar **DOS IPNs para la misma transacción**:
+
+| Tiempo | IPN | Acción del webhook (PRE-fix) |
+|---|---|---|
+| 03:28:44 | `status=12, message="Invalid CVV"` (interim) | marca intent como `'failed'`, guarda error_message |
+| 03:29:04 | `status=3, paid` (final) | **silenciosamente skipea** porque el filter del atomic claim no incluía `'failed'` |
+
+Consecuencia: NETOPIA cobró real (email al cardholder lo confirmó), wallet TC nunca acreditada (0 filas en `ledger_transactions` para el intent).
+
+**Fix shipped (PR #158, commit `42de9da`, EF v5)** — cambiar el filter del atomic claim en `supabase/functions/process-netopia-webhook/index.ts` rama `'paid'`:
+
+```ts
+// ANTES (buggy):
+.in('status', ['pending', 'created'])
+
+// DESPUÉS (correcto):
+.in('status', ['pending', 'created', 'failed'])
++ clear error_message: null
++ ntpID discrepancy check (si difiere, return 500 para que NETOPIA reintente y un humano investigue)
+```
+
+**Patrón canónico para casos similares en otros providers (Stripe, Tropipay)**: cuando un webhook puede recibir IPNs intermedios + finales, el atomic claim del path "success" debe poder recuperar desde estados `'failed'` previos. Sino se bloquea silenciosamente el credit y la wallet no se acredita.
+
+**Patrón canónico para reconciliación manual** cuando se descubre un caso histórico stuck (antes del fix): SQL en transacción:
+
+```sql
+BEGIN;
+UPDATE payment_intents SET status='processing', error_message=NULL, updated_at=NOW()
+  WHERE id='<intent>' AND status='failed';
+SELECT process_recharge_payment('<intent>'::uuid, jsonb_build_object(
+  'reconciliation', true,
+  'reason', '...',
+  'manual_credit_authorized_by', '<user>',
+  'reconciliation_ts', NOW()::text
+));
+COMMIT;
+```
+
+El RPC es idempotente por `idempotency_key='stripe_recharge_<intent>'` — re-ejecución segura.
+
+### Mirror EF helpers: las Edge Functions duplican datasets de `@tricigo/utils`
+
+**Patrón verificado 2026-05-23.** Las Edge Functions corren en **Deno** y NO importan del package `@tricigo/utils` (TypeScript/Node). Cuando un dataset/helper se necesita en ambos lugares (frontend + EF), el patrón es **duplicar el archivo** con un comment cross-reference.
+
+Ejemplo: `translateNetopiaError`:
+- `packages/utils/src/netopia-errors.ts` — usado por driver/cliente toasts
+- `supabase/functions/_shared/netopia-errors.ts` — DUPLICATE usado por `sendPaymentNotification` del webhook
+
+Comment en ambos archivos: "DUPLICATE of <other path>. Keep in sync when adding entries."
+
+Aceptable porque los datasets son chicos (≤10 entries en general). Si crece más, evaluar publicar `@tricigo/utils` como módulo ESM en npm o `https://esm.sh/...` para que Deno lo importe directo.
+
+### Patrón canónico cuando una columna nueva se agrega al payment_intents (o similar tabla crítica)
+
+**Aprendido en sesión 2026-05-23 con la migración 00286 (`provider_error_code`).** Las EFs y la DB tienen que estar sincronizadas, pero el deploy de EF + apply de migration pueden suceder en orden distinto. El patrón canónico **tolerante** es:
+
+```ts
+const { error: updateErr } = await supabase
+  .from('payment_intents')
+  .update({ /* incluyendo la columna nueva */ })
+  .eq('id', orderId);
+
+if (updateErr && /column.*does not exist|schema cache/i.test(updateErr.message)) {
+  console.warn(`[X] column missing — retrying without it (apply migration NNNNN)`);
+  await supabase.from('payment_intents').update({ /* sin la columna nueva */ }).eq('id', orderId);
+} else if (updateErr) {
+  console.error('[X] update error:', updateErr);
+}
+```
+
+Esto permite shipping del EF **antes** de aplicar la migration. Una vez aplicada, el path feliz (con columna) toma el primer branch. Sin esto, hay que coordinar deploy + migration en el mismo segundo, lo cual es frágil.
+
+### NETOPIA: el `config.language` controla la UI hosted page, pero NO confirma controlar el email del cardholder
+
+**Estado abierto 2026-05-23.** El spec de NETOPIA dice que `config.language` (ISO 639-1) controla "language you want **notifications** to be displayed in" — wording ambiguo. Empíricamente: la página hosted respeta el field (vimos pantalla en español), pero el **email de confirmación al cardholder llega en rumano** aunque mandamos `language: 'es'`.
+
+No hay field documentado `customer.language` / `billing.language`. La única vía oficial es **ticket a soporte NETOPIA** preguntando: (a) si `config.language` afecta también el email, (b) si hay setting de dashboard para forzar idioma del email, (c) si se puede setear a nivel POS account.
+
+Ticket abierto en el plan `~/.claude/plans/rol-eres-un-auditor-immutable-platypus.md` sección A.3 (texto en rumano + inglés, copy-paste-ready). Esperando respuesta de NETOPIA support (luni-vineri 9-18 hora Rumania).
+
+Si NETOPIA confirma que `config.language` debe afectar el email también pero no lo hace → bug suyo, escalación. Si confirma que es feature gap, podemos agregar nota a CLAUDE.md y avisar a usuarios cubanos que el email llegará en rumano hasta nuevo aviso.
+
 ---
 
 ### Recordatorio para Claude
