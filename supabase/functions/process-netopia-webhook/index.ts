@@ -31,6 +31,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { translateNetopiaError } from '../_shared/netopia-errors.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -322,11 +323,18 @@ Deno.serve(async (req) => {
 
     if (status === 'failed') {
       const failReason = ipn.payment?.message ?? `NETOPIA status ${ipn.payment?.status}`;
-      await supabase
+      const providerCode = ipn.payment?.code ?? null;
+
+      // Best-effort update including the new provider_error_code column
+      // (migration 00286). If the column doesn't exist yet in this env
+      // (pre-migration deploy), retry without it so the webhook still
+      // marks the intent failed and notifies the user.
+      const { error: updateErr } = await supabase
         .from('payment_intents')
         .update({
           status: 'failed',
           error_message: failReason,
+          provider_error_code: providerCode,
           webhook_payload: ipn as unknown as Record<string, unknown>,
           stripe_payment_intent_id: ntpId,
           updated_at: new Date().toISOString(),
@@ -334,9 +342,26 @@ Deno.serve(async (req) => {
         .eq('id', orderId)
         .in('status', ['created', 'pending', 'processing']);
 
-      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false);
+      if (updateErr && /provider_error_code|column.*does not exist|schema cache/i.test(updateErr.message)) {
+        console.warn(`[netopia] provider_error_code column missing — retrying without it (apply migration 00286): ${updateErr.message}`);
+        await supabase
+          .from('payment_intents')
+          .update({
+            status: 'failed',
+            error_message: failReason,
+            webhook_payload: ipn as unknown as Record<string, unknown>,
+            stripe_payment_intent_id: ntpId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orderId)
+          .in('status', ['created', 'pending', 'processing']);
+      } else if (updateErr) {
+        console.error('[netopia] failed-branch update error:', updateErr);
+      }
 
-      console.log(`[netopia] Payment failed: ${orderId} — ${failReason}`);
+      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false, failReason);
+
+      console.log(`[netopia] Payment failed: ${orderId} — ${failReason} (provider_code=${providerCode ?? 'none'})`);
 
       return new Response(JSON.stringify(ACK_OK), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -428,12 +453,18 @@ Deno.serve(async (req) => {
 /**
  * Send a push notification about recharge result. Mirrors the Stripe
  * implementation so users get the same UX regardless of provider.
+ *
+ * The optional `failReason` argument is the raw NETOPIA message
+ * (e.g. "Invalid CVV"). When present and `success=false`, the push
+ * body includes the translated reason so the user knows WHY the
+ * payment was rejected without opening the app.
  */
 async function sendPaymentNotification(
   supabase: ReturnType<typeof createClient>,
   userId: string,
   amountCup: number,
   success: boolean,
+  failReason?: string | null,
 ): Promise<void> {
   try {
     const { data: devices } = await supabase
@@ -450,9 +481,21 @@ async function sendPaymentNotification(
 
     const formattedAmount = amountCup.toLocaleString();
     const title = success ? 'Recarga exitosa' : 'Recarga fallida';
-    const body = success
-      ? `Tu recarga de ${formattedAmount} CUP ha sido acreditada a tu wallet.`
-      : `Tu recarga de ${formattedAmount} CUP no pudo ser procesada.`;
+
+    // For failed recharges, surface the translated reason in the push
+    // body so the user immediately knows whether it was a CVV issue,
+    // insufficient funds, etc. Trim to the first sentence so the body
+    // stays under most platform truncation thresholds.
+    let body: string;
+    if (success) {
+      body = `Tu recarga de ${formattedAmount} CUP ha sido acreditada a tu wallet.`;
+    } else if (failReason) {
+      const friendly = translateNetopiaError(failReason);
+      const firstSentence = friendly.split('. ')[0] + (friendly.includes('. ') ? '.' : '');
+      body = `Recarga de ${formattedAmount} CUP rechazada: ${firstSentence}`;
+    } else {
+      body = `Tu recarga de ${formattedAmount} CUP no pudo ser procesada.`;
+    }
 
     const messages = tokens.map((token) => ({
       to: token,

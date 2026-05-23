@@ -28,6 +28,7 @@ export type {
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
 export type { QuickReply } from './chatQuickReplies';
 export { getErrorMessage } from './errors';
+export { translateNetopiaError } from './netopia-errors';
 export { deliveryVehicleToSlug, isPackageCompatible, PACKAGE_CATEGORY_LABELS, INCOMPATIBILITY_REASON_LABELS } from './delivery';
 export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from './delivery';
 export { logger, setLogContext, clearLogContext } from './logger';
