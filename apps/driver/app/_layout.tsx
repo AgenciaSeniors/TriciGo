@@ -25,6 +25,11 @@ import Toast from 'react-native-toast-message';
 import { registerSoundAssets } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
+// FD1: importing for side effect — registers the TaskManager.defineTask
+// call at module scope. Must happen at JS bundle load (before the OS
+// can fire the task), so it lives in _layout (executed early on app
+// boot, including during background-launch recovery).
+import '@/services/locationBackgroundTask';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { Platform } from 'react-native';
 import '../global.css';

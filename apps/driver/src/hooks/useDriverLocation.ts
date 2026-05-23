@@ -9,6 +9,10 @@ import {
   flushBuffer,
 } from '@/services/locationBuffer';
 import type { BufferedLocation } from '@/services/locationBuffer';
+import {
+  startBgLocationTracking,
+  stopBgLocationTracking,
+} from '@/services/locationBackgroundTask';
 import NetInfo from '@react-native-community/netinfo';
 import { useLocationStore } from '@/stores/location.store';
 
@@ -236,6 +240,36 @@ export function useDriverLocationTracking(
               }
             } else {
               console.log('[Location] Driver dismissed background disclosure');
+            }
+          }
+
+          // FD1: if background permission is granted (either just-granted
+          // above, or pre-existing from a prior ride), start the real
+          // background TaskManager task. It runs inside an Android
+          // foreground service / iOS UIBackgroundModes=location and keeps
+          // receiving location callbacks even when the driver minimizes
+          // the app, switches to another app, or turns the screen off.
+          //
+          // Without this, the foreground-only watchPositionAsync below
+          // freezes the moment the app loses focus on Android — which
+          // breaks the promise that the passenger sees the driver's
+          // marker moving in real time during the active ride.
+          //
+          // Idempotent: startBgLocationTracking checks if the task is
+          // already running and only updates the persisted ctx.
+          const finalBgStatus = await Location.getBackgroundPermissionsAsync().catch(
+            () => ({ status: 'undetermined' as const }),
+          );
+          if (finalBgStatus.status === 'granted' && driverId) {
+            try {
+              await startBgLocationTracking({
+                driverId,
+                rideId: activeRideId,
+              });
+              console.log('[Location] Started background task for ride', activeRideId);
+            } catch (bgStartErr) {
+              console.warn('[Location] Failed to start background task:', bgStartErr);
+              // Fall through — foreground watchPositionAsync below still runs.
             }
           }
         }
@@ -484,6 +518,17 @@ export function useDriverLocationTracking(
       cancelled = true;
       subscriptionRef.current?.remove();
       subscriptionRef.current = null;
+      // FD1: stop the background TaskManager task when the effect
+      // re-runs with a different activeRideId / driverId / isOnline, or
+      // when the hook unmounts. This is what frees the Android foreground
+      // service notification and stops draining battery once the ride
+      // is over (or the driver goes offline).
+      //
+      // Safe to call even when the task isn't running — stopBgLocationTracking
+      // checks `isTaskRegisteredAsync` internally before issuing a stop.
+      stopBgLocationTracking().catch((e) => {
+        console.warn('[Location] stopBgLocationTracking failed:', e);
+      });
     };
   }, [driverId, isOnline, activeRideId]);
 

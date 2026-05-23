@@ -178,6 +178,8 @@ Pero NO menciona URL pública. Si Play Console requiere URL (como con el client)
 
 ## 3. GAP CRÍTICO FUNCIONAL + COMPLIANCE — FD1
 
+> **✅ RESUELTO en PR #166** (Opción A — real background tracking via `expo-task-manager` + `Location.startLocationUpdatesAsync` con foreground service notification). Implementación en `apps/driver/src/services/locationBackgroundTask.ts` + integración en `useDriverLocation.ts`. Doc original del gap preservada abajo para referencia histórica.
+
 ### 🔴 FD1 — `useDriverLocation.ts` usa solo `watchPositionAsync`, no real background tracking
 
 **Evidencia (`apps/driver/src/hooks/useDriverLocation.ts:241`, origin/master):**
