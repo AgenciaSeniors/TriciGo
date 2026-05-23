@@ -56,11 +56,19 @@ interface OnboardingState {
   reset: () => void;
 }
 
+// CC-04 (security audit 2026-05-23, PR-04 — opción C): selfie removed
+// from driver onboarding until real biometric provider integrated.
+// Before this change the selfie step ran a placeholder that returned
+// random pass scores when SELFIE_VERIFICATION_ENABLED was not set —
+// the UI promised verification it never performed. Manual admin
+// review of national_id + drivers_license + vehicle_registration is
+// the active KYC control. The `selfie_checks` table and `verify-selfie`
+// edge function remain in the codebase so a future PR can plug in
+// AWS Rekognition (or equivalent) without re-adding the step here.
 const INITIAL_DOCUMENTS: DocumentDraft[] = [
   { document_type: 'national_id', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
   { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
   { document_type: 'vehicle_registration', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
-  { document_type: 'selfie', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
   { document_type: 'vehicle_photo', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
 ];
 

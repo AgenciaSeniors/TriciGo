@@ -29,6 +29,12 @@ function useSteps() {
   ];
 }
 
+// CC-04 (security audit 2026-05-23, PR-04 — opción C): `selfie` kept
+// in the label map because DocumentType enum still includes it
+// (preserves backward compatibility for any in-flight onboarding
+// session that started before the deploy, and for the future provider
+// integration). The onboarding store no longer creates a selfie row,
+// so the UI never renders a selfie tile.
 const DOC_LABELS: Record<DocumentType, string> = {
   national_id: 'onboarding.national_id',
   drivers_license: 'onboarding.drivers_license',
@@ -220,7 +226,7 @@ export default function DocumentsScreen() {
           {t('onboarding.step_documents')}
         </Text>
         <Text variant="bodySmall" color="secondary" className="mb-6">
-          {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {uploadedCount}/5
+          {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {uploadedCount}/{documents.length}
         </Text>
 
         {documents.map((doc) => (
