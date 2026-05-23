@@ -17,6 +17,7 @@ const mockFunctions = {
   invoke: vi.fn(),
 };
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 const mockStorageUpload = vi.fn();
 const mockStorageGetPublicUrl = vi.fn();
 const mockStorage = {
@@ -25,7 +26,7 @@ const mockStorage = {
     getPublicUrl: mockStorageGetPublicUrl,
   })),
 };
-const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage, functions: mockFunctions };
+const mockSupabase = { auth: mockAuth, from: mockFrom, storage: mockStorage, functions: mockFunctions, rpc: mockRpc };
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -195,6 +196,7 @@ describe('authService', () => {
   // ==================== signOut ====================
   describe('signOut', () => {
     it('calls supabase auth.signOut', async () => {
+      mockAuth.getUser.mockResolvedValue({ data: { user: null }, error: null });
       mockAuth.signOut.mockResolvedValue({ error: null });
 
       await authService.signOut();
@@ -203,10 +205,47 @@ describe('authService', () => {
     });
 
     it('throws on supabase error', async () => {
+      mockAuth.getUser.mockResolvedValue({ data: { user: null }, error: null });
       const err = { message: 'Sign out failed', code: '500' };
       mockAuth.signOut.mockResolvedValue({ error: err });
 
       await expect(authService.signOut()).rejects.toEqual(err);
+    });
+
+    // CC-01 (security audit 2026-05-23, mig 00297): server-side
+    // revocation via revoke_user_tokens RPC before local signOut.
+    // RLS policies that consume is_session_revoked() will reject
+    // subsequent requests carrying the pre-logout JWT.
+    it('calls revoke_user_tokens RPC with current user id and signout reason (CC-01)', async () => {
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: { id: 'u-42' } },
+        error: null,
+      });
+      mockRpc.mockResolvedValue({ data: { success: true }, error: null });
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOut();
+
+      expect(mockRpc).toHaveBeenCalledWith('revoke_user_tokens', {
+        p_user_id: 'u-42',
+        p_reason: 'user_signout',
+      });
+      expect(mockAuth.signOut).toHaveBeenCalled();
+    });
+
+    it('completes signOut even when revoke RPC fails (CC-01 best-effort)', async () => {
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: { id: 'u-42' } },
+        error: null,
+      });
+      // Migration not yet applied → RPC error
+      mockRpc.mockRejectedValue(new Error('function revoke_user_tokens does not exist'));
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOut();
+
+      // Local signOut still runs despite the revoke RPC failure
+      expect(mockAuth.signOut).toHaveBeenCalled();
     });
   });
 

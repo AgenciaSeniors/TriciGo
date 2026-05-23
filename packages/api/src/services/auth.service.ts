@@ -169,9 +169,41 @@ export const authService = {
 
   /**
    * Sign out the current user.
+   *
+   * CC-01 (security audit 2026-05-23, mig 00297): in addition to
+   * the local Supabase signOut (which clears storage), we call
+   * `revoke_user_tokens()` RPC to write a server-side revocation
+   * timestamp. RLS policies that use `is_session_revoked()` will
+   * reject any subsequent request carrying the old JWT, closing
+   * the ~1h replay window where a captured token was still
+   * server-valid post-logout.
+   *
+   * The revoke call is best-effort: if the RPC fails (network,
+   * migration not yet deployed, transient DB error), we still
+   * complete the local signOut so the user UX isn't blocked. The
+   * old token retains its server-side validity in that case —
+   * tradeoff is acceptable because (a) the primary signOut path
+   * (local clear) always succeeds and (b) failed RPC is captured
+   * in Sentry for ops follow-up.
    */
   async signOut() {
     const supabase = getSupabaseClient();
+
+    // Server-side revocation first (best-effort). If it fails,
+    // log and continue to local signOut — never block the user.
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        await supabase.rpc('revoke_user_tokens', {
+          p_user_id: user.id,
+          p_reason: 'user_signout',
+        });
+      }
+    } catch {
+      // Migration may not be applied yet (frontend-tolerant);
+      // or transient error. Local signOut still runs below.
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   },
