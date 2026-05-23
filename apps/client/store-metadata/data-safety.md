@@ -98,8 +98,8 @@
 - Supabase Row Level Security (RLS) on all tables
 - Tokens stored in iOS Keychain / Android EncryptedSharedPreferences via `expo-secure-store`
 - Two-factor authentication via SMS OTP
-- User can delete account in-app and via public URL
-- Data retention: account data deleted within 30 days of account deletion request
+- User can delete account in-app (Settings → Eliminar cuenta) or via the public URL `https://tricigo.com/account/delete`
+- Data retention on deletion: account, profile, wallet balance, trusted contacts, notifications, recurring rides and driver profile are **deleted immediately** when the user confirms account deletion. Historical ride records, financial transactions and ratings are **anonymized** (re-pointed to an anonymous user) and retained for the AML / financial audit period required by Cuban transport regulation and international AML standards. No personal data of the deleted user remains in these retained records.
 
 ---
 

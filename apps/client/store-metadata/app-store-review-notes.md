@@ -66,9 +66,32 @@ methods (Google) are present. Implemented via Supabase OAuth.
 
 ### Account deletion
 
-Settings → Eliminar cuenta. Calls a server endpoint that hard-deletes
-the user record + cascade-deletes related data after a 30-day grace
-period (per privacy policy).
+Settings → Eliminar cuenta. Calls the `delete-account` Supabase Edge
+Function (authenticated with the user's JWT — user_id is derived
+server-side, not from a request body) which performs an **immediate,
+irreversible hard-delete**:
+
+1. `anonymize_user_references(user_id)` Postgres function re-points
+   every non-CASCADE foreign key (rides, ratings, referrals, chat
+   messages, ledger entries, etc.) from the user to a well-known
+   anonymous user (UUID `00000000-…-099`, role `customer`,
+   `is_active=false`). This preserves the financial / AML audit
+   trail without violating FK constraints during the next step.
+2. Best-effort cleanup of the user's avatar from the `avatars`
+   storage bucket.
+3. `auth.admin.deleteUser(user_id)` deletes the `auth.users` row,
+   which CASCADEs to `public.users` and the CASCADE-flagged
+   children: `wallet_accounts`, `trusted_contacts`, `notifications`,
+   `recurring_rides`, `driver_profiles`. The phone and email are
+   freed immediately and can be used to register a brand-new
+   account.
+
+There is **no grace period** — deletion is immediate. Users who
+prefer to deactivate temporarily can simply sign out and not log
+back in; we never auto-delete inactive accounts.
+
+Public URL for users who have already uninstalled the app:
+`https://tricigo.com/account/delete`.
 
 ### Background location
 

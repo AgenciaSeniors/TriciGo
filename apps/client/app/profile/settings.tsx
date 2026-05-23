@@ -274,7 +274,10 @@ export default function SettingsScreen() {
                 {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
               </Text>
               <Text variant="caption" color="tertiary" className="mt-0.5">
-                {t('profile.delete_account_desc', { defaultValue: 'Esta accion es irreversible. Se eliminaran todos tus datos, historial de viajes y saldo.' })}
+                {t('profile.delete_account_desc', {
+                  defaultValue:
+                    'Esta acción es inmediata e irreversible. Se eliminarán permanentemente tu cuenta, perfil y saldo. El historial de viajes se conserva anonimizado por requisitos de auditoría financiera.',
+                })}
               </Text>
             </View>
           </View>
@@ -283,21 +286,25 @@ export default function SettingsScreen() {
             onPress={() => {
               Alert.alert(
                 t('profile.delete_account_confirm_title', { defaultValue: '¿Eliminar cuenta?' }),
-                t('profile.delete_account_confirm_msg', { defaultValue: 'Esta accion no se puede deshacer. Se perderan todos tus datos, saldo y historial.' }),
+                t('profile.delete_account_confirm_msg', {
+                  defaultValue:
+                    'Esta acción no se puede deshacer. Se eliminarán inmediatamente tu cuenta, perfil y saldo. El historial de viajes se anonimiza (no se borra) para cumplir con la normativa de auditoría financiera.',
+                }),
                 [
                   { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
                   {
                     text: t('profile.delete_account', { defaultValue: 'Eliminar cuenta' }),
                     style: 'destructive',
                     onPress: async () => {
-                      if (!userId) return;
+                      // BUG-Store-Readiness-Client: hard-delete via edge function
+                      // derives user_id from JWT — no userId param needed.
                       try {
-                        await authService.deleteAccount(userId);
+                        await authService.deleteAccount();
                         reset();
                       } catch {
                         Alert.alert(
                           t('errors.generic_title', { defaultValue: 'Error' }),
-                          t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo mas tarde.' }),
+                          t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo más tarde.' }),
                         );
                       }
                     },
