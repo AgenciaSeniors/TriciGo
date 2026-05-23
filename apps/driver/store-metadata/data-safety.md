@@ -10,7 +10,7 @@
 |---|---|
 | Does your app collect or share user data? | **Yes** |
 | Encrypted in transit? | **Yes** (HTTPS / TLS 1.2+) |
-| User can request deletion? | **Yes** (Settings → Eliminar cuenta) |
+| User can request deletion? | **Yes** (Settings → Eliminar cuenta in-app, or via public URL `https://tricigo.com/account/delete`). Immediate hard-delete: account, driver profile, KYC documents (carné, licencia, vehículo, selfie) and avatar are removed from storage; historical rides, ratings and financial transactions are anonymized (re-pointed to an anonymous user) and retained for AML audit. |
 
 ---
 

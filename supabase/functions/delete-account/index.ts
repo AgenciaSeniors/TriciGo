@@ -117,17 +117,54 @@ Deno.serve(async (req: Request) => {
       throw new Error(`anonymize_failed: ${anonErr.message}`);
     }
 
-    // ─── 3. Best-effort: clean storage avatars ───
-    // The avatars bucket layout in 00025_avatar_storage.sql organizes
-    // by `{user_id}/<filename>`. We try both common extensions; if the
-    // user uploaded under a different name, this is a no-op (and the
-    // cron purge would catch it later — not blocking).
+    // ─── 3. Best-effort: clean storage buckets ───
+
+    // 3a. `avatars` bucket — both client and driver upload avatars under
+    //     `{user_id}/<filename>` per 00025_avatar_storage.sql. We try
+    //     common extensions; if the user uploaded under a different
+    //     name, it's a no-op (the cron purge would catch leftovers).
     try {
       await admin.storage
         .from('avatars')
         .remove([`${userId}/avatar.jpg`, `${userId}/avatar.png`, `${userId}/avatar.webp`]);
     } catch {
       // ignore — file may not exist or bucket may not be configured
+    }
+
+    // 3b. `driver-documents` bucket — drivers upload KYC docs (carné de
+    //     identidad, licencia de conducir, foto del vehículo, selfie de
+    //     verificación) under `{user_id}/<doc_type>/<filename>` per
+    //     00117_driver_documents_storage_rls.sql. We list-then-remove
+    //     because the exact filenames vary per upload. For non-driver
+    //     users this is a no-op (list returns empty).
+    //
+    // The list API returns paths relative to the bucket root. We
+    // recursively gather subfolders (one per document type) so the
+    // remove call passes the full set of leaf paths in one batch.
+    try {
+      const { data: rootEntries } = await admin.storage
+        .from('driver-documents')
+        .list(userId, { limit: 100 });
+      const leafPaths: string[] = [];
+      for (const entry of rootEntries ?? []) {
+        if (entry.id) {
+          // file directly under {userId}/
+          leafPaths.push(`${userId}/${entry.name}`);
+        } else {
+          // subfolder per document type → list it
+          const { data: subEntries } = await admin.storage
+            .from('driver-documents')
+            .list(`${userId}/${entry.name}`, { limit: 100 });
+          for (const sub of subEntries ?? []) {
+            leafPaths.push(`${userId}/${entry.name}/${sub.name}`);
+          }
+        }
+      }
+      if (leafPaths.length > 0) {
+        await admin.storage.from('driver-documents').remove(leafPaths);
+      }
+    } catch {
+      // ignore — non-driver user or bucket misconfigured
     }
 
     // ─── 4. Hard-delete auth.users (CASCADE handles the rest) ───

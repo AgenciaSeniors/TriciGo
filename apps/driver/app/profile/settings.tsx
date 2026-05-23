@@ -44,7 +44,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, driverService, authService, getSupabaseClient } from '@tricigo/api';
+import { notificationService, driverService, authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -223,16 +223,26 @@ export default function DriverSettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
+    // BUG-Store-Readiness-Driver (DD1): invoke the shared `delete-account`
+    // edge function (introduced in PR #160 for the client app). The edge
+    // function:
+    //   1. Anonymizes all non-CASCADE FK references to the user (rides,
+    //      ratings, referrals, ledger entries, chat messages, etc.) by
+    //      re-pointing them to the anonymous user (00000000-…-099).
+    //   2. Best-effort cleanup of the user's avatar AND any KYC documents
+    //      stored under `driver-documents/{user_id}/*` (carné, licencia,
+    //      vehicle photo, selfie).
+    //   3. Calls `auth.admin.deleteUser` which CASCADEs to public.users
+    //      and the CASCADE-flagged children including `driver_profiles`.
+    //
+    // The previous implementation only did soft-delete of
+    // `driver_profiles.is_active = false`, leaving KYC documents in
+    // storage and auth.users intact — that was the inconsistency DD1
+    // flagged by the audit (`app-store-review-notes.md` promised
+    // "documents removed from storage" but it never happened).
     const performDelete = async () => {
       try {
-        if (userId) {
-          const supabase = getSupabaseClient();
-          await supabase
-            .from('driver_profiles')
-            .update({ is_active: false, deactivated_at: new Date().toISOString() })
-            .eq('user_id', userId);
-        }
-        await authService.signOut();
+        await authService.deleteAccount();
         router.replace('/(auth)/login');
       } catch {
         Alert.alert('Error', t('profile.delete_error', { defaultValue: 'No se pudo eliminar la cuenta.' }));
@@ -243,7 +253,8 @@ export default function DriverSettingsScreen() {
       Alert.prompt(
         t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
         t('profile.delete_account_confirm', {
-          defaultValue: 'Escribe ELIMINAR para confirmar la eliminacion de tu cuenta.',
+          defaultValue:
+            'Escribí ELIMINAR para confirmar. La acción es inmediata e irreversible: se borrarán tu cuenta, perfil y documentos KYC. El historial de viajes se anonimiza (no se borra) por requisitos de auditoría AML.',
         }),
         [
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
@@ -265,7 +276,8 @@ export default function DriverSettingsScreen() {
       Alert.alert(
         t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
         t('profile.delete_account_confirm_android', {
-          defaultValue: '¿Estas seguro de que deseas eliminar tu cuenta? Esta accion es irreversible.',
+          defaultValue:
+            '¿Estás seguro? Esta acción es inmediata e irreversible: se borrarán tu cuenta, perfil y documentos KYC. El historial de viajes se anonimiza por auditoría AML.',
         }),
         [
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
