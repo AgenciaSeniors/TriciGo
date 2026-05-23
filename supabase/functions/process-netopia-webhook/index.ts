@@ -156,9 +156,14 @@ Deno.serve(async (req) => {
     // Log the source IP for future allowlist tightening.
 
     // ── 2. Lookup our intent ──
+    // `stripe_payment_intent_id` here is NETOPIA's ntpID (column name
+    // is legacy from the Stripe era). We need it for the failed→paid
+    // recovery check below: if a prior IPN already stamped a different
+    // ntpID we treat the second IPN as a separate transaction and
+    // refuse the recovery.
     const { data: existingIntent } = await supabase
       .from('payment_intents')
-      .select('id, status, user_id, amount_cup, intent_type, corporate_account_id, payment_provider')
+      .select('id, status, user_id, amount_cup, intent_type, corporate_account_id, payment_provider, stripe_payment_intent_id')
       .eq('id', orderId)
       .single();
 
@@ -190,12 +195,50 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Atomic idempotency claim.
+      // BUG-FIX (2026-05-23, intent d3fc744f): NETOPIA observed sending
+      // two IPNs for the same transaction — first an interim status=12
+      // ("Invalid CVV"), then ~20s later the final status=3 (paid). The
+      // first IPN marks our intent as 'failed'. The second IPN reaches
+      // this branch but used to be silently skipped because the atomic
+      // claim filter was `.in('status', ['pending', 'created'])` — it
+      // refused to recover from 'failed'. Result: card was charged,
+      // wallet was NEVER credited.
+      //
+      // Fix: allow the atomic claim to include 'failed' as a recoverable
+      // prior state. Defensive ntpID check: if the prior 'failed' IPN
+      // stamped a different ntpID than this paid IPN, we're looking at
+      // two distinct NETOPIA transactions on the same orderID, which
+      // would be a serious anomaly — refuse the recovery and signal
+      // NETOPIA to retry so a human can investigate.
+      if (existingIntent.status === 'failed') {
+        const priorNtp = existingIntent.stripe_payment_intent_id;
+        if (priorNtp && priorNtp !== ntpId) {
+          console.error(
+            `[netopia] DISCREPANCY: paid IPN for intent ${orderId} ntpID=${ntpId} ` +
+            `but prior failed IPN had ntpID=${priorNtp} — refusing to credit, manual review needed`,
+          );
+          return new Response(
+            JSON.stringify({ error: 'ntpid_mismatch_after_failure', detail: 'See logs' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        console.warn(
+          `[netopia] Recovering intent ${orderId} from 'failed' → 'paid' ` +
+          `(ntpID=${ntpId}) — prior IPN was a non-final status from NETOPIA`,
+        );
+      }
+
+      // Atomic idempotency claim. Now includes 'failed' as a recoverable
+      // state and clears any stale error_message from a prior interim IPN.
       const { data: claimed, error: claimError } = await supabase
         .from('payment_intents')
-        .update({ status: 'processing', updated_at: new Date().toISOString() })
+        .update({
+          status: 'processing',
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', orderId)
-        .in('status', ['pending', 'created'])
+        .in('status', ['pending', 'created', 'failed'])
         .select();
 
       if (claimError || !claimed || claimed.length === 0) {
