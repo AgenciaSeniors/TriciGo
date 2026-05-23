@@ -302,6 +302,31 @@ describe('driverService', () => {
         driverService.setOnlineStatus('d-1', false),
       ).rejects.toThrow();
     });
+
+    // DRV-002 (security audit 2026-05-23, Driver fraud kill chain):
+    // Migration 00288 extends tg_driver_profiles_protect_admin_fields
+    // with two new lockdowns:
+    //   * is_online toggle to true requires status='approved' — the
+    //     trigger RAISEs 'driver_not_approved_for_online' for unapproved
+    //     drivers. This blocks the dispatch-loop entry path that DRV-001
+    //     (00287) closes on the accept side.
+    //   * custom_per_km_rate_cup is now admin-only; non-admin updates
+    //     silently revert (NEW := OLD pattern) rather than raise, so
+    //     this branch is harder to assert at the service layer — it's
+    //     covered by manual verification in the PR (see PR-01 body).
+    it('throws driver_not_approved_for_online when trigger blocks is_online toggle on unapproved driver (DRV-002)', async () => {
+      const err = {
+        message:
+          "driver_not_approved_for_online: status=pending_verification — cannot go online until approved by admin",
+        code: 'P0001',
+      };
+      const chain = createMockQueryChain({ data: null, error: err });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 }),
+      ).rejects.toThrow(/driver_not_approved_for_online/);
+    });
   });
 
   // ==================== updateLocation ====================
@@ -392,6 +417,38 @@ describe('driverService', () => {
 
       await expect(driverService.acceptRide('r-1', 'd-1')).rejects.toEqual(err);
     });
+
+    // DRV-001 (security audit 2026-05-23, kill chain Driver fraud):
+    // Migration 00287 adds an `IF v_driver.status <> 'approved'` gate
+    // before is_online / heartbeat / single-active-ride checks. A
+    // driver in status='pending_verification' (or any other non-
+    // approved status) must be rejected — this prevents an attacker
+    // who only completed basic onboarding from accepting real rides.
+    // Service contract: surface the rpcError + rpcPayload so the UI
+    // can show "Tu cuenta aún no está aprobada — admin lo está
+    // revisando" instead of a generic 'rpc_error'.
+    it('throws driver_not_approved with status payload when RPC rejects unapproved driver (DRV-001)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          error: 'driver_not_approved',
+          driver_status: 'pending_verification',
+        },
+        error: null,
+      });
+
+      try {
+        await driverService.acceptRide('r-1', 'd-1');
+        throw new Error('expected rejection');
+      } catch (err) {
+        expect((err as Error).message).toBe('driver_not_approved');
+        const enriched = err as Error & {
+          rpcError?: string;
+          rpcPayload?: Record<string, unknown>;
+        };
+        expect(enriched.rpcError).toBe('driver_not_approved');
+        expect(enriched.rpcPayload).toMatchObject({ driver_status: 'pending_verification' });
+      }
+    });
   });
 
   // ==================== updateRideStatus ====================
@@ -461,6 +518,55 @@ describe('driverService', () => {
           actualDurationS: 600,
         }),
       ).rejects.toThrow('RPC failed');
+    });
+
+    // DRV-003 (security audit 2026-05-23, Driver fraud kill chain):
+    // Migration 00289 adds trigger trg_rides_validate_actuals that
+    // RAISEs when actual_distance_m / actual_duration_s exceed
+    // absolute caps (200km / 8h) or relative caps (2x distance
+    // estimate / 3x duration estimate). complete_ride_and_pay's
+    // UPDATE of rides hits that trigger before the wallet debit,
+    // so the entire RPC transaction rolls back. The error bubbles
+    // up to the client as a generic supabase error with the RAISE
+    // message in `message`.
+
+    it('throws when complete_ride_and_pay UPDATE hits trg_rides_validate_actuals — distance > 200km absolute cap (DRV-003a)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'actual_distance_m exceeds 200km absolute limit (got 999999 m)',
+          code: 'P0001',
+        },
+      });
+
+      await expect(
+        driverService.completeRide({
+          rideId: 'r-1',
+          driverId: 'd-1',
+          actualDistanceM: 999999,
+          actualDurationS: 600,
+        }),
+      ).rejects.toThrow(/exceeds 200km absolute limit/);
+    });
+
+    it('throws when complete_ride_and_pay UPDATE hits trg_rides_validate_actuals — duration > 3x estimate (DRV-003b)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          message:
+            'actual_duration_s (3600) exceeds 3x estimate (600 s). Cap: 1800 s. Manual review required.',
+          code: 'P0001',
+        },
+      });
+
+      await expect(
+        driverService.completeRide({
+          rideId: 'r-1',
+          driverId: 'd-1',
+          actualDistanceM: 2500,
+          actualDurationS: 3600,
+        }),
+      ).rejects.toThrow(/exceeds 3x estimate/);
     });
   });
 
