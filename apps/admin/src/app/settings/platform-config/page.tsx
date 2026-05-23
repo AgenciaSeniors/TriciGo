@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 type ConfigEntry = { key: string; value: string };
 
@@ -41,6 +42,11 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
 export default function PlatformConfigPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  // ADM-002: writes to platform_config now require super_admin tier
+  // (mig 00292 split the pc_admin policy into super_admin write +
+  // admin read). UI mirrors the policy so non-super-admins see the
+  // values but can't try to save.
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
@@ -107,6 +113,15 @@ export default function PlatformConfigPage() {
       <h1 className="text-3xl font-bold mb-2">{t('platform_config.title')}</h1>
       <p className="text-ink-muted mb-6">{t('platform_config.subtitle')}</p>
 
+      {!superAdminLoading && !isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+          {t('platform_config.requires_super_admin', {
+            defaultValue:
+              'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
+          })}
+        </div>
+      )}
+
       {loading ? (
         <p className="text-ink-subtle">{t('common.loading')}</p>
       ) : configs.length === 0 ? (
@@ -154,7 +169,8 @@ export default function PlatformConfigPage() {
                     />
                     <button
                       onClick={() => handleSave(config.key)}
-                      disabled={!isEdited || savingKey === config.key}
+                      disabled={!isEdited || savingKey === config.key || !isSuperAdmin}
+                      title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
                       className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                     >
                       {savingKey === config.key

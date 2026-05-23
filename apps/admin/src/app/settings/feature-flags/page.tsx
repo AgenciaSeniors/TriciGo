@@ -7,10 +7,15 @@ import { useTranslation } from '@tricigo/i18n';
 import type { FeatureFlag } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 export default function FeatureFlagsPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  // ADM-002: feature flags include security-critical toggles
+  // (KYC_ENABLED, RATE_LIMIT_ENABLED, etc). Mig 00292 requires
+  // super_admin for INSERT/UPDATE/DELETE on this table.
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +42,12 @@ export default function FeatureFlagsPage() {
   }, []);
 
   async function handleToggle(flag: FeatureFlag) {
+    if (!isSuperAdmin) {
+      showToast('error', t('feature_flags.requires_super_admin', {
+        defaultValue: 'Solo super_admin puede cambiar feature flags',
+      }));
+      return;
+    }
     const newValue = !flag.value;
     setFlags((prev) => prev.map((f) => f.id === flag.id ? { ...f, value: newValue } : f));
     try {
@@ -49,6 +60,12 @@ export default function FeatureFlagsPage() {
 
   async function handleCreate() {
     if (!newKey.trim()) return;
+    if (!isSuperAdmin) {
+      showToast('error', t('feature_flags.requires_super_admin', {
+        defaultValue: 'Solo super_admin puede crear feature flags',
+      }));
+      return;
+    }
     setCreating(true);
     try {
       await adminService.createFeatureFlag({
@@ -85,11 +102,22 @@ export default function FeatureFlagsPage() {
         <h1 className="text-3xl font-bold">{t('feature_flags.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600"
+          disabled={!isSuperAdmin}
+          title={!isSuperAdmin ? t('feature_flags.requires_super_admin', { defaultValue: 'Solo super_admin puede modificar feature flags' }) : undefined}
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('feature_flags.add_flag')}
         </button>
       </div>
+
+      {!superAdminLoading && !isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+          {t('feature_flags.requires_super_admin', {
+            defaultValue:
+              'Solo super_admin puede modificar feature flags. Tu cuenta puede consultar los flags actuales pero no toggle ni crear nuevos.',
+          })}
+        </div>
+      )}
 
       {showCreate && (
         <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
@@ -151,7 +179,9 @@ export default function FeatureFlagsPage() {
                 role="switch"
                 aria-checked={flag.value}
                 aria-label={`Toggle ${flag.key}`}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
+                disabled={!isSuperAdmin}
+                title={!isSuperAdmin ? t('feature_flags.requires_super_admin', { defaultValue: 'Solo super_admin puede toggle' }) : undefined}
+                className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   flag.value ? 'bg-primary-500' : 'bg-line-strong'
                 }`}
               >

@@ -1401,6 +1401,43 @@ export const adminService = {
     if (error) throw error;
   },
 
+  // ==================== USER ROLE PROMOTION ====================
+
+  /**
+   * ADM-001: promote a user to a new role (admin → super_admin, or
+   * customer → admin, etc). The only legitimate path for role
+   * changes: requires super_admin caller, requires a reason (min
+   * 10 chars), and logs to admin_actions for audit.
+   *
+   * Direct UPDATE of users.role is blocked by
+   * tg_users_protect_admin_fields (mig 00291) for non-super-admins.
+   *
+   * @throws Error('forbidden: only super_admin ...') if caller is not super_admin
+   * @throws Error('reason required (min 10 chars) ...') if reason too short
+   * @throws Error('target user not found ...') if p_target_user_id invalid
+   */
+  async promoteUserRole(
+    targetUserId: string,
+    newRole: 'customer' | 'driver' | 'admin' | 'super_admin',
+    reason: string,
+  ): Promise<{
+    success: boolean;
+    target_user_id: string;
+    old_role: string;
+    new_role: string;
+    no_change?: boolean;
+    reason?: string;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('promote_user_role', {
+      p_target_user_id: targetUserId,
+      p_new_role: newRole,
+      p_reason: reason,
+    });
+    if (error) throw error;
+    return data as Awaited<ReturnType<typeof this.promoteUserRole>>;
+  },
+
   // ==================== EXCHANGE RATE ====================
 
   /**

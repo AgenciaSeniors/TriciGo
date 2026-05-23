@@ -998,6 +998,87 @@ describe('adminService', () => {
 
       await expect(adminService.updatePlatformConfig('k', 'v')).rejects.toEqual(err);
     });
+
+    // ADM-002 (security audit 2026-05-23, Admin escalation kill chain):
+    // Migration 00292 split pc_admin policy into super_admin write +
+    // admin read. A regular admin (non-super) attempting to UPDATE
+    // platform_config now gets RLS permission denied (Postgres
+    // returns code 42501). The service surfaces the error verbatim
+    // so the UI can show "Requires super_admin" via the
+    // useIsSuperAdmin gate (apps/admin/src/hooks/useIsSuperAdmin.ts).
+    it('throws RLS permission denied when regular admin tries to update commission_rate (ADM-002)', async () => {
+      const err = {
+        message: 'new row violates row-level security policy for table "platform_config"',
+        code: '42501',
+      };
+      const chain = createMockQueryChain({ data: null, error: err });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(
+        adminService.updatePlatformConfig('commission_rate', '0'),
+      ).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== promoteUserRole (ADM-001) ====================
+  //
+  // ADM-001 (security audit 2026-05-23): direct UPDATE of users.role
+  // is now blocked by tg_users_protect_admin_fields (mig 00291) for
+  // non-super-admins. The promote_user_role RPC is the only
+  // legitimate path; it requires super_admin caller + reason >=10
+  // chars + logs to admin_actions.
+  describe('promoteUserRole', () => {
+    it('promotes a user to super_admin when caller is super_admin (ADM-001c)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          success: true,
+          target_user_id: 'u-99',
+          old_role: 'admin',
+          new_role: 'super_admin',
+          reason: 'founder transition Q2 — handover from previous CEO',
+        },
+        error: null,
+      });
+
+      const result = await adminService.promoteUserRole(
+        'u-99',
+        'super_admin',
+        'founder transition Q2 — handover from previous CEO',
+      );
+
+      expect(mockRpc).toHaveBeenCalledWith('promote_user_role', {
+        p_target_user_id: 'u-99',
+        p_new_role: 'super_admin',
+        p_reason: 'founder transition Q2 — handover from previous CEO',
+      });
+      expect(result.success).toBe(true);
+      expect(result.old_role).toBe('admin');
+      expect(result.new_role).toBe('super_admin');
+    });
+
+    it('throws forbidden when caller is not super_admin (ADM-001b)', async () => {
+      const err = {
+        message: 'forbidden: only super_admin can promote user roles',
+        code: 'P0001',
+      };
+      mockRpc.mockResolvedValueOnce({ data: null, error: err });
+
+      await expect(
+        adminService.promoteUserRole('u-99', 'super_admin', 'attempted privilege escalation'),
+      ).rejects.toEqual(err);
+    });
+
+    it('throws when reason is too short (ADM-001a)', async () => {
+      const err = {
+        message: 'reason required (min 10 chars): document why this role change is needed',
+        code: 'P0001',
+      };
+      mockRpc.mockResolvedValueOnce({ data: null, error: err });
+
+      await expect(
+        adminService.promoteUserRole('u-99', 'admin', 'no'),
+      ).rejects.toEqual(err);
+    });
   });
 
   // ==================== Surge Zones ====================
