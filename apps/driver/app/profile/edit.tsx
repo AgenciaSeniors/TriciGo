@@ -350,7 +350,7 @@ export default function EditProfileScreen() {
                 </Text>
               </View>
               <View className="items-center flex-1">
-                <Text variant="h4" color="accent">{driverProfile.total_rides ?? 0}</Text>
+                <Text variant="h4" color="accent">{driverProfile.total_rides_completed ?? driverProfile.total_rides ?? 0}</Text>
                 <Text variant="caption" color="primary" className="opacity-50">
                   {td('trips_history.title', { defaultValue: 'Viajes' })}
                 </Text>

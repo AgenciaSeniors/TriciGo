@@ -201,7 +201,7 @@ function NativeDriverProfileScreen() {
             <View className="flex-1">
               <StatCard
                 icon="car-outline"
-                value={String(driverProfile.total_rides ?? 0)}
+                value={String(driverProfile.total_rides_completed ?? driverProfile.total_rides ?? 0)}
                 label={td('trips_history.title')}
               />
             </View>
