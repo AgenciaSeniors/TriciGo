@@ -41,11 +41,22 @@ function getNumber(config: Record<string, string>, key: string, fallback: number
   return isNaN(val) ? fallback : val;
 }
 
-const REQUIRED_DOCS = ['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'];
+// CC-04 (security audit 2026-05-23, PR-04 — opción C): `selfie` removed
+// from REQUIRED_DOCS because the driver onboarding UI no longer uploads
+// it (the verify-selfie EF was returning placeholder pass scores when
+// SELFIE_VERIFICATION_ENABLED was not set — fake security). Manual
+// admin review of the remaining KYC documents is the active control.
+//
+// SECURITY POSTURE NOTE: with selfie biometric verification removed,
+// the recommended setting is `auto_approve_drivers_enabled = false` in
+// platform_config so every driver requires explicit admin approval.
+// This function is a NO-OP whenever that flag is false (line below).
+// If/when AWS Rekognition (or equivalent) is integrated, add selfie
+// back to REQUIRED_DOCS + restore the face_match_score gate.
+const REQUIRED_DOCS = ['national_id', 'drivers_license', 'vehicle_registration', 'vehicle_photo'];
 
 async function autoApproveDrivers(supabase: ReturnType<typeof getSupabase>, config: Record<string, string>) {
   if (!isEnabled(config, 'auto_approve_drivers_enabled')) return { count: 0, errors: [] };
-  const faceThreshold = getNumber(config, 'auto_approve_drivers_face_threshold', 80);
   let count = 0; const errors: string[] = [];
   const { data: drivers } = await supabase.from('driver_profiles').select('id, user_id').in('status', ['pending_verification', 'under_review']);
   if (!drivers?.length) return { count, errors };
@@ -54,11 +65,13 @@ async function autoApproveDrivers(supabase: ReturnType<typeof getSupabase>, conf
       const { data: docs } = await supabase.from('driver_documents').select('document_type, is_verified').eq('driver_id', driver.id);
       const verifiedTypes = new Set((docs ?? []).filter((d: { is_verified: boolean }) => d.is_verified).map((d: { document_type: string }) => d.document_type));
       if (!REQUIRED_DOCS.every((t) => verifiedTypes.has(t))) continue;
-      const { data: selfieChecks } = await supabase.from('selfie_checks').select('face_match_score, status').eq('driver_id', driver.id).eq('status', 'passed').order('created_at', { ascending: false }).limit(1);
-      const bestScore = selfieChecks?.[0]?.face_match_score ?? 0;
-      if (bestScore < faceThreshold) continue;
+      // CC-04: face_match_score gate removed (selfie verification not
+      // performing real biometric matching). When this path runs (admin
+      // explicitly enabled auto_approve_drivers_enabled), approval is
+      // based on doc verification alone. Re-add the gate after provider
+      // integration.
       await supabase.from('driver_profiles').update({ status: 'approved', approved_at: new Date().toISOString() }).eq('id', driver.id);
-      await supabase.from('admin_actions').insert({ admin_id: SYSTEM_USER, action: 'auto_approve_driver', target_type: 'driver_profile', target_id: driver.id, new_values: { face_match_score: bestScore, auto: true } });
+      await supabase.from('admin_actions').insert({ admin_id: SYSTEM_USER, action: 'auto_approve_driver', target_type: 'driver_profile', target_id: driver.id, new_values: { auto: true, selfie_gated: false } });
       if (driver.user_id) {
         const { data: devices } = await supabase.from('user_devices').select('push_token').eq('user_id', driver.user_id).not('push_token', 'is', null);
         const tokens = (devices ?? []).map((d: { push_token: string | null }) => d.push_token).filter(Boolean) as string[];
