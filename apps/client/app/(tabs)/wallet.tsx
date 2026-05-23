@@ -25,6 +25,7 @@ import {
   computeRechargeFeeUsd,
   computeRechargeChargeUsd,
   RECHARGE_LIMITS,
+  translateNetopiaError,
 } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
@@ -819,10 +820,13 @@ function NativeWalletScreen() {
           }
         })();
       } else if (final.status === 'failed') {
+        // Translate NETOPIA's English raw message (e.g. "Invalid CVV")
+        // into Spanish copy that always tells the user their card was
+        // NOT charged. See packages/utils/src/netopia-errors.ts.
         Toast.show({
           type: 'error',
           text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
-          text2: final.error_message ?? undefined,
+          text2: translateNetopiaError(final.error_message),
         });
       } else {
         // status='pending' / 'created' / 'processing' — webhook still in
