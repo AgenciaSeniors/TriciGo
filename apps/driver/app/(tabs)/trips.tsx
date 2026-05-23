@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
-import { formatTRC, formatUSD, formatCUP, trcToUsd, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay, riderChargedTotal } from '@tricigo/utils';
+import { formatTRC, formatUSD, formatCUP, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay, riderChargedTotal } from '@tricigo/utils';
 import { walletService } from '@tricigo/api';
 import { tripNetEarnings } from '@/utils/tripNetEarnings';
 import type { Ride } from '@tricigo/types';

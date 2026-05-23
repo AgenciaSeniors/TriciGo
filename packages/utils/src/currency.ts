@@ -107,9 +107,39 @@ export function formatCUP(cupPesos: number): string {
 // ──────────────────────────────────────────────
 
 /**
- * Convert TRC (= CUP) to USD using the exchange rate.
+ * Convert CUP (whole pesos) to USD using the exchange rate.
  *
- * @param trc - amount in TRC whole units (e.g. 500)
+ * Use this for ANY display that shows the "USD equivalent" of a fare,
+ * balance, or transaction amount. The formula is just `cup / rate`.
+ *
+ * IMPORTANT — prefer this over `trcToUsd()` when the source value comes
+ * from `rides.final_fare_*` columns. Since the Wallet v2 migration
+ * (~2026-04-08), the `complete_ride_and_pay` RPC writes
+ * `rides.final_fare_trc` as **USD-cents** (via the SQL helper
+ * `cup_to_trc_centavos`), NOT as CUP-pegged 1:1. Dividing USD-cents
+ * by the exchange rate gives ~5.5× wrong USD. `final_fare_cup` is
+ * always genuine CUP and safe to pass here in both regimes.
+ *
+ * @param cup - amount in CUP whole pesos (e.g. 1440)
+ * @param exchangeRate - 1 USD = X CUP (e.g. 555)
+ * @returns USD amount (e.g. 1440/555 = 2.5946)
+ */
+export function cupToUsd(cup: number, exchangeRate: number): number {
+  if (!Number.isFinite(cup) || exchangeRate <= 0 || !Number.isFinite(exchangeRate)) return 0;
+  return cup / exchangeRate;
+}
+
+/**
+ * Convert TRC to USD using the exchange rate.
+ *
+ * @deprecated For fare display, prefer `cupToUsd(final_fare_cup, rate)`.
+ * Since the Wallet v2 migration (~2026-04-08), `rides.final_fare_trc`
+ * is stored as USD-cents (not CUP-pegged 1:1), so this function gives
+ * ~5.5× wrong result when called with `final_fare_trc`. Safe to use
+ * with values that ARE genuinely CUP-pegged TRC: `estimated_fare_trc`,
+ * `wallet_accounts.balance` (legacy), or any TRC where 1 TRC = 1 CUP.
+ *
+ * @param trc - amount in TRC whole units, assumed CUP-pegged 1:1
  * @param exchangeRate - 1 USD = X CUP/TRC (e.g. 520)
  * @returns USD amount (e.g. 500/520 = 0.9615)
  */
