@@ -27,10 +27,11 @@ real driver availability.
 ### Wallet recharge — Apple Guideline 3.1.1 defense
 
 The in-app trip credit balance (visible at bottom tab "Créditos de viaje") accepts top-ups via
-Stripe Payment Sheet. **This is intentionally not StoreKit / In-App
-Purchase**, and we believe it falls outside Apple's IAP requirement based
-on the published precedents for ride-sharing wallets (Uber Cash,
-Starbucks, Lyft Cash):
+**NETOPIA Payments** (a Romanian payment processor) opened in a hosted
+checkout page via `WebBrowser.openAuthSessionAsync`. **This is intentionally
+not StoreKit / In-App Purchase**, and we believe it falls outside Apple's
+IAP requirement based on the published precedents for ride-sharing
+wallets (Uber Cash, Starbucks, Lyft Cash):
 
 1. **Wallet credit is redeemable only for physical transportation
    services.** The credit pays for rides between physical locations
@@ -55,9 +56,35 @@ Starbucks, Lyft Cash):
    Postmates — all use third-party payment processors for physical
    service top-ups without StoreKit.
 
-If the reviewer needs to test the recharge flow, the publishable Stripe
-key is in test mode; any test card (e.g. `4242 4242 4242 4242` exp
-`12/30` cvc `123`) will succeed without a real charge.
+If the reviewer needs to test the recharge flow, the NETOPIA POS account
+is in sandbox mode; the test card published by NETOPIA in their dev
+docs (`9900 0000 0000 5159` exp `01/26` cvc `123`) succeeds without a
+real charge. The hosted page returns to the app via Universal Link
+`https://tricigo.com/app/client/wallet` after the user confirms or
+cancels. Sandbox is fully OFAC-safe; we evaluated Stripe and rejected
+it because Stripe terms prohibit servicing Cuba directly.
+
+### App Tracking Transparency (ATT)
+
+TriciGo does **not** implement an ATT prompt (no
+`AppTrackingTransparency` framework, no `NSUserTrackingUsageDescription`
+in `Info.plist`) because the app does **not** track the user across
+other companies' apps or websites:
+
+- PostHog analytics runs with `autocapture: false` and is used only
+  for first-party product metrics on TriciGo's own surfaces.
+- Sentry is configured with `sendDefaultPii: false` and the
+  `beforeSend` hook strips authorization headers and any payload
+  fields that could carry PII before transmission.
+- No advertising SDK (AdMob, Meta Ads, AppsFlyer, Branch, etc.) is
+  integrated. No third-party SDK reads or shares the IDFA.
+- `apps/client/PrivacyInfo.xcprivacy` declares `NSPrivacyTracking
+  = false` and an empty `NSPrivacyTrackingDomains`, matching the
+  runtime behavior.
+
+Per Apple's ATT policy, the prompt is required only when an app
+tracks; since we don't, surfacing the prompt would actually be
+misleading to the user.
 
 ### Sign in with Apple
 
@@ -111,12 +138,13 @@ present for travelers using the app abroad.
 
 ### Known reviewer notes
 
-- The recharge flow may show a "stripe_not_ready" banner if the Stripe
-  publishable key has not been provisioned for the review account. If
-  this happens, the button label changes to "Abrir versión web" and
-  opens a web fallback — both flows redeem to the same wallet.
-- The "Próximamente" sections in some menus are intentionally disabled
-  features awaiting a future release.
+- The recharge flow opens a NETOPIA hosted checkout page in an
+  in-app browser (`WebBrowser.openAuthSessionAsync`). If the
+  NETOPIA POS sandbox is unreachable from the review device, the
+  recharge button surfaces a toast with the network error; rides
+  using cash payment continue to work normally.
+- The "Próximamente" sections in some menus are intentionally
+  disabled features awaiting a future release.
 
 ---
 

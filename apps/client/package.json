@@ -21,7 +21,6 @@
     "@react-navigation/native": "^7.0.0",
     "@rnmapbox/maps": "~10.3.0",
     "@sentry/react-native": "^7.11.0",
-    "@stripe/stripe-react-native": "0.49.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-query": "^5.66.0",
     "@tricigo/api": "workspace:*",
