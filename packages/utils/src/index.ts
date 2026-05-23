@@ -4,6 +4,7 @@ export * from './validation';
 export * from './cuba-geo';
 export * from './geo';
 export * from './fareCalculator';
+export * from './farePresentation';
 export { initAnalytics, trackEvent, identifyUser, resetAnalytics } from './analytics';
 export type { AnalyticsEvent } from './analytics';
 export {

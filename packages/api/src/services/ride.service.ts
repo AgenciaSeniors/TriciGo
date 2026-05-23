@@ -2234,6 +2234,20 @@ export const rideService = {
       const vehicleArr = driverProfile?.vehicles as { plate_number: string }[] | { plate_number: string } | null | undefined;
       const vehiclePlate = Array.isArray(vehicleArr) ? vehicleArr[0]?.plate_number ?? null : vehicleArr?.plate_number ?? null;
 
+      // BUG-fare-display-parity: el PDF passenger muestra
+      // "subtotal + surge + tip - discount = total cobrado". Antes
+      // `totalCup` se quedaba en `final_fare_cup`, que NO incluye tip
+      // (el RPC complete_ride_and_pay no la suma; add_tip solo updatea
+      // tip_amount aparte). Resultado: el rider veía aritmética rota
+      // ("subtotal $200 + tip $20 = total $200"). Sumar tip aquí lo
+      // alinea con lo que efectivamente el wallet debitó.
+      const tipCup = (ride.tip_amount as number | null) ?? 0;
+      const totalChargedCup = totalCup + tipCup;
+      // fareTrc se computa con la misma lógica (1 TRC = 1 CUP peg, no
+      // hace falta conversión del tip).
+      const baseFareTrc = (ride.final_fare_trc as number | null) ?? (ride.estimated_fare_trc as number | null);
+      const fareTrc = baseFareTrc != null ? baseFareTrc + tipCup : null;
+
       return {
         variant: 'passenger',
         ...base,
@@ -2243,9 +2257,9 @@ export const rideService = {
         surgeMultiplier: surgeMult,
         surgeAmountCup,
         discountCup: (ride.discount_amount_cup as number | null) ?? 0,
-        tipCup: (ride.tip_amount as number | null) ?? 0,
-        totalCup,
-        fareTrc: (ride.final_fare_trc as number | null) ?? (ride.estimated_fare_trc as number | null) ?? null,
+        tipCup,
+        totalCup: totalChargedCup,
+        fareTrc,
       };
     }
 

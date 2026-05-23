@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
@@ -280,8 +280,12 @@ function WebRidesScreen() {
                     // method. Previously fell back to TRC fields and showed
                     // "0 TRC" for cash rides where only *_fare_cup is set.
                     const rShowTrc = ride.payment_method === 'tricicoin';
-                    const rTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
-                    const rCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
+                    // BUG-fare-display-parity: incluir tip en "Total cobrado".
+                    // El RPC no suma tip al final_fare_cup pero el wallet sí
+                    // debita final + tip. Sin esto, la lista muestra menos
+                    // de lo que el rider pagó cuando hay propina.
+                    const rTrc = riderChargedTotalTrc(ride);
+                    const rCup = riderChargedTotal(ride);
                     const fareLabel =
                       rShowTrc && rTrc != null
                         ? formatTRC(rTrc)
@@ -570,8 +574,10 @@ function NativeRidesScreen() {
     // Previously formatted all rides as TRC, even cash ones whose only
     // populated field is estimated_fare_cup.
     const showTrc = item.payment_method === 'tricicoin';
-    const iTrc = item.final_fare_trc ?? item.estimated_fare_trc;
-    const iCup = item.final_fare_cup ?? item.estimated_fare_cup;
+    // BUG-fare-display-parity: incluir tip en "Total cobrado". El RPC no
+    // suma tip al final_fare_cup pero el wallet sí debita final + tip.
+    const iTrc = riderChargedTotalTrc(item);
+    const iCup = riderChargedTotal(item);
     const fareLabel =
       showTrc && iTrc != null
         ? formatTRC(iTrc)

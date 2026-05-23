@@ -7,7 +7,9 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
-import { formatTRC, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay } from '@tricigo/utils';
+import { formatTRC, formatUSD, formatCUP, trcToUsd, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay, riderChargedTotal } from '@tricigo/utils';
+import { walletService } from '@tricigo/api';
+import { tripNetEarnings } from '@/utils/tripNetEarnings';
 import type { Ride } from '@tricigo/types';
 import { colors } from '@tricigo/theme';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
@@ -32,6 +34,21 @@ function NativeTripsScreen() {
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<HistoryFilterState>({});
+  // BUG-fare-display-parity: commission rate fallback for legacy rides
+  // that don't have a snapshot. `tripNetEarnings()` prefers the
+  // snapshotted `commission_amount`; this rate is used only when the
+  // snapshot is absent.
+  const [commissionRate, setCommissionRate] = useState(0.15);
+  useEffect(() => {
+    walletService.getConfigValue('commission_rate')
+      .then((val) => {
+        if (val) {
+          const parsed = parseFloat(String(val).replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) setCommissionRate(parsed);
+        }
+      })
+      .catch(() => { /* best-effort: queda en 0.15 */ });
+  }, []);
 
   const serviceTypes = [
     { value: 'triciclo_basico', label: t('onboarding.triciclo', { defaultValue: 'Triciclo' }) },
@@ -139,15 +156,24 @@ function NativeTripsScreen() {
     }
   }, [driverProfileId, filters]);
 
-  const renderItem = useCallback(({ item }: { item: Ride }) => {
+  const renderItem = useCallback(({ item }: { item: Ride & { commission_amount?: number | null } }) => {
     const isCompleted = item.status === 'completed';
-    const fare = item.final_fare_trc ?? item.estimated_fare_trc ?? item.final_fare_cup ?? item.estimated_fare_cup ?? 0;
+    // BUG-fare-display-parity: para viajes completados el número grande
+    // ahora es "Ganaste $X" (NET = fare - snap_commission + tip). Antes
+    // mostraba `final_fare_*` bruto sin restar comisión ni sumar tip,
+    // entonces el driver leía un número que no coincidía con "Ganancias".
+    const netEarningsCup = isCompleted
+      ? tripNetEarnings(item, commissionRate)
+      : 0;
+    const chargedCup = isCompleted
+      ? riderChargedTotal(item)
+      : (item.estimated_fare_cup ?? 0);
     const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
-    const fareUsd = trcToUsd(fare, rate);
+    const primaryUsd = ((isCompleted ? netEarningsCup : chargedCup)) / rate;
     const deduction = item.quota_deduction_amount ?? 0;
 
     return (
-      <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${formatTRC(fare)}`}>
+      <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${isCompleted ? t('trips_history.you_earned', { defaultValue: 'Ganaste' }) + ' ' + formatCUP(netEarningsCup) : formatCUP(chargedCup)}`}>
         <Card variant="filled" padding="md" className="mb-3 bg-white" style={{ borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
           <View className="flex-row items-center justify-between mb-2">
             <Text variant="caption" style={{ color: '#64748B' }}>
@@ -175,8 +201,22 @@ function NativeTripsScreen() {
 
           <View className="flex-row justify-between items-center">
             <View>
-              <Text variant="body" color="primary" className="font-semibold">{formatTRC(fare)}</Text>
-              <Text variant="caption" style={{ color: '#94A3B8' }}>{'\u2248'} {formatUSD(fareUsd)}</Text>
+              {isCompleted ? (
+                <>
+                  <Text variant="caption" style={{ color: '#16A34A', fontWeight: '600' }}>
+                    {t('trips_history.you_earned', { defaultValue: 'Ganaste' })}
+                  </Text>
+                  <Text variant="body" color="primary" className="font-semibold">{formatCUP(netEarningsCup)}</Text>
+                  <Text variant="caption" style={{ color: '#94A3B8' }}>
+                    {t('trips_history.charged_to_client', { defaultValue: 'Cobrado al cliente' })}: {formatCUP(chargedCup)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text variant="body" color="primary" className="font-semibold">{formatCUP(chargedCup)}</Text>
+                  <Text variant="caption" style={{ color: '#94A3B8' }}>{'\u2248'} {formatUSD(primaryUsd)}</Text>
+                </>
+              )}
             </View>
             <View className="items-end">
               {deduction > 0 && (
@@ -189,7 +229,7 @@ function NativeTripsScreen() {
         </Card>
       </Pressable>
     );
-  }, [t]);
+  }, [t, commissionRate]);
 
   return (
     <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>

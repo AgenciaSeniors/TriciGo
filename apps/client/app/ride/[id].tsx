@@ -12,7 +12,7 @@ import { rideService } from '@tricigo/api/services/ride';
 import { disputeService, lostItemService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -136,8 +136,11 @@ export default function RideDetailScreen() {
     );
   }
 
-  const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc;
-  const fareCup = ride.final_fare_cup ?? ride.estimated_fare_cup;
+  // BUG-fare-display-parity: "Total cobrado" debe incluir el tip post-add_tip.
+  // El wallet del rider fue debitado por `final_fare_cup + tip_amount` pero
+  // antes la UI mostraba solo `final_fare_cup` → discrepancia visible.
+  const fareTrc = riderChargedTotalTrc(ride);
+  const fareCup = riderChargedTotal(ride);
   // BUG-293 parity: only payment_method='tricicoin' denominates in TRC.
   // final_fare_trc is set for every ride (1:1 CUP peg) so it can't pick
   // the currency — that's why cash rides were shown as "TRC". Mirror
