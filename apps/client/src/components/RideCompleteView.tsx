@@ -9,7 +9,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger, buildShareUrl } from '@tricigo/utils';
+import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger, buildShareUrl, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
@@ -206,8 +206,12 @@ export function RideCompleteView() {
 
   if (!activeRide) return null;
 
-  const fareTrc = activeRide.final_fare_trc ?? activeRide.estimated_fare_trc;
-  const fareCup = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup;
+  // BUG-fare-display-parity: "Total cobrado" debe incluir el tip que el
+  // rider agregó vía add_tip RPC. `final_fare_cup` solo no es source-of-truth
+  // porque el RPC no la actualiza al sumar tip (el wallet sí debita
+  // final_fare + tip, pero la UI mostraba solo final_fare → discrepancia).
+  const fareTrc = riderChargedTotalTrc(activeRide);
+  const fareCup = riderChargedTotal(activeRide);
   const showTrc = activeRide.payment_method === 'tricicoin';
   const fareDisplay = showTrc && fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup);
   const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;

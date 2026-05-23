@@ -682,9 +682,15 @@ export const driverService = {
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
+    // BUG-fare-display-parity: join `ride_pricing_snapshots` to flatten
+    // the snapshotted `commission_amount` onto each ride row. Without
+    // it the trips list falls back to `fare × live_commission_rate`,
+    // which drifts whenever platform_config.commission_rate changes
+    // after a ride completes. Mirrors the join in `getRideHistoryFiltered`
+    // (line 640) which already does this for the home earnings counter.
     let query = supabase
       .from('rides')
-      .select('*')
+      .select('*, ride_pricing_snapshots(snapshot_type, commission_amount)')
       .eq('driver_id', params.driverId);
 
     // Status filter
@@ -713,7 +719,21 @@ export const driverService = {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return (data ?? []).map((r) => transformRideCoordinates(r as Record<string, unknown>));
+    // Flatten the nested final-snapshot into a top-level `commission_amount`
+    // field so `tripNetEarnings()` can prefer the snapshot over a recalc.
+    return (data ?? []).map((r) => {
+      const row = r as Record<string, unknown>;
+      const snaps = row.ride_pricing_snapshots as
+        | Array<{ snapshot_type?: string; commission_amount?: number }>
+        | null
+        | undefined;
+      const finalSnap = snaps?.find((s) => s.snapshot_type === 'final');
+      return transformRideCoordinates({
+        ...row,
+        ride_pricing_snapshots: undefined,
+        commission_amount: finalSnap?.commission_amount ?? null,
+      });
+    });
   },
 
   // ==================== AUTO-ACCEPT ====================

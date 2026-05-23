@@ -107,9 +107,16 @@ export default function TripDetailScreen() {
 
   const fare = ride.final_fare_cup ?? ride.estimated_fare_cup;
   const isCompleted = ride.status === 'completed';
+  // BUG-fare-display-parity: prefer snapshot `commission_amount` directo,
+  // fallback a recalc con rate snapshoteada o live. Antes recalculaba
+  // siempre `fare * rate`, causando drift de centavos cuando el snapshot
+  // tenía el monto exacto en CUP enteros.
   const commissionRate = pricing?.commission_rate ?? 0.15;
-  const commissionAmount = Math.round(fare * commissionRate);
-  const netEarnings = fare - commissionAmount;
+  const commissionAmount = pricing?.commission_amount ?? Math.round(fare * commissionRate);
+  // Tip: 100% para el driver, suma al neto. Antes "Ganancia neta" omitía
+  // el tip aunque se renderizaba como banner separado más abajo.
+  const tipAmount = ride.tip_amount ?? 0;
+  const netEarnings = fare - commissionAmount + tipAmount;
   const isCash = ride.payment_method === 'cash' || ride.payment_method === 'mixed';
 
   return (

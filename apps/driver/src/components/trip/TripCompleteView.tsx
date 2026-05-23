@@ -79,8 +79,20 @@ export function TripCompleteView() {
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;
-  const commissionAmount = Math.round(fare * commissionRate);
-  const netEarnings = fare - commissionAmount;
+  // BUG-fare-display-parity: usar `commission_amount` snapshoteado del
+  // RPC return (vía driver.completeRide → CompleteRideResult). Antes
+  // recalculaba `fare * commissionRate` LIVE, que driftaba con respecto
+  // al PDF (que usa snapshot). Si la commission_rate cambió post-completion,
+  // hero mostraba un número y PDF otro. Snapshot es la fuente de verdad.
+  const snapshotCommission = (activeTrip as { commission_amount?: number | null }).commission_amount;
+  const commissionAmount = snapshotCommission != null
+    ? snapshotCommission
+    : Math.round(fare * commissionRate);
+  // Tip: 100% para el driver, suma al neto. Antes se mostraba como banner
+  // separado pero la label "Ganancia neta" lo omitía → driver no sabía
+  // si "Ganaste $500" incluía o no la propina.
+  const tipAmount = activeTrip.tip_amount ?? 0;
+  const netEarnings = fare - commissionAmount + tipAmount;
   const isCash = activeTrip.payment_method === 'cash' || activeTrip.payment_method === 'mixed';
 
   // BUG-291: defensive display clamp. If actual_distance_m landed on a
@@ -254,12 +266,28 @@ export function TripCompleteView() {
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
             <Text variant="bodySmall" style={{ color: midnightEmber.map.text.secondary }}>
-              {t('trip.platform_commission', { defaultValue: 'Comisión plataforma (15%)' })}
+              {/* BUG-fare-display-parity: % efectivo del snapshot, no
+                  hardcoded 15. Útil cuando ride es corporativo (rate ≠ 15) o
+                  cuando platform_config cambia globalmente. */}
+              {t('trip.platform_commission_pct', {
+                defaultValue: 'Comisión plataforma ({{pct}}%)',
+                pct: Math.round((commissionAmount / Math.max(fare, 1)) * 100),
+              })}
             </Text>
             <Text variant="bodySmall" style={{ color: midnightEmber.state.danger }}>
               -{formatCUP(commissionAmount)}
             </Text>
           </View>
+          {tipAmount > 0 && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text variant="bodySmall" style={{ color: midnightEmber.state.success }}>
+                {t('trip.tip', { defaultValue: 'Propina' })}
+              </Text>
+              <Text variant="bodySmall" style={{ color: midnightEmber.state.success }}>
+                +{formatCUP(tipAmount)}
+              </Text>
+            </View>
+          )}
           <View style={{ height: 1, marginVertical: 6, backgroundColor: midnightEmber.map.line.hairline }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text
