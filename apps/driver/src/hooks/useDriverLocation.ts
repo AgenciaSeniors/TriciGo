@@ -93,6 +93,12 @@ export function useDriverLocationTracking(
   // lat/lng with heading=0 between segments → without this we'd snap back
   // to north each pause).
   const smoothedHeadingRef = useRef<number | null>(null);
+  // BUG-Store-Readiness-Driver (W8): track whether we've already shown the
+  // background-location prominent disclosure this session so we don't spam
+  // it on every effect re-run. Google's policy is that the disclosure must
+  // appear at least once before the system prompt; re-asking on the same
+  // session would be annoying without adding compliance value.
+  const bgDisclosureShownRef = useRef(false);
 
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
@@ -168,11 +174,69 @@ export function useDriverLocationTracking(
           return;
         }
 
-        // Request background location when driver has active ride
+        // Request background location when driver has active ride.
+        //
+        // BUG-Store-Readiness-Driver (W8): Google Play User Data Policy
+        // requires a "prominent disclosure" — an in-app explanation
+        // shown BEFORE the OS permission prompt — for apps requesting
+        // ACCESS_BACKGROUND_LOCATION. The disclosure must:
+        //   1. Appear before the system prompt (not after, not behind a
+        //      settings menu).
+        //   2. Use the words "ubicación" (location) and "background" /
+        //      "siempre" (always).
+        //   3. Name the specific feature that needs background access.
+        //   4. Have an explicit "Allow" CTA that triggers the prompt.
+        //
+        // If we skip this and just call requestBackgroundPermissionsAsync
+        // directly, Play Console rejects the AAB during the Background
+        // Location declaration review.
+        //
+        // Implementation: first check if we already have the permission
+        // (no disclosure needed if already granted). If not, show an
+        // Alert.alert as the disclosure (Alert is OK — Google's policy
+        // is about content + ordering, not chrome). User taps "Permitir"
+        // → we trigger the system prompt; "Más tarde" → we skip this
+        // ride's background tracking and fall back to foreground-only
+        // updates (rider may see the marker freeze when driver minimizes
+        // the app, but the trip can still complete).
         if (activeRideId) {
-          const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync().catch(() => ({ status: 'denied' as const }));
-          if (bgStatus === 'granted') {
-            console.log('[Location] Background permission granted for active ride');
+          const current = await Location.getBackgroundPermissionsAsync().catch(
+            () => ({ status: 'undetermined' as const }),
+          );
+          if (current.status === 'granted') {
+            console.log('[Location] Background permission already granted');
+          } else if (!bgDisclosureShownRef.current) {
+            bgDisclosureShownRef.current = true;
+            const accepted = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                'Compartir ubicación durante el viaje',
+                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras tenés un viaje activo, para que el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, el pasajero pierde tu posición cuando salís de la app.',
+                [
+                  {
+                    text: 'Más tarde',
+                    style: 'cancel',
+                    onPress: () => resolve(false),
+                  },
+                  {
+                    text: 'Permitir',
+                    onPress: () => resolve(true),
+                  },
+                ],
+                { cancelable: false },
+              );
+            });
+            if (accepted) {
+              const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync().catch(
+                () => ({ status: 'denied' as const }),
+              );
+              if (bgStatus === 'granted') {
+                console.log('[Location] Background permission granted after disclosure');
+              } else {
+                console.log('[Location] Background permission denied at system prompt');
+              }
+            } else {
+              console.log('[Location] Driver dismissed background disclosure');
+            }
           }
         }
 
