@@ -27,24 +27,49 @@ and the trip simulation.
 
 ### Background location — required for ride tracking
 
-This driver-facing app uses **background location updates** (`UIBackgroundModes:
-location`) **only when the driver is on an active ride**. The flow:
+This driver-facing app uses **real background location updates**
+(`UIBackgroundModes: location` on iOS; Android `FOREGROUND_SERVICE` +
+`FOREGROUND_SERVICE_LOCATION` permissions via `expo-task-manager`)
+**only when the driver is on an active ride**. The full flow:
 
-1. Driver toggles "Conectarme" (go online) → foreground location is requested
-   first via `requestForegroundPermissionsAsync()`.
-2. When a ride is accepted, the app prompts for background permission
-   ("Always") via `requestBackgroundPermissionsAsync()`. The reason is
-   shown explicitly in `NSLocationAlwaysAndWhenInUseUsageDescription`.
-3. The driver can see and confirm the prompt — Apple's standard system
-   alert.
-4. Background location is used to stream the driver's position to the
-   passenger so the passenger sees the cab approaching in real time.
-5. When the ride completes, background location stops automatically.
+1. Driver toggles "Conectarme" (go online) → foreground location is
+   requested first via `requestForegroundPermissionsAsync()`.
+2. When a ride is accepted, the app shows the **prominent disclosure**
+   (Alert, full Spanish text, contains "ubicación" + "segundo plano /
+   Siempre" + names the feature + explicit "Permitir" CTA) BEFORE the
+   system prompt. Source: `apps/driver/src/hooks/useDriverLocation.ts`
+   (search "Compartir ubicación durante el viaje").
+3. If the driver taps "Permitir", the OS background permission prompt
+   fires. Apple's standard system alert.
+4. Once granted, the app starts a **TaskManager background task**
+   (`apps/driver/src/services/locationBackgroundTask.ts`,
+   `LOCATION_TASK = 'tricigo-driver-location-bg'`) via
+   `Location.startLocationUpdatesAsync` with:
+     - `foregroundService.notificationTitle = 'TriciGo Conductor'`
+       (Android persistent notification, required by Android 8+ for
+       any background location use).
+     - `showsBackgroundLocationIndicator = true` (iOS blue location
+       bar in the status bar, required by Apple HIG for
+       UIBackgroundModes=location).
+5. The task body uploads each location batch to the
+   `ride_location_events` table via
+   `locationService.recordRideLocation`. Offline batches fall back to
+   the `locationBuffer` and flush when connectivity returns.
+6. When the ride completes (or the driver goes offline), the React
+   hook's cleanup calls `stopBgLocationTracking` which calls
+   `Location.stopLocationUpdatesAsync(LOCATION_TASK)` and clears the
+   persisted context. The Android foreground service notification
+   disappears immediately.
 
-We do **not** use geofencing, do **not** track location when the driver
-is offline, and do **not** sell or share location data with third
-parties. All location streaming is end-to-end with the rider's device
-during a single active trip.
+We do **not** use geofencing, do **not** track location when the
+driver is offline or has no active ride, and do **not** sell or share
+location data with third parties. All location streaming is end-to-end
+with the rider's device during a single active trip.
+
+The previous implementation only used `watchPositionAsync`, which on
+Android stops invoking its callback the moment the app backgrounds —
+which broke the passenger-visibility promise. The TaskManager rewrite
+(FD1 in `docs/STORE_READINESS_DRIVER.md`) fixed this.
 
 ### Account deletion
 
