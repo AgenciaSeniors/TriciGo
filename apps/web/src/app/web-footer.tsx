@@ -29,6 +29,7 @@ export function WebFooter() {
           <a href="/privacy" className="footer-link">{t('footer.privacy')}</a>
           <a href="/terms" className="footer-link">{t('footer.terms')}</a>
           <a href="/refunds" className="footer-link">{t('footer.refunds', { defaultValue: 'Reembolsos' })}</a>
+          <a href="/account/delete" className="footer-link">{t('footer.delete_account', { defaultValue: 'Eliminar cuenta' })}</a>
           <a href="/aml" className="footer-link">{t('footer.aml', { defaultValue: 'Política AML' })}</a>
           <a href="/cookies" className="footer-link">{t('footer.cookies', { defaultValue: 'Cookies' })}</a>
           <a href="/contact" className="footer-link">{t('footer.contact', { defaultValue: 'Contacto' })}</a>

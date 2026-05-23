@@ -177,19 +177,34 @@ export const authService = {
   },
 
   /**
-   * Request account deletion. Marks the user profile as deleted
-   * and signs out. A Supabase Edge Function handles the actual
-   * auth.admin.deleteUser call server-side.
+   * Request hard-delete of the calling user's account. Invokes the
+   * `delete-account` edge function which (1) anonymizes all
+   * non-CASCADE FK references to the user via
+   * `anonymize_user_references()` (preserves financial/audit trail
+   * with anonymous customer_id, reviewer_id, etc.), (2) cleans the
+   * avatar from storage best-effort, (3) calls
+   * `auth.admin.deleteUser()` which cascades through public.users
+   * and the CASCADE-flagged children (wallet_accounts,
+   * trusted_contacts, notifications, recurring_rides,
+   * driver_profiles). Deletion is immediate and irreversible — no
+   * grace period.
+   *
+   * The user_id is derived server-side from the JWT, not from a
+   * parameter, so the client can never delete another user's
+   * account even if it has their JWT.
+   *
+   * On success, the local session is signed out and the
+   * RootNavigator in `_layout.tsx` redirects to `/(auth)/login`
+   * (detects `!isAuthenticated`).
    */
-  async deleteAccount(userId: string) {
+  async deleteAccount() {
     const supabase = getSupabaseClient();
-    // Soft-delete: mark profile
-    const { error: profileErr } = await supabase
-      .from('users')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', userId);
-    if (profileErr) throw profileErr;
-    // Sign out locally
+    const { error } = await supabase.functions.invoke('delete-account', {
+      method: 'POST',
+      body: {},
+    });
+    if (error) throw error;
+    // Sign out locally after server hard-delete succeeds.
     await this.signOut();
   },
 
