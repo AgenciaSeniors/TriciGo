@@ -6,7 +6,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { formatTRC, formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, cupToUsd, DEFAULT_EXCHANGE_RATE, formatTime, generateHistoryCSV, getRelativeDay, getErrorMessage, triggerSelection, logger, formatTimestamp, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
@@ -582,9 +582,12 @@ function NativeRidesScreen() {
       showTrc && iTrc != null
         ? formatTRC(iTrc)
         : formatCUP(iCup ?? 0);
-    const fare = iTrc ?? iCup ?? 0; // raw numeric for USD approximation below
+    // BUG-fare-trc-usd: SIEMPRE convertir CUP→USD (no TRC→USD). Desde
+    // Wallet v2 (~2026-04-08) `rides.final_fare_trc` está en USD-cents,
+    // no en CUP-pegged → dividirlo por la rate daba ~5.5× chico. La
+    // helper `riderChargedTotal(item)` ya retorna CUP (incluye tip).
     const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
-    const fareUsd = trcToUsd(fare, rate);
+    const fareUsd = cupToUsd(iCup ?? 0, rate);
 
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>

@@ -9,6 +9,7 @@ import {
   formatMultiCurrency,
   getMultiCurrencyValues,
   trcToUsd,
+  cupToUsd,
   usdToTrc,
   cupToTrc,
   trcToCup,
@@ -124,6 +125,51 @@ describe('trcToUsd', () => {
 
   it('returns 0 for Infinity exchange rate', () => {
     expect(trcToUsd(500, Infinity)).toBe(0);
+  });
+});
+
+// ============================================================
+// cupToUsd — canonical USD display for fares/balances/txns
+// Documented to handle the Wallet-v2 USD-cents trap (BUG fare-trc-usd).
+// ============================================================
+describe('cupToUsd', () => {
+  it('converts 1440 CUP at rate 555 → ~2.59 USD (matches real prod ride)', () => {
+    // Real ride from DB: id c6e71a7c, final_fare_cup=1440, rate=555
+    // UI was buggy showing 0.47 (= final_fare_trc=259/rate). Correct: 2.59.
+    expect(cupToUsd(1440, 555)).toBeCloseTo(2.5946, 3);
+  });
+
+  it('converts 2200 CUP at rate 555 → ~3.96 USD', () => {
+    expect(cupToUsd(2200, 555)).toBeCloseTo(3.9640, 3);
+  });
+
+  it('converts 2200 CUP at rate 530 → ~4.15 USD (matches dfd7db6f, 6388641b)', () => {
+    expect(cupToUsd(2200, 530)).toBeCloseTo(4.1509, 3);
+  });
+
+  it('handles zero amount', () => {
+    expect(cupToUsd(0, 555)).toBe(0);
+  });
+
+  it('returns 0 for invalid inputs', () => {
+    expect(cupToUsd(NaN, 555)).toBe(0);
+    expect(cupToUsd(1440, 0)).toBe(0);
+    expect(cupToUsd(1440, -1)).toBe(0);
+    expect(cupToUsd(1440, NaN)).toBe(0);
+    expect(cupToUsd(1440, Infinity)).toBe(0);
+  });
+
+  it('regression: do NOT confuse with trcToUsd when input comes from rides.final_fare_trc', () => {
+    // BUG documented: rides.final_fare_trc is USD-cents post-Wallet-v2
+    // (~2026-04-08), not CUP-pegged. Dividing it by the exchange rate
+    // (as old UIs did via trcToUsd) gives ~5.5× wrong result.
+    const finalFareCup = 1440;
+    const finalFareTrc = 259; // What complete_ride_and_pay actually writes for this ride @ 555
+    expect(cupToUsd(finalFareCup, 555)).toBeCloseTo(2.59, 2); // correct
+    // If someone (wrongly) passed final_fare_trc to cupToUsd, they'd get
+    // the SAME buggy 0.47 the UI used to show — this assert documents that
+    // and reinforces: ALWAYS pass final_fare_cup, never final_fare_trc.
+    expect(cupToUsd(finalFareTrc, 555)).toBeCloseTo(0.47, 2);
   });
 });
 
