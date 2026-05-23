@@ -428,6 +428,71 @@ Si NETOPIA confirma que `config.language` debe afectar el email también pero no
 
 ---
 
+### Patrones de remediación de seguridad (sesión 2026-05-23)
+
+Aprendidos al ejecutar 9 PRs de seguridad (Ola 1 + Ola 2 del programa de remediación post-auditoría). Aplicables a cualquier PR de seguridad futura. Estado completo en `docs/SECURITY_REMEDIATION.md`.
+
+**1. Branch fresh desde `origin/master`, no desde rama de trabajo.**
+`git checkout -b claude/security/<descripcion> origin/master`. Evita herencia de cambios uncommitted o branches stale entre PRs.
+
+**2. Reset `pnpm-lock.yaml` después de `pnpm install` local.**
+El install genera diff en lockfile que NO debe entrar al PR. Pre-commit: `git checkout HEAD -- pnpm-lock.yaml`.
+
+**3. Tests pragmáticos según tipo de fix:**
+- **Service-layer fixes** (RPC con caller TS): TDD strict en vitest, pattern `mockRpc.mockResolvedValueOnce({ data: { error: 'X' }, ... })` + assert error propagation
+- **DB-only fixes** (RLS / trigger sin service-layer code path): documentar limitación honestamente en commit msg + PR body, recomendar pgTAP follow-up
+- **EF fixes Deno**: requieren Deno test infra (no establecida) — service-layer tests cubren caller, EF body queda manual verification
+
+**4. Frontend tolerance pattern obligatorio.**
+Cuando un PR introduce una nueva RPC, el cliente debe tolerar su ausencia (migración no aplicada todavía):
+```typescript
+try {
+  const { data } = await supabase.rpc('new_rpc', args);
+} catch {
+  // Migration not yet applied → silent fallback
+  // Don't block UX
+}
+```
+Ejemplos: `apps/driver/src/hooks/useDriverPeakHours.ts:50-52`, `apps/driver/src/hooks/useSelfieCheck.ts:22`, `auth.service.ts:signOut` (PR #175).
+
+**5. Push y merge requieren autorización per-PR explícita.**
+El classifier de auto-mode bloquea cada `git push -u origin <branch>` y cada `gh pr merge` aunque el plan general esté aprobado. Pedir al usuario "haz el pr" / "OK" / equivalente por cada PR.
+
+**6. Numeración de migraciones secuencial — verificar próxima libre.**
+Al cierre de sesión 2026-05-23: última migración aplicada por humano es `00286`. Las PRs de seguridad agregaron `00287–00297` (no aplicadas a prod aún por MCP guard). Próxima libre para nueva PR: **00298**.
+
+**7. Patrones específicos a re-usar:**
+
+| Pattern | Cuándo aplicar | Migración ejemplo |
+|---------|----------------|-------------------|
+| Extender `tg_*_protect_admin_fields` trigger | Tabla donde non-admin no debería modificar ciertas columnas (status, role, pricing, etc.) | 00288 (driver_profiles), 00291 (users) |
+| Tier separation `is_admin()` vs `is_super_admin()` | Capacidades que NO deberían ser self-promoted desde admin regular | 00291 + 00292 (settings tables) |
+| `enforce_ride_update_columns` extension | Customer/driver intentando modificar columnas que RPCs usan como source of truth | 00290 (CLI-001 pricing fields) |
+| BEFORE UPDATE trigger con `is_admin()` bypass | Validación de rango / formato en columnas mutables por usuario | 00289 (actuals validation), 00296 (MIME validation) |
+| `SECURITY DEFINER` RPC con caller validation via `auth.uid()` | Operaciones admin con audit trail | 00291 promote_user_role |
+| RLS policy con status filter para active-trip window | Privacy: limitar acceso post-completion a tablas relacionadas con rides | 00295 (ride_messages, ride_location_events) |
+| `security_invoker=true` en views | Cualquier vista nueva. Default Postgres es SECDEF que bypassea RLS del caller | 00294 |
+
+**8. Migration application — gated por MCP guard.**
+Las migraciones quedan staged en `supabase/migrations/` pero NO aplicadas via `mcp__apply_migration` (bloqueado por sandbox prod). Patrón canónico:
+- Migración en repo + commitea con PR
+- Frontend tolera ausencia
+- Aplicación real queda como tarea humana via `supabase db push` o pipeline de deploy
+- Cada PR documenta en su body: "Migración no aplicada a prod (MCP guard); el frontend tolera ausencia"
+
+**9. Pre-flight queries críticas para PRs específicas.**
+Algunas PRs requieren verificación previa antes de aplicar:
+- PR-02 (ADM-001/002): verificar ≥1 super_admin existe. Si 0, bootstrappear via service_role.
+- PR-01 (DRV-001): verificar drivers no aprobados que estén online ahora (perderán capacidad de aceptar tras apply).
+- PR-04 (CC-04): setear `auto_approve_drivers_enabled=false` en platform_config post-apply.
+
+Detalle completo en `docs/SECURITY_REMEDIATION.md` § "Pre-flight queries antes de aplicar a producción".
+
+**10. Reportes de auditoría son gitignored.**
+Los 5 `SECURITY_AUDIT_*.md` (CLIENT, DRIVER, ADMIN, WEB, MASTER) tienen `.gitignore` entry porque contienen mapa de superficie de ataque + PoCs. Compartir solo por canal privado. **No commitear**.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
