@@ -27,6 +27,9 @@ android/
 .env.local
 .env.*.local
 
+# Security audit reports — contain attack-surface maps + PoCs. Share by private channel.
+SECURITY_AUDIT_*.md
+
 # Local secrets store — payment-processor PEMs, dev credentials, anything
 # that must never reach git. Pair with the secrets-store of the platform
 # (Supabase Edge Function secrets / Vercel env vars).
