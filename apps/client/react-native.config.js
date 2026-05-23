@@ -2,24 +2,18 @@
 // TriciGo Client — React Native CLI autolinking overrides
 // ============================================================
 // Controls which native modules get autolinked per platform.
-// Packages listed with `platforms: { android: null }` are skipped
-// on Android during `expo prebuild` / gradle autolinking, so their
-// native Kotlin/Java code is NOT compiled into the APK.
+// Currently empty — Stripe React Native SDK was removed in
+// PR (D3 / Store Readiness) because:
+//   - US sanctions block Stripe inside Cuba (target market).
+//   - All recharges use NETOPIA via WebBrowser-hosted page,
+//     not native StoreKit / Payment Sheet.
+//   - The SDK never had a caller in client code (stripe-bootstrap
+//     was removed in a prior refactor).
+//
+// Keep this file as a placeholder so future native dependency
+// overrides have a clear home.
 // ============================================================
 
 module.exports = {
-  dependencies: {
-    // @stripe/stripe-react-native v0.49.0 has a Kotlin compile bug
-    // (ReadableMap? vs ReadableMap nullability mismatch) that breaks
-    // compileReleaseKotlin. We don't need Stripe native on Android
-    // for the Cuba rollout — US sanctions block Stripe inside Cuba
-    // anyway, so the app falls back to opening the web wallet for
-    // recharges. stripe-bootstrap.tsx already handles the missing
-    // native module with a try/catch.
-    '@stripe/stripe-react-native': {
-      platforms: {
-        android: null,
-      },
-    },
-  },
+  dependencies: {},
 };

@@ -85,13 +85,6 @@
 -keep class com.rnmapbox.rnmbx.** { *; }
 -dontwarn com.rnmapbox.rnmbx.**
 
-# ── Stripe (@stripe/stripe-react-native) ───────────────────────────
-# Stripe SDK serializes payment method models via reflection.
--keep class com.stripe.android.** { *; }
--keep class com.reactnativestripesdk.** { *; }
--keepclassmembers class com.stripe.android.model.** { *; }
--dontwarn com.stripe.**
-
 # ── Sentry (@sentry/react-native) ──────────────────────────────────
 -keep class io.sentry.** { *; }
 -keep class com.getsentry.** { *; }

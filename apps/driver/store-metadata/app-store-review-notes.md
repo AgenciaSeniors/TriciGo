@@ -78,6 +78,28 @@ Public URL for users who have already uninstalled the app:
 `https://tricigo.com/account/delete` (the same page covers both
 client and driver — support verifies the role manually if asked).
 
+### App Tracking Transparency (ATT)
+
+TriciGo Conductor does **not** implement an ATT prompt (no
+`AppTrackingTransparency` framework, no `NSUserTrackingUsageDescription`
+in `Info.plist`) because the app does **not** track the driver across
+other companies' apps or websites:
+
+- No advertising SDK (AdMob, Meta Ads, AppsFlyer, etc.) is integrated.
+  No third-party SDK reads or shares the IDFA.
+- Sentry runs with `sendDefaultPii: false` and the `beforeSend` hook
+  strips authorization headers and PII before transmission.
+- Location data is used exclusively for in-app trip dispatch /
+  passenger visibility / earnings reporting — never shared with
+  advertising or analytics third parties (Mapbox telemetry is
+  explicitly disabled via `setTelemetryEnabled(false)`).
+- `apps/driver/PrivacyInfo.xcprivacy` declares `NSPrivacyTracking
+  = false` and an empty `NSPrivacyTrackingDomains`, matching the
+  runtime behavior.
+
+Per Apple's ATT policy, the prompt is required only when an app
+tracks; since we don't, surfacing the prompt would be misleading.
+
 ### Sign in with Apple
 
 Available alongside Google and SMS. Implemented via Supabase OAuth.
@@ -85,8 +107,16 @@ Available alongside Google and SMS. Implemented via Supabase OAuth.
 ### No payments inside this app
 
 The driver app does **not** process payments. Drivers receive earnings
-into an internal wallet (CUP balance) which they can transfer or
-redeem off-platform. There is no Stripe integration in this binary.
+into an internal wallet (CUP balance, displayed in
+"Mis ganancias"). The cashout / redemption flow was removed in
+migration `00273_remove_driver_cashout.sql` to keep the wallet
+closed-loop (earnings can only be spent inside the platform — the
+target was to eliminate the OFAC-sensitive transfer surface).
+
+There is no Stripe SDK, NETOPIA SDK, or any other payment processor
+SDK bundled in this binary. The driver wallet is purely a display of
+ledger entries written server-side by the ride completion RPC; the
+driver app never initiates a payment.
 
 ### Data collection — see Privacy Manifest
 

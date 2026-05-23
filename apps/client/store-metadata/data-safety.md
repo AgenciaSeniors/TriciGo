@@ -10,7 +10,7 @@
 **Yes**
 
 ### Is all of the user data collected by your app encrypted in transit?
-**Yes** (HTTPS / TLS 1.2+ everywhere — Supabase, Stripe, Mapbox)
+**Yes** (HTTPS / TLS 1.2+ everywhere — Supabase, NETOPIA Payments, Mapbox)
 
 ### Do you provide a way for users to request that their data be deleted?
 **Yes** (Settings → Eliminar cuenta + URL público en `tricigo.com/account/delete`)
@@ -44,7 +44,7 @@
 
 | Type | Collected | Shared | Optional | Purposes |
 |---|---|---|---|---|
-| User payment info | ✅ Yes (via Stripe — never touches our server) | ❌ No (Stripe is processor, not "shared") | ✅ Optional | App functionality, Purchases |
+| User payment info | ✅ Yes (via NETOPIA Payments — card data entered on NETOPIA's PCI-DSS L1 hosted page, never touches our server) | ❌ No (NETOPIA is processor, not "shared") | ✅ Optional | App functionality, Purchases |
 | Purchase history | ✅ Yes | ❌ No | ❌ Required | App functionality |
 | Credit score | ❌ No | — | — | — |
 | Other financial info | ❌ No | — | — | — |
@@ -107,7 +107,7 @@
 
 | SDK | What it collects | Sent to | Privacy Manifest |
 |---|---|---|---|
-| Stripe React Native | Payment info (tokenized, PCI-DSS L1) | Stripe servers | ✅ Bundled (>= 0.37.x) |
+| NETOPIA Payments (hosted page, no SDK) | Card data + cardholder name (PCI-DSS L1, NETOPIA-side only) | NETOPIA servers (https://secure.netopia-payments.com) | N/A (no client SDK — opened in `WebBrowser.openAuthSessionAsync`) |
 | Mapbox | Approximate device location for map rendering, anonymized telemetry | Mapbox servers (telemetry disabled in our config: `setTelemetryEnabled(false)`) | ✅ Bundled (>= 10.1.x) |
 | Sentry React Native | Crash logs, performance data | Sentry servers | ✅ Bundled (>= 5.20.x) |
 | Supabase JS Client | Database queries, auth tokens | Supabase servers (our backend) | N/A (TS-only) |

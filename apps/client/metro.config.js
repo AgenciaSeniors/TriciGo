@@ -27,9 +27,6 @@ config.resolver.unstable_enablePackageExports = true;
 
 // Stub native-only modules on web.
 // - @rnmapbox/maps: requires mapbox-gl which isn't installed
-// - @stripe/stripe-react-native: imports RN internals (RendererProxy, InitializeCore)
-//   that fail on web. stripe-bootstrap.tsx already gates usage with
-//   Platform.OS !== 'web', but Metro still statically traces the require().
 // - React Native DevTools internal specs: RN 0.83 ships InitializeCore that
 //   calls setUpReactDevTools → setUpFuseboxReactDevToolsDispatcher + reads
 //   NativeReactDevToolsRuntimeSettingsModule (TurboModule specs). These
@@ -41,9 +38,6 @@ const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (platform === 'web') {
     if (moduleName === '@rnmapbox/maps' || moduleName.startsWith('@rnmapbox/maps/')) {
-      return { type: 'empty' };
-    }
-    if (moduleName === '@stripe/stripe-react-native' || moduleName.startsWith('@stripe/stripe-react-native/')) {
       return { type: 'empty' };
     }
     if (
