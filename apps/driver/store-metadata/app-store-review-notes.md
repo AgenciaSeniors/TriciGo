@@ -48,8 +48,35 @@ during a single active trip.
 
 ### Account deletion
 
-Settings → Eliminar cuenta. Same cascade-delete pattern as the rider
-app, plus the driver's documents are removed from storage.
+Settings → Eliminar cuenta. Calls the shared `delete-account` Supabase
+Edge Function (authenticated with the driver's JWT — user_id is derived
+server-side) which performs an **immediate, irreversible hard-delete**:
+
+1. `anonymize_user_references(user_id)` Postgres function re-points
+   every non-CASCADE foreign key (rides, ratings, referrals, etc.)
+   from the driver to a well-known anonymous user (UUID
+   `00000000-…-099`, role `customer`, `is_active=false`). This
+   preserves the financial / AML audit trail without violating FK
+   constraints during the auth.users delete.
+2. Best-effort cleanup of storage:
+   - The driver's avatar from the `avatars` bucket.
+   - **All KYC documents** (carné de identidad, licencia de
+     conducir, foto del vehículo, selfie de verificación) from the
+     `driver-documents/{user_id}/` bucket. Recursive list +
+     remove — every subfolder per document type is cleaned.
+3. `auth.admin.deleteUser(user_id)` deletes the `auth.users` row,
+   CASCADEs to `public.users` and the CASCADE-flagged children:
+   `wallet_accounts`, `trusted_contacts`, `notifications`,
+   `recurring_rides`, **`driver_profiles`**. The phone and email
+   are freed immediately.
+
+There is **no grace period** — deletion is immediate. The same edge
+function is used by the rider app (PR #160); this PR wires it into
+the driver app and adds the `driver-documents` cleanup step.
+
+Public URL for users who have already uninstalled the app:
+`https://tricigo.com/account/delete` (the same page covers both
+client and driver — support verifies the role manually if asked).
 
 ### Sign in with Apple
 
