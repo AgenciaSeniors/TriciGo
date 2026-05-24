@@ -260,7 +260,17 @@ export function bearingBetween(from: GeoPoint, to: GeoPoint): number {
  * but laggier on real turns); higher = more responsive (snappier but
  * noisier). 0.4 is calibrated for 1 Hz GPS updates in Cuban urban driving.
  */
-export const HEADING_SMOOTHING_ALPHA = 0.4;
+// BUG-marker-lag (verified on-device with live console.log instrumentation
+// on 2026-05-24): alpha=0.4 + DOUBLE EMA application (useDriverLocation
+// hook + RideMapView component) produced 5-8s of visible lag in sharp
+// turns — driver going NNW (338°) → ENE (72°), real heading was already
+// 72° but renderized marker was still showing 10° for ~7 seconds.
+// Raised to 0.7 so that:
+//   - small jitter (≤5°) still softens (visually similar)
+//   - medium changes (10-45°) converge in ~3 iters (3s) instead of 7
+// Combined with the new snap-to-target branch in `smoothHeading` for
+// large deltas (>45°), the perceptible lag drops to <1s.
+export const HEADING_SMOOTHING_ALPHA = 0.7;
 
 /**
  * Exponential moving average for heading angle, handling the 359° → 1°
@@ -294,6 +304,14 @@ export function smoothHeading(
   let delta = raw - prev;
   if (delta > 180) delta -= 360;
   if (delta < -180) delta += 360;
+  // BUG-marker-lag: when the change is large (>45° in a single iter),
+  // the driver clearly took a sharp turn — snap directly to the target
+  // instead of interpolating across 7+ iterations. This eliminates the
+  // visible "marker pointing wrong way" lag during sharp turns without
+  // affecting the smoothness of small GPS jitter (≤45° still uses EMA).
+  // Threshold 45° rationale: a 4-way intersection turn is 90°, so 45°
+  // catches it cleanly; lane drift / GPS noise rarely exceeds 30°.
+  if (Math.abs(delta) > 45) return raw;
   return (prev + alpha * delta + 360) % 360;
 }
 
