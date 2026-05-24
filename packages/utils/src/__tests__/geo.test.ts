@@ -267,7 +267,7 @@ describe('routeCache invalidation on close-by destinations', () => {
   });
 });
 
-describe('smoothHeading (BUG-298)', () => {
+describe('smoothHeading (BUG-298 + BUG-marker-lag)', () => {
   it('returns the raw value when prev is null (first sample)', () => {
     expect(smoothHeading(45, null)).toBe(45);
     expect(smoothHeading(0, null)).toBe(0);
@@ -279,34 +279,69 @@ describe('smoothHeading (BUG-298)', () => {
     expect(smoothHeading(90, Infinity)).toBe(90);
   });
 
-  it('uses HEADING_SMOOTHING_ALPHA by default (0.4 toward target)', () => {
-    // raw=100, prev=0, alpha=0.4 → 0 + 0.4*(100) = 40
-    expect(smoothHeading(100, 0)).toBeCloseTo(40, 5);
+  // BUG-marker-lag: NEW behaviour — large deltas (>45°) snap to the
+  // target instead of being EMA-interpolated. Verified on-device that
+  // 5-8s of "marker pointing wrong way" was caused by EMA + double
+  // smoothing dragging large turns out over 7+ iterations.
+  describe('snap-to-target for large deltas (>45°)', () => {
+    it('snaps directly when driver makes a sharp 90° turn', () => {
+      // Driver was going north (0°), suddenly turns east (90°). Delta=90 > 45.
+      expect(smoothHeading(90, 0)).toBe(90);
+    });
+
+    it('snaps directly for a sharp left turn (E → N via shortest path)', () => {
+      // From 90° to 350° the shortest delta is -100° (CCW). |delta|>45 → snap.
+      expect(smoothHeading(350, 90)).toBe(350);
+    });
+
+    it('snaps when delta is exactly 46° (just over threshold)', () => {
+      expect(smoothHeading(46, 0)).toBe(46);
+    });
+
+    it('snaps for the real-world bug case: NNW (338°) → ENE (72°)', () => {
+      // Reproduces the case captured in live logs on 2026-05-24.
+      // Shortest path: +94° CW. Above 45° threshold → snap.
+      expect(smoothHeading(72, 338)).toBe(72);
+    });
   });
 
-  it('respects an explicit alpha argument', () => {
-    expect(smoothHeading(100, 0, 0.5)).toBeCloseTo(50, 5);
-    expect(smoothHeading(100, 0, 1.0)).toBeCloseTo(100, 5);
-    expect(smoothHeading(100, 0, 0)).toBeCloseTo(0, 5); // never converges
+  describe('EMA smoothing for small deltas (≤45°) with default alpha=0.7', () => {
+    it('uses HEADING_SMOOTHING_ALPHA by default', () => {
+      // raw=40, prev=0, delta=40 (≤45) → EMA: 0 + 0.7*40 = 28
+      expect(smoothHeading(40, 0)).toBeCloseTo(28, 5);
+    });
+
+    it('snaps at exactly 45° boundary (delta=45 is NOT > 45, so EMA)', () => {
+      // 0 + 0.7*45 = 31.5
+      expect(smoothHeading(45, 0)).toBeCloseTo(31.5, 5);
+    });
+
+    it('respects an explicit alpha argument', () => {
+      // Small delta, custom alpha.
+      expect(smoothHeading(30, 0, 0.5)).toBeCloseTo(15, 5);
+      expect(smoothHeading(30, 0, 1.0)).toBeCloseTo(30, 5);
+      expect(smoothHeading(30, 0, 0)).toBeCloseTo(0, 5);
+    });
   });
 
-  it('takes the short way around the 359→1 wrap', () => {
-    // From 350° to 10° the shortest delta is +20°, not -340°.
-    // alpha=0.4 → 350 + 0.4 * 20 = 358
-    const result = smoothHeading(10, 350);
-    expect(result).toBeCloseTo(358, 5);
-  });
+  describe('shortest-path wrap-around', () => {
+    it('takes the short way around the 350→10 wrap with EMA (delta=+20)', () => {
+      // From 350° to 10° delta=+20 (CW, ≤45) → EMA: 350 + 0.7*20 = 364 → 4
+      expect(smoothHeading(10, 350)).toBeCloseTo(4, 5);
+    });
 
-  it('takes the short way around the 10→350 wrap (opposite direction)', () => {
-    // From 10° to 350° the shortest delta is -20°, not +340°.
-    // alpha=0.4 → 10 + 0.4 * (-20) = 2 → (2 + 360) % 360 = 2
-    const result = smoothHeading(350, 10);
-    expect(result).toBeCloseTo(2, 5);
+    it('takes the short way around the 10→350 wrap with EMA (delta=-20)', () => {
+      // From 10° to 350° delta=-20 (CCW, ≤45) → EMA: 10 + 0.7*(-20) = -4 → 356
+      expect(smoothHeading(350, 10)).toBeCloseTo(356, 5);
+    });
+
+    it('snaps when wrap-around delta exceeds 45° (e.g. 10° → 280°)', () => {
+      // Shortest path: -90° CCW. Above 45° threshold → snap.
+      expect(smoothHeading(280, 10)).toBe(280);
+    });
   });
 
   it('keeps the result in [0, 360)', () => {
-    // Repeated smoothing near the boundary should never produce negative
-    // or out-of-range outputs.
     let h: number | null = null;
     for (const raw of [10, 350, 5, 355, 0, 359]) {
       h = smoothHeading(raw, h);
@@ -315,26 +350,19 @@ describe('smoothHeading (BUG-298)', () => {
     }
   });
 
-  it('converges geometrically toward a stable target (alpha 0.4)', () => {
-    // Simulate a 90° turn: prev=0, raw=90 sustained.
-    // alpha=0.4 → each step closes 40% of the gap. After 5 samples:
-    //   1: 36.000   2: 57.600   3: 70.560   4: 78.336   5: 83.002
-    // i.e. ~7° from target. After 8 samples should be within 3°.
+  it('converges fast on a sustained small change (alpha=0.7)', () => {
+    // Simulate a small 30° drift sustained: prev=0, raw=30 each iter.
+    // Each step closes 70% of the remaining gap.
+    //   1: 21.0   2: 27.3   3: 29.19   4: 29.757   5: 29.927
     let h: number | null = 0;
-    for (let i = 0; i < 5; i++) {
-      h = smoothHeading(90, h);
-    }
-    expect(h!).toBeCloseTo(83.0016, 3);
-
     for (let i = 0; i < 3; i++) {
-      h = smoothHeading(90, h);
+      h = smoothHeading(30, h);
     }
-    // After 8 samples: 90 - 0.6^8 * 90 ≈ 88.49
-    expect(h!).toBeGreaterThan(87);
-    expect(h!).toBeLessThan(90);
+    // After 3 iters: 30 - 0.3^3 * 30 = 30 - 0.81 = 29.19
+    expect(h!).toBeCloseTo(29.19, 2);
   });
 
-  it('exports HEADING_SMOOTHING_ALPHA = 0.4 (BUG-267 calibration)', () => {
-    expect(HEADING_SMOOTHING_ALPHA).toBe(0.4);
+  it('exports HEADING_SMOOTHING_ALPHA = 0.7 (BUG-marker-lag tuned)', () => {
+    expect(HEADING_SMOOTHING_ALPHA).toBe(0.7);
   });
 });
