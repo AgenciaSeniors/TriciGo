@@ -193,11 +193,12 @@ export function TripCompleteView() {
             }}
           >
             {t('trip.earned_this_ride', {
-              /* BUG-fare-audit B4: usar el `netEarnings` ya computado arriba
-                 (línea 83) con la commissionRate live en lugar de hardcodear
-                 0.85. Antes el hero mostraba un número y el breakdown otro
-                 cuando la rate real ≠ 15%. */
-              amount: `$${netEarnings.toLocaleString()}`,
+              /* BUG-fare-driver-hero-gross: el hero ahora muestra GROSS
+                 (tarifa cobrada al cliente), no el NET. El driver y el
+                 cliente ven el mismo número, y el breakdown abajo aclara
+                 la comisión. El i18n string también cambia: ahora dice
+                 "Tarifa del viaje: $X" en lugar de "+$X este viaje". */
+              amount: `$${fare.toLocaleString()}`,
             })}
           </Text>
         )}
@@ -275,7 +276,10 @@ export function TripCompleteView() {
               })}
             </Text>
             <Text variant="bodySmall" style={{ color: midnightEmber.state.danger }}>
-              -{formatCUP(commissionAmount)}
+              {/* BUG-fare-driver-hero-gross: agregar `(= X TC)` para aclarar
+                 que la comisión se descuenta del saldo TriciCoin del driver
+                 (peg 1:1 con CUP, mismo valor numérico). */}
+              -{formatCUP(commissionAmount)} {t('trip.tc_equivalent', { tc: commissionAmount, defaultValue: '(= {{tc}} TC)' })}
             </Text>
           </View>
           {tipAmount > 0 && (
@@ -288,29 +292,19 @@ export function TripCompleteView() {
               </Text>
             </View>
           )}
-          <View style={{ height: 1, marginVertical: 6, backgroundColor: midnightEmber.map.line.hairline }} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text
-              variant="body"
-              style={{ color: midnightEmber.map.text.primary, fontWeight: '700' }}
-            >
-              {isCash ? t('trip.collect_cash', { defaultValue: 'Cobras en efectivo' }) : t('trip.net_earnings', { defaultValue: 'Ganancia neta' })}
-            </Text>
-            <Text
-              variant="body"
-              style={{ color: midnightEmber.accent[500], fontWeight: '700' }}
-            >
-              {formatCUP(netEarnings)}
-            </Text>
-          </View>
-          {isCash && (
-            <Text
-              variant="caption"
-              style={{ color: midnightEmber.map.text.tertiary, marginTop: 4 }}
-            >
-              {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
-            </Text>
-          )}
+          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevás / Cobras
+             en efectivo" + separator anterior. El hero arriba ya muestra el
+             GROSS (lo cobrado al cliente) y el breakdown muestra la comisión.
+             Mostrar también el NET acá era redundante y confundía. */}
+          <Text
+            variant="caption"
+            style={{ color: midnightEmber.map.text.tertiary, marginTop: 4 }}
+          >
+            {/* Caption siempre visible (no solo en cash): la comisión SIEMPRE
+               se descuenta del saldo TC del driver, independientemente del
+               payment_method (confirmado con user 2026-05-24). */}
+            {t('trip.commission_deducted', { defaultValue: 'Se descuenta de tu saldo TriciCoin (1 CUP = 1 TC)' })}
+          </Text>
           {activeTrip.payment_method === 'mixed' && (
             <View
               style={{

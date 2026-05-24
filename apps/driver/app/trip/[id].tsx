@@ -222,22 +222,18 @@ export default function TripDetailScreen() {
             <Text variant="bodySmall" color="primary" className="opacity-60">
               {t('trip.platform_commission_pct', { pct: Math.round(commissionRate * 100) })}
             </Text>
-            <Text variant="bodySmall" className="text-red-400">-{formatCUP(commissionAmount)}</Text>
-          </View>
-          <View className="h-px bg-[#E2E8F0] my-2" />
-          <View className="flex-row justify-between">
-            <Text variant="body" color="primary" className="font-bold">
-              {isCash
-                ? t('trip.collect_cash', { defaultValue: 'Cobras en efectivo' })
-                : t('trip.net_earnings', { defaultValue: 'Ganancia neta' })}
+            <Text variant="bodySmall" className="text-red-400">
+              {/* BUG-fare-driver-hero-gross: consistencia con TripCompleteView. */}
+              -{formatCUP(commissionAmount)} {t('trip.tc_equivalent', { tc: commissionAmount, defaultValue: '(= {{tc}} TC)' })}
             </Text>
-            <Text variant="body" color="accent" className="font-bold">{formatCUP(netEarnings)}</Text>
           </View>
-          {isCash && (
-            <Text variant="caption" color="primary" className="opacity-40 mt-1">
-              {t('trip.commission_deducted', { defaultValue: 'La comisión se descuenta de tu saldo' })}
-            </Text>
-          )}
+          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevás / Cobras
+             en efectivo" + separator. El header de precio arriba ya muestra GROSS;
+             el breakdown muestra la comisión; el net se entiende del cálculo. */}
+          <Text variant="caption" color="primary" className="opacity-40 mt-1">
+            {/* Caption siempre visible: la comisión SIEMPRE se descuenta del TC del driver. */}
+            {t('trip.commission_deducted', { defaultValue: 'Se descuenta de tu saldo TriciCoin (1 CUP = 1 TC)' })}
+          </Text>
         </Card>
 
         {/* Trip stats */}
