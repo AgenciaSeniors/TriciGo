@@ -80,7 +80,6 @@ function NativeDriverProfileScreen() {
       items: [
         { icon: 'person-outline' as const, label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), iconBg: 'primary' as const },
         { icon: 'document-text-outline' as const, label: t('profile.documents'), onPress: () => router.push('/profile/documents'), iconBg: 'warning' as const },
-        { icon: 'options-outline' as const, label: t('preferences.driver_title', { defaultValue: 'Preferencias de viaje' }), onPress: () => router.push('/profile/driver-preferences'), iconBg: 'info' as const },
         { icon: 'location-outline' as const, label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones'), iconBg: 'info' as const },
         { icon: 'car-outline' as const, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), iconBg: 'neutral' as const },
       ],
@@ -95,15 +94,6 @@ function NativeDriverProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
-        // D5 — recurring shifts. Driver pre-defines typical work shifts.
-        // Note: `td(` (driver locale) — `shifts.*` keys live in driver.json.
-        {
-          icon: 'calendar-outline' as const,
-          label: td('shifts.title', { defaultValue: 'Turnos recurrentes' }),
-          onPress: () => router.push('/profile/recurring-shifts'),
-          iconBg: 'info' as const,
-        },
-        // N3 deep — performance dashboard with 30-day sparklines + alerts.
         {
           icon: 'analytics-outline' as const,
           label: td('performance.title', { defaultValue: 'Mi desempeño' }),

@@ -9,25 +9,6 @@ export interface GeoPoint {
   longitude: number;
 }
 
-/**
- * Driver matching preferences — equivalente por rol al `RidePreferences`
- * del rider. Almacenado en `driver_profiles.preferences` JSONB.
- *
- * Diferencia con `vehicles.accepts_cargo` y similar: estos son sobre
- * CAPACIDAD del vehículo. `DriverPreferences` son PREFERENCIAS personales
- * del conductor para el matching engine.
- */
-export interface DriverPreferences {
-  /** Distancia máxima al pickup que el driver acepta (km). Default 30. */
-  max_distance_km?: number;
-  /** Acepta viajes >10km (puede ser largos a otra provincia). Default true. */
-  accepts_long_trips?: boolean;
-  /** Tolerancia de música del rider durante el viaje. Default 'low'. */
-  music_preference?: 'none' | 'low' | 'any';
-  /** Acepta riders menores de edad sin adulto acompañante. Default true. */
-  accepts_minors_alone?: boolean;
-}
-
 export interface DriverProfile {
   id: string;
   user_id: string;
@@ -52,8 +33,6 @@ export interface DriverProfile {
   custom_per_km_rate_cup: number | null;
   /** Whether the driver has auto-accept enabled for incoming rides */
   auto_accept_enabled: boolean;
-  /** Driver matching preferences (parity with users.ride_preferences) */
-  preferences?: DriverPreferences;
   created_at: string;
   updated_at: string;
 }
