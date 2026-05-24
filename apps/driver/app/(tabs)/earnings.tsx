@@ -108,7 +108,9 @@ function NativeEarningsScreen() {
   const {
     loading,
     refreshing,
-    balance,
+    // Sub-PR E: `balance` no se desestructura más porque EarningsHeader ya
+    // no muestra BalanceBadge (consolidado al tab Wallet). El hook sigue
+    // exponiendo el field para callers futuros pero acá ya no se usa.
     periodTrips,
     commissionRate,
     avgRating,
@@ -217,7 +219,8 @@ function NativeEarningsScreen() {
         }
       >
         <View className="pt-4 pb-8">
-          <EarningsHeader balance={balance} />
+          {/* Sub-PR E: EarningsHeader simplified — no balance prop, no Ver Wallet button. */}
+          <EarningsHeader />
 
           {loading ? (
             <View className="py-4">
