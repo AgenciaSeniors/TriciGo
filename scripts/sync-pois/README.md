@@ -9,6 +9,7 @@ Syncs POI data from 3 open-source datasets to the `cuba_pois` table in Supabase.
 | [OpenStreetMap Cuba](https://download.geofabrik.de/central-america/cuba.html) | ODbL | Daily | Cross-streets, gov, hospitals |
 | [Overture Maps Places](https://docs.overturemaps.org/) | CDLA-Permissive 2.0 | Quarterly | Confidence scores, brand info |
 | [Foursquare OS Places](https://huggingface.co/datasets/foursquare/fsq-os-places) | Apache 2.0 | Monthly | Lifestyle (paladares, MIPYMES) |
+| [Wikidata](https://www.wikidata.org/) (PR 6, 2026-05) | CC0 | Continuous | Notable landmarks (Capitolio, Catedral, museums, fortresses) — forced `importance=1` |
 
 ## Files
 
@@ -18,6 +19,7 @@ Syncs POI data from 3 open-source datasets to the `cuba_pois` table in Supabase.
 | `download_foursquare.py` | Downloads + bbox-filters Foursquare HF dataset |
 | `merge_and_upsert.py` | Main weekly: dedup + categorize + upsert to Supabase |
 | `apply_osm_delta.py` | Daily OSM delta — applies Geofabrik replication diffs incrementally (PR 5 of POI parity) |
+| `download_wikidata.py` | SPARQL query → Wikidata GeoJSON for Cuban landmarks (PR 6 of POI parity) |
 | `requirements.txt` | Python deps |
 
 ## Run locally (test)
