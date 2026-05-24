@@ -30,6 +30,23 @@
 -- ============================================================
 
 -- ─────────────────────────────────────────────────────────────────
+-- Allow 'crowdsource' as a valid source in cuba_pois
+--
+-- Migration 00248 added a CHECK constraint that only allowed
+-- 'admin','osm','overture','foursquare','merged'. The approve_poi_submission
+-- RPC below inserts source='crowdsource', so we must extend the constraint
+-- before the RPC can succeed.
+-- ─────────────────────────────────────────────────────────────────
+
+ALTER TABLE public.cuba_pois
+  DROP CONSTRAINT IF EXISTS cuba_pois_source_check;
+
+ALTER TABLE public.cuba_pois
+  ADD CONSTRAINT cuba_pois_source_check
+  CHECK (source IN ('admin','osm','overture','foursquare','merged','crowdsource'));
+
+
+-- ─────────────────────────────────────────────────────────────────
 -- Schema
 -- ─────────────────────────────────────────────────────────────────
 
