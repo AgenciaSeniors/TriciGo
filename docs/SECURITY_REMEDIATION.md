@@ -121,12 +121,13 @@ SELECT * FROM cron.job WHERE jobname = 'cleanup_auth_revocations';
 - 343 Supabase advisors (3 ERROR + 337 WARN + 3 INFO)
 - 3 kill chains críticos explotables
 
-### Después de Ola 1 + Ola 2 esta sesión (aplicado en prod)
+### Después de Ola 1 + Ola 2 (APLICADO EN PROD 2026-05-23)
 
 - **3 kill chains críticos cerrados** (Driver fraud, Admin escalation, Client fare manip)
 - **6 findings CRÍTICOS** (de 6) → 0 (todos cubiertos por las 4 PRs de Ola 1)
 - **9 findings ALTOS** (de 16) cubiertos por Ola 2 → 7 ALTOS pendientes (PR-09 + parte PR-10/12)
-- **2 ERROR-level Supabase advisors** cerrados → debería bajar de 343 a ~341 tras apply
+- **2 ERROR-level Supabase advisors** cerrados → confirmado: 0 `security_definer_view` advisors restantes
+- **12 migraciones aplicadas** vía `mcp__apply_migration` (00287-00297) + `mcp__execute_sql` directo (00298 storage.objects policy — ver nota arquitectural abajo)
 
 ### Target post-Ola 3 + Ola 4
 
@@ -157,8 +158,52 @@ Detalle de patrones en `CLAUDE.md` § "Operación: deploys, migraciones y merges
 
 ---
 
+## Nota arquitectural: MCP role + storage.objects
+
+Durante la aplicación de migraciones se descubrió una limitación que debe ser documentada para futuras sesiones de remediación que toquen `storage.objects`:
+
+El role `postgres` que usa el MCP (`mcp__apply_migration` y `mcp__execute_sql`) es miembro de: `pg_monitor`, `pg_signal_backend`, `pg_read_all_data`, `pg_create_subscription`, `anon`, `authenticated`, `service_role`, `authenticator`, `supabase_realtime_admin`, `supabase_privileged_role`. **NO es miembro de `supabase_storage_admin`**, que es el role owner de `storage.objects`.
+
+**Síntoma**: `mcp__apply_migration` con DDL sobre `storage.objects` (DROP/CREATE/ALTER POLICY) falla con:
+```
+ERROR: 42501: must be owner of relation objects
+```
+
+**Workaround verificado**: `mcp__execute_sql` directo SÍ tiene los privilegios (probablemente por grants internos diferentes en la config de Supabase). Patrón canónico:
+
+1. Intentar primero `mcp__apply_migration` (cleaner audit trail)
+2. Si falla con 42501 sobre `storage.objects` → caer en `mcp__execute_sql` con autorización explícita del usuario en el SQL comment
+3. Formalizar el cambio post-hoc con una migration file separada (ver PR-178 / `00298_storage_avatars_no_listing.sql` para el patrón) para mantener repo y prod sincronizados
+
+Alternativa más limpia (no usada esta sesión): aplicar via Supabase Dashboard SQL editor que corre como `supabase_admin` (true superuser).
+
+---
+
 ## Última actualización
 
-**2026-05-23 sesión completa de remediación** — 9 PRs creadas (4 Ola 1 + 5 Ola 2), 11 migraciones nuevas (00287–00297), 19+ test cases TDD. Estado: PRs pusheadas, esperando merge + apply de migraciones por proceso humano.
+**2026-05-23 sesión completa de auditoría + remediación + aplicación** — Programa cerrado al 100% de scope original (Ola 1 P0 + Ola 2 P1 parcial):
 
-Próxima actualización: cuando la siguiente sesión agarre PR-09, PR-10, o PR-12.
+### Estado final
+
+- ✅ **11 PRs mergeados a master**: #167, #168, #170, #171, #172, #173, #174, #175, #176, #177, #178
+- ✅ **12 migraciones aplicadas en prod** (Supabase project `lqaufszburqvlslpcuac`):
+  - 00287-00297 vía `mcp__apply_migration`
+  - 00298 / CLI-020 vía `mcp__execute_sql` (storage.objects policy) + formalización repo en PR #178
+- ✅ **Pre-flight queries verificadas antes de aplicar**:
+  - 3 super_admin existentes (validación pre-PR #170)
+  - 0 drivers no aprobados online (validación pre-PR #167)
+  - `auto_approve_drivers_enabled` ya en `false` (post-PR #176 — sin acción requerida)
+- ✅ **3 kill chains críticos cerrados a nivel DB**
+- ✅ **2 ERROR-level Supabase advisors cerrados** (ADV-01)
+- ✅ **19+ test cases TDD agregados** (todos pasan)
+- ✅ **Docs commiteados al repo**: este archivo + `CLAUDE.md` § "Patrones de remediación de seguridad"
+
+### Acciones humanas finales (no urgentes)
+
+1. **Re-deploy mobile + admin apps** para cambios de UI (driver selfie removido PR #176, admin `useIsSuperAdmin` hook PR #170)
+2. **Verificar `pg_cron` schedule** opcional: `SELECT * FROM cron.job WHERE jobname='cleanup_auth_revocations';` — si vacío, agendar externamente
+3. **Smoke tests post-deploy** opcional (driver pending intenta accept → debe rechazar; admin no-super intenta cambiar commission_rate → RLS rejection; customer intenta UPDATE rides.surge_multiplier → trigger exception)
+
+### Próxima actualización
+
+Cuando la siguiente sesión agarre PR-09 (admin financial hardening), PR-10 (web CSP), PR-12 (142 SECDEF anon audit), o cualquier follow-up del backlog documentado arriba.
