@@ -97,3 +97,8 @@ export { StopMarker } from './StopMarker';
 export type { StopMarkerProps, StopStatus } from './StopMarker';
 export { StopsList } from './StopsList';
 export type { StopsListProps, StopsListItem } from './StopsList';
+// POI rendering — shared across client + driver native maps (web uses its
+// own mapbox-gl-js implementation in apps/web).
+export { PoiMapLayers } from './PoiMapLayers';
+export type { PoiTapPayload } from './PoiMapLayers';
+export { useViewportPois } from './useViewportPois';

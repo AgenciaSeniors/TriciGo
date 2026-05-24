@@ -17,6 +17,7 @@ import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
 import { RideMapView } from '@/components/RideMapView';
+import { useViewportPois } from '@tricigo/ui';
 import { TripActionBar } from '@/components/TripActionBar';
 import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
 import { useUnreadChatCount } from '@/hooks/useUnreadChatCount';
@@ -65,6 +66,15 @@ export function RideActiveView() {
   const { cancelRide } = useRideActions();
   const driverPosState = useDriverPositionWithCache(activeRide?.id ?? null);
   const driverPosition = driverPosState.position;
+  // POIs visible during active ride. Seeded from the driver's last known
+  // position (falls back to pickup if driver not yet broadcasting). The
+  // hook handles debouncing + caching + abort on unmount.
+  const poiSeed = driverPosition
+    ? { latitude: driverPosition.latitude, longitude: driverPosition.longitude }
+    : activeRide?.pickup_location
+      ? { latitude: activeRide.pickup_location.latitude, longitude: activeRide.pickup_location.longitude }
+      : null;
+  const { pois: viewportPois, onCameraChanged: poiOnCameraChanged } = useViewportPois(poiSeed);
   // Bug B: unread-message badge for the fixed TripActionBar chat button.
   const { count: unreadChatCount, markRead: markChatRead } = useUnreadChatCount(
     activeRide?.id ?? null,
@@ -1004,6 +1014,10 @@ export function RideActiveView() {
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}
           waypointStatuses={waypointStatuses}
+          // POI parity (PR 2): show categorical badges around the active
+          // ride. No onPoiPress — taps shouldn't distract during a trip.
+          pois={viewportPois}
+          onCameraChanged={poiOnCameraChanged}
           // BUG-267 v3: drive the Uber-style follow camera based on ride
           // status. RideMapView centers on the driver with state-specific
           // zoom/pitch/heading-up while activeRide.status is in

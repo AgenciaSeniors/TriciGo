@@ -27,7 +27,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
-import { useViewportPois } from '@/hooks/useViewportPois';
+import { useViewportPois } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
