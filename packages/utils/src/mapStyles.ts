@@ -13,10 +13,16 @@ export const MAP_STYLE_NAV_NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
 // ── Marker Dimensions ────────────────────────────────────────
 // BUG-218: marker sizes rebalanced — pickup/dropoff slightly bigger as fixed
 // targets, driver smaller so the vehicle icon doesn't dominate the map.
+//
+// MARKER-SIZE-1.5X (2026-05-24): user reported "se ve muy pequeño". Scaled
+// every dimension 1.5× (rounded to nearest integer) to match Uber/Bolt
+// visibility standards. Internal proportions (innerDot, tailH) scaled too
+// so the visual shape stays identical, just bigger. Single source for
+// driver + client + web map.
 export const MARKER = {
-  pickup: { size: 26, innerDot: 8, shadow: '0 3px 12px rgba(34,197,94,0.35)' },
-  dropoff: { size: 32, innerDot: 11, tailH: 12, shadow: '0 3px 12px rgba(239,68,68,0.35)' },
-  driver: { size: 30, ringSize: 40, shadow: '0 4px 16px rgba(59,130,246,0.35)' },
+  pickup: { size: 39, innerDot: 12, shadow: '0 3px 12px rgba(34,197,94,0.35)' },
+  dropoff: { size: 48, innerDot: 17, tailH: 18, shadow: '0 3px 12px rgba(239,68,68,0.35)' },
+  driver: { size: 45, ringSize: 60, shadow: '0 4px 16px rgba(59,130,246,0.35)' },
 } as const;
 
 // ── Route Line Styles ────────────────────────────────────────
