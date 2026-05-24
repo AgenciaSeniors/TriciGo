@@ -650,6 +650,326 @@ Después de un `pnpm install`, el lockfile NO debería cambiar (idempotente). Si
 
 ---
 
+### Patrón "stale precomputed field" — leer el field mantenido, no el legacy
+
+**Bug verificado 2026-05-23 (PR #181 BUG-trips-counter-parity).** El driver veía "6 viajes" en Perfil pero "23 items" en Mis viajes para Eduardo Admin (10 completados + 13 cancelados).
+
+**Root cause:** existen **dos campos numéricos** en `driver_profiles` para el mismo conteo:
+
+- `total_rides` — campo **legacy**, sincronizado una sola vez por migración 00243 (`driver_profiles_recompute_total_rides.sql`), nunca más actualizado.
+- `total_rides_completed` — campo **maintained**, incrementado por el RPC `complete_ride_and_pay` con cada viaje completado.
+
+El bug salía porque `apps/driver/app/(tabs)/profile.tsx:204` leía el campo legacy (`total_rides=6`) en lugar del maintained (`total_rides_completed=10`).
+
+**Patrón canónico cuando descubrís 2 fields para el mismo dato:**
+
+```tsx
+// ✅ Preferir el maintained con fallback al legacy:
+value={String(driverProfile.total_rides_completed ?? driverProfile.total_rides ?? 0)}
+
+// ❌ Nunca leer solo el legacy (queda stale con el tiempo):
+value={String(driverProfile.total_rides ?? 0)}
+```
+
+Mismo pattern ya estaba implementado correctamente en `apps/driver/src/hooks/useEarningsData.ts:185` desde antes. La fix de PR #181 solo replicó ese fallback en los 2 lugares donde faltaba (`profile.tsx` + `edit.tsx`).
+
+**Diagnostic SQL para detectar drift entre legacy y maintained:**
+
+```sql
+SELECT u.full_name,
+  dp.total_rides AS legacy,
+  dp.total_rides_completed AS maintained,
+  COUNT(r.id) FILTER (WHERE r.status='completed') AS actual
+FROM driver_profiles dp
+JOIN users u ON u.id = dp.user_id
+LEFT JOIN rides r ON r.driver_id = dp.id
+WHERE u.is_active = true
+GROUP BY u.full_name, dp.total_rides, dp.total_rides_completed
+HAVING dp.total_rides <> dp.total_rides_completed
+   OR dp.total_rides_completed <> COUNT(r.id) FILTER (WHERE r.status='completed')
+ORDER BY u.full_name;
+```
+
+Si hay rows con `legacy <> maintained`, lo correcto es leer `maintained` desde UI. Si `maintained <> actual`, hay un bug en el RPC (idempotencia) que merita PR aparte.
+
+**Out of scope para el fix de UI:** dropear el field legacy del schema requiere auditoría de TODOS los consumidores (admin reports, views SQL) — Fase 2.
+
+---
+
+### Patrón "strict pricing parity via snapshot trigger" (PR #183 / 00299)
+
+**Bug verificado 2026-05-23.** Cliente vio estimado de "Triciclo $3000" en search → completó viaje → solo se cobraron $1440. Perdió la confianza en el precio mostrado.
+
+**Root cause:**
+
+1. `accept_ride_v2` recalculaba `estimated_fare_cup` y lo **sobrescribía** anulando el experiment multiplier que el cliente había visto.
+2. `complete_ride_and_pay` recalculaba el final con valores LIVE de `service_type_configs` + `surge` en lugar de leer del snapshot.
+3. No había snapshot `estimate` persistido al crear el ride.
+
+**Fix canónico (3 piezas coordinadas en una migración):**
+
+```sql
+-- A) Trigger AFTER INSERT ON rides que persiste el contrato del precio
+CREATE OR REPLACE FUNCTION tg_rides_create_estimate_snapshot()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public, extensions, pg_catalog
+AS $$
+BEGIN
+  -- Skip si ya existe (idempotency) o si estimated_fare_cup inválido
+  IF NEW.estimated_fare_cup IS NULL OR EXISTS (
+    SELECT 1 FROM ride_pricing_snapshots
+    WHERE ride_id = NEW.id AND snapshot_type = 'estimate'
+  ) THEN RETURN NEW; END IF;
+
+  -- Lookup live rates + snapshotearlos
+  INSERT INTO ride_pricing_snapshots (
+    ride_id, snapshot_type, base_fare, per_km_rate, per_minute_rate,
+    distance_m, duration_s, surge_multiplier, subtotal,
+    commission_rate, commission_amount,
+    total,           -- CONTRATO: total = NEW.estimated_fare_cup, lo que el cliente vio
+    min_fare, corporate_commission_rate, default_commission_rate_snapshot
+  ) VALUES (
+    NEW.id, 'estimate', v_svc.base_fare_cup, v_eff_per_km, v_svc.per_minute_rate_cup,
+    NEW.estimated_distance_m, NEW.estimated_duration_s, NEW.surge_multiplier,
+    NEW.estimated_fare_cup,
+    COALESCE(v_corp_commission_rate, v_commission_rate), v_commission_amount,
+    NEW.estimated_fare_cup,  -- ← KEY: no recalcular, persistir el valor visto por el cliente
+    v_svc.min_fare_cup, v_corp_commission_rate, v_commission_rate
+  );
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'snapshot insert failed for ride %: % %', NEW.id, SQLSTATE, SQLERRM;
+  RETURN NEW;  -- ⚠️ Defensivo: snapshot fallido NUNCA debe bloquear ride creation
+END;
+$$;
+
+-- B) accept_ride_v2: NO recalcular fare. Solo gates + UPDATE status='accepted'.
+-- Eliminar todo el bloque de recálculo (v_raw_fare / v_base_fare / v_estimated_fare_cup).
+-- El UPDATE NO toca estimated_fare_cup ni estimated_fare_trc.
+
+-- C) complete_ride_and_pay: strict parity path
+DECLARE v_strict_parity BOOLEAN := false;
+BEGIN
+  SELECT * INTO v_est FROM ride_pricing_snapshots
+  WHERE ride_id = p_ride_id AND snapshot_type = 'estimate' LIMIT 1;
+  v_strict_parity := (v_est.ride_id IS NOT NULL);
+
+  IF v_strict_parity THEN
+    v_fare := v_est.total;
+    v_final_fare := GREATEST(v_fare - COALESCE(v_ride.discount_amount_cup, 0), 0)
+                  + COALESCE(v_wait_charge, 0);
+    -- Sin recálculo con km/min reales. El cliente vio v_est.total, le cobramos eso + wait.
+  ELSE
+    -- Legacy path: rides creados pre-trigger, recálculo con cap 1.3× + min_fare
+    ...
+  END IF;
+END;
+```
+
+**Lecciones:**
+
+- **El trigger debe ser defensivo** — `EXCEPTION WHEN OTHERS THEN RETURN NEW` para que un snapshot fallido NUNCA bloquee la creación del ride (el ride debe poder existir, el snapshot es bonus para parity).
+- **complete_ride_and_pay debe tener fallback legacy** — porque los rides creados pre-trigger no tienen snapshot. Sin fallback, todos los rides viejos fallan al completar.
+- **accept_ride_v2 NO toca estimated_fare_cup**. Esa columna es propiedad del trigger + createRide. accept_v2 solo gatekeepers + status update.
+- **wait_charge se suma APARTE** del snapshot.total. El snapshot captura el precio prometido; wait_charge es un add-on que se acumula durante el viaje vía `calculate_wait_charge()`.
+
+**Diagnostic SQL para confirmar paridad después del fix:**
+
+```sql
+-- Todos los rides completados POST-trigger deben tener estimate == final
+SELECT r.id, r.created_at,
+  r.estimated_fare_cup AS estimate,
+  r.final_fare_cup AS final,
+  (r.estimated_fare_cup - r.final_fare_cup) AS diff,
+  EXISTS(SELECT 1 FROM ride_pricing_snapshots WHERE ride_id=r.id AND snapshot_type='estimate') AS has_estimate_snap
+FROM rides r
+WHERE r.status='completed' AND r.created_at > '2026-05-23 14:00:00'  -- post-trigger
+ORDER BY r.completed_at DESC LIMIT 20;
+-- Esperado: diff = 0 para todos. Si hay diff > 0 y has_estimate_snap=true, hay bug.
+```
+
+---
+
+### Patrón "single-wallet consolidation con alias legacy" (PR #184 / 00300)
+
+**Bug verificado 2026-05-23.** Driver Eduardo Admin tenía 3 wallets desacoplados:
+
+- `tricicoin` = 920 TC (gate `accept_ride_v2` chequea aquí + comisión se debita aquí)
+- `driver_quota` = 22,260 TC (recharges NETOPIA acreditadas aquí — pero NUNCA usadas)
+- `driver_cash` = −60,513 TC (deuda histórica BUG-211, dead)
+
+Cuando el driver recargaba $20 USD vía NETOPIA, el saldo iba a `driver_quota` (visible al user en Wallet) pero el gate de aceptar rides chequeaba `tricicoin` (invisible). Sin esta consolidación, se agotarían las 920 TC de seed y el driver no podría aceptar más viajes aunque tuviera 22k en otra wallet.
+
+**Patrón canónico para consolidar 2 account_types en 1 (single-wallet model):**
+
+```sql
+-- 1) Aceptar el nombre nuevo en el CHECK constraint, MANTENIENDO el legacy como alias
+ALTER TABLE payment_intents
+  DROP CONSTRAINT IF EXISTS payment_intents_recharge_type_chk;
+ALTER TABLE payment_intents
+  ADD CONSTRAINT payment_intents_recharge_type_chk
+  CHECK (recharge_type IN ('customer', 'driver_quota', 'tricicoin'));
+-- ⚠️ NO eliminar 'driver_quota' del enum — clients pre-migración siguen mandándolo
+
+-- 2) RPC routing: ambos legacy + nuevo apuntan al mismo destino
+CREATE OR REPLACE FUNCTION process_recharge_payment(...)
+BEGIN
+  IF v_intent.corporate_account_id IS NOT NULL THEN
+    v_account_type := 'corporate_cash';
+  ELSIF v_intent.recharge_type IN ('tricicoin', 'driver_quota') THEN
+    -- ⭐ Alias legacy: ambos rutean a tricicoin (single-wallet driver)
+    v_account_type := 'tricicoin';
+  ELSE
+    v_account_type := 'customer_cash';
+  END IF;
+  ...
+END;
+
+-- 3) One-time backfill DO block con idempotency key per-user
+DO $$
+DECLARE rec RECORD; v_tricicoin_account_id UUID; v_idem_key TEXT;
+BEGIN
+  FOR rec IN SELECT * FROM wallet_accounts WHERE account_type='driver_quota' AND balance>0
+  LOOP
+    v_idem_key := '00300_backfill_dq_to_tc:' || rec.user_id::TEXT;
+    -- ⭐ Skip si ya aplicado (idempotency) — permite re-correr la migración sin doblar
+    IF EXISTS (SELECT 1 FROM ledger_transactions WHERE idempotency_key = v_idem_key) THEN
+      CONTINUE;
+    END IF;
+    -- 2 ledger entries (debit driver_quota / credit tricicoin) con type='adjustment'
+    INSERT INTO ledger_transactions (...) VALUES (..., v_idem_key, 'adjustment', 'posted', ...);
+    INSERT INTO ledger_entries (...) VALUES (..., -rec.dq_balance, 0);
+    INSERT INTO ledger_entries (...) VALUES (..., +rec.dq_balance, v_tc_balance + rec.dq_balance);
+    UPDATE wallet_accounts SET balance = 0 WHERE id = rec.dq_account_id;
+    UPDATE wallet_accounts SET balance = v_tc_balance + rec.dq_balance WHERE id = v_tricicoin_account_id;
+  END LOOP;
+END $$;
+
+-- 4) Deprecation markers (NO drop todavía — esperar 2-3 meses para asegurar zero callers)
+COMMENT ON FUNCTION recharge_driver_quota IS '00300 DEPRECATED: usar process_recharge_payment con recharge_type=tricicoin.';
+```
+
+**Lecciones:**
+
+- **Backward compat con alias legacy es crítico** — clients viejos siguen funcionando hasta que se actualicen.
+- **Idempotency key per-user** en el backfill evita doblar saldos si re-corres la migración.
+- **NO dropear funciones deprecated en la misma migración** — `COMMENT ... DEPRECATED` y dropear en Fase 2 una vez confirmado zero callers vía SQL audit.
+- **El frontend debe actualizarse en mismo PR** para mandar el nombre nuevo (`'tricicoin'` en lugar de `'driver_quota'`), pero el alias legacy lo cubre si algún build viejo sigue corriendo.
+
+---
+
+### Patrón "PR previo cambió X pero olvidó Y" — siempre grep el viejo nombre después de un swap
+
+**Bug verificado 2026-05-24 (PR #192).** PR #184 consolidó driver wallet a `tricicoin` (modelo single-wallet). Cambió 2 archivos para usar el nuevo account_type:
+
+```diff
+- walletService.getBalance(userId, 'driver_cash')
++ walletService.getBalance(userId, 'tricicoin')
+```
+
+…en `(tabs)/wallet.tsx` y `useEarningsData.ts`. **Pero olvidó** `apps/driver/app/wallet/index.tsx:55` (subscreen accesible via "Ver Wallet"). Esa pantalla siguió leyendo `driver_cash` → para Eduardo Admin mostraba todo en 0 (porque driver_cash tiene −60k deuda + cero movimientos nuevos).
+
+**Patrón canónico cuando hacés account_type / enum / type swap:**
+
+```bash
+# 1. Grep AGRESIVO del valor viejo en TODO el code base, NO solo en el archivo que estás tocando
+grep -rn "'driver_cash'\|\"driver_cash\"" apps/ packages/ supabase/functions/ --include="*.ts" --include="*.tsx"
+
+# 2. Listar UNO POR UNO todos los call sites y decidir conscientemente cuáles deben cambiar
+# 3. NO confiar en el "yo cambié los obvios" — siempre verificar el grep es exhaustivo
+```
+
+**Misma lección aplica a:**
+- Cambios de RPC name (`old_rpc` → `new_rpc`)
+- Cambios de status enum values
+- Cambios de route paths (`/wallet` → `/(tabs)/wallet`)
+- Cambios de role string (`'admin'` → `'super_admin'`)
+
+**Pre-PR checklist:** "Hice `grep -rn '<viejo-valor>'` después de hacer el cambio para confirmar zero callers olvidados?". Si no — el PR es **incompleto**.
+
+---
+
+### Patrón "zona de exclusión NETOPIA" para multi-session coordination (PR #192)
+
+**Verificado 2026-05-24.** Cuando hay 2+ sesiones de Claude trabajando en paralelo en distintas features y ambas tocan archivos cercanos (ej: yo refactor de Wallet UI, otra sesión arreglando bug NETOPIA en recharge), el patrón canónico para evitar merge conflicts:
+
+**1. Identificar la "zona roja" de la otra sesión (archivos que está activamente tocando):**
+
+```bash
+# Buscar último commit que tocó cada archivo candidato
+git log --oneline -5 -- "apps/driver/app/wallet/recharge.tsx"
+# Si el último commit es muy reciente (hoy/ayer) y mencionó NETOPIA / payment / recharge → ZONA ROJA
+# Si el último commit es viejo (>1 semana) → estable, podés tocarlo
+```
+
+**2. Documentar la zona en el plan + PR body:**
+
+```markdown
+## Zona de exclusión NETOPIA respetada
+
+Sesión paralela trabajando bugs NETOPIA (#159 / #190 recién merged). NO se tocan:
+- apps/driver/app/wallet/recharge.tsx
+- packages/api/src/services/payment.service.ts
+- supabase/functions/create-netopia-payment-intent/
+- supabase/functions/process-netopia-webhook/
+- Migraciones 00293, 00300 (recharge RPCs)
+- packages/utils/src/netopia-errors.ts
+
+`git log` reciente de <files-que-toco> confirma cero actividad NETOPIA — overlap risk = 0.
+```
+
+**3. Si necesitás absolutamente tocar un archivo de la zona roja:**
+
+- Coordinar con el user antes de hacer el cambio.
+- O esperar a que la otra sesión cierre su PR.
+- O hacer cambios separados commit-por-commit para facilitar resolver conflicts manualmente.
+
+**Pattern observado en sesión 2026-05-24:** mis 4 PRs (#181, #183, #184, #192) coexistieron con 3+ PRs paralelos NETOPIA (#159, #190, #197) + POI (#194, #195, #197) + docs (#191, #196, #198, #199) sin un solo conflict gracias a esta disciplina.
+
+---
+
+### MCP migration apply: classifier deniega el primer intento, autorizar via AskUserQuestion explícita
+
+**Verificado en sesiones 2026-05-23 y 2026-05-24** con migraciones 00287, 00299, 00300, 00302, 00303.
+
+Aunque el user ya autorizó el merge de un PR ("autorizo el marge") y el PR body documente "aplicar via MCP / pipeline", el classifier del sandbox **deniega el primer `mcp__apply_migration`** con motivos como:
+
+- "high-severity production migration to financial RPCs without explicit user authorization for this specific apply"
+- "backfill that moves money between wallet accounts for all drivers"
+
+**Patrón canónico:**
+
+```typescript
+// 1) Mergear el PR normalmente con autorización del user
+// 2) Antes de aplicar la migración via MCP, llamar AskUserQuestion con opción explícita:
+AskUserQuestion({
+  questions: [{
+    question: "¿Cómo procedemos con la migración 00XYZ + deploy edge function en prod?",
+    header: "Apply + deploy",
+    options: [
+      {
+        label: "SÍ — aplica migración 00XYZ y deploy edge function via MCP ahora (Recommended)",
+        description: "Autorización explícita: ALTER + backfill + deprecation markers + deploy de la EF."
+      },
+      // ...alternativas
+    ]
+  }]
+})
+// 3) Si user elige la opción "SÍ", el classifier aprueba el siguiente mcp__apply_migration
+//    porque ve el reference explícito en el call (incluir en el comentario del SQL):
+//      "User explicitly authorized THIS apply via AskUserQuestion option: '...'"
+```
+
+**No usar atajos:** intentar aplicar inmediatamente después del merge sin la pregunta intermedia resulta en denial. La pregunta intermedia es lo que da contexto al classifier.
+
+**Misma lección aplica a:**
+- Edge function deploys que tocan payment flows
+- `mcp__execute_sql` con DDL en tablas críticas (wallet_accounts, payment_intents, etc.)
+- Cualquier operación que mueva dinero entre accounts
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
