@@ -1,40 +1,33 @@
 // ============================================================
 // TriciGo — Vehicle marker rotation utilities
 //
-// BUG-295: per-vehicle-type rotation offset (degrees) that compensates
-// for marker assets drawn with non-standard "front pointing" convention.
-//
-// Convention: marker PNGs SHOULD be drawn with the front of the vehicle
+// Convention: ALL marker PNGs are drawn with the front of the vehicle
 // pointing UP (north / 0°). Code then applies `rotate: bearingDeg` to
-// align the nose with direction of travel.
+// align the nose with direction of travel. No per-vehicle offsets are
+// needed for the standard fleet (`triciclo`, `auto_clasico`, `moto`,
+// `confort`).
 //
-// Exception: `triciclo.png` is drawn with the driver/handlebar (= front
-// of the vehicle, direction of motion) pointing DOWN (south / 180°),
-// while the cargo box / passenger compartment occupies the upper half
-// of the image. Until the asset is re-exported with the conventional
-// orientation we compensate by adding 180° at render time. This makes
-// the marker visually face the same direction as the route polyline
-// underneath it.
-//
-// Other vehicle markers (auto_clasico, moto, confort) are correctly
-// drawn with their front pointing up — their offset is 0.
+// History (BUG-295 → resolved): `triciclo.png` was originally drawn
+// pointing east (90°), which broke the convention and caused a visible
+// "marker faces wrong way" bug during in-progress trips. The PNG asset
+// was re-exported pointing north (rotated 90° CCW) and the prior
+// `triciclo: 180` offset entry removed in this same change. Future
+// non-standard assets can be compensated by adding an entry here.
 //
 // Mensajería is excluded from rotation entirely via the consumer-side
 // `NON_ROTATING_MARKERS` set; it doesn't need an offset because it's
 // never rotated.
-//
-// Future: if `triciclo.png` is re-exported pointing up, delete the
-// triciclo entry from VEHICLE_MARKER_ROTATION_OFFSET_DEG (and note
-// the asset fix in the changelog).
 // ============================================================
 
-/** Per vehicle-type rotation offset in degrees. */
-export const VEHICLE_MARKER_ROTATION_OFFSET_DEG: Record<string, number> = {
-  // BUG-295: triciclo PNG drawn pointing south (driver/handlebar at
-  // bottom of image, cargo box at top). Add 180° so the rendered
-  // rotation aligns with the bearing of motion.
-  triciclo: 180,
-};
+/**
+ * Per vehicle-type rotation offset in degrees. Empty by default —
+ * all stock fleet assets follow the "point UP" convention.
+ *
+ * Add an entry here ONLY if a new asset is delivered in a non-standard
+ * orientation AND can't be re-exported. Adding offsets is technical
+ * debt; prefer fixing the asset itself.
+ */
+export const VEHICLE_MARKER_ROTATION_OFFSET_DEG: Record<string, number> = {};
 
 /**
  * Returns the rotation offset (in degrees) to apply for a given

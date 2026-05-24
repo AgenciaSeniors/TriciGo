@@ -893,8 +893,13 @@ function RideMapViewInner(
     };
   }, [surgeZones]);
 
-  // Compute camera bounds
+  // Compute camera bounds — only when overview mode (followMode=false).
+  // Skipping during followMode avoids the per-GPS-update recompute that
+  // forced re-renders (and the now-removed fitBounds) every second
+  // during in-progress trips. Pre-trip phases (accepted, arrived_at_*)
+  // typically have followMode=false → bounds still compute as before.
   const bounds = useMemo(() => {
+    if (followMode) return null;
     const allCoords: [number, number][] = [];
     if (routeCoordinates && routeCoordinates.length > 0) {
       routeCoordinates.forEach((c) => allCoords.push(toCoord(c)));
@@ -905,7 +910,7 @@ function RideMapViewInner(
     if (driverLocation) allCoords.push(toCoord(driverLocation));
     if (allCoords.length < 2) return null;
     return computeBounds(allCoords);
-  }, [pickupLocation, dropoffLocation, driverLocation, routeCoordinates]);
+  }, [pickupLocation, dropoffLocation, driverLocation, routeCoordinates, followMode]);
 
   // BUG-218: force imperative fitBounds whenever bounds change. Mapbox's
   // declarative <Camera bounds=...> prop sometimes doesn't re-fit on hot
@@ -1031,12 +1036,15 @@ function RideMapViewInner(
       case 'driver_en_route':
         // Nav phase: 3D perspective, heading-up navigation. Closer zoom
         // (16.5) than the previous 15.5 so individual streets are visible.
+        // animationDuration 800ms (was 1000ms) so each ease-to completes
+        // BEFORE the next GPS update fires (1000ms watch interval) —
+        // avoiding the race where in-flight animations get interrupted.
         return {
           centerCoordinate: driverCoord,
           zoomLevel: 16.5,
           pitch: 45,
           heading,
-          animationDuration: 1000,
+          animationDuration: 800,
           animationMode: 'easeTo' as const,
         };
       case 'arrived_at_pickup':
@@ -1386,12 +1394,14 @@ function RideMapViewInner(
                 <View
                   style={{
                     transform: [
-                      // 0=N, 90=E, 180=S, 270=W. Most marker assets point UP
-                      // (north) at rotation 0°. The triciclo asset is the
-                      // exception — drawn with the driver/handlebar pointing
-                      // south. BUG-295: vehicleMarkerRotationOffset() adds
-                      // +180° for triciclo so the rendered rotation aligns
-                      // with the bearing of motion. Other vehicles → 0.
+                      // 0=N, 90=E, 180=S, 270=W. All stock marker assets
+                      // (triciclo, moto, auto_clasico, confort) point UP
+                      // (north) at rotation 0°, so the rendered rotation
+                      // equals the bearing of motion directly.
+                      // `vehicleMarkerRotationOffset()` exists for future
+                      // non-standard assets but currently returns 0 for
+                      // the entire fleet (BUG-295 resolved by re-exporting
+                      // triciclo.png pointing north).
                       {
                         rotate: `${
                           (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
