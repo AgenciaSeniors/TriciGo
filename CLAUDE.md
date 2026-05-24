@@ -570,6 +570,84 @@ Más limpio pero más lento. Si la branch del worktree de Metro está en otro fe
 
 Recomendación: **Opción A para testing rápido + cleanup post-merge**.
 
+### Eliminar feature UI sin tocar la DB (patrón canónico)
+
+**Verificado 2026-05-24 (PR #193).** Cuando el usuario quiere "eliminar X feature del menú" pero la feature tiene infra de DB ya aplicada a prod (tabla, columna JSONB, RPC, etc.), el patrón seguro es **poda quirúrgica de UI + código TS/RN, dejando la DB intacta**.
+
+**Decisión tree:**
+
+| Pregunta | Si SÍ | Si NO |
+|---|---|---|
+| ¿La feature tiene Edge Function/cron que escribe a la tabla? | Detener el writer antes de borrar UI. | Pasar al siguiente. |
+| ¿La feature tiene Edge Function/cron que LEE la tabla y dispara efectos (notif, email, cron job)? | Considerar disable del consumer o usar feature flag. | Pasar al siguiente. |
+| ¿Alguna RPC de matching engine usa la columna/tabla? | Verificar si los filtros son NULL-safe (`IS NULL OR …`). | Pasar al siguiente. |
+| ¿La data existente en la tabla tiene valor analítico/legal? | DEJAR la tabla — solo borrar UI. | Considerar drop en otra PR. |
+
+**Patrón típico para la PR:**
+
+1. **Quitar items del menú** que llevan a las pantallas (la única "puerta" del usuario).
+2. **DELETE** los archivos `.tsx` de las pantallas (Expo Router elimina la ruta automáticamente).
+3. **DELETE** los services TS dedicados (`xxx-feature.service.ts`).
+4. **Quitar exports** de `packages/api/src/index.ts` y `packages/types/src/index.ts`.
+5. **Quitar tipos** dedicados (`XxxFeature` interface, etc.) y campos relacionados en interfaces padre.
+6. **Quitar i18n** solo de namespaces exclusivos (ver patrón i18n abajo).
+7. **DB / migraciones / matching engine queda intacto.** Documentar en commit + PR body que es decisión explícita.
+
+**Ejemplo concreto (PR #193):**
+- Eliminadas "Preferencias de viaje" + "Turnos recurrentes" del driver.
+- DEJADAS: `driver_profiles.preferences` JSONB (00257), tabla `driver_recurring_shifts` (00259), matching engine 00262 (NULL-safe).
+- Net: 12 archivos, –1322 líneas. Build verde, sin rollback risk.
+
+**i18n cleanup minimal:**
+- Solo borrar namespaces **driver-exclusivos** (ej: `shifts.*` en `driver.json`).
+- NO borrar keys del namespace `preferences.*` en `common.json` — son compartidas con el rider's `ride-preferences.tsx`.
+- Si una key usa `t('key', { defaultValue: '…' })` sin entrada en JSON (convención post-2026-04 de CLAUDE.md), no hay nada que borrar — el código se va con la pantalla.
+- Verificar con grep antes: `grep -r "preferences\.shared_key_name" --include="*.tsx"` — si solo aparece en archivos que borraste, safe to remove. Si aparece en otro app, dejar.
+
+**Verificación post-poda:**
+- `pnpm check-types` (turbo) — debe pasar en los 4 apps.
+- Grep paranoia: `grep -r "<symbol-borrado>" --exclude-dir=node_modules --exclude-dir=supabase/migrations` — debe devolver 0. Las migraciones quedan referenciando el símbolo en comments — eso está OK.
+- `git diff --stat` — debe coincidir con los archivos planeados (sin sorpresas).
+
+### `Remove-Item` de PowerShell falla silenciosamente con archivos tracked en git — usar `git rm`
+
+**Verificado 2026-05-24.** `Remove-Item -Force <path>` en PowerShell sobre archivos tracked en git **devuelve éxito pero no borra el archivo** en ciertos contextos (locking de file watcher, permisos sutiles, antivirus de Windows, etc.). El comando imprime "Deleted" en stdout pero `Test-Path` después devuelve `True`.
+
+**Síntoma:**
+```powershell
+PS> Remove-Item -Force "tracked-file.tsx"
+PS> Test-Path "tracked-file.tsx"
+True   # ← el archivo SIGUE existiendo
+```
+
+**Patrón canónico:** para archivos tracked, usar `git rm`:
+```bash
+git rm "apps/driver/app/profile/driver-preferences.tsx" \
+       "apps/driver/app/profile/recurring-shifts.tsx" \
+       "packages/api/src/services/driver-recurring-shift.service.ts"
+```
+
+`git rm` borra del disco Y stagea la eliminación en un solo paso. Si falla, lo dice explícitamente. Sin trampas silenciosas.
+
+**Cuándo usar cuál:**
+- Archivo **tracked** (en git): `git rm <path>` — siempre.
+- Archivo **untracked** (temp, generado, .gitignore): `Remove-Item -Force <path>` está OK.
+- Archivos **temp de la sesión** (`.commit-msg-temp.txt`, `.pr-body-temp.md`): `rm` de Git Bash o `Remove-Item` — cualquiera, no hay tracking.
+
+### `pnpm check-types` requiere `node_modules` en el worktree
+
+**Verificado 2026-05-24.** El comando `pnpm check-types` corre `turbo run check-types`, que falla con `'turbo' no se reconoce` si el worktree no tiene `node_modules`. Cada worktree es independiente — el `node_modules` del repo principal NO se hereda.
+
+**Flujo canónico para worktree nuevo o fresco:**
+```bash
+pnpm install              # ~2-3 min con cache local (reused, 0 downloaded)
+pnpm check-types          # ~50s para los 4 apps
+```
+
+Después de un `pnpm install`, el lockfile NO debería cambiar (idempotente). Si cambia: `git checkout HEAD -- pnpm-lock.yaml` antes de commitear.
+
+**Aclaración:** el script en package.json se llama `check-types`, NO `typecheck` ni `tsc`. Conviene memorizar el nombre exacto.
+
 ---
 
 ### Recordatorio para Claude
