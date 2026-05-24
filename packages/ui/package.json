@@ -40,7 +40,9 @@
     "./DraggableSheet": "./src/DraggableSheet.tsx",
     "./WalletMigrationBanner": "./src/WalletMigrationBanner.tsx",
     "./PoiMapLayers": "./src/PoiMapLayers.tsx",
-    "./useViewportPois": "./src/useViewportPois.ts"
+    "./useViewportPois": "./src/useViewportPois.ts",
+    "./SubmitPoiSheet": "./src/SubmitPoiSheet.tsx",
+    "./useSubmitPoi": "./src/useSubmitPoi.ts"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",

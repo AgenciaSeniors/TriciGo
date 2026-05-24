@@ -53,6 +53,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import type { Ride } from '@tricigo/types';
+import { SubmitPoiSheet } from '@tricigo/ui';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -518,6 +519,11 @@ function NativeDriverHomeScreen() {
   // so it survives app reload — drivers who prefer the calm view get it
   // by default after the first toggle.
   const [simpleMapMode, setSimpleMapMode] = useState(false);
+  // Crowdsourcing — "Sugerir lugar" sheet visibility + the coords the
+  // driver was at when they tapped the button. We snapshot the location
+  // so they can move the marker around during the form without losing it.
+  const [submitPoiOpen, setSubmitPoiOpen] = useState(false);
+  const [submitPoiCoords, setSubmitPoiCoords] = useState<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
     AsyncStorage.getItem('driver_simple_map_mode').then((val) => {
       if (val === '1') setSimpleMapMode(true);
@@ -1045,6 +1051,56 @@ function NativeDriverHomeScreen() {
             color="#FFFFFF"
           />
         </Pressable>
+      )}
+
+      {/* Crowdsourcing — "Sugerir lugar" floating button.
+           Lets the driver add a new POI from anywhere they are. Coords
+           snapshot at the moment they tap so the form has stable input.
+           Sits below the simple-map toggle on the right edge. */}
+      {isOnline && driverLocation && (
+        <Pressable
+          onPress={() => {
+            setSubmitPoiCoords({
+              lat: driverLocation.latitude,
+              lng: driverLocation.longitude,
+            });
+            setSubmitPoiOpen(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('home.suggest_poi', { defaultValue: 'Sugerir lugar nuevo' })}
+          style={({ pressed }) => ({
+            position: 'absolute',
+            top: insets.top + 168,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: 'rgba(8, 8, 12, 0.7)',
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.12)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="add" size={26} color="#FFFFFF" />
+        </Pressable>
+      )}
+
+      {/* SubmitPoiSheet — controlled by submitPoiOpen + submitPoiCoords */}
+      {submitPoiCoords && (
+        <SubmitPoiSheet
+          visible={submitPoiOpen}
+          onClose={() => setSubmitPoiOpen(false)}
+          lat={submitPoiCoords.lat}
+          lng={submitPoiCoords.lng}
+          supabase={getSupabaseClient()}
+        />
       )}
 
       {/* Top floating badges.
