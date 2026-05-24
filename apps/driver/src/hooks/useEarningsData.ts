@@ -141,8 +141,12 @@ export function useEarningsData({
 
       // Critical data — fetch in parallel (4 calls → renders immediately)
       const [balanceData, trips, commRateStr, ratingData] = await Promise.all([
-        // Driver earnings live in driver_cash, NOT customer_cash.
-        walletService.getBalance(userId, 'driver_cash'),
+        // 00300: single-wallet driver model. Antes leía driver_cash (-60k
+        // de deuda backfilled BUG-211). Ahora lee tricicoin que es el
+        // wallet único: recibe recargas NETOPIA + se debita comisión al
+        // completar ride. Match con lo que muestra QuotaCard via
+        // get_driver_quota_status que también lee tricicoin.
+        walletService.getBalance(userId, 'tricicoin'),
         driverService.getTripHistoryByDateRange(
           driverProfileId,
           start.toISOString(),

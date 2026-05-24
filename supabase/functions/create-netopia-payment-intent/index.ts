@@ -49,7 +49,10 @@ interface CreateIntentRequest {
    * Oct 2026 — see docs/payment-processor/PROGRESS.md.
    */
   amount_usd: number;
-  recharge_type?: 'customer' | 'driver_quota';
+  // 00300: 'tricicoin' es el nombre canónico post-migración. 'driver_quota'
+  // queda como alias legacy (clients pre-00300) — el RPC los rutea al mismo
+  // account_type='tricicoin'.
+  recharge_type?: 'customer' | 'driver_quota' | 'tricicoin';
   corporate_account_id?: string;
   device_fingerprint?: string;
   /**
@@ -476,10 +479,14 @@ Deno.serve(async (req) => {
       status: 'created',
       payment_provider: 'netopia',
       intent_type: 'recharge',
-      // Migration 00284 routing: 'customer' → customer_cash (default),
-      // 'driver_quota' → driver_quota account. Whitelisted to avoid
-      // bad data — anything else falls back to 'customer'.
-      recharge_type: recharge_type === 'driver_quota' ? 'driver_quota' : 'customer',
+      // 00300 routing: 'customer' → customer_cash (default),
+      // 'tricicoin' → tricicoin (driver single-wallet model),
+      // 'driver_quota' → tricicoin (legacy alias, preserved for back-compat
+      // with apps pre-00300). Whitelist avoids bad data.
+      recharge_type:
+        recharge_type === 'tricicoin' ? 'tricicoin' :
+        recharge_type === 'driver_quota' ? 'driver_quota' :
+        'customer',
     };
     if (corporate_account_id) {
       intentRow.corporate_account_id = corporate_account_id;
