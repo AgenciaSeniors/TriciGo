@@ -83,6 +83,11 @@ class Record:
     socials: dict[str, str] | None = None
     hours: str | None = None
     confidence: float = 0.5
+    # PR 6 of POI parity (2026-05-24): importance lets sources override the
+    # default density-bucket assignment. Wikidata records set this to 1
+    # (top tier — always visible) since being in Wikidata = notable landmark.
+    # NULL/None means "let the DB default apply" (currently 4).
+    importance: int | None = None
 
     def merge_with(self, other: "Record") -> "Record":
         """Combine two duplicate records preferring per-field best source."""
@@ -120,6 +125,10 @@ class Record:
             socials={**(self.socials or {}), **(other.socials or {})} or None,
             hours=pick("hours", PREFER_HOURS),
             confidence=min(1.0, max(self.confidence, other.confidence) * 1.1),  # boost for double-source
+            # Take the most prominent (lowest numeric) importance from either
+            # source. If only one had it set, use that. If neither, None
+            # (DB default).
+            importance=_pick_min_importance(self.importance, other.importance),
         )
 
 
@@ -420,6 +429,135 @@ def load_foursquare(path: Path, categories: dict, bbox: tuple) -> Iterable[Recor
 
 
 # ──────────────────────────────────────────────────────────────
+# Wikidata post-upsert importance boost (PR 6 of POI parity)
+# ──────────────────────────────────────────────────────────────
+
+def _boost_wikidata_importance() -> None:
+    """Bump importance=1 for all Wikidata-sourced rows after the bulk upsert.
+
+    The bulk_upsert_pois RPC doesn't currently read importance from input.
+    Rather than rewrite that 200-line RPC, we do a small post-upsert UPDATE
+    that hits exactly the rows with `source_ids->>'wd'` set. Respects admin
+    protection (never touches is_admin=true rows).
+
+    Only bumps UP (lowers numerically) — won't override an admin's manual
+    importance=2 setting back down.
+    """
+    try:
+        from supabase import create_client
+    except ImportError:
+        print("[wikidata-boost] supabase-py not installed — skipping", flush=True)
+        return
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE")
+    if not url or not key:
+        print("[wikidata-boost] SUPABASE_URL/SERVICE_ROLE missing — skipping", flush=True)
+        return
+
+    sb = create_client(url, key)
+    try:
+        # Use a raw SQL via PostgREST's RPC mechanism — we don't want to
+        # add a dedicated RPC for this one-line update. The 'rest' filter
+        # syntax handles it cleanly.
+        resp = sb.table("cuba_pois") \
+            .update({"importance": 1}) \
+            .filter("source_ids->>wd", "neq", None) \
+            .eq("is_admin", False) \
+            .gt("importance", 1) \
+            .execute()
+        n = len(resp.data) if hasattr(resp, "data") and resp.data else 0
+        print(f"[wikidata-boost] bumped importance=1 on {n} Wikidata POIs", flush=True)
+    except Exception as exc:
+        print(f"[wikidata-boost] failed (non-fatal): {exc!r}", flush=True)
+
+
+# ──────────────────────────────────────────────────────────────
+# Wikidata loader (PR 6 of POI parity — 2026-05-24)
+#
+# Reads the GeoJSON produced by download_wikidata.py and maps each feature's
+# wikidata_qid → tricigo_category via categories.json wikidata.q_ids.
+#
+# Features with an uncurated type (not in the q_ids map) are dropped.
+# Records are emitted with importance=1 (top tier — always visible) since
+# being in Wikidata with coords + curated type ≡ "notable Cuban landmark".
+# ──────────────────────────────────────────────────────────────
+
+def _pick_min_importance(a: int | None, b: int | None) -> int | None:
+    """Return the most prominent (lowest numeric) importance, or None if both None."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
+
+
+def load_wikidata(path: Path, categories: dict, bbox: tuple) -> Iterable[Record]:
+    if not path.exists():
+        print(f"[wikidata] file not found: {path} — skipping", flush=True)
+        return
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"[wikidata] failed to parse {path}: {e} — skipping", flush=True)
+        return
+
+    wd_map: dict[str, str] = (categories.get("wikidata") or {}).get("q_ids") or {}
+    if not wd_map:
+        print("[wikidata] no wikidata.q_ids in categories.json — nothing to map", flush=True)
+        return
+
+    features = data.get("features") or []
+    count = 0
+    skipped_uncurated = 0
+    for feat in features:
+        props = feat.get("properties") or {}
+        qid = props.get("wikidata_qid")
+        if not qid:
+            continue
+
+        # type_qid is the Wikidata P31 (instance of) target — that's what we map
+        type_qid = props.get("type_qid")
+        tricigo_cat = wd_map.get(type_qid) if type_qid else None
+        if not tricigo_cat:
+            # Some features may have type_qid not in our curated map (the SPARQL
+            # FILTER should prevent this but defensive). Skip — admin can
+            # always whitelist via categories.json later.
+            skipped_uncurated += 1
+            continue
+
+        geom = feat.get("geometry") or {}
+        coords = geom.get("coordinates")
+        if not coords or len(coords) < 2:
+            continue
+        lng, lat = float(coords[0]), float(coords[1])
+        if not in_bbox(lng, lat, bbox):
+            continue
+
+        name = (props.get("name") or "").strip()
+        if not name:
+            continue
+
+        yield Record(
+            name=name,
+            name_normalized=normalize_name(name),
+            lat=lat,
+            lng=lng,
+            source="wikidata",
+            source_ids={"wd": qid},
+            category=type_qid,                 # store the type_qid as raw category for debugging
+            subcategory=props.get("type_label"),
+            tricigo_category=tricigo_cat,
+            confidence=0.95,                    # Wikidata is curated, high confidence
+            importance=1,                        # PR 6 — top tier (always visible)
+        )
+        count += 1
+
+    print(f"[wikidata] loaded {count} records ({skipped_uncurated} skipped uncurated)", flush=True)
+
+
+# ──────────────────────────────────────────────────────────────
 # Dedup
 # ──────────────────────────────────────────────────────────────
 
@@ -594,6 +732,8 @@ def main() -> int:
     p.add_argument("--osm", type=Path, default=Path("/tmp/osm-pois.geojson"))
     p.add_argument("--overture", type=Path, default=Path("/tmp/overture.geojson"))
     p.add_argument("--foursquare", type=Path, default=Path("/tmp/foursquare.parquet"))
+    # PR 6 of POI parity (2026-05-24): Wikidata 4th source for landmarks.
+    p.add_argument("--wikidata", type=Path, default=Path("/tmp/wikidata.geojson"))
     p.add_argument("--categories", type=Path, default=Path(__file__).parent / "categories.json")
     p.add_argument("--bbox", default=os.environ.get("BBOX", ",".join(map(str, CUBA_BBOX))))
     args = p.parse_args()
@@ -611,6 +751,9 @@ def main() -> int:
     all_records.extend(load_osm(args.osm, categories, bbox))
     all_records.extend(load_overture(args.overture, categories, bbox))
     all_records.extend(load_foursquare(args.foursquare, categories, bbox))
+    # PR 6: Wikidata 4th source — adds notable landmarks (Capitolio, Catedral,
+    # Plaza Revolución, museos, fortalezas) with importance=1 (top tier).
+    all_records.extend(load_wikidata(args.wikidata, categories, bbox))
 
     if not all_records:
         print("[main] no records loaded — nothing to do", file=sys.stderr)
@@ -621,6 +764,14 @@ def main() -> int:
 
     stats = upsert_to_supabase(merged, dry_run=dry_run)
     print(f"[main] done: {stats}", flush=True)
+
+    # PR 6 of POI parity: post-upsert pass to boost importance for Wikidata
+    # records. bulk_upsert_pois doesn't read the importance field from
+    # payload (would require rewriting that giant RPC), so we run a small
+    # UPDATE here that bumps any POI with a wikidata source_id to
+    # importance=1, respecting admin protection.
+    if not dry_run:
+        _boost_wikidata_importance()
 
     # Output for GH Actions step summary + downstream steps
     gh_out = os.environ.get("GITHUB_OUTPUT")

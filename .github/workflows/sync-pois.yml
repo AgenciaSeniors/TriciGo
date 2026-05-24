@@ -137,6 +137,19 @@ jobs:
           ls -lah /tmp/sync/osm-pois.geojson
           echo "OSM features: $(jq '.features | length' /tmp/sync/osm-pois.geojson)"
 
+      # ─────────── Step 3b: Download Wikidata POIs (SPARQL) ───────────
+      # PR 6 of POI parity (2026-05-24): 4th source for notable landmarks
+      # (Capitolio, Catedral, Plaza Revolución, museos, fortalezas). Bumps
+      # importance=1 so these are always visible at any zoom level.
+      - name: Download Wikidata POIs (SPARQL)
+        run: |
+          python scripts/sync-pois/download_wikidata.py \
+            --out /tmp/sync/wikidata.geojson
+          if [ -f /tmp/sync/wikidata.geojson ]; then
+            echo "Wikidata features: $(jq '.features | length' /tmp/sync/wikidata.geojson)"
+          fi
+        continue-on-error: true  # SPARQL endpoint can be flaky; merge step handles missing file
+
       # ─────────── Step 4: Merge + dedup + upsert ───────────
       - name: Merge sources + upsert to Supabase
         id: upsert
@@ -151,6 +164,7 @@ jobs:
             --osm /tmp/sync/osm-pois.geojson \
             --overture /tmp/sync/overture.geojson \
             --foursquare /tmp/sync/foursquare.parquet \
+            --wikidata /tmp/sync/wikidata.geojson \
             --bbox=${{ steps.cfg.outputs.bbox }}
 
       # ─────────── Step 4b: Update poi_sync_state ───────────

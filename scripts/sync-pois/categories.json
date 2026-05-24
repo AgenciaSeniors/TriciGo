@@ -268,5 +268,28 @@
       "store": "shop",
       "park": "park"
     }
+  },
+
+  "wikidata": {
+    "_doc": "Maps Wikidata P31 (instance of) Q-IDs to TriciGo unified categories. Used by load_wikidata() in merge_and_upsert.py. Coordinated with POI_TYPE_QIDS in download_wikidata.py.",
+    "q_ids": {
+      "Q33506": "museum",
+      "Q570116": "other",
+      "Q108325": "religion",
+      "Q22746": "hotel",
+      "Q11707": "restaurant",
+      "Q4989906": "museum",
+      "Q2074034": "park",
+      "Q1370598": "religion",
+      "Q12280": "transport",
+      "Q124388": "gov",
+      "Q40357": "gov",
+      "Q9259": "museum",
+      "Q5727902": "park",
+      "Q44613": "religion",
+      "Q16970": "religion",
+      "Q12518": "other",
+      "Q839954": "museum"
+    }
   }
 }
