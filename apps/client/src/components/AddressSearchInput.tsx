@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, importPoiFromSearch } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -236,7 +236,9 @@ function AddressSearchInputInner({
           const unified = await searchAddressUnified(text, getSupabaseClient(), userLocation);
           externalAttribution = inferAttributionSource(unified);
           externalResults = unified.length > 0
-            ? unified.map(normalize)
+            // PR 4b: attach _src so handleSelectResult can fire-and-forget
+            // import-mapbox-poi for Google-sourced selections.
+            ? unified.map((r) => ({ ...normalize(r), _src: r }))
             : await searchAddress(text, 5, userLocation);
         }
         const searchResults: AddressSearchResult[] = merged.length > 0
@@ -312,6 +314,11 @@ function AddressSearchInputInner({
     setResults([]);
     setIsExpanded(false);
     onSelect(result.address, { latitude: result.latitude, longitude: result.longitude });
+    // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
+    // when the selection came from Google/Mapbox unified search. Never blocks UX.
+    if (result._src) {
+      void importPoiFromSearch(result._src, getSupabaseClient());
+    }
   };
 
   const handleSelectSaved = (loc: SavedLocation) => {

@@ -11,6 +11,8 @@ import {
   clearRouteCache,
   smoothHeading,
   HEADING_SMOOTHING_ALPHA,
+  importPoiFromSearch,
+  type SearchBoxResult,
 } from '../geo';
 
 describe('haversineDistance', () => {
@@ -364,5 +366,90 @@ describe('smoothHeading (BUG-298 + BUG-marker-lag)', () => {
 
   it('exports HEADING_SMOOTHING_ALPHA = 0.7 (BUG-marker-lag tuned)', () => {
     expect(HEADING_SMOOTHING_ALPHA).toBe(0.7);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// PR 4b — importPoiFromSearch fire-and-forget behaviour
+// ─────────────────────────────────────────────────────────────────
+describe('importPoiFromSearch (PR 4b)', () => {
+  const baseResult: SearchBoxResult = {
+    address: 'Concordia 418, La Habana',
+    latitude: 23.1366,
+    longitude: -82.3608,
+    place_name: 'La Guarida',
+    full_address: 'Concordia 418, La Habana',
+    category: 'restaurant',
+    source: 'google',
+    specificity: 0.95,
+  };
+
+  function makeSupabaseStub() {
+    const invoke = vi.fn(async () => ({ data: null, error: null }));
+    return {
+      client: { functions: { invoke } },
+      invoke,
+    };
+  }
+
+  it('skips invoke when supabase is null', async () => {
+    // Should resolve silently — nothing to assert other than no throw.
+    await expect(importPoiFromSearch(baseResult, null)).resolves.toBeUndefined();
+  });
+
+  it('skips invoke when result.source is mapbox', async () => {
+    const stub = makeSupabaseStub();
+    await importPoiFromSearch({ ...baseResult, source: 'mapbox' }, stub.client);
+    expect(stub.invoke).not.toHaveBeenCalled();
+  });
+
+  it('skips invoke when result.source is supabase (already in cuba_pois)', async () => {
+    const stub = makeSupabaseStub();
+    await importPoiFromSearch({ ...baseResult, source: 'supabase' }, stub.client);
+    expect(stub.invoke).not.toHaveBeenCalled();
+  });
+
+  it('invokes import-mapbox-poi with Google result payload', async () => {
+    const stub = makeSupabaseStub();
+    await importPoiFromSearch(baseResult, stub.client);
+    expect(stub.invoke).toHaveBeenCalledTimes(1);
+    expect(stub.invoke).toHaveBeenCalledWith(
+      'import-mapbox-poi',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          query: 'La Guarida',
+          proximity: { lat: 23.1366, lng: -82.3608 },
+          google_result: expect.objectContaining({
+            place_name: 'La Guarida',
+            address: 'Concordia 418, La Habana',
+            latitude: 23.1366,
+            longitude: -82.3608,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('never throws when invoke rejects (fire-and-forget contract)', async () => {
+    const failingClient = {
+      functions: {
+        invoke: vi.fn(async () => {
+          throw new Error('network down');
+        }),
+      },
+    };
+    // Silence the console.warn the function emits on failure
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(importPoiFromSearch(baseResult, failingClient)).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('skips invoke when place_name or coordinates are missing', async () => {
+    const stub = makeSupabaseStub();
+    await importPoiFromSearch({ ...baseResult, place_name: '' }, stub.client);
+    await importPoiFromSearch({ ...baseResult, latitude: 0 }, stub.client);
+    await importPoiFromSearch({ ...baseResult, longitude: 0 }, stub.client);
+    expect(stub.invoke).not.toHaveBeenCalled();
   });
 });

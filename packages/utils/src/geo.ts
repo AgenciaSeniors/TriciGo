@@ -625,6 +625,14 @@ export interface AddressSearchResult {
    * fallback rows.
    */
   tricigoCategory?: string | null;
+  /**
+   * PR 4b: original `SearchBoxResult` carried through from the
+   * unified search call so the selection handler can fire-and-forget
+   * `importPoiFromSearch` for Google-sourced rows. Always undefined
+   * for Supabase/POI/street rows (already in cuba_pois) and for
+   * cached/manual entries — those paths skip the import.
+   */
+  _src?: SearchBoxResult;
 }
 
 /* ─── Nominatim throttle ─── */
@@ -2658,6 +2666,60 @@ export async function searchAddressUnified(
   const mapboxResults = await searchAddressSearchBox(query, proximity, signal, limit);
   // Re-tag mapbox results so the UI shows the right attribution
   return mapboxResults.map((r) => ({ ...r, source: 'mapbox' as const }));
+}
+
+// ============================================================
+// PR 4b — Mapbox-backed POI growth on search-select
+//
+// Background fire-and-forget. After a user SELECTS a Google search
+// result, we look the same place up on Mapbox SearchBox and persist
+// it to cuba_pois (source='mapbox') via the import-mapbox-poi Edge
+// Function. Google Maps Platform TOS forbids storing/displaying
+// Google data; Mapbox SearchBox explicitly allows it — so the map
+// can show the pin to every other user without any Google
+// attribution.
+//
+// This function NEVER throws and NEVER blocks the UX. Skips when
+// the result is already from Mapbox or Supabase (nothing to import).
+// ============================================================
+/**
+ * Fire-and-forget. Triggers Mapbox lookup for the just-selected
+ * search result and persists it to cuba_pois (source='mapbox') if
+ * not already present. Resolves immediately on caller side; the
+ * actual Edge Function call happens async. Never rejects.
+ *
+ * Skipped when:
+ *  - `supabase` is null (no client available at the call site)
+ *  - `result.source === 'mapbox'` (already from Mapbox)
+ *  - `result.source === 'supabase'` (already in cuba_pois)
+ */
+export async function importPoiFromSearch(
+  result: SearchBoxResult,
+  supabase: SupabaseClientLike | null,
+): Promise<void> {
+  if (!supabase) return;
+  if (result.source === 'mapbox' || result.source === 'supabase') return;
+  if (!result.place_name || !result.latitude || !result.longitude) return;
+
+  try {
+    await supabase.functions.invoke('import-mapbox-poi', {
+      body: {
+        query: result.place_name,
+        proximity: { lat: result.latitude, lng: result.longitude },
+        google_result: {
+          place_name: result.place_name,
+          address: result.address ?? result.full_address ?? '',
+          latitude: result.latitude,
+          longitude: result.longitude,
+        },
+      },
+    });
+  } catch (err) {
+    // Silent — fire-and-forget. Visibility via EF logs.
+    if (typeof console !== 'undefined') {
+      console.warn('[importPoiFromSearch]', err);
+    }
+  }
 }
 
 /** OSM tag mappings for POI category searches */

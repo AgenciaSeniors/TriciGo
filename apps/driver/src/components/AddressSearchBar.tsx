@@ -18,6 +18,7 @@ import {
   searchAddress,
   searchAddressUnified,
   tricigoCategoryEmoji,
+  importPoiFromSearch,
   type GeoPoint,
   type SearchBoxResult,
 } from '@tricigo/utils';
@@ -38,6 +39,11 @@ interface AddressResult {
   isPoi: boolean;
   /** Category emoji (POI rows from search_pois_smart only). */
   emoji?: string;
+  /** PR 4b: original SearchBoxResult for background importPoiFromSearch.
+   *  Only populated when the row came from `searchAddressUnified` (Google
+   *  in particular). Supabase rows are already in cuba_pois, Mapbox rows
+   *  bypass the import (importPoiFromSearch skips both). */
+  _src?: SearchBoxResult;
 }
 
 interface AddressSearchBarProps {
@@ -104,7 +110,9 @@ async function searchUnified(query: string, near: GeoPoint | null): Promise<Sear
   const unified = await searchAddressUnified(query, getSupabaseClient(), near).catch(() => [] as SearchBoxResult[]);
   if (unified.length > 0) {
     return {
-      results: unified.map((r, idx) => toResult(r, idx)),
+      // PR 4b: attach the original SearchBoxResult so handleSelect can
+      // fire-and-forget the import-mapbox-poi EF on Google selections.
+      results: unified.map((r, idx) => ({ ...toResult(r, idx), _src: r })),
       attribution: inferAttributionSource(unified),
     };
   }
@@ -180,6 +188,11 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
       setFocused(false);
       Keyboard.dismiss();
       onSelect({ latitude: item.latitude, longitude: item.longitude, address: item.address });
+      // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox
+      // lookup for selected Google/Supabase-miss results. Never blocks UX.
+      if (item._src) {
+        void importPoiFromSearch(item._src, getSupabaseClient());
+      }
     },
     [onSelect],
   );
