@@ -33,7 +33,13 @@ function NativeTripsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [filters, setFilters] = useState<HistoryFilterState>({});
+  // BUG-trips-counter-parity: arrancar con filtro "Completado" activo por default.
+  // Antes filters={} → HistoryFilters mostraba chip "Todos" activo → fetch traía
+  // completed + canceled mezclados (default del service). Esto mostraba 23 items
+  // a un driver que solo había completado 10, confundiendo con el conteo del
+  // perfil (10). Ahora el default es solo completados; el usuario puede tap
+  // "Todos" o "Cancelado" para verlos explícitamente.
+  const [filters, setFilters] = useState<HistoryFilterState>({ status: ['completed'] });
   // BUG-fare-display-parity: commission rate fallback for legacy rides
   // that don't have a snapshot. `tripNetEarnings()` prefers the
   // snapshotted `commission_amount`; this rate is used only when the
