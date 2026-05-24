@@ -105,11 +105,15 @@ export default function RechargeScreen() {
       // 1. Create the intent — edge function returns NETOPIA hosted page URL.
       // RECARGA V2: send the NET USD; server adds the 3% min $0.50 fee
       // and tells NETOPIA the full charge.
+      // 00300: rechargeType='tricicoin' es el nombre canónico post-migración.
+      // El backend acepta 'driver_quota' como alias legacy y lo rutea al
+      // mismo lugar (account_type='tricicoin'), pero los clients nuevos
+      // deberían mandar 'tricicoin' directamente.
       const result = await paymentService.createRechargeIntent({
         provider: 'netopia',
         userId: user.id,
         amountUsd: selectedAmount,
-        rechargeType: 'driver_quota',
+        rechargeType: 'tricicoin',
         returnUrl: RETURN_URL_BASE,
       });
       if (!result.redirectUrl) {

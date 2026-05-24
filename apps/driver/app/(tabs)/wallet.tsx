@@ -77,8 +77,12 @@ export default function WalletScreen() {
     if (!driverProfile?.id || !userId) return;
     try {
       // BUG-081: Sequential fetch — balance first, then transactions to avoid stale values.
-      // Driver balance lives in driver_cash (NOT customer_cash default).
-      const balanceData = await walletService.getBalance(userId, 'driver_cash');
+      // 00300: single-wallet driver model. Antes leía driver_cash; ahora
+      // tricicoin que es el wallet único del driver (recargas NETOPIA +
+      // comisiones de rides). El balance card que está disabled (BUG-276
+      // wrap en {false && ...}) también queda apuntando al field correcto
+      // para cuando se re-habilite.
+      const balanceData = await walletService.getBalance(userId, 'tricicoin');
       setBalance(balanceData?.available ?? 0);
       setHoldBalance(balanceData?.held ?? 0);
 
@@ -86,8 +90,8 @@ export default function WalletScreen() {
       // the user id. Passing userId silently returned zero rows
       // because the inner-join on ledger_entries.account_id never
       // matched a user id (it stores the account PK). Resolve the
-      // driver_cash account first, then paginate its transactions.
-      const driverAccount = await walletService.getAccount(userId, 'driver_cash');
+      // tricicoin account first, then paginate its transactions.
+      const driverAccount = await walletService.getAccount(userId, 'tricicoin');
       const [txData, quotaData, rateData] = await Promise.all([
         driverAccount
           ? walletService.getTransactions(driverAccount.id, 0, 50)

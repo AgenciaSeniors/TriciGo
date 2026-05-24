@@ -97,8 +97,14 @@ export interface RechargeIntentRequest {
    * $100..$10000. Decided in design rounds 1-4.
    */
   amountUsd: number;
-  /** 'customer' credits the rider wallet; 'driver_quota' the driver commission credit. */
-  rechargeType?: 'customer' | 'driver_quota';
+  /**
+   * 'customer' credits the rider wallet (customer_cash).
+   * 'tricicoin' credits the driver single-wallet (post-00300).
+   * 'driver_quota' is a legacy alias preserved for back-compat with apps
+   * pre-00300 — the backend RPC routes it to the same tricicoin account.
+   * New driver client code should always send 'tricicoin'.
+   */
+  rechargeType?: 'customer' | 'driver_quota' | 'tricicoin';
   corporateAccountId?: string;
   /** Phase B6: basic device fingerprint of the payer's browser, for fraud analysis. */
   deviceFingerprint?: string;

@@ -120,8 +120,13 @@ export interface WalletSummary {
 /**
  * Which wallet_accounts.account_type the caller wants summarized.
  * Matches a subset of the public.wallet_account_type enum.
+ *
+ * 00300: added 'tricicoin' — single-wallet driver model. The driver's
+ * recargas NETOPIA y comisiones por viaje viven aquí. Legacy 'driver_cash'
+ * sigue listado para callers que necesitan inspeccionar la deuda histórica
+ * pre-#146 (no se usa para flows nuevos).
  */
-export type WalletAccountKind = 'customer_cash' | 'driver_cash';
+export type WalletAccountKind = 'customer_cash' | 'driver_cash' | 'tricicoin';
 
 /** One row of driver earnings grouped by zone (top 5 from RPC). */
 export interface DriverEarningsByZone {
