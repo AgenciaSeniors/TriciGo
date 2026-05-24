@@ -38,7 +38,9 @@
     "./QuotaCard": "./src/QuotaCard.tsx",
     "./TripProgressBar": "./src/TripProgressBar.tsx",
     "./DraggableSheet": "./src/DraggableSheet.tsx",
-    "./WalletMigrationBanner": "./src/WalletMigrationBanner.tsx"
+    "./WalletMigrationBanner": "./src/WalletMigrationBanner.tsx",
+    "./PoiMapLayers": "./src/PoiMapLayers.tsx",
+    "./useViewportPois": "./src/useViewportPois.ts"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",

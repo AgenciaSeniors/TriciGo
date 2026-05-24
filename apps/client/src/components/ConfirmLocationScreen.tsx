@@ -19,8 +19,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-import { useViewportPois } from '@/hooks/useViewportPois';
-import { PoiMapLayers } from './PoiMapLayers';
+import { useViewportPois, PoiMapLayers } from '@tricigo/ui';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {

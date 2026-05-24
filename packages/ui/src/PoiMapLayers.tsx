@@ -1,11 +1,16 @@
 // ============================================================
-// TriciGo — PoiMapLayers (BUG-296)
+// TriciGo — PoiMapLayers
 //
-// Shared POI rendering for the client maps (RideMapView's SelectingView
-// and ConfirmLocationScreen). Replaces the duplicated, "feo" 30-color
-// CircleLayer + emoji SymbolLayer with a Google-Maps-style categorical
-// badge system:
+// Shared POI rendering for ALL native maps (client + driver). Originally
+// lived in apps/client (BUG-296) but was promoted to @tricigo/ui so the
+// driver app can reuse the same Google-Maps-style categorical badge
+// system across its RideMapView, home map, and any future map screens.
 //
+// Web app (apps/web) uses mapbox-gl-js with its own equivalent
+// implementation in BookingMap.tsx — separate because mapbox-gl-js's
+// API differs from @rnmapbox/maps'. A future PR could unify them.
+//
+// Display strategy:
 //   zoom ≤12   → clusters (white fill + orange ring)
 //   zoom 13-15 → colored circular badge + white Ionicons glyph
 //   zoom 15.5+ → badge + name label below
@@ -24,6 +29,18 @@ import type { ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ViewportPoi } from '@tricigo/utils';
 import { POI_VISUAL_GROUPS, poiVisualGroup } from '@tricigo/utils';
+
+// Inline subset of @types/geojson for the FeatureCollection shape we
+// produce — keeps this file dependency-free instead of adding @types/geojson
+// as a peerDep of @tricigo/ui (it's already hoisted in the workspace).
+interface FeatureCollection {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    geometry: { type: 'Point'; coordinates: [number, number] };
+    properties: Record<string, unknown>;
+  }>;
+}
 
 /** Tap payload emitted to the parent (opens the "Ir aquí" sheet). */
 export interface PoiTapPayload {
@@ -54,7 +71,7 @@ interface PoiMapLayersProps {
  * (`['get', 'color']`, `['get', 'iconKey']`) resolve without any
  * runtime branching in the layer.
  */
-function buildPoiGeoJSON(pois: ViewportPoi[]): GeoJSON.FeatureCollection {
+function buildPoiGeoJSON(pois: ViewportPoi[]): FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: pois.map((p) => {
@@ -137,7 +154,7 @@ export function PoiMapLayers({ MapboxGL, pois, onPoiPress }: PoiMapLayersProps) 
   // useViewportPois clears them below z10). Returning a stable (empty)
   // shape keeps the <ShapeSource> mounted, so Mapbox never leaves an
   // orphaned cluster layer behind on an unmount during a zoom-out.
-  const geojson = useMemo<GeoJSON.FeatureCollection>(() => {
+  const geojson = useMemo<FeatureCollection>(() => {
     if (!pois || pois.length === 0) {
       return { type: 'FeatureCollection', features: [] };
     }

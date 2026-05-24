@@ -9,7 +9,7 @@ import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
-import { PoiMapLayers } from './PoiMapLayers';
+import { PoiMapLayers } from '@tricigo/ui';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
