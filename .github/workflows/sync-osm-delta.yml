@@ -1,0 +1,98 @@
+name: Sync OSM POI deltas (daily)
+
+# PR 5 of POI parity program. Pulls daily Geofabrik replication diffs for
+# Cuba and applies CREATE/MODIFY/DELETE events to cuba_pois incrementally.
+# Complements .github/workflows/sync-pois.yml (which does the full merge
+# of OSM + Overture + Foursquare weekly on Mondays).
+#
+# Frescura efectiva: OSM cambios reflejados en 24h en vez de los 7-30
+# días que el sync semanal/mensual permitía.
+#
+# State: poi_sync_state Supabase table tracks the last applied sequence.
+# See supabase/migrations/00305_poi_sync_state.sql.
+
+on:
+  schedule:
+    # Daily at 06:00 UTC (01:00 La Habana). Slight offset from sync-pois
+    # (also 06:00 UTC) to avoid contention with the weekly run on Mondays.
+    # The Monday daily run is harmless even if it overlaps — both update
+    # the same state table idempotently.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'If "true", parse but skip Supabase writes'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+permissions:
+  contents: read
+
+jobs:
+  delta:
+    name: Apply daily OSM delta
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/sync-pois/requirements.txt
+
+      - name: Install Python deps
+        run: pip install -r scripts/sync-pois/requirements.txt
+
+      - name: Apply OSM delta
+        id: apply
+        env:
+          # Reuses NEXT_PUBLIC_SUPABASE_URL (same value as SUPABASE_URL).
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '' }}
+          REGION: cuba
+        run: python scripts/sync-pois/apply_osm_delta.py
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## OSM delta sync ${{ job.status }}"
+            echo ""
+            echo "- **Inserted**: ${{ steps.apply.outputs.inserted || '0' }}"
+            echo "- **Updated**: ${{ steps.apply.outputs.updated || '0' }}"
+            echo "- **Deactivated**: ${{ steps.apply.outputs.deactivated || '0' }}"
+            echo "- **Skipped (admin-locked)**: ${{ steps.apply.outputs.skipped_admin || '0' }}"
+            echo "- **Diffs applied**: ${{ steps.apply.outputs.diffs_applied || '0' }}"
+            echo "- **New sequence**: ${{ steps.apply.outputs.new_sequence || 'n/a' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Slack notify (only on significant changes or failure)
+        if: always() && env.SLACK_WEBHOOK != ''
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
+        run: |
+          INS=${{ steps.apply.outputs.inserted || '0' }}
+          UPD=${{ steps.apply.outputs.updated || '0' }}
+          DEL=${{ steps.apply.outputs.deactivated || '0' }}
+          TOTAL=$((INS + UPD + DEL))
+
+          # Only notify on failure OR if >50 changes (signal worth seeing)
+          if [ "${{ job.status }}" = "success" ] && [ "$TOTAL" -lt 50 ]; then
+            echo "Suppressing notification — only $TOTAL changes"
+            exit 0
+          fi
+
+          STATUS_EMOJI=":white_check_mark:"
+          if [ "${{ job.status }}" != "success" ]; then STATUS_EMOJI=":x:"; fi
+
+          PAYLOAD=$(jq -nc \
+            --arg t "$STATUS_EMOJI OSM delta sync ${{ job.status }}" \
+            --arg b "Inserted: $INS | Updated: $UPD | Deactivated: $DEL | Diffs: ${{ steps.apply.outputs.diffs_applied || '0' }} | New seq: ${{ steps.apply.outputs.new_sequence || 'n/a' }}" \
+            '{text: $t, blocks: [{type:"section", text:{type:"mrkdwn", text:$b}}]}')
+          curl -sS -X POST -H 'Content-Type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK" || true

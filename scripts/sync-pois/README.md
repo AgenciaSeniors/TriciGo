@@ -16,7 +16,8 @@ Syncs POI data from 3 open-source datasets to the `cuba_pois` table in Supabase.
 |---|---|
 | `categories.json` | Maps source taxonomies to TriciGo unified categories |
 | `download_foursquare.py` | Downloads + bbox-filters Foursquare HF dataset |
-| `merge_and_upsert.py` | Main: dedup + categorize + upsert to Supabase |
+| `merge_and_upsert.py` | Main weekly: dedup + categorize + upsert to Supabase |
+| `apply_osm_delta.py` | Daily OSM delta — applies Geofabrik replication diffs incrementally (PR 5 of POI parity) |
 | `requirements.txt` | Python deps |
 
 ## Run locally (test)
@@ -51,13 +52,41 @@ python merge_and_upsert.py
 
 ## Run via GitHub Actions
 
-The workflow `.github/workflows/sync-pois.yml` orchestrates this monthly (cron `0 6 1 * *`).
-Manual trigger:
+Two complementary workflows (PR 5 of POI parity, 2026-05-24):
+
+| Workflow | Cadence | Purpose |
+|---|---|---|
+| `.github/workflows/sync-pois.yml` | **Weekly** (Mondays 6am UTC) | Full merge of OSM + Overture + Foursquare. Resets `poi_sync_state` sequence to latest Geofabrik. |
+| `.github/workflows/sync-osm-delta.yml` | **Daily** (every day 6am UTC) | Incremental OSM-only delta. Reads `poi_sync_state.last_sequence`, downloads diffs from Geofabrik `cuba-updates/`, applies CREATE/MODIFY/DELETE events. |
+
+Effective freshness post-PR:
+
+| Source | Update upstream | TriciGo refresh |
+|---|---|---|
+| OSM | continuous | **24h** (daily delta) |
+| Overture | monthly | 7d (weekly full) |
+| Foursquare | monthly | 7d (weekly full) |
+| Mapbox / Google (search) | continuous | on-demand (30d EF cache) |
+| Crowdsource | continuous | instant (post-approval) |
+
+Manual triggers:
 
 ```bash
+# Full weekly sync
 gh workflow run sync-pois.yml
 # or with a smaller test bbox:
 gh workflow run sync-pois.yml -f bbox=-82.5,23.0,-82.3,23.2  # only La Habana
+
+# Daily delta (manual replay if scheduled run failed)
+gh workflow run sync-osm-delta.yml
+gh workflow run sync-osm-delta.yml -f dry_run=true  # parse-only, no DB writes
+```
+
+Monitor state:
+
+```sql
+SELECT region, last_sequence, last_sync_at, last_sync_kind, stats
+FROM poi_sync_state;
 ```
 
 ## Behaviour
