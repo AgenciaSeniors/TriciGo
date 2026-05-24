@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./analytics": "./src/analytics.ts",
+    "./animateCoordinate": "./src/animateCoordinate.ts",
     "./chatQuickReplies": "./src/chatQuickReplies.ts",
     "./currency": "./src/currency.ts",
     "./date": "./src/date.ts",

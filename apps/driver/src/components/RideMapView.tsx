@@ -3,7 +3,7 @@ import { View, Text, Animated, Pressable, StyleSheet, Platform, Image, ActivityI
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
@@ -798,6 +798,27 @@ function RideMapViewInner(
     return () => anim.stop();
   }, [driverLocation, ringAnim, ringOpacity]);
 
+  // BUG-marker-position-lag: pulse ring listeners. The driver marker now
+  // renders via ShapeSource+SymbolLayer (no React children), so the
+  // Animated.View pulse rings can't be nested inside the marker. We mirror
+  // the two animated scales into React state so CircleLayer styles can
+  // consume the numeric radius. Native driver still drives the timing —
+  // we just sample the value on every JS tick.
+  const [innerPulseRadiusPx, setInnerPulseRadiusPx] = useState<number>(MARKER.driver.ringSize / 2);
+  const [outerPulseRadiusPx, setOuterPulseRadiusPx] = useState<number>(MARKER.driver.ringSize / 2);
+  const [outerPulseOpacityVal, setOuterPulseOpacityVal] = useState<number>(0.6);
+  useEffect(() => {
+    const baseRadius = MARKER.driver.ringSize / 2;
+    const innerId = pulseAnim.addListener(({ value }) => setInnerPulseRadiusPx(baseRadius * value));
+    const outerId = ringAnim.addListener(({ value }) => setOuterPulseRadiusPx(baseRadius * value));
+    const opacityId = ringOpacity.addListener(({ value }) => setOuterPulseOpacityVal(value));
+    return () => {
+      pulseAnim.removeListener(innerId);
+      ringAnim.removeListener(outerId);
+      ringOpacity.removeListener(opacityId);
+    };
+  }, [pulseAnim, ringAnim, ringOpacity]);
+
   // Pickup pulse ring animation (native only) — BUG-218: reduced peak scale
   // from 2.5 (80px halo) to 1.5 (48px) so the pickup doesn't dominate the map.
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
@@ -950,6 +971,17 @@ function RideMapViewInner(
         snappedDriver?.latitude ?? driverLocation.latitude,
       ]
     : null;
+
+  // BUG-marker-position-lag (2026-05-24): smooth interpolation between
+  // discrete GPS samples so the driver's own marker glides Uber-style
+  // instead of teleporting every ~200-1000 ms (GPS callback rate varies
+  // by speed; throttle on upload is 1Hz but local rendering can be faster).
+  const renderedDriverCoord = useAnimatedCoordinate(
+    effectiveDriverCoord
+      ? { latitude: effectiveDriverCoord[1], longitude: effectiveDriverCoord[0] }
+      : null,
+    1000,
+  );
 
   // BUG-298: smooth the effective bearing with EMA to dampen the discrete
   // jumps that happen when `snapDriverToRoute` switches polyline segments
@@ -1366,73 +1398,112 @@ function RideMapViewInner(
             <View style={styles.riderMarker} accessibilityLabel="Rider location" />
           </MapboxGL.PointAnnotation>
         )}
-        {driverLocation && (
-          // BUG-218: use MarkerView (not PointAnnotation) for the driver
-          // marker so the <Image> child renders reliably on Android.
-          // PointAnnotation snapshots its child once on mount — if the image
-          // hasn't loaded yet, the snapshot is empty and the user sees just
-          // a dark/white circle without the vehicle icon.
+        {/* Hoisted vehicle icons — needed by BOTH the driver SymbolLayer below
+            AND the peers SymbolLayer further down. Mounting once at the map
+            root ensures the icon is available as soon as the driver marker
+            renders (peers GeoJSON may be empty at the moment of first
+            render). */}
+        <MapboxGL.Images
+          images={{
+            'marker-triciclo': vehicleMarkerImages.triciclo,
+            'marker-moto': vehicleMarkerImages.moto,
+            'marker-auto': vehicleMarkerImages.auto,
+            'marker-confort': vehicleMarkerImages.confort,
+            'marker-mensajeria': vehicleMarkerImages.mensajeria,
+          }}
+        />
+
+        {driverLocation && renderedDriverCoord && (
+          // BUG-marker-position-lag (2026-05-24): switched from MarkerView
+          // (which forced re-mount on coord change → 1s teleports) to
+          // ShapeSource + SymbolLayer + CircleLayer. The Mapbox-native
+          // source updates without re-mount, and useAnimatedCoordinate
+          // interpolates the coord at ~30 FPS so the marker slides
+          // continuously between GPS samples — Uber/Bolt style.
           //
-          // BUG-293: coordinate + rotation now come from `effectiveDriverCoord`
-          // / `effectiveDriverHeading` which prefer the route-polyline snap
-          // when available. This keeps the marker on-road and aligned with
-          // the visible street geometry instead of drifting through
-          // buildings as Lockito/GPS noise crosses streets diagonally.
-          <MapboxGL.MarkerView id="driver" coordinate={effectiveDriverCoord ?? toCoord(driverLocation)} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.driverMarkerContainer}>
-              <Animated.View
-                style={[styles.driverRing, { transform: [{ scale: ringAnim }], opacity: ringOpacity }]}
+          // BUG-293 preserved: `effectiveDriverCoord` / `effectiveDriverHeading`
+          // still prefer the route-polyline snap when available, so the marker
+          // stays on-road and aligned with the visible street geometry.
+          <>
+            {/* Outer pulse ring (drawn first, sits below) */}
+            <MapboxGL.ShapeSource
+              id="driver-pulse-outer-src"
+              shape={{
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
+                },
+                properties: {},
+              }}
+            >
+              <MapboxGL.CircleLayer
+                id="driver-pulse-outer-circle"
+                style={{
+                  circleRadius: outerPulseRadiusPx,
+                  circleColor: MAP_COLORS.driver,
+                  circleOpacity: 0.18 * outerPulseOpacityVal,
+                  circlePitchAlignment: 'map',
+                }}
               />
-              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                {/* BUG-268: rotation MUST live on a non-Animated View. When
-                    Animated.View has a transform array mixing Animated.Value
-                    (scale: pulseAnim) with a raw string (rotate: '90deg'),
-                    React Native's native driver only updates the animated
-                    entries and silently ignores the raw ones — the marker
-                    stays at rotate(0deg) forever. Splitting into two nested
-                    views isolates the dynamic rotate so it actually applies. */}
-                <View
-                  style={{
-                    transform: [
-                      // 0=N, 90=E, 180=S, 270=W. All stock marker assets
-                      // (triciclo, moto, auto_clasico, confort) point UP
-                      // (north) at rotation 0°, so the rendered rotation
-                      // equals the bearing of motion directly.
-                      // `vehicleMarkerRotationOffset()` exists for future
-                      // non-standard assets but currently returns 0 for
-                      // the entire fleet (BUG-295 resolved by re-exporting
-                      // triciclo.png pointing north).
-                      {
-                        rotate: `${
-                          (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
-                            ? 0
-                            : ((effectiveDriverHeading + vehicleMarkerRotationOffset(vehicleType)) % 360)
-                        }deg`,
-                      },
-                    ],
-                  }}
-                >
-                  {vehicleType && vehicleMarkerImages[vehicleType] && !markerImageError ? (
-                    <View style={styles.vehicleIconContainer}>
-                      <Image
-                        source={vehicleMarkerImages[vehicleType]}
-                        style={styles.vehicleIcon}
-                        resizeMode="contain"
-                        accessibilityLabel={`${vehicleType} vehicle marker`}
-                        onError={(e) => {
-                          console.warn('[VehicleMarker] image failed', vehicleType, e?.nativeEvent);
-                          setMarkerImageError(true);
-                        }}
-                        onLoad={() => console.log('[VehicleMarker] image loaded', vehicleType)}
-                      />
-                    </View>
-                  ) : (
-                    <View style={styles.driverDot} />
-                  )}
-                </View>
-              </Animated.View>
-            </View>
-          </MapboxGL.MarkerView>
+            </MapboxGL.ShapeSource>
+
+            {/* Inner pulse ring */}
+            <MapboxGL.ShapeSource
+              id="driver-pulse-inner-src"
+              shape={{
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
+                },
+                properties: {},
+              }}
+            >
+              <MapboxGL.CircleLayer
+                id="driver-pulse-inner-circle"
+                style={{
+                  circleRadius: innerPulseRadiusPx,
+                  circleColor: MAP_COLORS.driver,
+                  circleOpacity: 0.25,
+                  circlePitchAlignment: 'map',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+
+            {/* Vehicle icon (rotates with smoothed heading) */}
+            <MapboxGL.ShapeSource
+              id="driver-marker-src"
+              shape={{
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
+                },
+                properties: {
+                  icon: vehicleType ? `marker-${vehicleType}` : 'marker-auto',
+                  heading:
+                    (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
+                      ? 0
+                      : (effectiveDriverHeading + vehicleMarkerRotationOffset(vehicleType)) % 360,
+                },
+              }}
+            >
+              <MapboxGL.SymbolLayer
+                id="driver-marker-icon"
+                style={{
+                  iconImage: ['get', 'icon'],
+                  // 0.85 = comparable to MARKER.driver.size = 45 (PR #185 1.5×
+                  // sizing). Tune on-device against nearby vehicles (iconSize
+                  // 0.55) — active driver should pop slightly larger.
+                  iconSize: 0.85,
+                  iconAllowOverlap: true,
+                  iconAnchor: 'center',
+                  iconRotate: ['get', 'heading'],
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          </>
         )}
         {/* BUG-218: pickup marker rendered AFTER driver so when both
             overlap (driver at pickup), the green pickup stays visible on
@@ -1497,15 +1568,6 @@ function RideMapViewInner(
         {/* Peer drivers — top-down vehicle icons rendered via SymbolLayer */}
         {peersGeoJSON && (
           <>
-            <MapboxGL.Images
-              images={{
-                'marker-triciclo': vehicleMarkerImages.triciclo,
-                'marker-moto': vehicleMarkerImages.moto,
-                'marker-auto': vehicleMarkerImages.auto,
-                'marker-confort': vehicleMarkerImages.confort,
-                'marker-mensajeria': vehicleMarkerImages.mensajeria,
-              }}
-            />
             <MapboxGL.ShapeSource id="peers" shape={peersGeoJSON}>
               <MapboxGL.SymbolLayer
                 id="peers-layer"

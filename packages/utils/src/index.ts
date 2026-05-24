@@ -18,6 +18,12 @@ export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
 export { useDebouncePress } from './useDebouncePress';
+// BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
+// marker animation between discrete GPS samples. Used by RideMapView
+// (driver + client) to avoid the "teleport every 1s" effect when the
+// underlying MarkerView re-mounts on coord change.
+export { useAnimatedCoordinate, lerpCoordinate } from './animateCoordinate';
+export type { AnimatedCoordinate } from './animateCoordinate';
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
 export type {
