@@ -27,7 +27,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
-import { useViewportPois } from '@tricigo/ui';
+import { useViewportPois, SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
@@ -2963,6 +2963,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     lat: number; lng: number; address: string | null;
   } | null>(null);
 
+  // Crowdsourcing — "Sugerir lugar" sheet visibility + snapshotted coords.
+  // PR 3 of POI parity program. Coords default to user's location; we
+  // could enhance later to use long-press on the map for "agregar aquí".
+  const [submitPoiOpen, setSubmitPoiOpen] = useState(false);
+  const submitPoiCoords = userCenterLatLng;
+
   /** Format fare based on payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
     if (draft.paymentMethod === 'tricicoin') {
@@ -3143,6 +3149,43 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
       />
+
+      {/* Crowdsourcing — "Sugerir lugar" floating button (PR 3 of POI
+          parity). Only visible when not searching/selecting addresses —
+          no clutter while user is actively booking. */}
+      {!searchingField && submitPoiCoords && (
+        <Pressable
+          onPress={() => setSubmitPoiOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Sugerir lugar nuevo"
+          style={{
+            position: 'absolute',
+            top: insets.top + 80,
+            right: 12,
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: 'rgba(255,255,255,0.95)',
+            borderWidth: 1,
+            borderColor: 'rgba(0,0,0,0.08)',
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+            zIndex: 30,
+          }}
+        >
+          <Ionicons name="add" size={26} color="#FF4D00" />
+        </Pressable>
+      )}
+
+      {/* SubmitPoiSheet — opens when user taps "+" floating button */}
+      {submitPoiCoords && (
+        <SubmitPoiSheet
+          visible={submitPoiOpen}
+          onClose={() => setSubmitPoiOpen(false)}
+          lat={submitPoiCoords.latitude}
+          lng={submitPoiCoords.longitude}
+          supabase={getSupabaseClient()}
+        />
+      )}
 
       {/*
         Floating "Ir aquí" card — appears when the user taps a POI on

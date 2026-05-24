@@ -102,3 +102,7 @@ export type { StopsListProps, StopsListItem } from './StopsList';
 export { PoiMapLayers } from './PoiMapLayers';
 export type { PoiTapPayload } from './PoiMapLayers';
 export { useViewportPois } from './useViewportPois';
+// POI crowdsourcing — shared submit form + hook for driver + client.
+export { SubmitPoiSheet } from './SubmitPoiSheet';
+export type { SubmitPoiSheetProps } from './SubmitPoiSheet';
+export { useSubmitPoi } from './useSubmitPoi';
