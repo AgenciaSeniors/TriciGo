@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -16,6 +16,9 @@ interface AddressResult {
   category?: string;
   source?: 'searchbox' | 'nominatim' | 'supabase' | 'google' | 'mapbox';
   specificity?: number;
+  /** PR 4b: original SearchBoxResult for background importPoiFromSearch.
+   *  Populated only for unified (Google/Mapbox) rows. */
+  _src?: SearchBoxResult;
 }
 
 interface SavedLocationItem {
@@ -282,6 +285,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           : r.source === 'mapbox' ? 'mapbox'
           : (r.source === 'overpass' ? 'nominatim' : r.source) as AddressResult['source'],
         specificity: r.specificity,
+        // PR 4b: keep original SearchBoxResult so handleSelect can fire-and-forget
+        // import-mapbox-poi for Google-sourced selections.
+        _src: r,
       }));
       mapboxCacheRef.current.set(q, items);
       return items;
@@ -560,6 +566,11 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     // This prevents the bug where enriched address text didn't match pin coordinates.
     saveToRecent(result);
     onSelect(result);
+    // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
+    // when the selection came from Google/Mapbox unified search.
+    if (result._src) {
+      void importPoiFromSearch(result._src, getSupabaseClient());
+    }
     isSelectingRef.current = false;
   }
 
