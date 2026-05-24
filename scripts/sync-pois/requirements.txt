@@ -8,3 +8,5 @@ pyarrow>=15.0
 pandas>=2.0
 huggingface_hub>=0.24
 supabase>=2.5
+# PR 5 of POI parity (2026-05-24): apply_osm_delta.py uses stdlib gzip +
+# xml.etree to parse .osc.gz directly (no pyosmium required). No new deps.

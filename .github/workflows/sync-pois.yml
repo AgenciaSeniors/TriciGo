@@ -1,11 +1,18 @@
 name: Sync POIs from open datasets
 
-# Monthly sync of OSM + Overture + Foursquare into cuba_pois.
+# Weekly sync of OSM + Overture + Foursquare into cuba_pois.
 # See scripts/sync-pois/README.md for details.
+#
+# PR 5 of POI parity (2026-05-24): changed from monthly to weekly because:
+#   - Overture and Foursquare update monthly upstream, so weekly captures
+#     edits + bug fixes faster
+#   - OSM long-tail (mypimes, paladares) deserves <30d freshness
+#   - Complementary daily delta in sync-osm-delta.yml fills the OSM gap
+#     between full syncs (24h freshness for OSM)
 
 on:
   schedule:
-    - cron: '0 6 1 * *'   # day 1 of each month, 06:00 UTC
+    - cron: '0 6 * * 1'   # every Monday 06:00 UTC (~01:00 La Habana)
   workflow_dispatch:
     inputs:
       bbox:
@@ -145,6 +152,32 @@ jobs:
             --overture /tmp/sync/overture.geojson \
             --foursquare /tmp/sync/foursquare.parquet \
             --bbox=${{ steps.cfg.outputs.bbox }}
+
+      # ─────────── Step 4b: Update poi_sync_state ───────────
+      # After the full weekly sync, advance the sync-state pointer to the
+      # current Geofabrik replication sequence so the daily delta workflow
+      # (sync-osm-delta.yml) continues from here on subsequent days.
+      # PR 5 of POI parity (2026-05-24).
+      - name: Update poi_sync_state to current Geofabrik sequence
+        if: steps.cfg.outputs.dry_run != 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          # Fetch latest Geofabrik replication sequence for Cuba
+          SEQ=$(curl -sS https://download.geofabrik.de/central-america/cuba-updates/state.txt \
+            | grep '^sequenceNumber=' | cut -d= -f2)
+          if [ -z "$SEQ" ]; then
+            echo "::warning::Could not fetch Geofabrik state.txt — skipping poi_sync_state update"
+            exit 0
+          fi
+          echo "Setting poi_sync_state.cuba.last_sequence = $SEQ"
+          curl -sS -X POST \
+            -H "apikey: $SUPABASE_SERVICE_ROLE" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+            -H "Content-Type: application/json" \
+            -d "{\"p_region\":\"cuba\",\"p_sequence\":$SEQ,\"p_kind\":\"full\",\"p_stats\":{\"inserted\":\"${{ steps.upsert.outputs.inserted || 0 }}\",\"updated\":\"${{ steps.upsert.outputs.updated || 0 }}\"}}" \
+            "${SUPABASE_URL}/rest/v1/rpc/poi_sync_state_set" || echo "::warning::poi_sync_state_set RPC call failed"
 
       # ─────────── Step 5: Notify ───────────
       - name: Job summary
