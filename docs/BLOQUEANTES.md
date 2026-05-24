@@ -122,6 +122,32 @@
 
 ---
 
+## 5. NETOPIA Support — clarificaciones de la integración v2.x
+
+> **Añadido:** 2026-05-24 — durante el flow productivo de NETOPIA en sandbox descubrimos 2 comportamientos no documentados (o ambiguos) que requieren respuesta oficial del soporte.
+
+**Qué bloquea:** Lanzar pagos productivos con confianza completa en la integración. **No es bloqueante crítico** (ambos issues tienen mitigación temporal), pero las respuestas habilitan mejoras puntuales:
+
+1. **Two-IPN race condition** — NETOPIA observó enviar 2 IPNs para la misma transacción (`status=12, "Invalid CVV"` interim → `status=3, paid` final, ~20s de diferencia). Detectado el 2026-05-23 con intent `d3fc744f` ($20 driver_quota → wallet jamás acreditada pre-fix porque el atomic claim del webhook no aceptaba transición `failed → paid`). **Fix shipped** en PR #158 (commit `42de9da`, EF `process-netopia-webhook` v5 deployada) — ahora el webhook tolera la recuperación con verificación de `ntpID` matching. Pero queremos confirmar si es behavior documentado y si hay un endpoint REST `verify-auth` para reconfirmar status canónico.
+2. **Email cardholder en rumano** — enviamos `config.language: 'es'` y la página hosted respeta el field, pero el email de confirmación al cardholder llega en rumano. Spec dice `config.language` controla "language you want notifications to be displayed in" (wording ambiguo). No hay field documentado `customer.language` / `billing.language`.
+
+**Qué necesitas:**
+- Tiempo para mandar el ticket vía chat o form de soporte NETOPIA (https://netopia-payments.com — luni-vineri 9-18 hora Rumania)
+- Las credenciales del POS sandbox/live para que NETOPIA ubique las transacciones referenciadas (ntpID `2812872` para el caso del two-IPN)
+
+**Qué vamos a hacer cuando tengas la respuesta:**
+1. **Si NETOPIA confirma el endpoint REST `verify-auth`**: implementar Fix 4 del plan (cross-check defensivo en `process-netopia-webhook` antes de marcar un intent como `failed`, llamando la API de NETOPIA para confirmar status canónico).
+2. **Si NETOPIA confirma protocolo para email language**: ajustar config en POS dashboard o agregar field nuevo (`customer.language`, `billing.language`, etc.) a la request del EF `create-netopia-payment-intent`.
+3. **Si NETOPIA confirma que el two-IPN es behavior interim documentado**: agregar nota a CLAUDE.md y mantener el fix actual sin cambios.
+
+**Texto del ticket (copy-paste-ready):** ver `~/.claude/plans/rol-eres-un-auditor-immutable-platypus.md` sección **A.3 (FINAL)** — incluye versión en rumano + inglés con cronología completa, payloads de IPN, y 6 preguntas técnicas concretas.
+
+**Estado actual:** ticket NO enviado todavía. Lo mandás cuando puedas; mientras tanto, el código en master tolera los 2 issues sin perder transacciones.
+
+**Tiempo estimado:** 15 min de envío + horario de soporte (luni-vineri 9-18 hora Rumania) para respuesta.
+
+---
+
 ## Orden de resolución recomendado
 
 ```
@@ -134,6 +160,14 @@
 4. App Store Submission (después de smoke test exitoso)
    ↓
 5. Load Testing (después de primeros usuarios reales)
+
+═══════════════════════════════════════════════════════════════
+PARALELO (independiente del orden de arriba):
+═══════════════════════════════════════════════════════════════
+
+• NETOPIA Support ticket (sección 5) — podés mandarlo en cualquier
+  momento; la respuesta llega cuando llegue. No bloquea ninguno
+  de los items 1-5.
 ```
 
 ---
@@ -149,3 +183,5 @@
 - [ ] Google Play service account JSON
 - [ ] Confirmar: Apple Developer Program activo
 - [ ] Confirmar: Google Play Console activo
+- [ ] Confirmar: ticket NETOPIA enviado (texto en plan A.3, sección 5 arriba)
+- [ ] Respuesta de NETOPIA support (cuando llegue) — copy/paste la respuesta acá o reenviame el email
