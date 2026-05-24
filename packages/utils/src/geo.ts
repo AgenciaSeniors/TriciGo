@@ -2400,7 +2400,7 @@ export interface SearchBoxResult {
   place_name: string;
   full_address: string;
   category?: string;
-  source: 'searchbox' | 'nominatim' | 'overpass' | 'supabase';
+  source: 'searchbox' | 'nominatim' | 'overpass' | 'supabase' | 'google' | 'mapbox';
   specificity: number; // 0-1: 1 = unique named POI, 0 = generic
   /**
    * Smart-search metadata (only populated when the row came from
@@ -2537,6 +2537,127 @@ export async function searchAddressSearchBox(
   } catch {
     return [];
   }
+}
+
+// ============================================================
+// PR 4 of POI parity — Google Places search + unified orchestrator
+//
+// `searchAddressGoogle` proxies through the Edge Function so the API key
+// stays server-side. The EF handles caching (30d), budget capping (1000
+// calls/day), and graceful fallback to Mapbox when Google is unavailable
+// or unconfigured.
+//
+// `searchAddressUnified` is the new entry point callers should use:
+// it tries Google first, then Mapbox SearchBox as fallback. Each result
+// carries its `source` so the UI can render proper attribution.
+// ============================================================
+
+// Structural shape matching the @supabase/supabase-js Client.functions.invoke
+// signature. We use a loose `body: any` so callers can pass any JSON
+// payload without forcing them to convert to FormData / string first
+// (Supabase's strict body type union doesn't help us).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface SupabaseClientLike {
+  functions: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    invoke: (name: string, opts: { body?: any }) => PromiseLike<{
+      data: unknown;
+      error: { message: string } | null;
+    }>;
+  };
+}
+
+/**
+ * Calls the search-places-google Edge Function. Returns:
+ *   - SearchBoxResult[] with source='google' on success
+ *   - [] when the EF says fallback OR when proxy errors
+ *
+ * Caller (searchAddressUnified) interprets [] as a cue to try Mapbox.
+ *
+ * The EF responds with a JSON body containing data + (optional) fallback
+ * indicator. We surface the data to the caller and silently honour the
+ * fallback hint by returning [].
+ */
+export async function searchAddressGoogle(
+  query: string,
+  supabase: SupabaseClientLike | null,
+  proximity: { latitude: number; longitude: number } | null = null,
+  signal?: AbortSignal,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  if (!supabase || !query || query.trim().length < 2) return [];
+  // signal-aware short-circuit: if caller already aborted, don't fire
+  if (signal?.aborted) return [];
+
+  try {
+    const { data, error } = await supabase.functions.invoke('search-places-google', {
+      body: {
+        query: query.trim(),
+        proximity: proximity ?? undefined,
+        limit,
+      },
+    });
+
+    if (error) {
+      // EF failure — caller will fall back to Mapbox
+      return [];
+    }
+
+    const payload = data as {
+      data?: Array<Partial<SearchBoxResult> & { latitude?: number; longitude?: number }>;
+      fallback?: 'mapbox';
+      reason?: string;
+    } | null;
+
+    if (!payload || !Array.isArray(payload.data) || payload.fallback) {
+      return [];
+    }
+
+    return payload.data
+      .filter((r) => typeof r.latitude === 'number' && typeof r.longitude === 'number')
+      .map((r) => ({
+        address: r.address ?? '',
+        latitude: r.latitude as number,
+        longitude: r.longitude as number,
+        place_name: r.place_name ?? r.address ?? '',
+        full_address: r.address ?? '',
+        category: r.matchedCategory ?? '',
+        source: 'google' as const,
+        specificity: typeof r.specificity === 'number' ? r.specificity : 0.95,
+        matchedCategory: r.matchedCategory ?? null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Unified address search — Google first, Mapbox SearchBox as fallback.
+ * This is the function new callers should use; legacy callers can keep
+ * using `searchAddressSearchBox` directly if they don't want Google.
+ *
+ * Pass `supabase=null` to skip the Google attempt entirely (useful for
+ * apps without a configured Supabase client at the search site, or for
+ * graceful degradation).
+ */
+export async function searchAddressUnified(
+  query: string,
+  supabase: SupabaseClientLike | null,
+  proximity: { latitude: number; longitude: number } | null = null,
+  signal?: AbortSignal,
+  limit = 10,
+): Promise<SearchBoxResult[]> {
+  // Try Google first — it has the best Cuban coverage for the long-tail
+  // of mypimes / paladares / kioscos that aren't in OSM/Mapbox.
+  const googleResults = supabase
+    ? await searchAddressGoogle(query, supabase, proximity, signal, limit)
+    : [];
+  if (googleResults.length > 0) return googleResults;
+
+  // Fallback to Mapbox SearchBox (the existing implementation)
+  const mapboxResults = await searchAddressSearchBox(query, proximity, signal, limit);
+  // Re-tag mapbox results so the UI shows the right attribution
+  return mapboxResults.map((r) => ({ ...r, source: 'mapbox' as const }));
 }
 
 /** OSM tag mappings for POI category searches */

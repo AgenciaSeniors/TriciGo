@@ -3,7 +3,9 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified } from '@tricigo/utils';
+import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
+import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
@@ -86,6 +88,9 @@ function AddressSearchInputInner({
   const [isLocating, setIsLocating] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  // PR 4 of POI parity — when external search (Google/Mapbox) contributes
+  // results, we surface attribution at the bottom of the dropdown per TOS.
+  const [attribution, setAttribution] = useState<'google' | 'mapbox' | 'mixed' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastQueryRef = useRef<string>('');
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
@@ -119,6 +124,7 @@ function AddressSearchInputInner({
       setResults([]);
       setIsSearching(false);
       setIsOffline(false);
+      setAttribution(null);
       return;
     }
 
@@ -220,12 +226,24 @@ function AddressSearchInputInner({
           ...streetResults.map(normalize),
           ...lowSpecPois,
         ];
-        // searchAddress already returns AddressSearchResult[] — no
-        // normalize map needed on the fallback branch.
+        // PR 4 of POI parity — when local Supabase has no results, fall
+        // back to Google Places (best Cuban coverage) and then Mapbox
+        // SearchBox via the unified helper. Each result carries its
+        // `source` so we can render proper TOS attribution below the list.
+        let externalResults: AddressSearchResult[] = [];
+        let externalAttribution: 'google' | 'mapbox' | 'mixed' | null = null;
+        if (merged.length === 0) {
+          const unified = await searchAddressUnified(text, getSupabaseClient(), userLocation);
+          externalAttribution = inferAttributionSource(unified);
+          externalResults = unified.length > 0
+            ? unified.map(normalize)
+            : await searchAddress(text, 5, userLocation);
+        }
         const searchResults: AddressSearchResult[] = merged.length > 0
           ? merged
-          : await searchAddress(text, 5, userLocation);
+          : externalResults;
         setResults(searchResults);
+        setAttribution(externalAttribution);
         setIsOffline(false);
         // Cache successful results
         setCachedResults(text, searchResults).catch(() => {});
@@ -631,6 +649,11 @@ function AddressSearchInputInner({
                 )}
               </Pressable>
             ))}
+
+            {/* PR 4 of POI parity — TOS attribution for external search providers */}
+            {attribution && mergedResults.length > 0 && (
+              <SourceAttribution source={attribution} />
+            )}
 
             {/* Skeleton loading while API is searching and no local results */}
             {isSearching && mergedResults.length === 0 && (

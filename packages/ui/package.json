@@ -42,7 +42,8 @@
     "./PoiMapLayers": "./src/PoiMapLayers.tsx",
     "./useViewportPois": "./src/useViewportPois.ts",
     "./SubmitPoiSheet": "./src/SubmitPoiSheet.tsx",
-    "./useSubmitPoi": "./src/useSubmitPoi.ts"
+    "./useSubmitPoi": "./src/useSubmitPoi.ts",
+    "./SourceAttribution": "./src/SourceAttribution.tsx"
   },
   "dependencies": {
     "@tricigo/theme": "workspace:*",

@@ -16,10 +16,13 @@ import {
   searchPoisSupabase,
   searchStreetsSupabase,
   searchAddress,
+  searchAddressUnified,
   tricigoCategoryEmoji,
   type GeoPoint,
   type SearchBoxResult,
 } from '@tricigo/utils';
+import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
+import { getSupabaseClient } from '@tricigo/api';
 
 interface AddressResult {
   id: string;
@@ -56,8 +59,14 @@ interface AddressSearchBarProps {
  * full Cuban cross-street format is what we want — the rider client already
  * uses this same cascade.
  */
-async function searchUnified(query: string, near: GeoPoint | null): Promise<AddressResult[]> {
-  if (query.trim().length < 2) return [];
+interface SearchOutcome {
+  results: AddressResult[];
+  /** When external providers (Google/Mapbox) contributed, surface attribution. */
+  attribution: 'google' | 'mapbox' | 'mixed' | null;
+}
+
+async function searchUnified(query: string, near: GeoPoint | null): Promise<SearchOutcome> {
+  if (query.trim().length < 2) return { results: [], attribution: null };
 
   // search_pois_smart already detects category intent (e.g. "Bar" /
   // "Hospital") and sinks generic OSM placeholders. When a category
@@ -88,24 +97,38 @@ async function searchUnified(query: string, near: GeoPoint | null): Promise<Addr
   const streets      = streetResults.map(toResult);
 
   const merged = [...highSpecPois, ...streets, ...lowSpecPois];
-  if (merged.length > 0) return merged.slice(0, 8);
+  if (merged.length > 0) return { results: merged.slice(0, 8), attribution: null };
 
-  // Mapbox / Nominatim fallback only when Supabase had nothing
+  // PR 4 of POI parity — Supabase had nothing, try Google Places (best
+  // Cuban long-tail coverage) → Mapbox SearchBox → finally Nominatim.
+  const unified = await searchAddressUnified(query, getSupabaseClient(), near).catch(() => [] as SearchBoxResult[]);
+  if (unified.length > 0) {
+    return {
+      results: unified.map((r, idx) => toResult(r, idx)),
+      attribution: inferAttributionSource(unified),
+    };
+  }
+
+  // Final fallback: Nominatim via the existing searchAddress helper.
   const fallback = await searchAddress(query, 6, near).catch(() => []);
-  return fallback.map((r, idx) => ({
-    id: `mapbox-${idx}`,
-    title: r.displayName || r.address,
-    subtitle: r.address && r.address !== (r.displayName || r.address) ? r.address : '',
-    address: r.address,
-    latitude: r.latitude,
-    longitude: r.longitude,
-    isPoi: !!(r.displayName && r.displayName !== r.address),
-  }));
+  return {
+    results: fallback.map((r, idx) => ({
+      id: `mapbox-${idx}`,
+      title: r.displayName || r.address,
+      subtitle: r.address && r.address !== (r.displayName || r.address) ? r.address : '',
+      address: r.address,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      isPoi: !!(r.displayName && r.displayName !== r.address),
+    })),
+    attribution: null,
+  };
 }
 
 export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...' }: AddressSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AddressResult[]>([]);
+  const [attribution, setAttribution] = useState<'google' | 'mapbox' | 'mixed' | null>(null);
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState(false);
   const [near, setNear] = useState<GeoPoint | null>(null);
@@ -141,10 +164,11 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     }
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
-      const found = await searchUnified(text, near);
+      const outcome = await searchUnified(text, near);
       // Drop stale responses if the user kept typing
       if (lastQueryRef.current !== text) return;
-      setResults(found);
+      setResults(outcome.results);
+      setAttribution(outcome.attribution);
       setLoading(false);
     }, 350);
   }, [near]);
@@ -215,6 +239,9 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
               keyboardShouldPersistTaps="always"
               scrollEnabled={results.length > 3}
               style={{ maxHeight: 220 }}
+              ListFooterComponent={
+                attribution ? <SourceAttribution source={attribution} isDark /> : null
+              }
               renderItem={({ item, index }) => (
                 <Pressable
                   onPress={() => handleSelect(item)}

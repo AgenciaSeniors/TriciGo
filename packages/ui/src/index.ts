@@ -106,3 +106,7 @@ export { useViewportPois } from './useViewportPois';
 export { SubmitPoiSheet } from './SubmitPoiSheet';
 export type { SubmitPoiSheetProps } from './SubmitPoiSheet';
 export { useSubmitPoi } from './useSubmitPoi';
+// POI search attribution — required by Google + Mapbox TOS for any UI
+// that displays results from their APIs.
+export { SourceAttribution, inferAttributionSource } from './SourceAttribution';
+export type { SourceAttributionProps } from './SourceAttribution';

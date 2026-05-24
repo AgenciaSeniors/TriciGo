@@ -2,8 +2,9 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
+import { getSupabaseClient } from '@tricigo/api';
 
 // suggestCrossStreets and parseCubanAddress imported from @tricigo/utils (Supabase-backed, ~5ms)
 
@@ -13,7 +14,7 @@ interface AddressResult {
   longitude: number;
   place_name: string;
   category?: string;
-  source?: 'searchbox' | 'nominatim' | 'supabase';
+  source?: 'searchbox' | 'nominatim' | 'supabase' | 'google' | 'mapbox';
   specificity?: number;
 }
 
@@ -263,26 +264,44 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     }
   }
 
-  // Search Box API fetch with caching
+  // PR 4 of POI parity — Google Places (best Cuban coverage) → Mapbox
+  // SearchBox fallback via the unified helper. We cache the merged
+  // results so subsequent same-query renders skip both providers.
   const fetchSearchBox = useCallback(async (q: string, signal?: AbortSignal): Promise<AddressResult[]> => {
     const cached = mapboxCacheRef.current.get(q);
     if (cached) return cached;
     try {
-      const results = await searchAddressSearchBox(q, proximity ?? null, signal, 10);
+      const results = await searchAddressUnified(q, getSupabaseClient(), proximity ?? null, signal, 10);
       const items: AddressResult[] = results.map(r => ({
         address: r.full_address || r.address,
         latitude: r.latitude,
         longitude: r.longitude,
         place_name: r.place_name,
         category: r.category,
-        source: (r.source === 'overpass' ? 'nominatim' : r.source) as AddressResult['source'],
+        source: r.source === 'google' ? 'google'
+          : r.source === 'mapbox' ? 'mapbox'
+          : (r.source === 'overpass' ? 'nominatim' : r.source) as AddressResult['source'],
         specificity: r.specificity,
       }));
       mapboxCacheRef.current.set(q, items);
       return items;
     } catch (err: any) {
       if (err?.name === 'AbortError') return [];
-      return [];
+      // Hard fallback: if unified fails entirely, hit Mapbox SearchBox directly
+      try {
+        const fallback = await searchAddressSearchBox(q, proximity ?? null, signal, 10);
+        return fallback.map(r => ({
+          address: r.full_address || r.address,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          place_name: r.place_name,
+          category: r.category,
+          source: 'mapbox' as AddressResult['source'],
+          specificity: r.specificity,
+        }));
+      } catch {
+        return [];
+      }
     }
   }, [proximity]);
 
@@ -892,6 +911,26 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
               {t('web.address_no_results', { defaultValue: 'No se encontraron direcciones' })}
             </li>
           ) : null}
+          {/* PR 4 of POI parity — TOS attribution for Google/Mapbox results */}
+          {results.length > 0 && (() => {
+            const hasGoogle = results.some(r => r.source === 'google');
+            const hasMapbox = results.some(r => r.source === 'mapbox' || r.source === 'searchbox');
+            const label = hasGoogle && hasMapbox
+              ? 'Powered by Google + © Mapbox'
+              : hasGoogle ? 'Powered by Google'
+              : hasMapbox ? '© Mapbox'
+              : null;
+            if (!label) return null;
+            return (
+              <li style={{
+                padding: '0.4rem 0.75rem',
+                fontSize: '0.7rem',
+                fontStyle: 'italic',
+                color: 'var(--text-tertiary)',
+                borderTop: '1px solid var(--border-subtle)',
+              }}>{label}</li>
+            );
+          })()}
         </ul>
       )}
 
