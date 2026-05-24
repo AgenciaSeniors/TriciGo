@@ -40,9 +40,13 @@ export function useIsSuperAdmin(): IsSuperAdminState {
     const supabase = getSupabaseClient();
 
     // Call the SECURITY DEFINER RPC. Defined in mig 00291.
-    supabase
-      .rpc('is_super_admin')
-      .then(({ data, error }) => {
+    // NOTE: supabase.rpc(...) returns a PostgrestBuilder (PromiseLike),
+    // which does NOT have a .catch method — only .then. Wrap in an async
+    // IIFE so we get proper try/catch semantics and TypeScript stops
+    // complaining about Property 'catch' does not exist on PromiseLike.
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_super_admin');
         if (cancelled) return;
         if (error) {
           // Migration may not be applied yet, or transient error —
@@ -53,13 +57,13 @@ export function useIsSuperAdmin(): IsSuperAdminState {
           setIsSuperAdmin(Boolean(data));
         }
         setLoading(false);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setIsSuperAdmin(false);
           setLoading(false);
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
