@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, importPoiFromSearch } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, importPoiFromSearch, dedupeSearchResults } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -192,59 +192,65 @@ function AddressSearchInputInner({
         // search_pois_smart already detects category intent (e.g. "Bar"
         // → bar category; "consultorio del medico" → hospital), mixes
         // name + category matches, and sinks generic-name placeholders.
-        // When the user typed a category keyword (matchedCategory != null
-        // on the rows), suppress the streets fetch entirely — searching
-        // "Bar" should not surface streets named "Bartolomé*". When the
-        // query has no detected category, run streets in parallel for
-        // address-style queries like "Calle 23 e/ M y N".
-        const poiResults = await searchPoisSupabase(text, userLocation, 6);
-        const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
-        const streetResults: SearchBoxResult[] = detectedCategory
-          ? []                                                              // category search → drop streets
-          : await searchStreetsSupabase(text, userLocation, 5);
-        // Each result keeps a separate `displayName` (POI name) and
-        // `address` so the dropdown can render the POI name as title
-        // with the street as subtitle.
+        // PR F (2026-05-25) — flipped search order: Google PRIMARY, cuba_pois
+        // SECONDARY. The user reported on-device 2026-05-25 that the airport
+        // bug was caused by a bad cuba_pois result appearing above the
+        // correct Google result. Going forward Google goes first; cuba_pois
+        // rows that duplicate a Google result (by coord proximity ≤100 m or
+        // name token overlap ≥0.7) are silently dropped from the secondary
+        // list. PR E's cleanup already removed the worst cuba_pois offenders.
+        //
+        // Streets stay as the final tier (only for non-category queries) so
+        // "Calle 23 e/ M y N" still surfaces as an address result below the
+        // POI matches from either source.
         const normalize = (r: SearchBoxResult): AddressSearchResult => ({
           address: r.address,
           latitude: r.latitude,
           longitude: r.longitude,
-          // Only set displayName when different from address (e.g. a real
-          // POI name). When equal, render a single-line result.
           displayName: r.place_name && r.place_name !== r.address ? r.place_name : undefined,
           tricigoCategory: r.tricigoCategory ?? null,
         });
-        // The smart RPC already orders rows correctly (name match
-        // quality, then is_admin, then distance, generic-name rows last).
-        // Keep that order; only inject streets between high-spec and
-        // low-spec POIs when streets are actually available (non-category
-        // queries).
-        const highSpecPois = poiResults.filter(r => r.specificity >= 0.8).map(normalize);
-        const lowSpecPois  = poiResults.filter(r => r.specificity <  0.8).map(normalize);
-        const merged: AddressSearchResult[] = [
+
+        // Fire Google + cuba_pois in parallel — Google takes ~200-400 ms via
+        // the EF, the local RPC is ~50-100 ms, so we wait on the slower one.
+        const [unifiedResults, poiResults] = await Promise.all([
+          searchAddressUnified(text, getSupabaseClient(), userLocation),
+          searchPoisSupabase(text, userLocation, 6),
+        ]);
+        const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
+        // Streets are local and cheap — fetch only if no category keyword.
+        const streetResults: SearchBoxResult[] = detectedCategory
+          ? []
+          : await searchStreetsSupabase(text, userLocation, 5);
+
+        const externalAttribution = inferAttributionSource(unifiedResults);
+        // PR 4b: attach _src so handleSelectResult can fire-and-forget
+        // import-mapbox-poi for Google-sourced selections.
+        const externalNormalized: AddressSearchResult[] = unifiedResults
+          .map((r) => ({ ...normalize(r), _src: r }));
+
+        // Dedupe cuba_pois against external results, keeping only the
+        // rows that don't already appear above. Keep the smart-RPC
+        // ordering (high-spec first, low-spec last) within the survivors.
+        const dedupedPois = dedupeSearchResults(unifiedResults, poiResults);
+        const highSpecPois = dedupedPois.filter(r => r.specificity >= 0.8).map(normalize);
+        const lowSpecPois  = dedupedPois.filter(r => r.specificity <  0.8).map(normalize);
+
+        // Final order: Google/Mapbox first → high-spec cuba_pois →
+        // streets (non-category only) → low-spec cuba_pois.
+        const searchResults: AddressSearchResult[] = [
+          ...externalNormalized,
           ...highSpecPois,
           ...streetResults.map(normalize),
           ...lowSpecPois,
         ];
-        // PR 4 of POI parity — when local Supabase has no results, fall
-        // back to Google Places (best Cuban coverage) and then Mapbox
-        // SearchBox via the unified helper. Each result carries its
-        // `source` so we can render proper TOS attribution below the list.
-        let externalResults: AddressSearchResult[] = [];
-        let externalAttribution: 'google' | 'mapbox' | 'mixed' | null = null;
-        if (merged.length === 0) {
-          const unified = await searchAddressUnified(text, getSupabaseClient(), userLocation);
-          externalAttribution = inferAttributionSource(unified);
-          externalResults = unified.length > 0
-            // PR 4b: attach _src so handleSelectResult can fire-and-forget
-            // import-mapbox-poi for Google-sourced selections.
-            ? unified.map((r) => ({ ...normalize(r), _src: r }))
-            : await searchAddress(text, 5, userLocation);
-        }
-        const searchResults: AddressSearchResult[] = merged.length > 0
-          ? merged
-          : externalResults;
-        setResults(searchResults);
+
+        // Last-resort: nothing came back from anywhere → ultimate Mapbox/
+        // Nominatim fallback (free, slower) so the user gets *something*.
+        const finalResults: AddressSearchResult[] = searchResults.length > 0
+          ? searchResults
+          : await searchAddress(text, 5, userLocation);
+        setResults(finalResults);
         setAttribution(externalAttribution);
         setIsOffline(false);
         // Cache successful results
