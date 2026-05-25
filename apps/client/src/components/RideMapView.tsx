@@ -9,7 +9,7 @@ import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
-import { PoiMapLayers } from '@tricigo/ui';
+import { PoiMapLayers, extractBoundsFromCameraEvent } from '@tricigo/ui';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
@@ -515,22 +515,16 @@ function RideMapViewInner({
 
   // BUG-296: POI GeoJSON now built inside <PoiMapLayers> — no local memo.
 
-  // Handle camera change — notify parent with viewport bounds + zoom
-  const handleCameraChanged = useCallback((event: any) => {
+  // Handle camera change — notify parent with viewport bounds + zoom.
+  // BUG-poi-viewport-visibility (PR D, 2026-05-25): delegate the bounds
+  // extraction to the shared helper so missing visibleBounds (common on
+  // @rnmapbox/maps v10.3.0 new arch mid-pan) falls back to centre+zoom
+  // synthesis instead of silently dropping the event.
+  const handleCameraChanged = useCallback((event: unknown) => {
     if (!onCameraChanged) return;
-    try {
-      const { properties, geometry } = event;
-      const zoom = properties?.zoomLevel ?? 13;
-      const visibleBounds = properties?.visibleBounds;
-      if (visibleBounds && visibleBounds.length === 2) {
-        // visibleBounds = [[neLng, neLat], [swLng, swLat]]
-        const [ne, sw] = visibleBounds;
-        onCameraChanged({
-          minLng: sw[0], minLat: sw[1],
-          maxLng: ne[0], maxLat: ne[1],
-        }, zoom);
-      }
-    } catch {}
+    const result = extractBoundsFromCameraEvent(event);
+    if (!result) return;
+    onCameraChanged(result.bounds, result.zoom);
   }, [onCameraChanged]);
 
   // Compute camera bounds (includes searching driver positions)

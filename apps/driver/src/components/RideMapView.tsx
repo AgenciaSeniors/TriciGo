@@ -8,7 +8,7 @@ import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/typ
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
 import { useMapboxReady } from '../hooks/useMapboxReady';
-import { PoiMapLayers, useViewportPois } from '@tricigo/ui';
+import { PoiMapLayers, useViewportPois, extractBoundsFromCameraEvent } from '@tricigo/ui';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -752,20 +752,14 @@ function RideMapViewInner(
     : null;
   const { pois: viewportPois, onCameraChanged: poiOnCameraChanged } = useViewportPois(poiSeedCenter);
 
-  const handlePoiCameraChanged = useCallback((event: any) => {
-    try {
-      const { properties } = event;
-      const zoom = properties?.zoomLevel ?? 13;
-      const visibleBounds = properties?.visibleBounds;
-      if (visibleBounds && visibleBounds.length === 2) {
-        // visibleBounds = [[neLng, neLat], [swLng, swLat]]
-        const [ne, sw] = visibleBounds;
-        poiOnCameraChanged({
-          minLng: sw[0], minLat: sw[1],
-          maxLng: ne[0], maxLat: ne[1],
-        }, zoom);
-      }
-    } catch { /* best-effort */ }
+  // BUG-poi-viewport-visibility (PR D, 2026-05-25): use shared
+  // extractor so events without visibleBounds (common on @rnmapbox v10.3
+  // new arch mid-pan) still trigger a POI refetch via centre+zoom
+  // synthesis instead of silently no-op'ing.
+  const handlePoiCameraChanged = useCallback((event: unknown) => {
+    const result = extractBoundsFromCameraEvent(event);
+    if (!result) return;
+    poiOnCameraChanged(result.bounds, result.zoom);
   }, [poiOnCameraChanged]);
   const [markerImageError, setMarkerImageError] = useState(false);
   // PR E (2026-05-12) — track whether MapboxGL has finished streaming
