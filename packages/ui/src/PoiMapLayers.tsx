@@ -85,6 +85,11 @@ function buildPoiGeoJSON(pois: ViewportPoi[]): FeatureCollection {
           tricigo_category: p.tricigo_category ?? '',
           address: p.address ?? '',
           is_admin: p.is_admin ? 1 : 0,
+          // Importance tier (1=top tier Wikidata/admin, 5=lowest). Passed
+          // to the SymbolLayer via `symbolSortKey` so Mapbox prioritizes
+          // higher tiers when collision detection culls overlapping pins.
+          // Defaults to 5 (lowest) for old rows that predate 00310.
+          importance: p.importance ?? 5,
           visualGroup: group.key,
           color: group.color,
           // Mapbox image id — registered below via <Images>.
@@ -263,7 +268,16 @@ export function PoiMapLayers({ MapboxGL, pois, onPoiPress }: PoiMapLayersProps) 
           }}
         />
 
-        {/* ── White Ionicons glyph centered on the badge — from z13 ── */}
+        {/* ── White Ionicons glyph centered on the badge — from z13 ──
+            Google-Maps-style collision detection:
+            `iconAllowOverlap: false` + `iconIgnorePlacement: false` →
+            Mapbox auto-hides overlapping pins so the map never looks
+            cluttered, even when the RPC returns 1200 POIs at zoom 15
+            in Centro Habana. `symbolSortKey: importance` (lower = higher
+            tier) tells Mapbox to keep the tier-1 (Wikidata/admin)
+            landmarks visible and cull tier-3/4/5 around them. As the
+            user zooms in, more pixel space frees up and the lower
+            tiers reappear automatically. */}
         <MapboxGL.SymbolLayer
           id="tg-poi-badge-icon"
           filter={['!', ['has', 'point_count']]}
@@ -271,10 +285,11 @@ export function PoiMapLayers({ MapboxGL, pois, onPoiPress }: PoiMapLayersProps) 
           style={{
             iconImage: ['get', 'iconKey'],
             iconSize: ['interpolate', ['linear'], ['zoom'], 13, 0.32, 16, 0.46, 17, 0.5],
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
+            iconAllowOverlap: false,
+            iconIgnorePlacement: false,
             iconAnchor: 'center',
             iconOpacity: ['interpolate', ['linear'], ['zoom'], 12.2, 0, 12.8, 1],
+            symbolSortKey: ['get', 'importance'],
           }}
         />
 

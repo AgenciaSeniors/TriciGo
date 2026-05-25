@@ -385,6 +385,13 @@ export default function BookingMap({
       // (street-level). Native emoji rendering means no asset bundling
       // and a single layer covers all 21 categories (mirrors RideMapView
       // PR #70).
+      //
+      // Google-Maps-style collision detection: `text-allow-overlap` and
+      // `text-ignore-placement` both flipped to false so Mapbox auto-
+      // hides overlapping emojis. `symbol-sort-key: importance` (lower
+      // is higher tier) tells Mapbox to keep tier-1 Wikidata/admin POIs
+      // visible and cull tier-3/4/5 around them. As the user zooms in,
+      // more pixel space frees up and the lower tiers reappear.
       map.addLayer({
         id: 'poi-emoji',
         type: 'symbol',
@@ -394,8 +401,9 @@ export default function BookingMap({
         layout: {
           'text-field': ['get', 'emoji'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 15, 16, 18, 24],
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'symbol-sort-key': ['get', 'importance'],
         },
         paint: {
           'text-halo-color': 'rgba(255,255,255,0.85)',
@@ -404,7 +412,9 @@ export default function BookingMap({
       });
 
       // POI name labels — only at deep zoom (16+) to avoid cluttering
-      // the map. Sits below the emoji icon.
+      // the map. Sits below the emoji icon. `symbol-sort-key: importance`
+      // mirrors the emoji layer so collision-culled labels match their
+      // emoji partners (tier-1 labels stay when crowded).
       map.addLayer({
         id: 'poi-labels',
         type: 'symbol',
@@ -419,6 +429,7 @@ export default function BookingMap({
           'text-max-width': 8,
           'text-optional': true,
           'text-allow-overlap': false,
+          'symbol-sort-key': ['get', 'importance'],
         },
         paint: {
           'text-color': '#444',
