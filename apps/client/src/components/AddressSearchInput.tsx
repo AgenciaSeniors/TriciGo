@@ -521,8 +521,22 @@ function AddressSearchInputInner({
     // Sort by priority
     deduped.sort((a, b) => a.priority - b.priority);
 
+    // PR I (2026-05-25): dynamic cap based on query specificity.
+    // The "Hotel Boutique Malecon 663" bug surfaced because saved/recent
+    // matches (priorities 2-3) can fill the top-5 slice and push real
+    // POI/API matches (priority 4) off the visible list. For a specific
+    // multi-word query the user is clearly looking for a particular
+    // venue — raise the cap to 8 so the POI from Google/cuba_pois has
+    // room to surface even when it ranks below saved/recent.
+    //
+    // Short queries (1-2 words like "hotel" or "casa") keep the tight
+    // cap of 5 — those are exploratory and a long list is overwhelming.
+    const queryWordCount = queryLower.split(/\s+/).filter(w => w.length > 0).length;
+    const hasApiOrPoi = deduped.some((d) => d.source === 'api' || d.source === 'poi');
+    const cap = (queryWordCount >= 3 && hasApiOrPoi) ? 8 : 5;
+
     // Add distance from user
-    return deduped.slice(0, 5).map((item) => ({
+    return deduped.slice(0, cap).map((item) => ({
       ...item,
       distanceKm: userLocation
         ? haversineDistance(userLocation, { latitude: item.latitude, longitude: item.longitude }) / 1000
