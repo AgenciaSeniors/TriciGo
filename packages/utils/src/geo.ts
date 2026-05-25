@@ -2498,6 +2498,192 @@ export function computeSpecificity(placeName: string): number {
   return 1.0;
 }
 
+// ============================================================
+// PR J (2026-05-25) \u2014 map external category vocabularies (Google
+// Places types + Mapbox poi_category) into our internal tricigo
+// vocabulary. The shared `tricigoCategoryEmoji` below only knows
+// our 20 tricigo categories; without this mapper, Google's "lodging"
+// and Mapbox's "fuel" fall through to the default \ud83d\udccd emoji instead
+// of showing \ud83c\udfe8 / \u26fd in the search dropdown.
+//
+// Each table covers values actually observed in production responses.
+// Categories not in the table fall back to null \u2192 caller renders
+// the default \ud83d\udccd pin (safe).
+// ============================================================
+
+export type TricigoCategory =
+  | 'hotel' | 'restaurant' | 'cafe' | 'bar' | 'paladar'
+  | 'supermarket' | 'shop' | 'pharmacy' | 'hospital'
+  | 'bank' | 'atm' | 'gas_station' | 'school' | 'gov'
+  | 'museum' | 'park' | 'beach' | 'embassy' | 'religion' | 'transport';
+
+const GOOGLE_TO_TRICIGO: Record<string, TricigoCategory> = {
+  // Lodging
+  lodging: 'hotel',
+  // Food & drink
+  restaurant: 'restaurant',
+  food: 'restaurant',
+  meal_takeaway: 'restaurant',
+  meal_delivery: 'restaurant',
+  cafe: 'cafe',
+  coffee_shop: 'cafe',
+  bar: 'bar',
+  night_club: 'bar',
+  pub: 'bar',
+  // Fuel
+  gas_station: 'gas_station',
+  // Health
+  hospital: 'hospital',
+  doctor: 'hospital',
+  clinic: 'hospital',
+  pharmacy: 'pharmacy',
+  drugstore: 'pharmacy',
+  // Education
+  school: 'school',
+  university: 'school',
+  secondary_school: 'school',
+  primary_school: 'school',
+  college: 'school',
+  // Retail
+  store: 'shop',
+  clothing_store: 'shop',
+  electronics_store: 'shop',
+  shoe_store: 'shop',
+  furniture_store: 'shop',
+  jewelry_store: 'shop',
+  home_goods_store: 'shop',
+  hardware_store: 'shop',
+  // Grocery
+  supermarket: 'supermarket',
+  grocery_or_supermarket: 'supermarket',
+  grocery_store: 'supermarket',
+  // Money
+  bank: 'bank',
+  finance: 'bank',
+  atm: 'atm',
+  // Culture
+  museum: 'museum',
+  art_gallery: 'museum',
+  // Nature
+  park: 'park',
+  amusement_park: 'park',
+  beach: 'beach',
+  // Religion
+  church: 'religion',
+  mosque: 'religion',
+  synagogue: 'religion',
+  hindu_temple: 'religion',
+  place_of_worship: 'religion',
+  // Civic
+  embassy: 'embassy',
+  // Transit
+  bus_station: 'transport',
+  train_station: 'transport',
+  transit_station: 'transport',
+  airport: 'transport',
+  subway_station: 'transport',
+  light_rail_station: 'transport',
+  // Gov
+  local_government_office: 'gov',
+  city_hall: 'gov',
+  courthouse: 'gov',
+  post_office: 'gov',
+};
+
+const MAPBOX_TO_TRICIGO: Record<string, TricigoCategory> = {
+  // Lodging
+  hotel: 'hotel',
+  lodging: 'hotel',
+  motel: 'hotel',
+  hostel: 'hotel',
+  // Food & drink
+  food: 'restaurant',
+  restaurant: 'restaurant',
+  fast_food: 'restaurant',
+  cafe: 'cafe',
+  coffee: 'cafe',
+  bar: 'bar',
+  pub: 'bar',
+  nightclub: 'bar',
+  // Fuel
+  fuel: 'gas_station',
+  gas: 'gas_station',
+  gas_station: 'gas_station',
+  // Health
+  hospital: 'hospital',
+  clinic: 'hospital',
+  pharmacy: 'pharmacy',
+  // Education
+  school: 'school',
+  college: 'school',
+  university: 'school',
+  // Retail
+  shop: 'shop',
+  store: 'shop',
+  retail: 'shop',
+  mall: 'shop',
+  // Grocery
+  grocery: 'supermarket',
+  supermarket: 'supermarket',
+  // Money
+  bank: 'bank',
+  atm: 'atm',
+  // Culture
+  museum: 'museum',
+  gallery: 'museum',
+  // Nature
+  park: 'park',
+  garden: 'park',
+  beach: 'beach',
+  // Religion
+  religious_institution: 'religion',
+  church: 'religion',
+  mosque: 'religion',
+  temple: 'religion',
+  // Civic
+  embassy: 'embassy',
+  // Transit
+  bus_stop: 'transport',
+  train_station: 'transport',
+  transit: 'transport',
+  airport: 'transport',
+  // Gov
+  government: 'gov',
+  city_hall: 'gov',
+  post_office: 'gov',
+};
+
+/**
+ * Translate an external provider's category string (Google Places type
+ * or Mapbox poi_category) into our internal `TricigoCategory` vocabulary
+ * so the shared `tricigoCategoryEmoji()` can render the right icon.
+ *
+ * Returns null when the input is empty, an array with no usable element,
+ * or a value not present in the mapping tables. Callers should treat
+ * null as "use the default \ud83d\udccd pin" (no implicit fallback to a wrong
+ * emoji \u2014 better silent default than wrong icon).
+ *
+ * Handles:
+ *   - case-insensitive matching (Google returns lowercase, Mapbox is mixed)
+ *   - whitespace trimming
+ *   - array input (Mapbox sometimes returns `poi_category: string[]`)
+ */
+export function mapExternalCategoryToTricigo(
+  source: 'google' | 'mapbox' | 'overture',
+  externalCategory?: string | string[] | null,
+): TricigoCategory | null {
+  if (!externalCategory) return null;
+  const raw = Array.isArray(externalCategory)
+    ? (externalCategory[0] ?? '')
+    : externalCategory;
+  const key = String(raw).trim().toLowerCase();
+  if (!key) return null;
+  // overture is treated as mapbox-equivalent \u2014 same poi_category vocab
+  // (both inherit from the OSM-derived schema).
+  const table = source === 'google' ? GOOGLE_TO_TRICIGO : MAPBOX_TO_TRICIGO;
+  return table[key] ?? null;
+}
+
 /**
  * Map a `tricigo_category` value (returned by `search_pois_smart`) to
  * an emoji icon. Used by the search dropdown and the on-map POI layer
@@ -2594,6 +2780,13 @@ export async function searchAddressSearchBox(
         category: typeof category === 'string' ? category : '',
         source: 'searchbox' as const,
         specificity: computeSpecificity(name),
+        // PR J (2026-05-25): translate Mapbox poi_category (e.g. "fuel",
+        // "lodging", "food") into our tricigo vocabulary so the search
+        // dropdown can render the right emoji via tricigoCategoryEmoji.
+        // Without this, Mapbox rows show the 📍 default. Note category
+        // here is already the resolved first element of the poi_category
+        // array (line above), so we forward it as-is.
+        tricigoCategory: mapExternalCategoryToTricigo('mapbox', category),
       };
     });
   } catch {
@@ -2687,6 +2880,12 @@ export async function searchAddressGoogle(
         source: 'google' as const,
         specificity: typeof r.specificity === 'number' ? r.specificity : 0.95,
         matchedCategory: r.matchedCategory ?? null,
+        // PR J (2026-05-25): translate Google Places type (e.g. "lodging",
+        // "restaurant", "store") into our tricigo vocabulary so the search
+        // dropdown can render the right emoji (🏨 / 🍽️ / 🛍️) via
+        // tricigoCategoryEmoji. Without this, Google rows show the 📍
+        // default for everything that's not literally named "restaurant".
+        tricigoCategory: mapExternalCategoryToTricigo('google', r.matchedCategory),
       }));
   } catch {
     return [];

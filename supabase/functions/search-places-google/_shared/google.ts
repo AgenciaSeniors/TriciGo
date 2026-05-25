@@ -63,12 +63,22 @@ export async function googlePlacesAutocomplete(
     input: query,
     languageCode: 'es',
     regionCode: 'CU',
-    locationRestriction: {
-      rectangle: config.cubaBbox ?? CUBA_BBOX,
-    },
   };
 
-  // Bias by proximity if known (improves relevance for nearby venues)
+  // Google Places API (New) rejects requests that set BOTH locationBias and
+  // locationRestriction with HTTP 400 INVALID_ARGUMENT:
+  //   "At most one of location_bias or location_restriction must be set."
+  //
+  // Bug discovered 2026-05-25 — version 3 (and earlier) always set
+  // locationRestriction to Cuba bbox + ALSO set locationBias when proximity
+  // was provided, so every client search with GPS coords failed silently
+  // (caught by EF, fallback to mapbox, no cache/counter increment).
+  //
+  // Resolution: when we know the user's GPS coords, prefer locationBias
+  // (gives better relevance for nearby venues). When we don't, fall back to
+  // locationRestriction with the full Cuba bbox. The post-fetch sanity check
+  // below (lines ~165) still drops any result outside Cuba in case Google
+  // bends the bias and returns something close to the border.
   if (proximity) {
     body.locationBias = {
       circle: {
@@ -78,6 +88,10 @@ export async function googlePlacesAutocomplete(
         },
         radius: 5000, // 5km — typical urban search radius
       },
+    };
+  } else {
+    body.locationRestriction = {
+      rectangle: config.cubaBbox ?? CUBA_BBOX,
     };
   }
 
