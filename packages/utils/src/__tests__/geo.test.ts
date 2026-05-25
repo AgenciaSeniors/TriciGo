@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   haversineDistance,
   estimateRoadDistance,
@@ -451,5 +451,108 @@ describe('importPoiFromSearch (PR 4b)', () => {
     await importPoiFromSearch({ ...baseResult, latitude: 0 }, stub.client);
     await importPoiFromSearch({ ...baseResult, longitude: 0 }, stub.client);
     expect(stub.invoke).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// PR C — fetchRoute fallback order (Mapbox primary, OSRM fallback)
+// ─────────────────────────────────────────────────────────────────
+describe('fetchRoute fallback order (PR C)', () => {
+  // The Mapbox helper bails out when no token is in env. Stub one so
+  // the Mapbox path is reachable in tests.
+  const ORIGINAL_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+  beforeEach(() => {
+    clearRouteCache();
+    vi.restoreAllMocks();
+    process.env.EXPO_PUBLIC_MAPBOX_TOKEN = 'pk.test';
+  });
+  afterEach(() => {
+    process.env.EXPO_PUBLIC_MAPBOX_TOKEN = ORIGINAL_TOKEN;
+  });
+
+  function makeRouteResponse(distance: number, duration: number) {
+    return new Response(
+      JSON.stringify({
+        routes: [{
+          geometry: { coordinates: [[-82.36, 23.13], [-82.35, 23.14]] },
+          distance,
+          duration,
+        }],
+      }),
+      { status: 200 },
+    );
+  }
+
+  it('calls Mapbox FIRST and returns its result; OSRM never called', async () => {
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes('api.mapbox.com/directions')) {
+        return makeRouteResponse(1234, 200);
+      }
+      if (u.includes('router.project-osrm.org')) {
+        return makeRouteResponse(9999, 999);
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchRoute({ lat: 23.13, lng: -82.36 }, { lat: 23.14, lng: -82.35 });
+
+    expect(result?.distance_m).toBe(1234); // Mapbox value, not OSRM 9999
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes('api.mapbox.com/directions'))).toBe(true);
+    expect(calls.some((u) => u.includes('router.project-osrm.org'))).toBe(false);
+  });
+
+  it('falls back to OSRM when Mapbox returns no route', async () => {
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes('api.mapbox.com/directions')) {
+        return new Response(JSON.stringify({ routes: [] }), { status: 200 });
+      }
+      if (u.includes('router.project-osrm.org')) {
+        return makeRouteResponse(2222, 220);
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchRoute({ lat: 23.13, lng: -82.36 }, { lat: 23.14, lng: -82.35 });
+
+    expect(result?.distance_m).toBe(2222); // OSRM value
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes('api.mapbox.com/directions'))).toBe(true);
+    expect(calls.some((u) => u.includes('router.project-osrm.org'))).toBe(true);
+  });
+
+  it('falls back to OSRM when Mapbox HTTP request fails', async () => {
+    const fetchSpy = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.includes('api.mapbox.com/directions')) {
+        return new Response('rate limited', { status: 429 });
+      }
+      if (u.includes('router.project-osrm.org')) {
+        return makeRouteResponse(3333, 300);
+      }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchRoute({ lat: 23.13, lng: -82.36 }, { lat: 23.14, lng: -82.35 });
+
+    expect(result?.distance_m).toBe(3333); // OSRM rescued the call
+  });
+
+  it('returns null when both Mapbox and OSRM fail', async () => {
+    const fetchSpy = vi.fn(async () => new Response('upstream down', { status: 503 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await fetchRoute({ lat: 23.13, lng: -82.36 }, { lat: 23.14, lng: -82.35 });
+
+    expect(result).toBeNull();
+    // Confirm BOTH providers were exercised (defence-in-depth).
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes('api.mapbox.com/directions'))).toBe(true);
+    expect(calls.some((u) => u.includes('router.project-osrm.org'))).toBe(true);
   });
 });

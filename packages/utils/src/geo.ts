@@ -806,15 +806,19 @@ export function clearRouteCache(): void {
 }
 
 /**
- * Fetch route via OSRM (primary, free, public infra) with Mapbox Directions
- * as fallback when OSRM is unreachable or returns no route.
+ * Fetch route via Mapbox Directions (primary) with OSRM public infra as a
+ * free fallback when Mapbox is unreachable, unconfigured, or returns no
+ * route.
  *
- * Order rationale: at TriciGo's volume (~500 rides/day → ~75k Directions
- * calls/month) Mapbox would cost ~$150/mo. OSRM gives equivalent results
- * for Cuba's road network — traffic-aware routing isn't useful here since
- * Cuba doesn't have the Waze-density data Mapbox depends on for it.
- * Mapbox stays as a hot fallback so a single OSRM outage doesn't kill the
- * app; the 30-min cache absorbs most of the duplicate requests anyway.
+ * Order rationale (changed in PR C of routing fixes, 2026-05-25):
+ *   OSRM public uses stock OSM data. Cuba's OSM coverage of one-way
+ *   streets is incomplete — drivers reported the OSRM route taking them
+ *   contra-flow on streets where the road signage clearly marks one
+ *   direction. Mapbox Directions uses a proprietary data layer (OSM +
+ *   HERE + manual corrections) that's significantly better-curated for
+ *   Cuba, and the 30-min route cache keeps the marginal cost under
+ *   ~$15/mo at 500 rides/day. OSRM remains as a hot fallback so a
+ *   Mapbox outage or missing token doesn't kill the app entirely.
  */
 export async function fetchRoute(
   from: { lat: number; lng: number },
@@ -824,18 +828,7 @@ export async function fetchRoute(
   const cached = routeCache.get(key);
   if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) return cached.result;
 
-  // Try OSRM first (free)
-  const osrmResult = await fetchRouteOSRM(from, to);
-  if (osrmResult) {
-    if (routeCache.size >= ROUTE_CACHE_MAX) {
-      const oldest = routeCache.keys().next().value;
-      if (oldest) routeCache.delete(oldest);
-    }
-    routeCache.set(key, { result: osrmResult, ts: Date.now() });
-    return osrmResult;
-  }
-
-  // Fallback to Mapbox if OSRM failed
+  // Try Mapbox first (better Cuba one-way coverage)
   const mapboxResult = await fetchRouteMapbox(from, to);
   if (mapboxResult) {
     if (routeCache.size >= ROUTE_CACHE_MAX) {
@@ -843,8 +836,19 @@ export async function fetchRoute(
       if (oldest) routeCache.delete(oldest);
     }
     routeCache.set(key, { result: mapboxResult, ts: Date.now() });
+    return mapboxResult;
   }
-  return mapboxResult;
+
+  // Fallback to OSRM if Mapbox failed (no token, network, etc.)
+  const osrmResult = await fetchRouteOSRM(from, to);
+  if (osrmResult) {
+    if (routeCache.size >= ROUTE_CACHE_MAX) {
+      const oldest = routeCache.keys().next().value;
+      if (oldest) routeCache.delete(oldest);
+    }
+    routeCache.set(key, { result: osrmResult, ts: Date.now() });
+  }
+  return osrmResult;
 }
 
 /**
