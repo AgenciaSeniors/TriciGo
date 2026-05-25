@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
-import { smoothHeading } from '@tricigo/utils';
+import { smoothHeading, mapLogger } from '@tricigo/utils';
 import {
   initLocationBuffer,
   bufferLocation,
@@ -458,16 +458,26 @@ export function useDriverLocationTracking(
                   rideId: activeRideId ?? undefined,
                 })
                 .then(() => {
-                  console.log('[GPS upload] updateDriverPosition OK', {
-                    lat: pos.latitude.toFixed(5),
-                    lng: pos.longitude.toFixed(5),
-                    heading:
-                      pos.heading != null ? Math.round(pos.heading) : null,
+                  mapLogger.gps({
+                    event: 'upload_ok',
+                    lat: pos.latitude,
+                    lng: pos.longitude,
+                    heading: pos.heading ?? null,
+                    speed: loc.coords.speed ?? null,
                     has_ride: !!activeRideId,
+                    app: 'driver',
                   });
                 })
                 .catch((err) => {
-                  console.warn('[GPS upload] updateDriverPosition FAILED', String((err as { message?: string })?.message ?? err));
+                  mapLogger.gps({
+                    event: 'upload_fail',
+                    lat: pos.latitude,
+                    lng: pos.longitude,
+                    heading: pos.heading ?? null,
+                    has_ride: !!activeRideId,
+                    app: 'driver',
+                    error: String((err as { message?: string })?.message ?? err),
+                  });
                   if (activeRideId) {
                     // Buffer the sample for later flush via 5-second
                     // periodic retry (BUG-273 v2). The bulk endpoint will

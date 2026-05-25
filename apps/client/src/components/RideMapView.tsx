@@ -10,6 +10,7 @@ import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
 import { PoiMapLayers, extractBoundsFromCameraEvent } from '@tricigo/ui';
+import { mapLogger } from '@tricigo/utils';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
@@ -346,9 +347,21 @@ function RideMapViewInner({
         : null);
 
     if (rawTarget == null) return;
-    const next = smoothHeading(rawTarget, lastSmoothedHeadingRef.current);
+    const prev = lastSmoothedHeadingRef.current;
+    const next = smoothHeading(rawTarget, prev);
     lastSmoothedHeadingRef.current = next;
     setSmoothedDriverHeading(next);
+    // PR G — heading source decision visibility. Tag which input the
+    // EMA consumed so QA can correlate marker rotation with snap vs
+    // GPS vs prop heading.
+    const sourceTag: 'snap' | 'ema' = snappedDriver?.bearing != null ? 'snap' : 'ema';
+    mapLogger.markerHeading({
+      source: sourceTag,
+      value: next,
+      prev: prev,
+      delta: prev == null ? undefined : (((next - prev + 540) % 360) - 180),
+      app: 'client',
+    });
   }, [
     driverLocation?.latitude,
     driverLocation?.longitude,
@@ -749,6 +762,23 @@ function RideMapViewInner({
     dropoffLat,
     dropoffLng,
   ]);
+
+  // PR G — surface camera profile transitions so QA can see exactly
+  // which zoom/pitch/bearing was applied for each rideStatus on the
+  // client side. Fires only when the memo recomputes (i.e. status
+  // changed or driver moved by enough to flip the profile branch).
+  useEffect(() => {
+    if (!cameraProfile) return;
+    mapLogger.cameraProfile({
+      rideStatus: rideStatus ?? null,
+      zoom: cameraProfile.zoomLevel ?? 0,
+      pitch: cameraProfile.pitch ?? 0,
+      bearing: cameraProfile.heading ?? 0,
+      mode: cameraProfile.animationMode ?? 'easeTo',
+      followMode: !userOverride,
+      app: 'client',
+    });
+  }, [cameraProfile, rideStatus, userOverride]);
 
   const showFollowOverlayFab = isRideActive && userOverride;
 

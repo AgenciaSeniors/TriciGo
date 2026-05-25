@@ -30,6 +30,21 @@ export {
   HEADING_SNAP_THRESHOLD_DEG,
 } from './animateCoordinate';
 export type { AnimatedCoordinate } from './animateCoordinate';
+// PR G (2026-05-25) — categorised debug logger for map/POI/ride flows.
+// Use mapLogger.search / .viewport / .poiTap / .cameraProfile / etc. at
+// the call sites you want to surface in Metro logs.
+export { mapLogger, formatBbox } from './mapLogger';
+export type {
+  SearchEvent,
+  ViewportEvent,
+  PoiTapEvent,
+  PoiSubmitEvent,
+  CameraProfileEvent,
+  MarkerHeadingEvent,
+  GpsEvent,
+  RouteEvent,
+  TripLifecycleEvent,
+} from './mapLogger';
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
 export type {
