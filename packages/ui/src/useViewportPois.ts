@@ -32,8 +32,11 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadPois = useCallback((bounds: ViewportBounds, zoom: number) => {
-    // Too zoomed out — clear POIs
-    if (zoom < 10) {
+    // Too zoomed out — clear POIs. The threshold matches the RPC's
+    // lowest-zoom branch (00310 returns top-100 importance=1 at zoom
+    // 8-10 for the "country/province overview" path). Below zoom 8 the
+    // viewport spans more than Cuba itself — no point fetching.
+    if (zoom < 8) {
       // eslint-disable-next-line no-console
       console.log('[useViewportPois] zoom too low, clearing', { zoom: Math.floor(zoom) });
       setPois([]);
@@ -72,6 +75,22 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
       if (controller.signal.aborted) return;
       setPois(result);
       lastBoundsRef.current = padded;
+      // eslint-disable-next-line no-console
+      console.log('[useViewportPois] fetched', {
+        zoom: Math.floor(zoom),
+        count: result.length,
+        bbox: [
+          padded.minLng.toFixed(3),
+          padded.minLat.toFixed(3),
+          padded.maxLng.toFixed(3),
+          padded.maxLat.toFixed(3),
+        ].join(','),
+      });
+    }).catch((err: unknown) => {
+      if (controller.signal.aborted) return;
+      // Surface fetch errors so QA can diagnose silent empty maps.
+      // eslint-disable-next-line no-console
+      console.warn('[useViewportPois] fetch failed', err);
     });
   }, []);
 

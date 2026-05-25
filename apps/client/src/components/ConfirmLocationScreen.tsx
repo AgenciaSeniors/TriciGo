@@ -19,7 +19,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-import { useViewportPois, PoiMapLayers } from '@tricigo/ui';
+import { useViewportPois, PoiMapLayers, extractBoundsFromCameraEvent } from '@tricigo/ui';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -84,16 +84,12 @@ export function ConfirmLocationScreen({
   );
   // BUG-296: POI GeoJSON now built inside <PoiMapLayers>.
 
-  const handleCameraForPois = useCallback((event: any) => {
-    try {
-      const { properties } = event;
-      const zoom = properties?.zoomLevel ?? 13;
-      const visibleBounds = properties?.visibleBounds;
-      if (visibleBounds && visibleBounds.length === 2) {
-        const [ne, sw] = visibleBounds;
-        onPoiCameraChanged({ minLng: sw[0], minLat: sw[1], maxLng: ne[0], maxLat: ne[1] }, zoom);
-      }
-    } catch {}
+  // BUG-poi-viewport-visibility (PR D, 2026-05-25): use shared
+  // extractor so events without visibleBounds still trigger a POI refetch.
+  const handleCameraForPois = useCallback((event: unknown) => {
+    const result = extractBoundsFromCameraEvent(event);
+    if (!result) return;
+    onPoiCameraChanged(result.bounds, result.zoom);
   }, [onPoiCameraChanged]);
 
   // Shimmer animation for address bar
