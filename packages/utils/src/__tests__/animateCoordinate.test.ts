@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { lerpCoordinate, type AnimatedCoordinate } from '../animateCoordinate';
+import {
+  lerpCoordinate,
+  lerpHeading,
+  HEADING_SNAP_THRESHOLD_DEG,
+  type AnimatedCoordinate,
+} from '../animateCoordinate';
 
 // Habana reference coords used across tests
 const VEDADO: AnimatedCoordinate = { latitude: 23.1429, longitude: -82.3949 };
@@ -65,5 +70,61 @@ describe('lerpCoordinate', () => {
     // Midpoint should be at ((23.13 + -34.6)/2, (-82.36 + -58.4)/2)
     expect(result.latitude).toBeCloseTo(-5.735, 5);
     expect(result.longitude).toBeCloseTo(-70.38, 5);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────
+// PR B — lerpHeading (compass angle interpolation, shortest path)
+// ─────────────────────────────────────────────────────────────────
+describe('lerpHeading', () => {
+  it('returns `from` when t = 0', () => {
+    expect(lerpHeading(45, 270, 0)).toBeCloseTo(45, 6);
+  });
+
+  it('returns `to` when t = 1', () => {
+    expect(lerpHeading(45, 270, 1)).toBeCloseTo(270, 6);
+  });
+
+  it('interpolates linearly when no wrap-around (0→90)', () => {
+    expect(lerpHeading(0, 90, 0.5)).toBeCloseTo(45, 6);
+    expect(lerpHeading(0, 90, 0.25)).toBeCloseTo(22.5, 6);
+    expect(lerpHeading(0, 90, 0.75)).toBeCloseTo(67.5, 6);
+  });
+
+  it('takes the shortest path across 0/360 wrap (350 → 10)', () => {
+    // Shortest path is +20° (350 → 360/0 → 10), NOT -340° backwards.
+    // At t=0.5 the result should be 0 (or 360 equivalently).
+    const mid = lerpHeading(350, 10, 0.5);
+    expect(mid).toBeCloseTo(0, 6);
+    // At t=0.25 — quarter way along the short arc (350 → 355).
+    expect(lerpHeading(350, 10, 0.25)).toBeCloseTo(355, 6);
+  });
+
+  it('takes the shortest path across 0/360 wrap (10 → 350)', () => {
+    // Opposite direction: shortest path is -20° (10 → 0/360 → 350).
+    expect(lerpHeading(10, 350, 0.5)).toBeCloseTo(0, 6);
+    expect(lerpHeading(10, 350, 0.25)).toBeCloseTo(5, 6);
+  });
+
+  it('clamps t outside [0, 1]', () => {
+    expect(lerpHeading(0, 90, -0.5)).toBeCloseTo(0, 6);
+    expect(lerpHeading(0, 90, 1.5)).toBeCloseTo(90, 6);
+  });
+
+  it('handles exact 180° apart deterministically (clockwise)', () => {
+    // Both paths are equal length — we pick clockwise (positive delta).
+    expect(lerpHeading(0, 180, 0.5)).toBeCloseTo(90, 6);
+    expect(lerpHeading(90, 270, 0.5)).toBeCloseTo(180, 6);
+  });
+
+  it('returns values always in [0, 360)', () => {
+    // Wrap path that crosses 360 should normalize to [0, 360).
+    expect(lerpHeading(350, 10, 1)).toBeCloseTo(10, 6);
+    expect(lerpHeading(350, 10, 0.9)).toBeGreaterThanOrEqual(0);
+    expect(lerpHeading(350, 10, 0.9)).toBeLessThan(360);
+  });
+
+  it('exposes a snap threshold of 60° (matches hook)', () => {
+    expect(HEADING_SNAP_THRESHOLD_DEG).toBe(60);
   });
 });

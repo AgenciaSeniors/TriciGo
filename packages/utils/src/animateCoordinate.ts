@@ -160,3 +160,165 @@ export function useAnimatedCoordinate(
 
   return rendered;
 }
+
+// ============================================================
+// useAnimatedHeading — same idea as useAnimatedCoordinate but for
+// a scalar compass angle. Used on the CLIENT side to smooth the
+// driver marker's rotation between DB samples (server publishes
+// driver location every ~3 s; without interpolation the marker
+// snaps between two distant headings instead of gliding through
+// the intermediate angles, which combined with camera bearing
+// rotation creates the "marker jumps sideways" UX bug the user
+// reported on 2026-05-24).
+//
+// The driver app itself doesn't need this — its useDriverLocation
+// hook already runs smoothHeading() on live GPS at ~1 Hz with no
+// network gap.
+// ============================================================
+
+/**
+ * Snap-to-target threshold (degrees). Heading deltas larger than this skip
+ * interpolation and jump directly to the new value. Matches `smoothHeading`
+ * which uses 45° — we use a slightly looser 60° because this hook runs on
+ * 3-5 s gaps (not 1 Hz GPS) so legitimate cornering can produce larger
+ * apparent jumps that we still want to follow without lag.
+ */
+export const HEADING_SNAP_THRESHOLD_DEG = 60;
+
+/**
+ * Interpolate between two compass headings (0–360, degrees) at progress `t`,
+ * always rotating along the shortest path. Exported for unit testing.
+ *
+ * Examples:
+ *   lerpHeading(0, 90, 0.5)   = 45     // simple
+ *   lerpHeading(350, 10, 0.5) = 0      // wrap-around via 360, NOT via 180
+ *   lerpHeading(10, 350, 0.5) = 0      // same wrap, opposite direction
+ *   lerpHeading(0, 180, 0.5)  = 90     // both paths equal, pick clockwise
+ */
+export function lerpHeading(from: number, to: number, t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  let delta = ((to - from + 540) % 360) - 180; // normalize to [-180, 180)
+  // Edge case: exact 180° apart → pick clockwise (positive) for determinism.
+  if (delta === -180) delta = 180;
+  return (((from + delta * clamped) % 360) + 360) % 360;
+}
+
+/**
+ * Hook that animates a compass heading toward a target, gliding through
+ * intermediate angles via the shortest path. Returns the currently-rendered
+ * heading, or `null` if no target has ever been provided.
+ *
+ * Behaviour:
+ *   - First valid target teleports (no "from" makes sense).
+ *   - Subsequent targets within `HEADING_SNAP_THRESHOLD_DEG` interpolate
+ *     linearly over `durationMs`.
+ *   - Targets outside the threshold (sharp turn at intersection, GPS
+ *     fix that crossed a corner) snap immediately to avoid the marker
+ *     visibly rotating "the long way around" mid-turn.
+ *   - Pass `target = null` to disable animation and clear the cached
+ *     heading (lets the next valid sample teleport again).
+ *
+ * @param target     Compass heading 0–360, or `null` to disable.
+ * @param durationMs Time to interpolate to a new target. Default 1000 ms
+ *                   (same as useAnimatedCoordinate so position and rotation
+ *                   stay visually coherent).
+ */
+export function useAnimatedHeading(
+  target: number | null,
+  durationMs: number = 1000,
+): number | null {
+  const [rendered, setRendered] = useState<number | null>(null);
+  const renderedRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const animationRef = useRef<{
+    from: number;
+    to: number;
+    startedAt: number;
+  } | null>(null);
+
+  useEffect(() => {
+    renderedRef.current = rendered;
+  }, [rendered]);
+
+  useEffect(() => {
+    // Disable / clear when target is null or non-finite.
+    if (target == null || !Number.isFinite(target)) {
+      animationRef.current = null;
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    // Normalize input to [0, 360).
+    const normalized = ((target % 360) + 360) % 360;
+
+    // First-ever sample → teleport.
+    if (renderedRef.current === null) {
+      renderedRef.current = normalized;
+      setRendered(normalized);
+      return;
+    }
+
+    // Already at target → no-op.
+    if (renderedRef.current === normalized) return;
+
+    // Sharp delta → snap directly (avoid 'long way round' visual).
+    const delta = Math.abs(
+      (((normalized - renderedRef.current + 540) % 360) - 180),
+    );
+    if (delta > HEADING_SNAP_THRESHOLD_DEG) {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      animationRef.current = null;
+      renderedRef.current = normalized;
+      setRendered(normalized);
+      return;
+    }
+
+    // Cancel any in-flight tick before starting a new leg.
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    animationRef.current = {
+      from: renderedRef.current,
+      to: normalized,
+      startedAt: Date.now(),
+    };
+
+    const tick = () => {
+      const anim = animationRef.current;
+      if (!anim) {
+        rafRef.current = null;
+        return;
+      }
+      const elapsed = Date.now() - anim.startedAt;
+      const t = elapsed / durationMs;
+      const next = lerpHeading(anim.from, anim.to, t);
+      renderedRef.current = next;
+      setRendered(next);
+      if (t >= 1) {
+        animationRef.current = null;
+        rafRef.current = null;
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [target, durationMs]);
+
+  return rendered;
+}
