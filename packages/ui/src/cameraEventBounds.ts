@@ -155,12 +155,13 @@ export function extractBoundsFromCameraEvent(
     return { bounds, zoom };
   }
 
-  mapLogger.viewport({
-    bbox: '',
-    zoom: Math.floor(zoom),
-    source: 'skipped',
-    reason: 'no_geometry',
-    error: 'event missing both visibleBounds and centre',
-  });
+  // PR G follow-up (2026-05-25): the no_geometry branch fires constantly
+  // during Mapbox SDK transitions (cold mount, fly-to animations, pinch
+  // gestures) — those events arrive without visibleBounds AND without a
+  // centre coordinate because the camera hasn't finished animating yet.
+  // It's not actionable for the consumer (no bbox = no refetch possible)
+  // and floods the log to the point of hiding real events. Silent return
+  // — visibleBounds_missing path (one above) still logs because it IS
+  // actionable (synthesised bbox triggers a refetch).
   return null;
 }

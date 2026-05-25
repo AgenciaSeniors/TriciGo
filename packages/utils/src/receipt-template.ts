@@ -195,6 +195,21 @@ const fmtDate = (iso: string, locale: Locale): string =>
     timeZone: 'America/Havana',
   });
 
+/**
+ * Pretty-print a trip duration in seconds. PR H (2026-05-25):
+ * receipts used to render `Math.round(durationS / 60) + ' min'`,
+ * which produced "0 min" for any trip shorter than 30 s — confusing
+ * the user (reported on-device: short test trip showed "0 min" on
+ * the receipt). Short trips now read as "<1 min" or, when the
+ * duration is missing/zero (e.g. legacy completed rides with
+ * actual_duration_s = 0), as "—" so the receipt doesn't lie.
+ */
+function fmtDuration(durationS: number): string {
+  if (!Number.isFinite(durationS) || durationS <= 0) return '—';
+  if (durationS < 60) return '<1 min';
+  return Math.round(durationS / 60).toString() + ' min';
+}
+
 function row(label: string, value: string, opts: { mute?: boolean; bold?: boolean; positive?: boolean; negative?: boolean } = {}): string {
   const labelColor = opts.mute ? '#888' : '#444';
   const valueColor = opts.negative ? '#22c55e' : opts.positive ? '#1a1a1a' : '#1a1a1a';
@@ -234,7 +249,7 @@ function shell(title: string, receiptNo: string, body: string, footer: string): 
 
 function passengerHtml(data: PassengerReceiptData, l: Labels, locale: Locale): string {
   const distKm = (data.distanceM / 1000).toFixed(1);
-  const durMin = Math.round(data.durationS / 60);
+  const durStr = fmtDuration(data.durationS);
   const tipShown = data.tipCup > 0;
   const surgeShown = data.surgeMultiplier > 1 && data.surgeAmountCup > 0;
   const discountShown = data.discountCup > 0;
@@ -249,7 +264,7 @@ function passengerHtml(data: PassengerReceiptData, l: Labels, locale: Locale): s
     ${data.vehiclePlate ? row(l.vehicle, data.vehiclePlate, { mute: true }) : ''}
     ${row(l.pickup, data.pickupAddress, { mute: true })}
     ${row(l.dropoff, data.dropoffAddress, { mute: true })}
-    ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durMin} min`, { mute: true })}
+    ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durStr}`, { mute: true })}
   </table>`;
 
   const breakdown = `<h2 style="margin:0 0 8px;font-size:13px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.05em;">${l.fareBreakdown}</h2>
@@ -278,7 +293,7 @@ function passengerHtml(data: PassengerReceiptData, l: Labels, locale: Locale): s
 
 function driverHtml(data: DriverReceiptData, l: Labels, locale: Locale): string {
   const distKm = (data.distanceM / 1000).toFixed(1);
-  const durMin = Math.round(data.durationS / 60);
+  const durStr = fmtDuration(data.durationS);
   const tipShown = data.tipCup > 0;
   const fxShown = data.exchangeRateUsdCup != null && data.exchangeRateUsdCup > 0;
   const usdEq = fxShown ? data.netCup / data.exchangeRateUsdCup! : null;
@@ -289,7 +304,7 @@ function driverHtml(data: DriverReceiptData, l: Labels, locale: Locale): string 
     ${data.passengerName ? row(l.passenger, data.passengerName, { mute: true }) : ''}
     ${row(l.pickup, data.pickupAddress, { mute: true })}
     ${row(l.dropoff, data.dropoffAddress, { mute: true })}
-    ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durMin} min`, { mute: true })}
+    ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durStr}`, { mute: true })}
   </table>`;
 
   const commissionPct = (data.commissionRate * 100).toFixed(0);
