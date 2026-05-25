@@ -22,7 +22,13 @@ export { useDebouncePress } from './useDebouncePress';
 // marker animation between discrete GPS samples. Used by RideMapView
 // (driver + client) to avoid the "teleport every 1s" effect when the
 // underlying MarkerView re-mounts on coord change.
-export { useAnimatedCoordinate, lerpCoordinate } from './animateCoordinate';
+export {
+  useAnimatedCoordinate,
+  lerpCoordinate,
+  useAnimatedHeading,
+  lerpHeading,
+  HEADING_SNAP_THRESHOLD_DEG,
+} from './animateCoordinate';
 export type { AnimatedCoordinate } from './animateCoordinate';
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';

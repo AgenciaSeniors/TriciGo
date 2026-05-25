@@ -3,7 +3,7 @@ import { View, Text, Animated, Platform, useColorScheme, Image, TouchableOpacity
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import type { ViewportPoi } from '@tricigo/utils';
@@ -357,6 +357,17 @@ function RideMapViewInner({
     driverHeading,
   ]);
 
+  // PR B — interpolate the heading at ~30 FPS between server samples
+  // (driver location lands in the client roughly every 3-5 s via the
+  // DB polling hook). Without this, every sample produced a discrete
+  // jump in BOTH the marker rotation AND the camera bearing — combined
+  // with the bearing-doubling fix from PR A, the residual UX still felt
+  // "jerky" relative to the driver app (which has 1 Hz GPS + no network
+  // latency). useAnimatedHeading rotates along the shortest arc and
+  // snaps if the delta crosses HEADING_SNAP_THRESHOLD_DEG (60°) so
+  // sharp turns at intersections don't visually drag.
+  const animatedDriverHeading = useAnimatedHeading(smoothedDriverHeading, 1000);
+
   const animatedDriver = useMemo(() => {
     if (
       !driverLocation ||
@@ -368,7 +379,7 @@ function RideMapViewInner({
     return {
       latitude: snappedDriver?.latitude ?? driverLocation.latitude,
       longitude: snappedDriver?.longitude ?? driverLocation.longitude,
-      heading: smoothedDriverHeading,
+      heading: animatedDriverHeading ?? smoothedDriverHeading,
     };
   }, [
     driverLocation?.latitude,
@@ -376,6 +387,7 @@ function RideMapViewInner({
     snappedDriver?.latitude,
     snappedDriver?.longitude,
     smoothedDriverHeading,
+    animatedDriverHeading,
   ]);
   // DEBUG-271: log every time the marker coordinate changes so we can
   // see in the rider's Metro log whether the prop chain is delivering
