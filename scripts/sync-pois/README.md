@@ -98,6 +98,17 @@ FROM poi_sync_state;
 - **New merged rows not yet in DB → INSERT** with `source` set to the dominant input source (or `merged` if multi-source).
 - **Stale non-admin rows** (not seen in 60 days) get `is_active=false` so search excludes them. Run `scripts/sync-pois/deactivate-stale.sql` separately or via cron.
 
+## Quality gates (PR E, 2026-05-25)
+
+Two filters apply between dedup and upsert (`_enforce_quality_gates` in `merge_and_upsert.py`):
+
+1. **Confidence ≥ 0.6** — records below this threshold are dropped. Bypassed for `source IN ('admin','wikidata','crowdsource')` which are editorially trusted.
+2. **Coord-cluster guard** — records whose `lat,lng` rounded to 4 decimals (~11 m) match a cluster of 5+ records in the same batch are dropped. Same trusted-source bypass.
+
+The coord-cluster guard exists because Overture and other providers occasionally geocode unresolvable addresses to the municipality centroid, stacking dozens of unrelated POIs at the same coordinate. Those entries caused the on-device bug 2026-05-25: searching "aeropuerto" returned `Aeropuerto Internacional José Martí` at a random spot in Habana centro (cluster of 44 POIs at that fake coord, including the airport mixed with casas particulares).
+
+Historical cleanup of pre-existing low-quality rows ran via migration `00311_pois_cleanup_low_confidence.sql` — same criteria, applied once to the existing ~108k rows. Going forward the sync pipeline never re-introduces them.
+
 ## Dedup
 
 - Spatial: R-tree, 50m radius
