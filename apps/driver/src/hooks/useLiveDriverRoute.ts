@@ -16,15 +16,20 @@ import type { GeoPoint } from '@tricigo/utils';
  * useLiveDriverRoute keeps a single fetched polyline cached and only
  * refetches when:
  *   • This is the first fetch (no polyline yet), OR
- *   • The driver is more than DEVIATION_M (50 m) from the cached polyline
- *     AND at least MIN_INTERVAL_MS (5 s) has passed since the last fetch
+ *   • The driver is more than DEVIATION_M (25 m) from the cached polyline
+ *     AND at least MIN_INTERVAL_MS (3 s) has passed since the last fetch
  *
  * This mirrors the client-side `useLiveDriverRoute` so the driver and
  * the rider see the SAME up-to-date route after a deviation.
+ *
+ * PR C of routing fixes (2026-05-25): the previous 50 m / 5 s thresholds
+ * let drivers take a contraflow shortcut for ~half a block before the
+ * route corrected. Tighter values catch the misroute faster so the
+ * "Dirígete por X" instruction updates while it's still actionable.
  */
 
-const DEVIATION_M = 50;
-const MIN_INTERVAL_MS = 5_000;
+const DEVIATION_M = 25;
+const MIN_INTERVAL_MS = 3_000;
 const NEAR_TARGET_M = 50;
 
 export function useLiveDriverRoute(
