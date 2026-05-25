@@ -9,6 +9,7 @@ import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
 import { useMapboxReady } from '../hooks/useMapboxReady';
 import { PoiMapLayers, useViewportPois, extractBoundsFromCameraEvent } from '@tricigo/ui';
+import { mapLogger } from '@tricigo/utils';
 
 // Native map (iOS/Android)
 let MapboxGL: any;
@@ -1030,9 +1031,19 @@ function RideMapViewInner(
         ? driverHeading
         : null);
     if (target == null) return;
-    const next = smoothHeading(target, lastSmoothedHeadingRef.current);
+    const prev = lastSmoothedHeadingRef.current;
+    const next = smoothHeading(target, prev);
     lastSmoothedHeadingRef.current = next;
     setEffectiveDriverHeading(next);
+    // PR G — heading source visibility on driver side. Tag whether
+    // the EMA input came from the snap-to-route bearing or raw GPS.
+    mapLogger.markerHeading({
+      source: snappedDriver?.bearing != null ? 'snap' : 'ema',
+      value: next,
+      prev,
+      delta: prev == null ? undefined : (((next - prev + 540) % 360) - 180),
+      app: 'driver',
+    });
   }, [snappedDriver?.bearing, driverHeading]);
 
   // Default center: driver location > Havana
@@ -1156,6 +1167,21 @@ function RideMapViewInner(
     effectiveDriverHeading,
     rideStatus,
   ]);
+
+  // PR G — log camera profile transitions on the driver so QA can
+  // see exactly which zoom/pitch/bearing applies for each rideStatus.
+  useEffect(() => {
+    if (!tripCameraProfile) return;
+    mapLogger.cameraProfile({
+      rideStatus: rideStatus ?? null,
+      zoom: tripCameraProfile.zoomLevel ?? 0,
+      pitch: tripCameraProfile.pitch ?? 0,
+      bearing: tripCameraProfile.heading ?? 0,
+      mode: tripCameraProfile.animationMode ?? 'easeTo',
+      followMode,
+      app: 'driver',
+    });
+  }, [tripCameraProfile, rideStatus, followMode]);
 
   // Expose imperative API for parent (camera control)
   useImperativeHandle(ref, () => ({

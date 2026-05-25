@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, driverService, locationService, notificationService, presenceService } from '@tricigo/api';
-import { triggerHaptic, playSound, logger } from '@tricigo/utils';
+import { triggerHaptic, playSound, logger, mapLogger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -339,6 +339,14 @@ export function useDriverRideActions() {
     try {
       // 1. RPC call FIRST — database determines who wins the race
       const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
+
+      // PR G — emit lifecycle log on accept (mirrors the rider side's
+      // [MAP:ride] feed so grep can correlate both perspectives).
+      mapLogger.tripLifecycle({
+        event: 'accept',
+        ride_id: rideId,
+        app: 'driver',
+      });
 
       // 2. Only broadcast AFTER DB confirms success (BUG-005 fix)
       const user = useAuthStore.getState().user;
@@ -697,6 +705,20 @@ export function useDriverRideActions() {
         useDriverRideStore.getState().updateActiveTrip({
           ...activeTrip,
           status: nextStatus,
+        });
+        // PR G — surface lifecycle transitions on the [MAP:ride] tag so
+        // QA can correlate driver-side status changes with map/route/GPS
+        // events filtered by the same prefix.
+        const lifecycleEvent: 'driver_en_route' | 'arrived_pickup' | 'started' | 'arrived_dropoff' | 'completed' =
+          nextStatus === 'driver_en_route' ? 'driver_en_route'
+          : nextStatus === 'arrived_at_pickup' ? 'arrived_pickup'
+          : nextStatus === 'in_progress' ? 'started'
+          : nextStatus === 'arrived_at_destination' ? 'arrived_dropoff'
+          : 'completed';
+        mapLogger.tripLifecycle({
+          event: lifecycleEvent,
+          ride_id: activeTrip.id,
+          app: 'driver',
         });
         // UX: confirm the status change with haptic + a context-specific toast.
         // Previously only the final "completed" step had feedback — drivers

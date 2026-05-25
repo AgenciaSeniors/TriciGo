@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, trustedContactService, notificationService, walletService, corporateService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { invalidatePredictionCache } from '@/services/predictionCache';
@@ -687,6 +687,14 @@ export function useRideActions() {
         service_type: d.serviceType,
         payment_method: d.paymentMethod,
         has_promo: !!promoResult?.valid,
+      });
+      // PR G — emit [MAP:ride] for correlation with map/route logs
+      mapLogger.tripLifecycle({
+        event: 'request',
+        ride_id: ride.id,
+        lat: d.pickup.location.latitude,
+        lng: d.pickup.location.longitude,
+        app: 'client',
       });
 
       // BUG-217 / BUG-220 / BUG-277: polling fallback. With realtime DISABLED

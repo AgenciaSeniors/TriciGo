@@ -4,6 +4,8 @@
 // ============================================================
 
 import type { ServiceTypeSlug } from '@tricigo/types';
+// PR G — categorised debug logger; see packages/utils/src/mapLogger.ts.
+import { mapLogger, formatBbox } from './mapLogger';
 
 export interface GeoPoint {
   latitude: number;
@@ -802,7 +804,13 @@ function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; ln
  * 1m-precision cache key.
  */
 export function clearRouteCache(): void {
+  const sizeBefore = routeCache.size;
   routeCache.clear();
+  mapLogger.route({ event: 'cache_clear', endpoint: 'cache' });
+  // Hint to QA: log size so we know whether the clear actually had impact.
+  if (sizeBefore > 0 && typeof console !== 'undefined') {
+    console.log('[clearRouteCache] cleared', sizeBefore, 'entries');
+  }
 }
 
 /**
@@ -824,13 +832,36 @@ export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
+  const fromStr = `${from.lat.toFixed(4)},${from.lng.toFixed(4)}`;
+  const toStr = `${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
   const key = routeCacheKey(from, to);
   const cached = routeCache.get(key);
-  if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) return cached.result;
+  if (cached && Date.now() - cached.ts < ROUTE_CACHE_TTL) {
+    mapLogger.route({
+      event: 'cache_hit',
+      endpoint: 'cache',
+      distance_m: cached.result?.distance_m,
+      duration_s: cached.result?.duration_s,
+      from: fromStr,
+      to: toStr,
+    });
+    return cached.result;
+  }
 
   // Try Mapbox first (better Cuba one-way coverage)
+  mapLogger.route({ event: 'fetch_start', endpoint: 'mapbox', from: fromStr, to: toStr });
+  const startMapbox = Date.now();
   const mapboxResult = await fetchRouteMapbox(from, to);
   if (mapboxResult) {
+    mapLogger.route({
+      event: 'fetch_ok',
+      endpoint: 'mapbox',
+      latency_ms: Date.now() - startMapbox,
+      distance_m: mapboxResult.distance_m,
+      duration_s: mapboxResult.duration_s,
+      from: fromStr,
+      to: toStr,
+    });
     if (routeCache.size >= ROUTE_CACHE_MAX) {
       const oldest = routeCache.keys().next().value;
       if (oldest) routeCache.delete(oldest);
@@ -840,13 +871,32 @@ export async function fetchRoute(
   }
 
   // Fallback to OSRM if Mapbox failed (no token, network, etc.)
+  mapLogger.route({ event: 'fetch_start', endpoint: 'osrm', from: fromStr, to: toStr });
+  const startOsrm = Date.now();
   const osrmResult = await fetchRouteOSRM(from, to);
   if (osrmResult) {
+    mapLogger.route({
+      event: 'fetch_ok',
+      endpoint: 'osrm',
+      latency_ms: Date.now() - startOsrm,
+      distance_m: osrmResult.distance_m,
+      duration_s: osrmResult.duration_s,
+      from: fromStr,
+      to: toStr,
+    });
     if (routeCache.size >= ROUTE_CACHE_MAX) {
       const oldest = routeCache.keys().next().value;
       if (oldest) routeCache.delete(oldest);
     }
     routeCache.set(key, { result: osrmResult, ts: Date.now() });
+  } else {
+    mapLogger.route({
+      event: 'fail',
+      endpoint: 'unified',
+      from: fromStr,
+      to: toStr,
+      error: 'both mapbox and osrm returned null',
+    });
   }
   return osrmResult;
 }
@@ -2661,13 +2711,32 @@ export async function searchAddressUnified(
 ): Promise<SearchBoxResult[]> {
   // Try Google first — it has the best Cuban coverage for the long-tail
   // of mypimes / paladares / kioscos that aren't in OSM/Mapbox.
+  mapLogger.search({ query, provider: 'google', count: 0, stage: 'fire' });
+  const startGoogle = Date.now();
   const googleResults = supabase
     ? await searchAddressGoogle(query, supabase, proximity, signal, limit)
     : [];
+  mapLogger.search({
+    query,
+    provider: 'google',
+    count: googleResults.length,
+    latency_ms: Date.now() - startGoogle,
+    stage: 'resolve',
+  });
   if (googleResults.length > 0) return googleResults;
 
   // Fallback to Mapbox SearchBox (the existing implementation)
+  mapLogger.search({ query, provider: 'mapbox', count: 0, stage: 'fire', fallback: true });
+  const startMapbox = Date.now();
   const mapboxResults = await searchAddressSearchBox(query, proximity, signal, limit);
+  mapLogger.search({
+    query,
+    provider: 'mapbox',
+    count: mapboxResults.length,
+    latency_ms: Date.now() - startMapbox,
+    stage: 'resolve',
+    fallback: true,
+  });
   // Re-tag mapbox results so the UI shows the right attribution
   return mapboxResults.map((r) => ({ ...r, source: 'mapbox' as const }));
 }
@@ -2705,8 +2774,16 @@ export async function importPoiFromSearch(
   if (result.source === 'mapbox' || result.source === 'supabase') return;
   if (!result.place_name || !result.latitude || !result.longitude) return;
 
+  const start = Date.now();
+  mapLogger.poiSubmit({
+    event: 'submit',
+    name: result.place_name,
+    lat: result.latitude,
+    lng: result.longitude,
+    app: 'client',
+  });
   try {
-    await supabase.functions.invoke('import-mapbox-poi', {
+    const { data, error } = await supabase.functions.invoke('import-mapbox-poi', {
       body: {
         query: result.place_name,
         proximity: { lat: result.latitude, lng: result.longitude },
@@ -2718,11 +2795,41 @@ export async function importPoiFromSearch(
         },
       },
     });
+    if (error) {
+      mapLogger.poiSubmit({
+        event: 'reject',
+        name: result.place_name,
+        lat: result.latitude,
+        lng: result.longitude,
+        app: 'client',
+        latency_ms: Date.now() - start,
+        reject_reason: 'ef_invoke_error',
+        error: String(error.message ?? error),
+      });
+      return;
+    }
+    const payload = (data ?? {}) as { imported?: boolean; mapbox_found?: boolean; reason?: string };
+    mapLogger.poiSubmit({
+      event: payload.imported ? 'success' : 'reject',
+      name: result.place_name,
+      lat: result.latitude,
+      lng: result.longitude,
+      app: 'client',
+      latency_ms: Date.now() - start,
+      reject_reason: payload.imported ? undefined : payload.reason ?? 'unknown',
+    });
   } catch (err) {
     // Silent — fire-and-forget. Visibility via EF logs.
-    if (typeof console !== 'undefined') {
-      console.warn('[importPoiFromSearch]', err);
-    }
+    mapLogger.poiSubmit({
+      event: 'reject',
+      name: result.place_name,
+      lat: result.latitude,
+      lng: result.longitude,
+      app: 'client',
+      latency_ms: Date.now() - start,
+      reject_reason: 'throw',
+      error: String(err instanceof Error ? err.message : err),
+    });
   }
 }
 
@@ -2791,7 +2898,7 @@ export function dedupeSearchResults<T extends {
 ): T[] {
   if (primary.length === 0 || secondary.length === 0) return [...secondary];
 
-  return secondary.filter((sec) => {
+  const survivors = secondary.filter((sec) => {
     for (const pri of primary) {
       // Coord-distance check
       const meters = haversineDistance(
@@ -2821,6 +2928,19 @@ export function dedupeSearchResults<T extends {
     }
     return true;
   });
+
+  const droppedCount = secondary.length - survivors.length;
+  if (droppedCount > 0) {
+    // Surface dedupe activity so QA can confirm Google → cuba_pois
+    // overlap suppression actually fires (PR F regression guard).
+    mapLogger.search({
+      query: '<dedupe>',
+      provider: 'cuba_pois',
+      count: survivors.length,
+      deduped: droppedCount,
+    });
+  }
+  return survivors;
 }
 
 /** OSM tag mappings for POI category searches */

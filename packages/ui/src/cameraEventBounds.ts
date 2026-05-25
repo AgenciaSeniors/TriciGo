@@ -51,6 +51,8 @@ export interface CameraEventBoundsResult {
   zoom: number;
 }
 
+import { mapLogger } from '@tricigo/utils';
+
 // Approximate degrees-per-pixel ratio at zoom 0 at the equator
 // (256 pixel tile spans 360°). Decreases by half each zoom level.
 const DEGREES_PER_TILE_Z0 = 360;
@@ -138,29 +140,27 @@ export function extractBoundsFromCameraEvent(
     const halfLng = (FALLBACK_VIEWPORT_TILES_W * degPerTile) / 2;
     const halfLat = halfLng * (FALLBACK_VIEWPORT_TILES_H / FALLBACK_VIEWPORT_TILES_W)
       * Math.cos((cLat * Math.PI) / 180);
-    if (typeof console !== 'undefined') {
-      console.warn(
-        '[cameraEventBounds] visibleBounds missing on event, synthesising from centre',
-        { zoom: Math.floor(zoom), centre: [cLng.toFixed(4), cLat.toFixed(4)] },
-      );
-    }
-    return {
-      bounds: {
-        minLng: cLng - halfLng,
-        minLat: cLat - halfLat,
-        maxLng: cLng + halfLng,
-        maxLat: cLat + halfLat,
-      },
-      zoom,
+    const bounds = {
+      minLng: cLng - halfLng,
+      minLat: cLat - halfLat,
+      maxLng: cLng + halfLng,
+      maxLat: cLat + halfLat,
     };
+    mapLogger.viewport({
+      bbox: `${bounds.minLng.toFixed(3)},${bounds.minLat.toFixed(3)},${bounds.maxLng.toFixed(3)},${bounds.maxLat.toFixed(3)}`,
+      zoom: Math.floor(zoom),
+      source: 'pan',
+      reason: 'synthesised_from_centre',
+    });
+    return { bounds, zoom };
   }
 
-  if (typeof console !== 'undefined') {
-    console.warn('[cameraEventBounds] no usable geometry on event — skipping refetch', {
-      hasProperties: !!event.properties,
-      hasGeometry: !!event.geometry,
-      zoom,
-    });
-  }
+  mapLogger.viewport({
+    bbox: '',
+    zoom: Math.floor(zoom),
+    source: 'skipped',
+    reason: 'no_geometry',
+    error: 'event missing both visibleBounds and centre',
+  });
   return null;
 }

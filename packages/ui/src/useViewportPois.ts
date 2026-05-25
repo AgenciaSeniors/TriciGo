@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { fetchPoisInViewport, type ViewportPoi } from '@tricigo/utils';
+import { fetchPoisInViewport, mapLogger, formatBbox, type ViewportPoi } from '@tricigo/utils';
 
 interface ViewportBounds {
   minLng: number;
@@ -37,8 +37,12 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
     // 8-10 for the "country/province overview" path). Below zoom 8 the
     // viewport spans more than Cuba itself — no point fetching.
     if (zoom < 8) {
-      // eslint-disable-next-line no-console
-      console.log('[useViewportPois] zoom too low, clearing', { zoom: Math.floor(zoom) });
+      mapLogger.viewport({
+        bbox: formatBbox(bounds),
+        zoom: Math.floor(zoom),
+        source: 'clear',
+        reason: 'zoom_below_threshold',
+      });
       setPois([]);
       lastBoundsRef.current = null;
       return;
@@ -63,6 +67,12 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
       bounds.maxLng <= last.maxLng &&
       bounds.maxLat <= last.maxLat
     ) {
+      mapLogger.viewport({
+        bbox: formatBbox(bounds),
+        zoom: Math.floor(zoom),
+        source: 'skipped',
+        reason: 'inside_padded_bounds',
+      });
       return;
     }
 
@@ -75,22 +85,20 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
       if (controller.signal.aborted) return;
       setPois(result);
       lastBoundsRef.current = padded;
-      // eslint-disable-next-line no-console
-      console.log('[useViewportPois] fetched', {
+      mapLogger.viewport({
+        bbox: formatBbox(padded),
         zoom: Math.floor(zoom),
         count: result.length,
-        bbox: [
-          padded.minLng.toFixed(3),
-          padded.minLat.toFixed(3),
-          padded.maxLng.toFixed(3),
-          padded.maxLat.toFixed(3),
-        ].join(','),
+        source: 'pan',
       });
     }).catch((err: unknown) => {
       if (controller.signal.aborted) return;
-      // Surface fetch errors so QA can diagnose silent empty maps.
-      // eslint-disable-next-line no-console
-      console.warn('[useViewportPois] fetch failed', err);
+      mapLogger.viewport({
+        bbox: formatBbox(padded),
+        zoom: Math.floor(zoom),
+        source: 'pan',
+        error: String(err instanceof Error ? err.message : err),
+      });
     });
   }, []);
 
@@ -122,8 +130,11 @@ export function useViewportPois(initialCenter?: UserCenter | null) {
       maxLng: initialCenter.longitude + HALF,
       maxLat: initialCenter.latitude + HALF,
     };
-    // eslint-disable-next-line no-console
-    console.log('[useViewportPois] seeding from initialCenter', { seedKey });
+    mapLogger.viewport({
+      bbox: formatBbox(seedBounds),
+      zoom: 14,
+      source: 'seed',
+    });
     loadPois(seedBounds, 14);
   }, [initialCenter, loadPois]);
 

@@ -28,7 +28,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ViewportPoi } from '@tricigo/utils';
-import { POI_VISUAL_GROUPS, poiVisualGroup } from '@tricigo/utils';
+import { POI_VISUAL_GROUPS, poiVisualGroup, mapLogger } from '@tricigo/utils';
 
 // Inline subset of @types/geojson for the FeatureCollection shape we
 // produce — keeps this file dependency-free instead of adding @types/geojson
@@ -199,14 +199,25 @@ export function PoiMapLayers({ MapboxGL, pois, onPoiPress }: PoiMapLayersProps) 
           if (!feat || !feat.properties || !onPoiPress) return;
           if (feat.properties.point_count) return; // cluster tap → ignore
           const coords = feat.geometry?.coordinates ?? [0, 0];
-          onPoiPress({
+          const payload = {
             id: Number(feat.properties.id),
             name: String(feat.properties.name ?? ''),
             tricigo_category: (feat.properties.tricigo_category as string) || null,
             lat: Number(coords[1]),
             lng: Number(coords[0]),
             address: (feat.properties.address as string) || null,
+          };
+          // PR G — surface POI taps in Metro logs so QA can correlate
+          // visual interactions with downstream consumer actions.
+          mapLogger.poiTap({
+            poi_id: payload.id,
+            name: payload.name,
+            category: payload.tricigo_category,
+            lat: payload.lat,
+            lng: payload.lng,
+            app: 'client', // both client and driver render via this; only client wires onPoiPress today
           });
+          onPoiPress(payload);
         }}
       >
         {/* ── Clusters — white fill + orange ring (Cuban Modern) ── */}
