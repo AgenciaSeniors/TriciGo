@@ -104,8 +104,16 @@ Deno.serve(async (req: Request) => {
       p_query_hash: hash,
     });
     if (!cacheErr && cached) {
+      // PR I (2026-05-25): log cache hits with count so we can detect a
+      // cache serving an empty/stale response that's hiding a real venue.
+      // Previously this branch was silent — a cached "[]" for "hotel
+      // boutique malecon 663" would keep returning nothing for 30 days
+      // without any signal in the logs.
+      const cachedArr = cached as SearchBoxResult[];
+      const n = Array.isArray(cachedArr) ? cachedArr.length : 0;
+      console.info('[search-places-google] cache_hit query=%s n=%d', query, n);
       return jsonResponse({
-        data: cached as SearchBoxResult[],
+        data: cachedArr,
         source: 'cache',
         cached: true,
       }, 200);
@@ -154,16 +162,27 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Cache it + increment counter ──
+  // PR I (2026-05-25): SKIP cache_put when results.length === 0.
+  // The 30-day TTL on an empty response sticks the failure for a month
+  // even after the missing venue gets indexed by Google the next day.
+  // We still increment the daily call counter so budget cap stays
+  // accurate, but the next caller will re-hit Google (~1 extra call/day
+  // per missing query — acceptable tradeoff vs sticky-empty bug).
+  console.info(
+    '[search-places-google] live_call query=%s n=%d cache=%s',
+    query, results.length, results.length === 0 ? 'skipped_empty' : 'will_cache',
+  );
   try {
-    await Promise.all([
-      supabase.rpc('google_cache_put', {
+    const ops: Promise<unknown>[] = [supabase.rpc('google_cache_increment_call')];
+    if (results.length > 0) {
+      ops.push(supabase.rpc('google_cache_put', {
         p_query_hash: hash,
         p_query: query,
         p_proximity_key: proximityKey,
         p_response_json: results,
-      }),
-      supabase.rpc('google_cache_increment_call'),
-    ]);
+      }));
+    }
+    await Promise.all(ops);
   } catch (e) {
     console.warn('[search-places-google] cache_put / increment failed:', e);
     // Non-fatal — return the results to the user anyway

@@ -120,10 +120,22 @@ export async function googlePlacesAutocomplete(
 
   // Fetch details (lat/lng) for each in parallel. Field mask limits to
   // just `location` so this stays in the cheap "Basic" tier.
+  //
+  // PR I (2026-05-25): "Hotel Boutique Malecon 663" not appearing in search.
+  // Place Details previously failed silently — a placeId returned by
+  // Autocomplete that hits a transient 429/5xx on the details call was
+  // dropped as `null` with no record of which placeId or why. We now log
+  // each failure (`[search-places-google] place_details_fail`) so QA can
+  // correlate "Google found this name" vs "it disappeared from UI".
+  // Behaviour is unchanged — still returns null on fail.
   const details = await Promise.all(
     suggestions.map(async (sug) => {
       const placeId = sug.placePrediction?.placeId;
-      if (!placeId) return null;
+      const mainText = sug.placePrediction?.structuredFormat?.mainText?.text ?? '';
+      if (!placeId) {
+        console.warn('[search-places-google] place_details_skip reason=no_place_id mainText=%s', mainText);
+        return null;
+      }
       try {
         const detailsResp = await fetch(
           `https://places.googleapis.com/v1/places/${placeId}`,
@@ -134,22 +146,39 @@ export async function googlePlacesAutocomplete(
             },
           },
         );
-        if (!detailsResp.ok) return null;
+        if (!detailsResp.ok) {
+          const errBody = await detailsResp.text().catch(() => '');
+          console.warn(
+            '[search-places-google] place_details_fail placeId=%s status=%d mainText=%s err=%s',
+            placeId, detailsResp.status, mainText, errBody.slice(0, 200),
+          );
+          return null;
+        }
         const d = await detailsResp.json() as {
           location?: { latitude?: number; longitude?: number };
           formattedAddress?: string;
         };
-        if (!d.location?.latitude || !d.location?.longitude) return null;
+        if (!d.location?.latitude || !d.location?.longitude) {
+          console.warn(
+            '[search-places-google] place_details_fail placeId=%s reason=no_location mainText=%s',
+            placeId, mainText,
+          );
+          return null;
+        }
         return {
           placeId,
           lat: d.location.latitude,
           lng: d.location.longitude,
           formattedAddress: d.formattedAddress ?? '',
-          mainText: sug.placePrediction?.structuredFormat?.mainText?.text ?? '',
+          mainText,
           secondaryText: sug.placePrediction?.structuredFormat?.secondaryText?.text ?? '',
           types: sug.placePrediction?.types ?? [],
         };
-      } catch {
+      } catch (e) {
+        console.warn(
+          '[search-places-google] place_details_throw placeId=%s mainText=%s err=%s',
+          placeId, mainText, String(e instanceof Error ? e.message : e),
+        );
         return null;
       }
     }),
@@ -158,8 +187,17 @@ export async function googlePlacesAutocomplete(
   const results: SearchBoxResult[] = [];
   for (const d of details) {
     if (!d) continue;
-    // Sanity: confirm within Cuba bbox (Google may bend the restriction)
-    if (d.lat < 19.5 || d.lat > 23.5 || d.lng < -85.0 || d.lng > -74.0) continue;
+    // Sanity: confirm within Cuba bbox (Google may bend the restriction).
+    // PR I (2026-05-25): log rejections so we notice when a real Cuban
+    // venue (e.g. coastal hotel in a cayo on the bbox edge) is being
+    // silently dropped. Behaviour unchanged.
+    if (d.lat < 19.5 || d.lat > 23.5 || d.lng < -85.0 || d.lng > -74.0) {
+      console.warn(
+        '[search-places-google] bbox_reject placeId=%s mainText=%s lat=%f lng=%f',
+        d.placeId, d.mainText, d.lat, d.lng,
+      );
+      continue;
+    }
 
     results.push({
       latitude: d.lat,

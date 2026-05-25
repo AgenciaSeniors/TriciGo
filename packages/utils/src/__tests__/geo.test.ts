@@ -12,6 +12,8 @@ import {
   smoothHeading,
   HEADING_SMOOTHING_ALPHA,
   importPoiFromSearch,
+  dedupeSearchResults,
+  searchAddressGoogle,
   type SearchBoxResult,
 } from '../geo';
 
@@ -554,5 +556,206 @@ describe('fetchRoute fallback order (PR C)', () => {
     const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
     expect(calls.some((u) => u.includes('api.mapbox.com/directions'))).toBe(true);
     expect(calls.some((u) => u.includes('router.project-osrm.org'))).toBe(true);
+  });
+});
+
+// ============================================================
+// PR I (2026-05-25) — dedupeSearchResults regression guard
+//
+// Surfaced by the "Hotel Boutique Malecon 663" bug. The dedupe is
+// supposed to drop cuba_pois rows that duplicate Google rows, NOT
+// drop the venue the user is looking for. These tests pin down the
+// edge cases so future tweaks to NAME_DEDUP_THRESHOLD or
+// COORD_DEDUP_RADIUS_M don't silently break search visibility.
+// ============================================================
+describe('dedupeSearchResults', () => {
+  // Helper to build a minimal SearchBoxResult.
+  function mkResult(
+    place_name: string,
+    latitude: number,
+    longitude: number,
+  ): SearchBoxResult {
+    return {
+      address: place_name,
+      latitude,
+      longitude,
+      place_name,
+      full_address: place_name,
+      category: '',
+      source: 'google',
+      specificity: 0.95,
+      matchedCategory: null,
+    };
+  }
+
+  it('returns secondary intact when primary is empty', () => {
+    const primary: SearchBoxResult[] = [];
+    const secondary = [mkResult('Hotel X', 23.13, -82.36)];
+    expect(dedupeSearchResults(primary, secondary)).toEqual(secondary);
+  });
+
+  it('returns secondary intact when secondary is empty', () => {
+    const primary = [mkResult('Hotel X', 23.13, -82.36)];
+    const secondary: SearchBoxResult[] = [];
+    expect(dedupeSearchResults(primary, secondary)).toEqual([]);
+  });
+
+  it('drops secondary entry that matches primary by both coord (<100m) and name', () => {
+    const primary = [mkResult('Hotel Boutique Malecon 663', 23.140, -82.371)];
+    const secondary = [
+      mkResult('Hotel Boutique Malecon 663', 23.1401, -82.3711), // ~15m away, same name
+    ];
+    expect(dedupeSearchResults(primary, secondary)).toEqual([]);
+  });
+
+  it('KEEPS secondary entry that shares coord with primary but has unrelated name', () => {
+    // Regression: a cafe and a bank on the same street corner should
+    // not be deduped. Coord matches but names share zero tokens.
+    const primary = [mkResult('Banco Metropolitano', 23.140, -82.371)];
+    const secondary = [mkResult('Cafe Imperial', 23.1401, -82.3711)];
+    const survivors = dedupeSearchResults(primary, secondary);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]!.place_name).toBe('Cafe Imperial');
+  });
+
+  it('drops secondary entry with strong name match within 5km even if not coord-close', () => {
+    // Same hotel listed twice by different providers with coords ~200m
+    // apart due to geocoder jitter. Name overlap is 100% → dedupe.
+    const primary = [mkResult('Hotel Boutique Malecon 663', 23.140, -82.371)];
+    const secondary = [
+      mkResult('Hotel Boutique Malecon 663', 23.142, -82.369), // ~280m away, same name
+    ];
+    expect(dedupeSearchResults(primary, secondary)).toEqual([]);
+  });
+
+  it('KEEPS hotel with same name in a different city (>5km)', () => {
+    // "Hotel Inglaterra" exists in both Habana and Cienfuegos. They
+    // should both surface, not be merged.
+    const primary = [mkResult('Hotel Inglaterra', 23.137, -82.359)]; // Habana
+    const secondary = [
+      mkResult('Hotel Inglaterra', 22.146, -80.439), // Cienfuegos ~280km
+    ];
+    const survivors = dedupeSearchResults(primary, secondary);
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]!.latitude).toBeCloseTo(22.146, 2);
+  });
+
+  it('preserves original ordering of survivors', () => {
+    const primary = [mkResult('Hotel A', 23.10, -82.30)];
+    const secondary = [
+      mkResult('Restaurant X', 23.20, -82.40),
+      mkResult('Hotel A', 23.10, -82.30), // dropped
+      mkResult('Cafe Y', 23.30, -82.50),
+      mkResult('Bar Z', 23.40, -82.60),
+    ];
+    const survivors = dedupeSearchResults(primary, secondary);
+    expect(survivors.map((s) => s.place_name)).toEqual([
+      'Restaurant X', 'Cafe Y', 'Bar Z',
+    ]);
+  });
+
+  it('handles diacritics: "Malecón" matches "Malecon"', () => {
+    const primary = [mkResult('Hotel Boutique Malecón 663', 23.140, -82.371)];
+    const secondary = [
+      mkResult('Hotel Boutique Malecon 663', 23.1401, -82.3711),
+    ];
+    expect(dedupeSearchResults(primary, secondary)).toEqual([]);
+  });
+});
+
+// ============================================================
+// PR I (2026-05-25) — searchAddressGoogle frontend caller
+//
+// These tests validate the geo.ts wrapper around the EF. The EF
+// itself (Deno) is verified by manual smoke + EF logs.
+// ============================================================
+describe('searchAddressGoogle', () => {
+  function mkSupabase(invokeImpl: (name: string, opts: { body?: unknown }) => Promise<{ data: unknown; error: { message: string } | null }>) {
+    return {
+      functions: { invoke: invokeImpl },
+    };
+  }
+
+  it('returns [] when query is too short (avoids wasting EF call)', async () => {
+    const invokeSpy = vi.fn();
+    const supabase = mkSupabase(invokeSpy);
+    const out = await searchAddressGoogle('a', supabase);
+    expect(out).toEqual([]);
+    expect(invokeSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns [] when supabase client is null', async () => {
+    const out = await searchAddressGoogle('hotel boutique malecon 663', null);
+    expect(out).toEqual([]);
+  });
+
+  it('returns [] when EF responds with fallback hint (caller falls back to Mapbox)', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: { data: [], fallback: 'mapbox', reason: 'budget_cap' },
+      error: null,
+    }));
+    const out = await searchAddressGoogle('hotel x', supabase);
+    expect(out).toEqual([]);
+  });
+
+  it('returns [] on EF transport error', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: null,
+      error: { message: 'network' },
+    }));
+    const out = await searchAddressGoogle('hotel x', supabase);
+    expect(out).toEqual([]);
+  });
+
+  it('maps valid EF response to SearchBoxResult[] with source=google', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: {
+        data: [
+          {
+            address: 'Malecón 663, Habana',
+            latitude: 23.1408,
+            longitude: -82.3712,
+            place_name: 'Hotel Boutique Malecon 663',
+            matchedCategory: 'lodging',
+            specificity: 0.95,
+          },
+        ],
+      },
+      error: null,
+    }));
+    const out = await searchAddressGoogle('hotel boutique malecon 663', supabase);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe('google');
+    expect(out[0]!.place_name).toBe('Hotel Boutique Malecon 663');
+    expect(out[0]!.latitude).toBeCloseTo(23.1408, 4);
+  });
+
+  it('drops entries without numeric lat/lng (defensive: simulates Place Details fail upstream)', async () => {
+    // If the EF managed to return a payload but a row is missing
+    // coordinates (e.g. Place Details failed inside the EF and the
+    // EF's filter didn't catch it), the frontend filter must drop
+    // the bad row but keep the good one.
+    const supabase = mkSupabase(async () => ({
+      data: {
+        data: [
+          { place_name: 'Hotel A', address: 'X', latitude: 23.1, longitude: -82.3 },
+          { place_name: 'Hotel B', address: 'Y' /* no lat/lng */ },
+          { place_name: 'Hotel C', address: 'Z', latitude: 23.2, longitude: -82.4 },
+        ],
+      },
+      error: null,
+    }));
+    const out = await searchAddressGoogle('hotel', supabase);
+    expect(out.map((r) => r.place_name)).toEqual(['Hotel A', 'Hotel C']);
+  });
+
+  it('returns [] when caller signal is already aborted (no wasted call)', async () => {
+    const invokeSpy = vi.fn();
+    const supabase = mkSupabase(invokeSpy);
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const out = await searchAddressGoogle('hotel x', supabase, null, ctrl.signal);
+    expect(out).toEqual([]);
+    expect(invokeSpy).not.toHaveBeenCalled();
   });
 });
