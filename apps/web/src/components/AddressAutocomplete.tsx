@@ -139,8 +139,15 @@ function scoreResult(
     distScore = Math.max(0, 1 - dist / 20000);
   }
 
-  // Source priority (10% weight)
-  const sourceScore = result.source === 'searchbox' ? 1.0 : result.source === 'supabase' ? 0.9 : 0.5;
+  // Source priority — PR F (2026-05-25): the user explicitly chose
+  // "Google primero" after the on-device airport bug where a bad
+  // cuba_pois (Supabase) result outranked the correct Google result.
+  // We give external providers a hard tier above local cuba_pois so
+  // Google/Mapbox results dominate the dropdown ordering, while still
+  // letting text/spec/dist tie-break within each tier.
+  const sourceScore = result.source === 'searchbox' ? 1.0
+    : result.source === 'supabase' ? 0.4
+    : 0.3;
 
   return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
 }

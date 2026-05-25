@@ -19,6 +19,7 @@ import {
   searchAddressUnified,
   tricigoCategoryEmoji,
   importPoiFromSearch,
+  dedupeSearchResults,
   type GeoPoint,
   type SearchBoxResult,
 } from '@tricigo/utils';
@@ -74,11 +75,13 @@ interface SearchOutcome {
 async function searchUnified(query: string, near: GeoPoint | null): Promise<SearchOutcome> {
   if (query.trim().length < 2) return { results: [], attribution: null };
 
-  // search_pois_smart already detects category intent (e.g. "Bar" /
-  // "Hospital") and sinks generic OSM placeholders. When a category
-  // keyword is detected, suppress the streets fetch so searching "Bar"
-  // doesn't surface "Bartolomé*" streets — we only want bars.
-  const poiResults = await searchPoisSupabase(query, near, 6).catch(() => [] as SearchBoxResult[]);
+  // PR F (2026-05-25) — flipped search order: Google PRIMARY, cuba_pois
+  // SECONDARY. Same change as the client AddressSearchInput — see the
+  // comment there for the airport-bug rationale.
+  const [unified, poiResults] = await Promise.all([
+    searchAddressUnified(query, getSupabaseClient(), near).catch(() => [] as SearchBoxResult[]),
+    searchPoisSupabase(query, near, 6).catch(() => [] as SearchBoxResult[]),
+  ]);
   const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
   const streetResults: SearchBoxResult[] = detectedCategory
     ? []
@@ -98,26 +101,33 @@ async function searchUnified(query: string, near: GeoPoint | null): Promise<Sear
     };
   };
 
-  const highSpecPois = poiResults.filter(r => r.specificity >= 0.8).map(toResult);
-  const lowSpecPois  = poiResults.filter(r => r.specificity <  0.8).map(toResult);
+  // Dedupe cuba_pois rows against external results (coord ≤100 m OR
+  // name token overlap ≥0.7). Keep smart-RPC ordering within survivors.
+  const dedupedPois = dedupeSearchResults(unified, poiResults);
+  const highSpecPois = dedupedPois.filter(r => r.specificity >= 0.8).map(toResult);
+  const lowSpecPois  = dedupedPois.filter(r => r.specificity <  0.8).map(toResult);
   const streets      = streetResults.map(toResult);
 
-  const merged = [...highSpecPois, ...streets, ...lowSpecPois];
-  if (merged.length > 0) return { results: merged.slice(0, 8), attribution: null };
+  // PR 4b: attach _src so handleSelect can fire-and-forget the
+  // import-mapbox-poi EF on Google selections.
+  const externalNormalized = unified.map((r, idx) => ({ ...toResult(r, idx), _src: r }));
 
-  // PR 4 of POI parity — Supabase had nothing, try Google Places (best
-  // Cuban long-tail coverage) → Mapbox SearchBox → finally Nominatim.
-  const unified = await searchAddressUnified(query, getSupabaseClient(), near).catch(() => [] as SearchBoxResult[]);
-  if (unified.length > 0) {
+  // Final order: Google/Mapbox first → high-spec cuba_pois → streets →
+  // low-spec cuba_pois. Cap at 8 (existing UX bound).
+  const merged = [
+    ...externalNormalized,
+    ...highSpecPois,
+    ...streets,
+    ...lowSpecPois,
+  ];
+  if (merged.length > 0) {
     return {
-      // PR 4b: attach the original SearchBoxResult so handleSelect can
-      // fire-and-forget the import-mapbox-poi EF on Google selections.
-      results: unified.map((r, idx) => ({ ...toResult(r, idx), _src: r })),
+      results: merged.slice(0, 8),
       attribution: inferAttributionSource(unified),
     };
   }
 
-  // Final fallback: Nominatim via the existing searchAddress helper.
+  // Last-resort fallback: Nominatim via searchAddress (free, slower).
   const fallback = await searchAddress(query, 6, near).catch(() => []);
   return {
     results: fallback.map((r, idx) => ({

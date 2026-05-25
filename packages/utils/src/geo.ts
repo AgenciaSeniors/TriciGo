@@ -2726,6 +2726,103 @@ export async function importPoiFromSearch(
   }
 }
 
+// ============================================================
+// PR F (2026-05-25) — dedupeSearchResults
+//
+// When the search dropdown surfaces results from BOTH Google Places
+// (via searchAddressUnified) AND cuba_pois (searchPoisSupabase), we
+// need to drop the duplicates so the user doesn't see two rows for
+// the same place. Google goes first (the user explicitly chose this
+// ordering on 2026-05-25 after the airport bug); cuba_pois rows that
+// match a Google result are silently dropped.
+//
+// Match criteria (either is sufficient to call it a dupe):
+//   - coordinate distance <= COORD_DEDUP_RADIUS_M (≈ 100 m)
+//   - normalized name token overlap >= NAME_DEDUP_THRESHOLD (≈ 0.7)
+//
+// The function is intentionally generic — it takes a primary array
+// (the side that wins on conflict) and a secondary array (the side
+// that gets filtered). Returns the secondary array minus dupes,
+// in original order so the caller can concatenate [primary, ...kept].
+// ============================================================
+
+const COORD_DEDUP_RADIUS_M = 100;
+const NAME_DEDUP_THRESHOLD = 0.7;
+
+function normalizeForDedup(s: string | null | undefined): string[] {
+  if (!s) return [];
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((t) => t.length > 1);
+}
+
+function tokenOverlapRatio(a: string, b: string): number {
+  const ta = new Set(normalizeForDedup(a));
+  const tb = new Set(normalizeForDedup(b));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let hits = 0;
+  ta.forEach((t) => { if (tb.has(t)) hits++; });
+  return hits / Math.max(ta.size, tb.size);
+}
+
+/**
+ * Drop entries from `secondary` that duplicate any entry in `primary`.
+ * A "duplicate" matches either by coordinate proximity (<=100 m) OR
+ * by name token overlap (>=0.7). Returns the surviving secondary
+ * entries in their original order.
+ *
+ * Used by AddressSearchInput / AddressSearchBar / AddressAutocomplete
+ * to suppress cuba_pois rows that already appear in Google search
+ * results above them.
+ */
+export function dedupeSearchResults<T extends {
+  latitude: number;
+  longitude: number;
+  place_name?: string;
+  address?: string;
+}>(
+  primary: ReadonlyArray<T>,
+  secondary: ReadonlyArray<T>,
+): T[] {
+  if (primary.length === 0 || secondary.length === 0) return [...secondary];
+
+  return secondary.filter((sec) => {
+    for (const pri of primary) {
+      // Coord-distance check
+      const meters = haversineDistance(
+        { latitude: sec.latitude, longitude: sec.longitude },
+        { latitude: pri.latitude, longitude: pri.longitude },
+      );
+      if (meters <= COORD_DEDUP_RADIUS_M) {
+        // Coordinates match — also do a quick name sanity check so we
+        // don't dedupe a cafe and a bank that happen to be on the same
+        // street corner. If names are completely unrelated keep both.
+        const nameA = sec.place_name ?? sec.address ?? '';
+        const nameB = pri.place_name ?? pri.address ?? '';
+        if (tokenOverlapRatio(nameA, nameB) >= 0.3) return false;
+      }
+      // Pure name match (works when one source lacks precise coords)
+      const nameA = sec.place_name ?? sec.address ?? '';
+      const nameB = pri.place_name ?? pri.address ?? '';
+      if (tokenOverlapRatio(nameA, nameB) >= NAME_DEDUP_THRESHOLD) {
+        // Names strongly match — also require proximity (< 5 km) to
+        // avoid deduping "Bar El Rincón" in Habana vs Santiago.
+        const meters = haversineDistance(
+          { latitude: sec.latitude, longitude: sec.longitude },
+          { latitude: pri.latitude, longitude: pri.longitude },
+        );
+        if (meters <= 5000) return false;
+      }
+    }
+    return true;
+  });
+}
+
 /** OSM tag mappings for POI category searches */
 const OVERPASS_POI_TAGS: Record<string, string> = {
   hotel: '["tourism"="hotel"]',
