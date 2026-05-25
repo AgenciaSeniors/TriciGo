@@ -724,6 +724,86 @@ def upsert_to_supabase(records: list[Record], dry_run: bool) -> dict[str, int]:
 
 
 # ──────────────────────────────────────────────────────────────
+# Quality gates — PR E of 2026-05-25
+# ──────────────────────────────────────────────────────────────
+
+# Sources whose records are trusted unconditionally and bypass the
+# confidence + coord-cluster filters. Admin is curated by hand,
+# Wikidata is editorially gated, crowdsource is moderated.
+QUALITY_GATE_TRUSTED_SOURCES = {"admin", "wikidata", "crowdsource"}
+
+# Minimum confidence to enter cuba_pois. Below this, we'd be carrying
+# OSM stock data (default 0.5) and low-quality Overture/Foursquare
+# rows — the user has set "quality > quantity" as the bar.
+QUALITY_GATE_MIN_CONFIDENCE = 0.6
+
+# Coord-cluster threshold: when 5+ records sit at the same lat/lng
+# rounded to 4 decimals (~11 m), it's almost always a centroid
+# fallback from the source provider (e.g. Overture geocodes to the
+# municipality centre when the actual address can't be resolved).
+# Drop them — they cause search results that route users to a random
+# spot in town instead of the actual venue.
+QUALITY_GATE_COORD_CLUSTER_THRESHOLD = 5
+
+
+def _enforce_quality_gates(records: list) -> list:
+    """
+    Filter records before upsert. Two gates:
+      1. confidence ≥ 0.6 (skipped for trusted sources)
+      2. coord-cluster guard: drop records whose lat/lng rounded to
+         4 decimals match a cluster of >= 5 other records in this
+         same batch (skipped for trusted sources).
+
+    Both run side-by-side — a single record only needs to fail one
+    gate to be dropped. Logs aggregated counts so the GH Actions
+    summary makes the impact visible.
+    """
+    if not records:
+        return records
+
+    # Stage 1: confidence filter
+    low_conf_dropped = 0
+    after_conf: list = []
+    for r in records:
+        if r.source in QUALITY_GATE_TRUSTED_SOURCES:
+            after_conf.append(r)
+            continue
+        if r.confidence is None or r.confidence < QUALITY_GATE_MIN_CONFIDENCE:
+            low_conf_dropped += 1
+            continue
+        after_conf.append(r)
+
+    # Stage 2: coord-cluster guard. Build a histogram of (lat4, lng4)
+    # over the post-confidence set, then drop any non-trusted record
+    # whose bucket exceeds the threshold.
+    from collections import Counter
+    bucket_counts = Counter(
+        (round(r.lat, 4), round(r.lng, 4))
+        for r in after_conf
+        if r.source not in QUALITY_GATE_TRUSTED_SOURCES
+    )
+    cluster_dropped = 0
+    after_cluster: list = []
+    for r in after_conf:
+        if r.source in QUALITY_GATE_TRUSTED_SOURCES:
+            after_cluster.append(r)
+            continue
+        bucket = (round(r.lat, 4), round(r.lng, 4))
+        if bucket_counts.get(bucket, 0) >= QUALITY_GATE_COORD_CLUSTER_THRESHOLD:
+            cluster_dropped += 1
+            continue
+        after_cluster.append(r)
+
+    print(
+        f"[quality_gate] confidence<{QUALITY_GATE_MIN_CONFIDENCE}: dropped {low_conf_dropped} | "
+        f"coord-cluster (>={QUALITY_GATE_COORD_CLUSTER_THRESHOLD} at same 4-dec coord): "
+        f"dropped {cluster_dropped} | kept {len(after_cluster)}",
+        flush=True,
+    )
+    return after_cluster
+
+
+# ──────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────
 
@@ -761,6 +841,13 @@ def main() -> int:
 
     print(f"[main] {len(all_records)} total records before dedup", flush=True)
     merged = dedup_records(all_records)
+
+    # PR E (2026-05-25) — quality gates: drop low-confidence and
+    # coord-clustered records BEFORE upsert so they never enter the
+    # DB. The historical cleanup of pre-existing rows happens in
+    # migration 00311 (deactivate). Going forward this is the new
+    # standard for what gets persisted.
+    merged = _enforce_quality_gates(merged)
 
     stats = upsert_to_supabase(merged, dry_run=dry_run)
     print(f"[main] done: {stats}", flush=True)
