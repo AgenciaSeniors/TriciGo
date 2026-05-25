@@ -1536,6 +1536,19 @@ function RideMapViewInner(
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
                   iconRotate: ['get', 'heading'],
+                  // BUG-marker-bearing-doubling (2026-05-24): without these,
+                  // the icon rotates in VIEWPORT space (Mapbox default for
+                  // SymbolLayer). When the camera bearing also follows the
+                  // driver heading (Uber 3D mode below), both rotations
+                  // compound visually → the nose ends up offset by ~heading°
+                  // from the actual direction of travel. Anchoring to 'map'
+                  // makes iconRotate represent the compass bearing so the
+                  // visual rotation cancels camera rotation correctly.
+                  // The nearby vehicles SymbolLayer below already does this.
+                  iconRotationAlignment: 'map',
+                  // Pitch-align to map so the icon lays flat on the road
+                  // surface in 3D pitch=45 mode (Waze / Google Maps style).
+                  iconPitchAlignment: 'map',
                 }}
               />
             </MapboxGL.ShapeSource>
@@ -1610,15 +1623,13 @@ function RideMapViewInner(
                 style={{
                   iconImage: ['get', 'icon'],
                   iconSize: 0.45,
-                  // Cargo box marker (mensajería) stays at 0deg — no inherent front.
-                  // BUG-295: triciclo asset drawn pointing south — add 180°
-                  // to align the nose with direction of travel. Mensajería
-                  // doesn't rotate (cargo box has no inherent front). All
-                  // other markers use the raw heading.
+                  // Cargo box marker (mensajería) stays at 0° — no inherent
+                  // front. Everything else uses the raw heading. The triciclo
+                  // PNG is NORTH-convention since BUG-295 (PR #186), so it
+                  // doesn't need a per-vehicle compensation here.
                   iconRotate: [
                     'case',
                     ['==', ['get', 'icon'], 'marker-mensajeria'], 0,
-                    ['==', ['get', 'icon'], 'marker-triciclo'], ['%', ['+', ['get', 'heading'], 180], 360],
                     ['get', 'heading'],
                   ],
                   iconAllowOverlap: true,

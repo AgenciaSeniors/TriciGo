@@ -1115,6 +1115,17 @@ function RideMapViewInner({
                   iconAnchor: 'center',
                   iconRotate: ['get', 'heading'],
                   iconOpacity: driverMarkerOpacity,
+                  // BUG-marker-bearing-doubling (2026-05-24): without these,
+                  // iconRotate is interpreted in VIEWPORT space (Mapbox
+                  // default). When the camera bearing follows the driver
+                  // heading (Uber 3D mode, cameraProfile above), both
+                  // rotations compound → the marker visually ends up offset
+                  // by ~heading° from the actual direction of travel. Anchor
+                  // to 'map' so iconRotate represents the compass bearing.
+                  iconRotationAlignment: 'map',
+                  // Pitch-align to map so the icon lays flat on the road
+                  // surface in 3D pitch=45 mode (Waze / Google Maps style).
+                  iconPitchAlignment: 'map',
                 }}
               />
             </MapboxGL.ShapeSource>
@@ -1134,16 +1145,23 @@ function RideMapViewInner({
                   iconSize: 0.55,
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
-                  // Cargo box marker (mensajería) has no front — keep rotation 0.
-                  // BUG-295: triciclo asset drawn pointing south — add 180° to
-                  // align the nose with direction of travel. All other markers
-                  // (auto, moto, confort) rotate by their raw heading.
+                  // Cargo box marker (mensajería) has no front — keep
+                  // rotation 0. Everything else uses the raw heading.
+                  // BUG-marker-bearing-doubling (2026-05-24): removed the
+                  // legacy "triciclo + 180" compensation — the PNG is
+                  // NORTH-convention since BUG-295 (PR #186), so the offset
+                  // was leaving every nearby triciclo facing backwards.
                   iconRotate: [
                     'case',
                     ['==', ['get', 'icon'], 'marker-mensajeria'], 0,
-                    ['==', ['get', 'icon'], 'marker-triciclo'], ['%', ['+', ['get', 'heading'], 180], 360],
                     ['get', 'heading'],
                   ],
+                  // BUG-marker-bearing-doubling (2026-05-24): match the
+                  // focused-driver SymbolLayer above — anchor rotation to
+                  // map space so icons stay aligned with the street when
+                  // the camera bearing rotates with the driver heading.
+                  iconRotationAlignment: 'map',
+                  iconPitchAlignment: 'map',
                 }}
               />
             </MapboxGL.ShapeSource>
