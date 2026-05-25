@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -14,6 +14,11 @@ interface AddressResult {
   longitude: number;
   place_name: string;
   category?: string;
+  /** PR J (2026-05-25): tricigo-vocabulary category (hotel, restaurant,
+   *  gas_station, etc.) populated by the providers via
+   *  mapExternalCategoryToTricigo (Google/Mapbox) or directly by
+   *  search_pois_smart (cuba_pois). Drives the per-row emoji icon. */
+  tricigoCategory?: string | null;
   source?: 'searchbox' | 'nominatim' | 'supabase' | 'google' | 'mapbox';
   specificity?: number;
   /** PR 4b: original SearchBoxResult for background importPoiFromSearch.
@@ -83,14 +88,25 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 function getResultIcon(result: AddressResult): string {
-  // First try category from API (most accurate)
+  // PR J (2026-05-25): primary path uses tricigoCategoryEmoji on the
+  // tricigo-vocab category (populated by providers via
+  // mapExternalCategoryToTricigo). This is the single source of truth
+  // shared with the native client + driver apps, so icons stay
+  // consistent across all three surfaces.
+  if (result.tricigoCategory) {
+    const emoji = tricigoCategoryEmoji(result.tricigoCategory);
+    if (emoji !== '📍') return emoji;
+  }
+  // Legacy fallback #1: raw category string (handles providers that
+  // pre-date PR J or pass a string that didn't survive the mapper).
   if (result.category) {
     const cat = result.category.toLowerCase();
     for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
       if (cat.includes(key)) return icon;
     }
   }
-  // Fallback to name-based matching
+  // Legacy fallback #2: keyword scan over name + address (catches
+  // hotels-by-name like "Hostal X" where the upstream type was missing).
   const name = (result.place_name + ' ' + result.address).toLowerCase();
   if (name.includes('hotel') || name.includes('hostal') || name.includes('casa particular')) return '🏨';
   if (name.includes('hospital') || name.includes('clínica') || name.includes('policlínico')) return '🏥';
@@ -288,6 +304,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         longitude: r.longitude,
         place_name: r.place_name,
         category: r.category,
+        tricigoCategory: r.tricigoCategory ?? null,
         source: r.source === 'google' ? 'google'
           : r.source === 'mapbox' ? 'mapbox'
           : (r.source === 'overpass' ? 'nominatim' : r.source) as AddressResult['source'],
@@ -309,6 +326,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           longitude: r.longitude,
           place_name: r.place_name,
           category: r.category,
+          tricigoCategory: r.tricigoCategory ?? null,
           source: 'mapbox' as AddressResult['source'],
           specificity: r.specificity,
         }));
@@ -386,6 +404,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             longitude: r.longitude,
             place_name: r.place_name,
             category: r.category,
+            tricigoCategory: r.tricigoCategory ?? null,
             source: 'supabase' as const,
             specificity: r.specificity,
           }))

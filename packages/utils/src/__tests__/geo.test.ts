@@ -14,7 +14,10 @@ import {
   importPoiFromSearch,
   dedupeSearchResults,
   searchAddressGoogle,
+  mapExternalCategoryToTricigo,
+  tricigoCategoryEmoji,
   type SearchBoxResult,
+  type TricigoCategory,
 } from '../geo';
 
 describe('haversineDistance', () => {
@@ -757,5 +760,142 @@ describe('searchAddressGoogle', () => {
     const out = await searchAddressGoogle('hotel x', supabase, null, ctrl.signal);
     expect(out).toEqual([]);
     expect(invokeSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// PR J (2026-05-25) — mapExternalCategoryToTricigo
+//
+// Coverage: Google + Mapbox vocab → tricigo, case-insensitive, array
+// input, edge cases (empty/null/unknown). Default → null is critical
+// so the caller falls back to 📍 instead of a wrong emoji.
+// ============================================================
+describe('mapExternalCategoryToTricigo', () => {
+  describe('Google Places (New) → tricigo', () => {
+    it('maps lodging to hotel', () => {
+      expect(mapExternalCategoryToTricigo('google', 'lodging')).toBe('hotel');
+    });
+
+    it('maps food/restaurant/meal_takeaway to restaurant', () => {
+      expect(mapExternalCategoryToTricigo('google', 'restaurant')).toBe('restaurant');
+      expect(mapExternalCategoryToTricigo('google', 'food')).toBe('restaurant');
+      expect(mapExternalCategoryToTricigo('google', 'meal_takeaway')).toBe('restaurant');
+    });
+
+    it('maps store variants to shop', () => {
+      expect(mapExternalCategoryToTricigo('google', 'store')).toBe('shop');
+      expect(mapExternalCategoryToTricigo('google', 'clothing_store')).toBe('shop');
+      expect(mapExternalCategoryToTricigo('google', 'electronics_store')).toBe('shop');
+    });
+
+    it('maps grocery_or_supermarket to supermarket', () => {
+      expect(mapExternalCategoryToTricigo('google', 'grocery_or_supermarket')).toBe('supermarket');
+      expect(mapExternalCategoryToTricigo('google', 'supermarket')).toBe('supermarket');
+    });
+
+    it('maps transit station variants to transport', () => {
+      expect(mapExternalCategoryToTricigo('google', 'bus_station')).toBe('transport');
+      expect(mapExternalCategoryToTricigo('google', 'train_station')).toBe('transport');
+      expect(mapExternalCategoryToTricigo('google', 'airport')).toBe('transport');
+      expect(mapExternalCategoryToTricigo('google', 'subway_station')).toBe('transport');
+    });
+
+    it('maps places of worship to religion', () => {
+      expect(mapExternalCategoryToTricigo('google', 'church')).toBe('religion');
+      expect(mapExternalCategoryToTricigo('google', 'mosque')).toBe('religion');
+      expect(mapExternalCategoryToTricigo('google', 'place_of_worship')).toBe('religion');
+    });
+
+    it('maps gov-related variants to gov', () => {
+      expect(mapExternalCategoryToTricigo('google', 'local_government_office')).toBe('gov');
+      expect(mapExternalCategoryToTricigo('google', 'city_hall')).toBe('gov');
+      expect(mapExternalCategoryToTricigo('google', 'courthouse')).toBe('gov');
+      expect(mapExternalCategoryToTricigo('google', 'post_office')).toBe('gov');
+    });
+
+    it('returns null for unknown Google types (tourist_attraction, point_of_interest, establishment)', () => {
+      expect(mapExternalCategoryToTricigo('google', 'tourist_attraction')).toBeNull();
+      expect(mapExternalCategoryToTricigo('google', 'point_of_interest')).toBeNull();
+      expect(mapExternalCategoryToTricigo('google', 'establishment')).toBeNull();
+    });
+  });
+
+  describe('Mapbox SearchBox poi_category → tricigo', () => {
+    it('maps fuel/gas to gas_station', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', 'fuel')).toBe('gas_station');
+      expect(mapExternalCategoryToTricigo('mapbox', 'gas')).toBe('gas_station');
+    });
+
+    it('maps hostel/motel/lodging/hotel to hotel', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', 'hostel')).toBe('hotel');
+      expect(mapExternalCategoryToTricigo('mapbox', 'motel')).toBe('hotel');
+      expect(mapExternalCategoryToTricigo('mapbox', 'lodging')).toBe('hotel');
+      expect(mapExternalCategoryToTricigo('mapbox', 'hotel')).toBe('hotel');
+    });
+
+    it('maps grocery to supermarket', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', 'grocery')).toBe('supermarket');
+    });
+
+    it('maps religious_institution to religion', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', 'religious_institution')).toBe('religion');
+    });
+
+    it('returns null for unknown Mapbox categories', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', 'address')).toBeNull();
+      expect(mapExternalCategoryToTricigo('mapbox', 'place')).toBeNull();
+    });
+  });
+
+  describe('overture treated as mapbox-equivalent', () => {
+    it('uses the mapbox table for overture source', () => {
+      expect(mapExternalCategoryToTricigo('overture', 'fuel')).toBe('gas_station');
+      expect(mapExternalCategoryToTricigo('overture', 'grocery')).toBe('supermarket');
+    });
+  });
+
+  describe('input handling', () => {
+    it('is case-insensitive', () => {
+      expect(mapExternalCategoryToTricigo('google', 'LODGING')).toBe('hotel');
+      expect(mapExternalCategoryToTricigo('google', 'Restaurant')).toBe('restaurant');
+      expect(mapExternalCategoryToTricigo('mapbox', 'FUEL')).toBe('gas_station');
+    });
+
+    it('trims whitespace', () => {
+      expect(mapExternalCategoryToTricigo('google', '  lodging  ')).toBe('hotel');
+    });
+
+    it('handles array input (Mapbox sometimes returns string[])', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', ['fuel', 'gas_station'])).toBe('gas_station');
+      expect(mapExternalCategoryToTricigo('google', ['lodging', 'point_of_interest'])).toBe('hotel');
+    });
+
+    it('returns null for null / undefined / empty string', () => {
+      expect(mapExternalCategoryToTricigo('google', null)).toBeNull();
+      expect(mapExternalCategoryToTricigo('google', undefined)).toBeNull();
+      expect(mapExternalCategoryToTricigo('google', '')).toBeNull();
+      expect(mapExternalCategoryToTricigo('google', '   ')).toBeNull();
+    });
+
+    it('returns null for empty array', () => {
+      expect(mapExternalCategoryToTricigo('mapbox', [])).toBeNull();
+    });
+  });
+
+  describe('end-to-end with tricigoCategoryEmoji', () => {
+    it('Google "lodging" → 🏨 via the full pipeline', () => {
+      const tc = mapExternalCategoryToTricigo('google', 'lodging');
+      expect(tricigoCategoryEmoji(tc)).toBe('🏨');
+    });
+
+    it('Mapbox "fuel" → ⛽ via the full pipeline', () => {
+      const tc = mapExternalCategoryToTricigo('mapbox', 'fuel');
+      expect(tricigoCategoryEmoji(tc)).toBe('⛽');
+    });
+
+    it('unknown Google type → 📍 default via the full pipeline', () => {
+      const tc = mapExternalCategoryToTricigo('google', 'tourist_attraction');
+      expect(tricigoCategoryEmoji(tc)).toBe('📍');
+    });
   });
 });
