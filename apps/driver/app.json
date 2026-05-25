@@ -74,6 +74,7 @@
         }
       ],
       "./plugins/with-privacy-manifest",
+      "./plugins/with-user-leave-hint-safe",
       "expo-router",
       "expo-localization",
       [

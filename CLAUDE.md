@@ -970,6 +970,62 @@ AskUserQuestion({
 
 ---
 
+### Fix RN 0.83.x bug: `ReactActivityDelegate.onUserLeaveHint` NPE crash
+
+**Bug verificado 2026-05-25 en `app.tricigo.client`** (PIDs 25688, 26797 — reproducido 2+ veces consecutivas). Stack trace canónico:
+
+```
+FATAL EXCEPTION: main
+Process: app.tricigo.client
+java.lang.NullPointerException
+  at java.util.Objects.requireNonNull(Objects.java:235)
+  at com.facebook.react.ReactActivityDelegate.onUserLeaveHint(ReactActivityDelegate.java:192)
+  at com.facebook.react.ReactActivity.onUserLeaveHint(ReactActivity.java:139)
+  at android.app.Activity.performUserLeaving(Activity.java:9543)
+  at android.app.Instrumentation.callActivityOnUserLeaving(Instrumentation.java:1803)
+  at android.app.ActivityThread.performUserLeavingActivity(ActivityThread.java:6121)
+  at android.app.ActivityThread.handlePauseActivity(ActivityThread.java:6102)
+```
+
+**Causa raíz:** Android dispara `onUserLeaveHint()` cuando el user sale de la activity (home button, fast app switch, universal-link redirect post-pago). `ReactActivityDelegate` línea 192 hace `Objects.requireNonNull(mDelegate)`. Si Android llama `onUserLeaveHint()` ANTES de que `onCreate()` complete (race condition durante cold-start interrumpido), `mDelegate` es null → NPE → app crash.
+
+**Reproducción más común en TriciGo:** universal links post-pago NETOPIA que redirigen al app cuando recién está booteando.
+
+**Fix canónico** (PR #220, 2026-05-25): custom Expo config plugin `with-user-leave-hint-safe.js` que durante `expo prebuild` inserta un override en `MainActivity.kt`:
+
+```kotlin
+override fun onUserLeaveHint() {
+  try {
+    super.onUserLeaveHint()
+  } catch (e: NullPointerException) {
+    android.util.Log.w("TriciGo", "onUserLeaveHint NPE swallowed (RN 0.83.x delegate race)", e)
+  }
+}
+```
+
+**Por qué es seguro ignorar el NPE:**
+1. La activity está siendo backgrounded — JS bridge no tiene UI work pendiente que pueda quedar incompleto.
+2. Android Activity lifecycle sigue normal, solo el callback dispatch al JS se omite.
+3. Próxima vez que la activity vuelva a foreground, `onResume()` reinicializa el delegate correctamente.
+
+**Aplicado a cliente + driver** (`apps/<app>/plugins/with-user-leave-hint-safe.js` duplicado per-app porque Expo config plugins son per-app, no compartibles via packages monorepo).
+
+**Patrón general "fix nativo via custom Expo plugin":**
+- Cuando el bug es en RN/Expo core nativo y no se puede arreglar via JS, custom plugin que parchea `MainActivity.kt` o `AppDelegate.swift` durante `prebuild`.
+- Idempotencia via sentinel string en el code injection (evita doble-inject).
+- Anchor primary + fallback (insertar al final del class). El anchor primary suele ser un método estable como `getMainComponentName()`.
+- Documentar en plugin comment: stack trace exacto + causa raíz + por qué es seguro el fix.
+- **Verificación requiere rebuild APK** (15-20 min EAS Build). El dev client existente NO tiene el fix hasta que se compile un APK nuevo.
+
+**Reproducir el bug si vuelve:**
+1. Driver/cliente app en cold-start (apenas lanzada, 0-2s post launch).
+2. Recibir un universal link o cambiar de app antes de que `onCreate()` complete.
+3. Logcat capture `E/AndroidRuntime: FATAL EXCEPTION: main` → `java.lang.NullPointerException at ReactActivityDelegate.onUserLeaveHint:192`.
+
+**Si el bug reaparece post-fix:** el plugin no aplicó. Verificar con `eas build --profile development --platform android` que el APK tiene el override (grep `TriciGo:user-leave-hint-safe` en logcat al lanzar).
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
