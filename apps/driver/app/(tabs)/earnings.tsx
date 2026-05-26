@@ -1,15 +1,14 @@
 /**
- * Earnings dashboard — orchestrator (PR-A extraction landed).
+ * Earnings dashboard — orchestrator.
  *
- * The previous monolith (1118 LOC, including a 209-LOC inline
- * EarningsGoalCard component, a 38-LOC zombie EarningsChart that was
- * no longer used, an 85-LOC fetchData callback in line, and a
- * 522-LOC return JSX with 9 stacked sections) was split into focused
- * subcomponents under `apps/driver/src/components/earnings/` plus a
- * single data-fetching hook under `apps/driver/src/hooks/`.
+ * Cuban Modern wrapper + hero card + stagger entrance (PR post-#232).
+ * Subcomponents internos (charts, heatmaps, quests, performance, activity)
+ * SIGUEN usando midnightEmber tokens — se ven consistentes dentro de su
+ * propia card sobre el paper Cuban. NO se refactoriza el midnightEmber
+ * en este PR (decisión user: "Wrapper + Hero + Stagger" scope).
  *
- *   Subcomponents (see `apps/driver/src/components/earnings/*`):
- *     - EarningsHeader            — title + balance + Wallet CTA
+ *   Subcomponents (intactos, midnightEmber):
+ *     - EarningsHeader (sin uso ahora — reemplazado por hero card Cuban)
  *     - PeriodTabs                — Hoy / Semana / Mes pill row
  *     - EarningsGoalCard          — daily goal + milestone toasts
  *     - EarningsStatsCards        — 6 stat cards (3 × 2)
@@ -17,30 +16,30 @@
  *     - QuestsSection             — quest progress list
  *     - RecentActivitySection     — collapsible txn list
  *
- *   Hook:
- *     - useEarningsData — every fetch (critical / deferred / trend /
- *                          tx pagination) + the `Period` type and
- *                          `getDateRange` helper used by zone chart.
+ *   Charts/Heatmaps (intactos, midnightEmber):
+ *     - EarningsBarChart, HourlyHeatmap, PersonalPeakHours, EarningsByZoneChart
  *
- * Removed in this PR:
- *
- *   - `EarningsChart` legacy bar chart (lines 92-129 of the old file).
- *     It was never imported in the JSX after `<EarningsBarChart>`
- *     replaced it long ago — pure dead code.
- *
- * PR-A is a pure refactor: zero visual changes, zero behaviour
- * changes. Migration to `midnightEmber` tokens lands in PR-B;
- * storytelling hero + microcopy unification in PR-C.
+ *   Hook (intacto):
+ *     - useEarningsData — fetch (critical / deferred / trend / tx pagination)
  */
-import React, { useMemo, useState } from 'react';
-import { View, ScrollView, RefreshControl } from 'react-native';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import {
+  View,
+  ScrollView,
+  RefreshControl,
+  Animated,
+  Easing,
+  StyleSheet,
+  useColorScheme,
+} from 'react-native';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
-import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { cubanLight, cubanDark, colors, midnightEmber } from '@tricigo/theme';
+import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -53,7 +52,6 @@ import { EarningsByZoneChart } from '@/components/EarningsByZoneChart';
 import { useDriverEarningsByZone } from '@/hooks/useDriverEarningsByZone';
 import { useEarningsData, getDateRange, type Period } from '@/hooks/useEarningsData';
 import { tripNetEarnings } from '@/utils/tripNetEarnings';
-import { EarningsHeader } from '@/components/earnings/EarningsHeader';
 import { PeriodTabs } from '@/components/earnings/PeriodTabs';
 import { EarningsGoalCard } from '@/components/earnings/EarningsGoalCard';
 import { EarningsStatsCards } from '@/components/earnings/EarningsStatsCards';
@@ -61,16 +59,12 @@ import { PerformanceMetricsSection } from '@/components/earnings/PerformanceMetr
 import { QuestsSection } from '@/components/earnings/QuestsSection';
 import { RecentActivitySection } from '@/components/earnings/RecentActivitySection';
 
+// Tabular-nums style for number alignment
+const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+
 /**
- * Aggregate completed trips by their day-of-week label so the
- * `EarningsBarChart` can render one bar per day. Kept here because the
- * orchestrator is the only consumer.
- *
- * BUG-fare-audit B5: each bar now reports NET earnings (fare − commission
- * + tip) via `tripNetEarnings`, matching the today/prev totals from
- * useEarningsData and the receipt PDF — previously each bar showed gross
- * `final_fare_cup`, which made the chart sum higher than the headline
- * "Hoy" stat just above it.
+ * Aggregate completed trips by day for the bar chart. NET earnings per
+ * day (fare − commission + tip) matches the headline totals.
  */
 function groupTripsByDay(
   trips: Ride[],
@@ -95,10 +89,23 @@ function NativeEarningsScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   const driverProfileId = useDriverStore((s) => s.profile?.id);
 
+  // Cuban Modern palette — warm cream / navy profundo
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
+
+  const HERO_SHADOW = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.28 : 0.16,
+    shadowRadius: 24,
+    elevation: 12,
+  };
+
   const [period, setPeriod] = useState<Period>('day');
   const [txExpanded, setTxExpanded] = useState(false);
 
-  // N2 — personal peak hours (DOW × hour earnings heatmap, last 30d)
+  // N2 — personal peak hours
   const { data: peakHours, loading: peakHoursLoading } = useDriverPeakHours({
     driverId: driverProfileId,
     days: 30,
@@ -108,9 +115,6 @@ function NativeEarningsScreen() {
   const {
     loading,
     refreshing,
-    // Sub-PR E: `balance` no se desestructura más porque EarningsHeader ya
-    // no muestra BalanceBadge (consolidado al tab Wallet). El hook sigue
-    // exponiendo el field para callers futuros pero acá ya no se usa.
     periodTrips,
     commissionRate,
     avgRating,
@@ -141,10 +145,6 @@ function NativeEarningsScreen() {
     for (const trip of periodTrips) {
       const fare = trip.final_fare_cup ?? trip.estimated_fare_cup;
       totalEarnings += fare;
-      // Prefer the server-recorded commission (final snapshot) so
-      // rate changes don't retroactively alter historical earnings.
-      // Fall back to the live rate only when no snapshot is attached
-      // (legacy rides completed before the snapshot pipeline landed).
       const serverCommission = (trip as Ride & { commission_amount?: number | null }).commission_amount;
       totalCommission += serverCommission != null
         ? serverCommission
@@ -155,8 +155,6 @@ function NativeEarningsScreen() {
 
     const avgPerTrip = completedCount > 0 ? Math.round(totalEarnings / completedCount) : 0;
     const netEarnings = totalEarnings - totalCommission;
-
-    // Time-adjusted metrics — 0 when duration is missing to avoid Infinity.
     const totalHours = totalDurationSec / 3600;
     const ridesPerHour = totalHours > 0 ? completedCount / totalHours : 0;
     const earningsPerHour = totalHours > 0 ? Math.round(netEarnings / totalHours) : 0;
@@ -173,7 +171,6 @@ function NativeEarningsScreen() {
     };
   }, [periodTrips, commissionRate]);
 
-  // Earnings by zone (top 5) — RPC get_driver_earnings_by_zone (migration 00128)
   const periodRange = useMemo(() => getDateRange(period), [period]);
   const { data: earningsByZone, loading: earningsByZoneLoading } = useDriverEarningsByZone({
     driverId: driverProfileId ?? null,
@@ -182,7 +179,6 @@ function NativeEarningsScreen() {
     enabled: !!driverProfileId,
   });
 
-  // Convert dailyData to BarChartDataPoint[]
   const chartData: BarChartDataPoint[] = useMemo(() => {
     const dailyData = groupTripsByDay(periodTrips, commissionRate);
     const today = new Date().toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit' });
@@ -195,116 +191,247 @@ function NativeEarningsScreen() {
       }));
   }, [periodTrips, commissionRate]);
 
-  // Trend percentage
   const trendPct = useMemo(() => {
     if (prevPeriodEarnings == null || prevPeriodEarnings === 0) return null;
     return Math.round(((periodStats.totalEarnings - prevPeriodEarnings) / prevPeriodEarnings) * 100);
   }, [periodStats.totalEarnings, prevPeriodEarnings]);
 
-  // Check if there is no earnings data at all
   const hasNoEarningsData =
     !loading && periodStats.totalEarnings === 0 && periodStats.completedCount === 0;
 
+  // ── Stagger entrance — 5 sections ──────────────────────────────────
+  const fadeAnim = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+  useEffect(() => {
+    if (!loading) {
+      Animated.stagger(
+        80,
+        fadeAnim.map((a) =>
+          Animated.timing(a, {
+            toValue: 1,
+            duration: 380,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+        ),
+      ).start();
+    }
+  }, [loading, fadeAnim]);
+
+  const sectionTranslateY = (idx: number) =>
+    fadeAnim[idx]!.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
+
+  const sectionStyle = (idx: number) => ({
+    opacity: fadeAnim[idx]!,
+    transform: [{ translateY: sectionTranslateY(idx) }],
+  });
+
+  // ── Hero copy by period ────────────────────────────────────────────
+  const heroLabel =
+    period === 'day'
+      ? t('earnings.hero_today', { defaultValue: 'Ganaste hoy' })
+      : period === 'week'
+        ? t('earnings.hero_week', { defaultValue: 'Ganaste esta semana' })
+        : t('earnings.hero_month', { defaultValue: 'Ganaste este mes' });
+
+  const tripsCountLabel =
+    periodStats.completedCount === 1
+      ? t('earnings.hero_one_trip', { defaultValue: '1 viaje' })
+      : t('earnings.hero_n_trips', {
+          defaultValue: '{{count}} viajes',
+          count: periodStats.completedCount,
+        });
+
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content">
-      <ScrollView
-        className="flex-1 px-5"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refetch}
-            tintColor={midnightEmber.accent[500]}
-            accessibilityLabel={t('earnings.refresh', { defaultValue: 'Actualizar ganancias' })}
-          />
-        }
-      >
-        <View className="pt-4 pb-8">
-          {/* Sub-PR E: EarningsHeader simplified — no balance prop, no Ver Wallet button. */}
-          <EarningsHeader />
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refetch}
+              tintColor={colors.brand.orange}
+              accessibilityLabel={t('earnings.refresh', { defaultValue: 'Actualizar ganancias' })}
+            />
+          }
+        >
+          {/* ── Hero Earnings Card ─────────────────────────────────── */}
+          <Animated.View style={[sectionStyle(0), { borderRadius: 24, overflow: 'hidden', marginBottom: 18, ...HERO_SHADOW }]}>
+            {/* Layer 1: base gradient */}
+            <LinearGradient
+              colors={isDark ? ['#11172A', '#18203A'] : ['#FFFFFF', '#FFFBF5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            {/* Layer 2: orange glow corner */}
+            <LinearGradient
+              colors={[palette.accent.orangeGlow, 'transparent']}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0.3, y: 0.7 }}
+              style={{ position: 'absolute', top: 0, right: 0, width: 180, height: 180 }}
+              pointerEvents="none"
+            />
+            {/* Layer 3: content */}
+            <View style={{ padding: 24 }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  letterSpacing: 1.6,
+                  color: palette.ink.secondary,
+                  textTransform: 'uppercase',
+                  marginBottom: 10,
+                }}
+              >
+                {heroLabel}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'Inter_800ExtraBold',
+                  fontSize: 42,
+                  letterSpacing: -1.2,
+                  lineHeight: 48,
+                  color: palette.ink.primary,
+                  ...TABULAR,
+                }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {loading ? '—' : formatCUP(periodStats.netEarnings)}
+              </Text>
+              {!loading && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: palette.accent.warm,
+                      marginRight: 8,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: palette.accent.warm,
+                      ...TABULAR,
+                    }}
+                  >
+                    {tripsCountLabel} · ≈ {formatUSD(trcToUsd(periodStats.netEarnings, DEFAULT_EXCHANGE_RATE))}
+                  </Text>
+                </View>
+              )}
+              {/* Trend indicator — pill if trendPct available */}
+              {!loading && trendPct != null && (
+                <View
+                  style={{
+                    marginTop: 14,
+                    alignSelf: 'flex-start',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: trendPct >= 0 ? '#22C55E22' : '#EF444422',
+                    borderRadius: 9999,
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                  }}
+                >
+                  <Text style={{ color: trendPct >= 0 ? '#16A34A' : '#DC2626', fontSize: 12, fontWeight: '700', marginRight: 4 }}>
+                    {trendPct >= 0 ? '↑' : '↓'}
+                  </Text>
+                  <Text style={{ color: trendPct >= 0 ? '#16A34A' : '#DC2626', fontSize: 12, fontWeight: '700', ...TABULAR }}>
+                    {Math.abs(trendPct)}% {t('earnings.vs_prev_period', { defaultValue: 'vs período anterior' })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Animated.View>
 
           {loading ? (
-            <View className="py-4">
-              <SkeletonBalance />
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={3} />
+            // Light skeleton — let the hero "—" hold space while sections load
+            <View style={{ marginTop: 8 }}>
+              <View style={{ height: 120, borderRadius: 18, backgroundColor: palette.bg.elev1, marginBottom: 14 }} />
+              <View style={{ height: 60, borderRadius: 16, backgroundColor: palette.bg.elev1, marginBottom: 14 }} />
+              <View style={{ height: 180, borderRadius: 18, backgroundColor: palette.bg.elev1 }} />
             </View>
           ) : (
-          <>
-          {/* Daily Earnings Goal */}
-          <EarningsGoalCard currentEarnings={todayEarnings} />
+            <>
+              {/* ── Daily Goal ───────────────────────────────────── */}
+              <Animated.View style={sectionStyle(1)}>
+                <EarningsGoalCard currentEarnings={todayEarnings} />
+              </Animated.View>
 
-          {/* Period Tabs */}
-          <PeriodTabs period={period} onChange={setPeriod} />
+              {/* ── Period Tabs ──────────────────────────────────── */}
+              <Animated.View style={sectionStyle(2)}>
+                <PeriodTabs period={period} onChange={setPeriod} />
+              </Animated.View>
 
-          {/* Empty state when no earnings data */}
-          {hasNoEarningsData ? (
-            // UX: weak "0s everywhere" is discouraging for a new driver, and
-            // period-agnostic copy ("no tienes ganancias") felt wrong for a
-            // driver checking the "Mes" tab on day 2. Period-specific copy +
-            // a direct "Ir a Inicio" CTA makes the zero feel actionable rather
-            // than terminal.
-            <EmptyState
-              icon="wallet-outline"
-              title={
-                period === 'day'
-                  ? t('earnings.no_earnings_today_title', { defaultValue: 'Aún sin ganancias hoy' })
-                  : period === 'week'
-                    ? t('earnings.no_earnings_week_title', { defaultValue: 'Aún sin ganancias esta semana' })
-                    : t('earnings.no_earnings_month_title', { defaultValue: 'Aún sin ganancias este mes' })
-              }
-              description={t('earnings.no_earnings_cta_description', { defaultValue: 'Conectate para empezar a recibir ofertas. Tus ganancias aparecen acá al completar el primer viaje.' })}
-              action={{
-                label: t('earnings.go_online_cta', { defaultValue: 'Ir a Inicio' }),
-                onPress: () => router.push('/(tabs)'),
-              }}
-            />
-          ) : (
-          <>
-          {/* Bar Chart (SVG) — only on week/month tabs */}
-          {period !== 'day' && chartData.length > 0 && (
-            <EarningsBarChart data={chartData} theme="light" />
+              {/* ── Charts + Stats ───────────────────────────────── */}
+              <Animated.View style={sectionStyle(3)}>
+                {hasNoEarningsData ? (
+                  <EmptyState
+                    icon="wallet-outline"
+                    title={
+                      period === 'day'
+                        ? t('earnings.no_earnings_today_title', { defaultValue: 'Aún sin ganancias hoy' })
+                        : period === 'week'
+                          ? t('earnings.no_earnings_week_title', { defaultValue: 'Aún sin ganancias esta semana' })
+                          : t('earnings.no_earnings_month_title', { defaultValue: 'Aún sin ganancias este mes' })
+                    }
+                    description={t('earnings.no_earnings_cta_description', {
+                      defaultValue: 'Conectate para empezar a recibir ofertas. Tus ganancias aparecen acá al completar el primer viaje.',
+                    })}
+                    action={{
+                      label: t('earnings.go_online_cta', { defaultValue: 'Ir a Inicio' }),
+                      onPress: () => router.push('/(tabs)'),
+                    }}
+                  />
+                ) : (
+                  <>
+                    {period !== 'day' && chartData.length > 0 && (
+                      <EarningsBarChart data={chartData} theme={isDark ? 'dark' : 'light'} />
+                    )}
+                    <EarningsStatsCards
+                      stats={periodStats}
+                      trendPct={trendPct}
+                      avgRating={avgRating}
+                      totalReviews={totalReviews}
+                      period={period}
+                    />
+                    {periodTrips.length > 0 && (
+                      <HourlyHeatmap trips={periodTrips} theme={isDark ? 'dark' : 'light'} />
+                    )}
+                    <PersonalPeakHours data={peakHours} loading={peakHoursLoading} />
+                    <EarningsByZoneChart data={earningsByZone} loading={earningsByZoneLoading} />
+                  </>
+                )}
+              </Animated.View>
+
+              {/* ── Quests + Performance + Activity ──────────────── */}
+              {!hasNoEarningsData && (
+                <Animated.View style={sectionStyle(4)}>
+                  <QuestsSection quests={quests} />
+                  <PerformanceMetricsSection stats={driverStats} />
+                  <RecentActivitySection
+                    transactions={transactions}
+                    loading={txLoading}
+                    hasMore={txHasMore}
+                    onLoadMore={loadMoreTransactions}
+                    onExpandedChange={setTxExpanded}
+                  />
+                </Animated.View>
+              )}
+            </>
           )}
-
-          {/* PR-C: hero earnings + collapsible "Más métricas" */}
-          <EarningsStatsCards
-            stats={periodStats}
-            trendPct={trendPct}
-            avgRating={avgRating}
-            totalReviews={totalReviews}
-            period={period}
-          />
-
-          {/* Hourly Heatmap — current-period trip activity */}
-          {periodTrips.length > 0 && (
-            <HourlyHeatmap trips={periodTrips} theme="light" />
-          )}
-
-          {/* N2 — personal peak hours (30-day earnings × DOW × hour) */}
-          <PersonalPeakHours data={peakHours} loading={peakHoursLoading} />
-
-          {/* Earnings by zone (top 5) */}
-          <EarningsByZoneChart data={earningsByZone} loading={earningsByZoneLoading} />
-
-          {/* Quests / Missions */}
-          <QuestsSection quests={quests} />
-
-          {/* Performance Metrics — null-gated inside the component */}
-          <PerformanceMetricsSection stats={driverStats} />
-
-          {/* Recent Wallet Activity (collapsible) */}
-          <RecentActivitySection
-            transactions={transactions}
-            loading={txLoading}
-            hasMore={txHasMore}
-            onLoadMore={loadMoreTransactions}
-            onExpandedChange={setTxExpanded}
-          />
-          </>
-          )}
-          </>
-          )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </Screen>
   );
 }
@@ -312,3 +439,7 @@ function NativeEarningsScreen() {
 export default function EarningsScreen() {
   return <NativeEarningsScreen />;
 }
+
+// Reference: midnightEmber kept imported for potential subcomponent override
+// (not used directly here — subcomponents handle their own tokens).
+void midnightEmber;
