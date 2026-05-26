@@ -876,6 +876,73 @@ describe('rideService.previewCancelPenalty', () => {
 describe('rideService.validatePromoCode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // P-HIGH-6 (00321): default to "RPC missing" so existing tests cover the
+    // legacy fallback path. RPC-path tests override this explicitly.
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'function validate_promo_code does not exist' },
+    });
+  });
+
+  it('uses RPC validate_promo_code when available (happy path)', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        valid: true,
+        promotion_id: 'promo-rpc-1',
+        code: 'SAVE20',
+        type: 'percentage_discount',
+        discount_amount: 1000,
+      },
+      error: null,
+    });
+
+    const result = await rideService.validatePromoCode({
+      code: 'save20',
+      userId: 'user-1',
+      fareAmount: 5000,
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith('validate_promo_code', {
+      p_code: 'save20',
+      p_user_id: 'user-1',
+      p_fare_amount: 5000,
+    });
+    expect(result.valid).toBe(true);
+    expect(result.discountAmount).toBe(1000);
+    expect(result.promotion?.id).toBe('promo-rpc-1');
+    expect(result.promotion?.code).toBe('SAVE20');
+  });
+
+  it('maps RPC error reasons to client-facing error fields', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { valid: false, error: 'already_used' },
+      error: null,
+    });
+
+    const result = await rideService.validatePromoCode({
+      code: 'USED',
+      userId: 'user-1',
+      fareAmount: 5000,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('already_used');
+    expect(result.discountAmount).toBe(0);
+  });
+
+  it('rethrows non-missing RPC errors instead of falling back', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(
+      rideService.validatePromoCode({
+        code: 'ANY',
+        userId: 'user-1',
+        fareAmount: 5000,
+      }),
+    ).rejects.toMatchObject({ code: '42501' });
   });
 
   it('validates a valid percentage promo', async () => {

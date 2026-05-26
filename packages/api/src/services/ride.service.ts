@@ -1350,6 +1350,19 @@ export const rideService = {
 
   /**
    * Validate a promo code for a ride.
+   *
+   * P-HIGH-6 (migration 00321): la tabla `promotions` ya no expone
+   * SELECT a usuarios authenticated (RLS policy `promo_select`
+   * eliminada). La RPC `validate_promo_code` SECURITY DEFINER hace
+   * la validación + cálculo server-side y devuelve solo
+   * `{ valid, promotion_id, code, type, discount_amount, error }`.
+   * El client NO necesita ver `discount_percent`, `max_uses`,
+   * `created_by`, etc.
+   *
+   * Tolerancia: si la migración 00321 no se aplicó aún (PGRST202 /
+   * function does not exist), fallback al flujo legacy de query
+   * directa a `promotions` — sigue funcionando porque la policy
+   * vieja `promo_select` aún existe pre-migración.
    */
   async validatePromoCode(params: {
     code: string;
@@ -1363,7 +1376,49 @@ export const rideService = {
   }> {
     const supabase = getSupabaseClient();
 
-    // Find active promotion by code
+    const { data: rpcData, error: rpcError } = await supabase.rpc('validate_promo_code', {
+      p_code: params.code.trim(),
+      p_user_id: params.userId,
+      p_fare_amount: params.fareAmount,
+    });
+
+    if (!rpcError && rpcData && typeof rpcData === 'object') {
+      const result = rpcData as {
+        valid?: boolean;
+        promotion_id?: string;
+        code?: string;
+        type?: Promotion['type'];
+        discount_amount?: number;
+        error?: string;
+      };
+      if (result.valid) {
+        return {
+          valid: true,
+          // Minimal Promotion stub — callers only need id + code + type.
+          promotion: {
+            id: result.promotion_id!,
+            code: result.code!,
+            type: result.type!,
+          } as Promotion,
+          discountAmount: result.discount_amount ?? 0,
+        };
+      }
+      return {
+        valid: false,
+        discountAmount: 0,
+        error: result.error ?? 'invalid',
+      };
+    }
+
+    // Tolerate missing RPC (migration 00321 not yet applied).
+    const isMissingFn =
+      rpcError?.code === 'PGRST202' ||
+      /function .* does not exist|could not find the function/i.test(rpcError?.message ?? '');
+    if (rpcError && !isMissingFn) {
+      throw rpcError;
+    }
+
+    // ---- Legacy fallback (works only while pre-migration RLS allows it) ----
     const { data: promo, error } = await supabase
       .from('promotions')
       .select('*')
@@ -1376,17 +1431,13 @@ export const rideService = {
 
     const promotion = promo as Promotion;
 
-    // Check expiration
     if (promotion.valid_until && new Date(promotion.valid_until) < new Date()) {
       return { valid: false, discountAmount: 0, error: 'expired' };
     }
-
-    // Check max uses
     if (promotion.max_uses !== null && promotion.current_uses >= promotion.max_uses) {
       return { valid: false, discountAmount: 0, error: 'max_uses' };
     }
 
-    // Check if user already used this promo
     const { data: existing } = await supabase
       .from('promotion_uses')
       .select('id')
@@ -1397,10 +1448,6 @@ export const rideService = {
       return { valid: false, discountAmount: 0, error: 'already_used' };
     }
 
-    // Calculate discount. `bonus_credit` is a percentage-discount sibling
-    // (same mechanics as percentage_discount, different UI label — e.g.
-    // welcome bonus or loyalty promo). Kept in sync with the DB trigger
-    // in supabase/migrations/00175_bonus_credit_is_percentage_discount.
     let discountAmount = 0;
     if (
       (promotion.type === 'percentage_discount' || promotion.type === 'bonus_credit') &&
@@ -1408,7 +1455,7 @@ export const rideService = {
     ) {
       discountAmount = Math.min(
         Math.round(params.fareAmount * promotion.discount_percent / 100),
-        params.fareAmount, // Cap at 100% of fare
+        params.fareAmount,
       );
     } else if (promotion.type === 'fixed_discount' && promotion.discount_fixed_cup) {
       discountAmount = Math.min(promotion.discount_fixed_cup, params.fareAmount);
