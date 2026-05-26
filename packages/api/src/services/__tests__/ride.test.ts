@@ -770,6 +770,50 @@ describe('rideService.createRide', () => {
     );
     expect(mockRpc).toHaveBeenCalledWith('increment_promo_uses', { p_promo_id: UUID.PROMO_1 });
   });
+
+  it('tolerates UNIQUE 23505 from promotion_uses insert post-migration 00320', async () => {
+    // After migration 00320 the BEFORE INSERT trigger on rides inserts the
+    // promotion_uses row atomically. The service-layer insert then hits
+    // the UNIQUE(promotion_id, user_id) constraint with code 23505 — we
+    // must swallow this silently (not retry, not rollback).
+    const rideData = { id: 'ride-4', customer_id: 'user-1', status: 'searching' };
+    const mockPromoInsert = vi.fn().mockResolvedValue({
+      error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+    });
+
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: rideData, error: null }),
+            }),
+          }),
+        };
+      }
+      return { insert: mockPromoInsert };
+    });
+
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    // The createRide call must NOT throw despite the UNIQUE error.
+    await expect(
+      rideService.createRide({
+        service_type: 'triciclo_basico',
+        payment_method: 'cash',
+        pickup_latitude: 23.1352,
+        pickup_longitude: -82.3599,
+        pickup_address: 'Capitolio',
+        dropoff_latitude: 23.1375,
+        dropoff_longitude: -82.3964,
+        dropoff_address: 'Hotel Nacional',
+        promo_code_id: UUID.PROMO_1,
+        discount_amount_cup: 500,
+      }),
+    ).resolves.toBeDefined();
+  });
 });
 
 // ============================================================
