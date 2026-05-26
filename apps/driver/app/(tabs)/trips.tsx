@@ -1,17 +1,46 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, RefreshControl, Alert } from 'react-native';
+// ============================================================
+// Mis Viajes — Cuban Modern redesign (post-PR #232).
+//
+// Trip cards refactoreados a paleta cubanLight/cubanDark con warm-gold
+// accents, status pills colored-alpha, Inter_800ExtraBold tabular-nums
+// para "Ganaste". Screen wrapper cream/navy. HistoryFilters (shared
+// component) queda intacto (decisión user: out of scope).
+//
+// Lógica intacta: fetchTrips, paginación, filtros, CSV export, refresh,
+// commission rate fallback.
+// ============================================================
+
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import {
+  View,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  Alert,
+  Animated,
+  Easing,
+  StyleSheet,
+  useColorScheme,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api/services/driver';
-import { formatTRC, formatUSD, formatCUP, DEFAULT_EXCHANGE_RATE, generateHistoryCSV, getRelativeDay, riderChargedTotal } from '@tricigo/utils';
+import {
+  formatTRC,
+  formatUSD,
+  formatCUP,
+  DEFAULT_EXCHANGE_RATE,
+  generateHistoryCSV,
+  getRelativeDay,
+  riderChargedTotal,
+} from '@tricigo/utils';
 import { walletService } from '@tricigo/api';
 import { tripNetEarnings } from '@/utils/tripNetEarnings';
 import type { Ride } from '@tricigo/types';
-import { colors } from '@tricigo/theme';
+import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useDriverStore } from '@/stores/driver.store';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
@@ -24,27 +53,35 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const PAGE_SIZE = 20;
 
+// Tabular-nums style for number alignment
+const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+
 function NativeTripsScreen() {
   const { t } = useTranslation('driver');
   const driverProfileId = useDriverStore((s) => s.profile?.id);
+
+  // Cuban palette
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
+
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
 
   const [trips, setTrips] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  // BUG-trips-counter-parity: arrancar con filtro "Completado" activo por default.
-  // Antes filters={} → HistoryFilters mostraba chip "Todos" activo → fetch traía
-  // completed + canceled mezclados (default del service). Esto mostraba 23 items
-  // a un driver que solo había completado 10, confundiendo con el conteo del
-  // perfil (10). Ahora el default es solo completados; el usuario puede tap
-  // "Todos" o "Cancelado" para verlos explícitamente.
+  // BUG-trips-counter-parity: default solo completed (no canceled mezclados).
   const [filters, setFilters] = useState<HistoryFilterState>({ status: ['completed'] });
-  // BUG-fare-display-parity: commission rate fallback for legacy rides
-  // that don't have a snapshot. `tripNetEarnings()` prefers the
-  // snapshotted `commission_amount`; this rate is used only when the
-  // snapshot is absent.
   const [commissionRate, setCommissionRate] = useState(0.15);
+
   useEffect(() => {
     walletService.getConfigValue('commission_rate')
       .then((val) => {
@@ -130,7 +167,7 @@ function NativeTripsScreen() {
         t('trips.export_failed', { defaultValue: 'No se pudo exportar el CSV' }),
       );
     }
-  }, [trips]);
+  }, [trips, t]);
 
   const loadMore = useCallback(() => {
     if (trips.length >= (page + 1) * PAGE_SIZE) {
@@ -162,175 +199,390 @@ function NativeTripsScreen() {
     }
   }, [driverProfileId, filters]);
 
+  // ── Trip card render (Cuban Modern) ────────────────────────────────
   const renderItem = useCallback(({ item }: { item: Ride & { commission_amount?: number | null } }) => {
     const isCompleted = item.status === 'completed';
-    // BUG-fare-display-parity: para viajes completados el número grande
-    // ahora es "Ganaste $X" (NET = fare - snap_commission + tip). Antes
-    // mostraba `final_fare_*` bruto sin restar comisión ni sumar tip,
-    // entonces el driver leía un número que no coincidía con "Ganancias".
-    const netEarningsCup = isCompleted
-      ? tripNetEarnings(item, commissionRate)
-      : 0;
-    const chargedCup = isCompleted
-      ? riderChargedTotal(item)
-      : (item.estimated_fare_cup ?? 0);
+    const netEarningsCup = isCompleted ? tripNetEarnings(item, commissionRate) : 0;
+    const chargedCup = isCompleted ? riderChargedTotal(item) : (item.estimated_fare_cup ?? 0);
     const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
     const primaryUsd = ((isCompleted ? netEarningsCup : chargedCup)) / rate;
     const deduction = item.quota_deduction_amount ?? 0;
+    const statusColor = isCompleted ? '#22C55E' : '#EF4444';
+    const statusDarker = isCompleted ? '#16A34A' : '#DC2626';
 
     return (
-      <Pressable onPress={() => router.push(`/trip/${item.id}`)} accessibilityRole="button" accessibilityLabel={`${isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}, ${item.pickup_address} → ${item.dropoff_address}, ${isCompleted ? t('trips_history.you_earned', { defaultValue: 'Ganaste' }) + ' ' + formatCUP(netEarningsCup) : formatCUP(chargedCup)}`}>
-        <Card variant="filled" padding="md" className="mb-3 bg-white" style={{ borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
-          <View className="flex-row items-center justify-between mb-2">
-            <Text variant="caption" style={{ color: '#64748B' }}>
-              {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
+      <Pressable
+        onPress={() => router.push(`/trip/${item.id}`)}
+        accessibilityRole="button"
+        accessibilityLabel={`${
+          isCompleted
+            ? t('trips_history.completed', { defaultValue: 'Completado' })
+            : t('trips_history.canceled', { defaultValue: 'Cancelado' })
+        }, ${item.pickup_address} → ${item.dropoff_address}, ${
+          isCompleted
+            ? t('trips_history.you_earned', { defaultValue: 'Ganaste' }) + ' ' + formatCUP(netEarningsCup)
+            : formatCUP(chargedCup)
+        }`}
+        style={({ pressed }) => [
+          {
+            marginHorizontal: 16,
+            marginBottom: 12,
+            backgroundColor: palette.bg.elev1,
+            borderRadius: 16,
+            ...CARD_SHADOW,
+          },
+          pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+        ]}
+      >
+        {/* Date + status pill */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 14,
+            paddingTop: 14,
+            paddingBottom: 10,
+          }}
+        >
+          <Text style={{ color: palette.ink.secondary, fontSize: 12, fontWeight: '600', flex: 1 }}>
+            {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
+          </Text>
+          <View
+            style={{
+              backgroundColor: `${statusColor}22`,
+              borderRadius: 9999,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+            }}
+          >
+            <Text
+              style={{
+                color: statusDarker,
+                fontSize: 10,
+                fontWeight: '800',
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+              }}
+            >
+              {isCompleted
+                ? t('trips_history.completed', { defaultValue: 'Completado' })
+                : t('trips_history.canceled', { defaultValue: 'Cancelado' })}
             </Text>
-            <View className={`px-2 py-0.5 rounded-full ${isCompleted ? 'bg-green-50' : 'bg-red-50'}`}>
-              <Text variant="caption" className={isCompleted ? 'text-green-600' : 'text-red-600'} style={{ fontWeight: '600' }}>
-                {isCompleted ? t('trips_history.completed', { defaultValue: 'Completado' }) : t('trips_history.canceled', { defaultValue: 'Cancelado' })}
+          </View>
+        </View>
+
+        {/* Pickup → dropoff */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12 }}>
+          {/* Markers column */}
+          <View style={{ width: 12, alignItems: 'center', paddingTop: 5 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#22C55E' }} />
+            <View
+              style={{ width: 2, flex: 1, backgroundColor: palette.line, marginVertical: 3, minHeight: 16 }}
+            />
+            <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: colors.brand.orange }} />
+          </View>
+          {/* Addresses */}
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ color: palette.ink.primary, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+              {item.pickup_address}
+            </Text>
+            <View style={{ height: 14 }} />
+            <Text style={{ color: palette.ink.primary, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+              {item.dropoff_address}
+            </Text>
+          </View>
+        </View>
+
+        {/* Earnings row */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            paddingHorizontal: 14,
+            paddingTop: 12,
+            paddingBottom: 14,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: palette.line,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            {isCompleted ? (
+              <>
+                <Text
+                  style={{
+                    color: palette.ink.secondary,
+                    fontSize: 10,
+                    fontWeight: '700',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.8,
+                    marginBottom: 2,
+                  }}
+                >
+                  {t('trips_history.you_earned', { defaultValue: 'Ganaste' })}
+                </Text>
+                <Text
+                  style={{
+                    color: palette.ink.primary,
+                    fontFamily: 'Inter_800ExtraBold',
+                    fontSize: 20,
+                    letterSpacing: -0.5,
+                    ...TABULAR,
+                  }}
+                >
+                  {formatCUP(netEarningsCup)}
+                </Text>
+                <Text
+                  style={{
+                    color: palette.ink.subtle,
+                    fontSize: 11,
+                    marginTop: 3,
+                    ...TABULAR,
+                  }}
+                >
+                  {t('trips_history.charged_to_client', { defaultValue: 'Cobrado al cliente' })}: {formatCUP(chargedCup)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    color: palette.ink.primary,
+                    fontFamily: 'Inter_700Bold',
+                    fontSize: 18,
+                    ...TABULAR,
+                  }}
+                >
+                  {formatCUP(chargedCup)}
+                </Text>
+                <Text style={{ color: palette.ink.subtle, fontSize: 11, marginTop: 3, ...TABULAR }}>
+                  ≈ {formatUSD(primaryUsd)}
+                </Text>
+              </>
+            )}
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            {deduction > 0 && (
+              <Text style={{ color: '#EF4444', fontSize: 11, fontWeight: '700', marginBottom: 4, ...TABULAR }}>
+                −{formatTRC(deduction)}
+              </Text>
+            )}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: palette.bg.elev2,
+                borderRadius: 9999,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <Ionicons
+                name={item.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'}
+                size={11}
+                color={palette.ink.secondary}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={{ color: palette.ink.secondary, fontSize: 11, fontWeight: '600' }}>
+                {item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
               </Text>
             </View>
           </View>
-
-          <View className="flex-row items-start mb-2">
-            <View className="mr-3 items-center pt-1">
-              <View className="w-2.5 h-2.5 rounded-full bg-primary-500" />
-              <View className="w-0.5 h-4 bg-neutral-200 my-0.5" />
-              <View className="w-2.5 h-2.5 rounded-full bg-neutral-400" />
-            </View>
-            <View className="flex-1">
-              <Text variant="bodySmall" color="primary" numberOfLines={1}>{item.pickup_address}</Text>
-              <View className="h-2" />
-              <Text variant="bodySmall" style={{ color: '#64748B' }} numberOfLines={1}>{item.dropoff_address}</Text>
-            </View>
-          </View>
-
-          <View className="flex-row justify-between items-center">
-            <View>
-              {isCompleted ? (
-                <>
-                  <Text variant="caption" style={{ color: '#16A34A', fontWeight: '600' }}>
-                    {t('trips_history.you_earned', { defaultValue: 'Ganaste' })}
-                  </Text>
-                  <Text variant="body" color="primary" className="font-semibold">{formatCUP(netEarningsCup)}</Text>
-                  <Text variant="caption" style={{ color: '#94A3B8' }}>
-                    {t('trips_history.charged_to_client', { defaultValue: 'Cobrado al cliente' })}: {formatCUP(chargedCup)}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text variant="body" color="primary" className="font-semibold">{formatCUP(chargedCup)}</Text>
-                  <Text variant="caption" style={{ color: '#94A3B8' }}>{'\u2248'} {formatUSD(primaryUsd)}</Text>
-                </>
-              )}
-            </View>
-            <View className="items-end">
-              {deduction > 0 && (
-                <Text variant="caption" className="text-red-500">-{formatTRC(deduction)}</Text>
-              )}
-              <Text variant="caption" style={{ color: '#94A3B8' }}>{item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}</Text>
-            </View>
-          </View>
-
-        </Card>
+        </View>
       </Pressable>
     );
-  }, [t, commissionRate]);
+  }, [t, commissionRate, palette, CARD_SHADOW]);
+
+  // ── Stagger entrance — header (0) + filters (1) + list area (2) ────
+  const fadeAnim = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+  useEffect(() => {
+    if (!loading || page === 0) {
+      // re-trigger on filter change
+      fadeAnim.forEach((a) => a.setValue(0));
+      Animated.stagger(
+        80,
+        fadeAnim.map((a) =>
+          Animated.timing(a, {
+            toValue: 1,
+            duration: 360,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+        ),
+      ).start();
+    }
+  }, [loading, page, fadeAnim]);
+
+  const sectionStyle = (idx: number) => ({
+    opacity: fadeAnim[idx]!,
+    transform: [
+      {
+        translateY: fadeAnim[idx]!.interpolate({
+          inputRange: [0, 1],
+          outputRange: [10, 0],
+        }),
+      },
+    ],
+  });
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
-      <View className="pt-4 flex-1">
-        <View className="flex-row items-center justify-between mb-2">
-          <Text variant="h3" color="primary">{t('trips_history.title')}</Text>
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper, paddingTop: 16 }}>
+        {/* Header — title + CSV export */}
+        <Animated.View
+          style={[
+            sectionStyle(0),
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              marginBottom: 12,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              color: palette.ink.primary,
+              fontSize: 28,
+              fontWeight: '800',
+              letterSpacing: -0.5,
+            }}
+          >
+            {t('trips_history.title', { defaultValue: 'Mis viajes' })}
+          </Text>
           {trips.length > 0 && (
-            <Pressable onPress={handleExportCSV} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full" style={{ backgroundColor: '#F1F5F9' }} accessibilityRole="button" accessibilityLabel={t('trips_history.export_csv', { defaultValue: 'Exportar CSV' })}>
-              <Ionicons name="download-outline" size={14} color="#64748B" />
-              <Text variant="caption" style={{ color: '#64748B', fontWeight: '500' }}>CSV</Text>
+            <Pressable
+              onPress={handleExportCSV}
+              style={({ pressed }) => [
+                {
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  backgroundColor: palette.bg.elev2,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+                pressed && { transform: [{ scale: 0.94 }] },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('trips_history.export_csv', { defaultValue: 'Exportar CSV' })}
+            >
+              <Ionicons name="download-outline" size={18} color={palette.ink.secondary} />
             </Pressable>
           )}
-        </View>
+        </Animated.View>
 
-        <HistoryFilters
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          serviceTypes={serviceTypes}
-          paymentMethods={paymentMethods}
-          labels={filterLabels}
-        />
-
-        {error && !loading ? (
-          <ErrorState
-            title={t('trips_history.error_title', { defaultValue: 'Error al cargar viajes' })}
-            description={error}
-            onRetry={() => {
-              setError(null);
-              setPage(0);
-            }}
-            retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
+        {/* HistoryFilters (shared) — intacto */}
+        <Animated.View style={[sectionStyle(1), { paddingHorizontal: 16 }]}>
+          <HistoryFilters
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            serviceTypes={serviceTypes}
+            paymentMethods={paymentMethods}
+            labels={filterLabels}
           />
-        ) : loading && page === 0 ? (
-          <View className="px-1 pt-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <SkeletonListItem key={i} />
-            ))}
-          </View>
-        ) : (
-          <FlatList
-            data={trips}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#F97316']}
-                tintColor="#F97316"
+        </Animated.View>
+
+        {/* List area */}
+        <Animated.View style={[sectionStyle(2), { flex: 1, marginTop: 8 }]}>
+          {error && !loading ? (
+            <View style={{ paddingHorizontal: 16 }}>
+              <ErrorState
+                title={t('trips_history.error_title', { defaultValue: 'Error al cargar viajes' })}
+                description={error}
+                onRetry={() => {
+                  setError(null);
+                  setPage(0);
+                }}
+                retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
               />
-            }
-            ListEmptyComponent={
-              // UX: first-time drivers saw a lonely icon + title and no idea
-              // what to do next. Differentiate two very different empty cases:
-              //   1. Filters applied → "no results with these filters" + clear CTA
-              //   2. Truly empty (new driver) → encouraging message + "Ir a Inicio"
-              Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
-                <EmptyState
-                  icon="filter-outline"
-                  title={t('trips_history.no_results_title', { defaultValue: 'Sin resultados' })}
-                  description={t('trips_history.no_results_description', { defaultValue: 'No hay viajes que coincidan con los filtros seleccionados.' })}
-                  action={{
-                    label: t('trips_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
-                    onPress: () => {
-                      setFilters({});
-                      setPage(0);
-                    },
+            </View>
+          ) : loading && page === 0 ? (
+            <View style={{ paddingHorizontal: 16 }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <View
+                  key={i}
+                  style={{
+                    height: 130,
+                    borderRadius: 16,
+                    backgroundColor: palette.bg.elev1,
+                    marginBottom: 12,
+                    opacity: 1 - i * 0.12,
                   }}
+                >
+                  <SkeletonListItem />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <FlatList
+              data={trips}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[colors.brand.orange]}
+                  tintColor={colors.brand.orange}
                 />
-              ) : (
-                <EmptyState
-                  icon="car-outline"
-                  title={t('trips_history.no_trips_title', { defaultValue: 'Aún no has hecho viajes' })}
-                  description={t('trips_history.no_trips_description', { defaultValue: 'Cuando completes tu primer viaje aparecerá aquí con todos los detalles.' })}
-                  action={{
-                    label: t('trips_history.go_online_cta', { defaultValue: 'Ir a Inicio' }),
-                    onPress: () => router.push('/(tabs)'),
-                  }}
-                />
-              )
-            }
-            ListFooterComponent={
-              trips.length >= (page + 1) * PAGE_SIZE ? (
-                <Button
-                  title={t('trips_history.load_more')}
-                  variant="outline"
-                  size="sm"
-                  onPress={loadMore}
-                  loading={loading && page > 0}
-                  className="mb-6"
-                />
-              ) : null
-            }
-          />
-        )}
+              }
+              contentContainerStyle={{ paddingBottom: 24 }}
+              ListEmptyComponent={
+                Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
+                  <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                    <EmptyState
+                      icon="filter-outline"
+                      title={t('trips_history.no_results_title', { defaultValue: 'Sin resultados' })}
+                      description={t('trips_history.no_results_description', {
+                        defaultValue: 'No hay viajes que coincidan con los filtros seleccionados.',
+                      })}
+                      action={{
+                        label: t('trips_history.clear_filters', { defaultValue: 'Limpiar filtros' }),
+                        onPress: () => {
+                          setFilters({});
+                          setPage(0);
+                        },
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                    <EmptyState
+                      icon="car-outline"
+                      title={t('trips_history.no_trips_title', { defaultValue: 'Aún no has hecho viajes' })}
+                      description={t('trips_history.no_trips_description', {
+                        defaultValue: 'Cuando completes tu primer viaje aparecerá aquí con todos los detalles.',
+                      })}
+                      action={{
+                        label: t('trips_history.go_online_cta', { defaultValue: 'Ir a Inicio' }),
+                        onPress: () => router.push('/(tabs)'),
+                      }}
+                    />
+                  </View>
+                )
+              }
+              ListFooterComponent={
+                trips.length >= (page + 1) * PAGE_SIZE ? (
+                  <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 24 }}>
+                    <Button
+                      title={t('trips_history.load_more')}
+                      variant="outline"
+                      size="sm"
+                      onPress={loadMore}
+                      loading={loading && page > 0}
+                    />
+                  </View>
+                ) : null
+              }
+            />
+          )}
+        </Animated.View>
       </View>
     </Screen>
   );
