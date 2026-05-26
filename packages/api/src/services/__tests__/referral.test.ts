@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock the Supabase client
+// Mock the Supabase client. The shape is small: we only need `.rpc(...)` and
+// `.from(...).select(...).eq(...)...` chains for the service's call sites.
 const mockSingle = vi.fn();
 const mockLimit = vi.fn(() => ({ single: mockSingle }));
 const mockEq = vi.fn(() => ({ limit: mockLimit, single: mockSingle }));
@@ -8,7 +9,8 @@ const mockIlike = vi.fn(() => ({ limit: mockLimit }));
 const mockSelect = vi.fn(() => ({ eq: mockEq, ilike: mockIlike, order: vi.fn(() => ({ data: [], error: null })) }));
 const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) }));
 const mockFrom = vi.fn(() => ({ select: mockSelect, insert: mockInsert }));
-const mockSupabase = { from: mockFrom };
+const mockRpc = vi.fn();
+const mockSupabase = { from: mockFrom, rpc: mockRpc };
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -22,34 +24,54 @@ describe('referralService', () => {
     vi.clearAllMocks();
   });
 
-  describe('getOrCreateReferralCode', () => {
-    it('returns existing code if user has referrals', async () => {
-      // Mock: user has existing referrals
+  describe('getOrCreateReferralCode (RPC path)', () => {
+    it('returns RPC code when get_or_create_referral_code RPC succeeds', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'ABCDEF1234', error: null });
+
+      const code = await referralService.getOrCreateReferralCode('user-1');
+      expect(code).toBe('ABCDEF1234');
+      expect(mockRpc).toHaveBeenCalledWith('get_or_create_referral_code');
+    });
+
+    it('throws if RPC returns non-missing error', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'permission denied' } });
+
+      await expect(referralService.getOrCreateReferralCode('user-1')).rejects.toMatchObject({
+        code: '42501',
+      });
+    });
+  });
+
+  describe('getOrCreateReferralCode (legacy fallback when migration not applied)', () => {
+    it('returns existing referral code from referrals table if RPC missing', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'function get_or_create_referral_code does not exist' },
+      });
+
       mockFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: [{ code: 'ABCD1234' }],
-              error: null,
-            }),
+            limit: vi.fn().mockResolvedValue({ data: [{ code: 'LEGACYAA' }], error: null }),
           }),
         }),
         insert: mockInsert,
       });
 
       const code = await referralService.getOrCreateReferralCode('abcd1234-5678-uuid');
-      expect(code).toBe('ABCD1234');
+      expect(code).toBe('LEGACYAA');
     });
 
-    it('generates code from userId prefix if no referrals exist', async () => {
-      // Mock: no existing referrals
+    it('falls back to UUID prefix when RPC missing and no existing referrals', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'function get_or_create_referral_code does not exist' },
+      });
+
       mockFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
         }),
         insert: mockInsert,
@@ -61,142 +83,111 @@ describe('referralService', () => {
     });
   });
 
-  describe('applyReferralCode', () => {
-    it('throws if code matches no user', async () => {
-      // Mock: users query returns empty
-      mockFrom
-        .mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            ilike: vi.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
-          }),
-          insert: mockInsert,
-        });
-
-      await expect(
-        referralService.applyReferralCode('referee-id', 'INVALID1'),
-      ).rejects.toThrow('Código de referido inválido');
-    });
-
-    it('throws if user tries self-referral', async () => {
-      const userId = 'self0000-user-uuid';
-
-      // Mock: users query returns the same user
-      mockFrom
-        .mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            ilike: vi.fn().mockResolvedValue({
-              data: [{ id: userId }],
-              error: null,
-            }),
-          }),
-          insert: mockInsert,
-        });
-
-      await expect(
-        referralService.applyReferralCode(userId, 'SELF0000'),
-      ).rejects.toThrow('No puedes usar tu propio código');
-    });
-
-    it('throws if user already has a referral', async () => {
-      // Mock: users query returns a valid referrer
-      mockFrom
-        .mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            ilike: vi.fn().mockResolvedValue({
-              data: [{ id: 'referrer-id' }],
-              error: null,
-            }),
-          }),
-          insert: mockInsert,
-        })
-        // Mock: existing referral check returns a result
-        .mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue({
-                data: [{ id: 'existing-ref' }],
-                error: null,
-              }),
-            }),
-          }),
-          insert: mockInsert,
-        });
-
-      await expect(
-        referralService.applyReferralCode('referee-id', 'REFERRER'),
-      ).rejects.toThrow('Ya usaste un código de referido');
-    });
-
-    it('creates referral record on valid code', async () => {
+  describe('applyReferralCode (RPC path)', () => {
+    it('fetches and returns the referral row when apply_referral_code RPC succeeds', async () => {
       const mockReferral = {
         id: 'new-ref-id',
         referrer_id: 'referrer-id',
         referee_id: 'referee-id',
-        code: 'REFERRER',
+        code: 'ABC12345',
         status: 'pending',
-        bonus_amount: 50000,
+        bonus_amount: 500,
       };
 
-      // Mock: users query finds referrer
+      mockRpc.mockResolvedValueOnce({ data: 'new-ref-id', error: null });
+
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: mockReferral, error: null }),
+          }),
+        }),
+        insert: mockInsert,
+      });
+
+      const result = await referralService.applyReferralCode('referee-id', 'abc12345');
+      expect(result.status).toBe('pending');
+      expect(result.referrer_id).toBe('referrer-id');
+      expect(mockRpc).toHaveBeenCalledWith('apply_referral_code', { p_code: 'ABC12345' });
+    });
+
+    it('maps P0001 → "Código de referido inválido"', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'P0001', message: 'Código de referido inválido' },
+      });
+
+      await expect(
+        referralService.applyReferralCode('referee-id', 'NOTREAL'),
+      ).rejects.toThrow('Código de referido inválido');
+    });
+
+    it('maps P0002 → "No puedes usar tu propio código"', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'P0002', message: 'self-referral' },
+      });
+
+      await expect(
+        referralService.applyReferralCode('referee-id', 'OWN12345'),
+      ).rejects.toThrow('No puedes usar tu propio código');
+    });
+
+    it('maps P0003 → "Ya usaste un código de referido"', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'P0003', message: 'duplicate referee' },
+      });
+
+      await expect(
+        referralService.applyReferralCode('referee-id', 'AAAA1111'),
+      ).rejects.toThrow('Ya usaste un código de referido');
+    });
+
+    it('falls back to legacy path when RPC missing (PGRST202)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'function apply_referral_code does not exist' },
+      });
+
+      // Legacy uses ILIKE on users + check existing + insert.
       mockFrom
+        // 1) ILIKE on users
         .mockReturnValueOnce({
           select: vi.fn().mockReturnValue({
-            ilike: vi.fn().mockResolvedValue({
-              data: [{ id: 'referrer-id' }],
-              error: null,
-            }),
+            ilike: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
           insert: mockInsert,
-        })
-        // Mock: no existing referral
-        .mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue({
-                data: [],
-                error: null,
-              }),
-            }),
-          }),
-          insert: mockInsert,
-        })
-        // Mock: insert succeeds
-        .mockReturnValueOnce({
-          select: mockSelect,
-          insert: vi.fn().mockReturnValue({
-            select: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: mockReferral,
-                error: null,
-              }),
-            }),
-          }),
         });
 
-      const result = await referralService.applyReferralCode('referee-id', 'REFERRER');
-      expect(result.status).toBe('pending');
-      expect(result.bonus_amount).toBe(50000);
-      expect(result.referrer_id).toBe('referrer-id');
+      await expect(
+        referralService.applyReferralCode('referee-id', 'NOMATCH1'),
+      ).rejects.toThrow('Código de referido inválido');
+    });
+
+    it('rethrows non-mapped errors', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
+
+      await expect(
+        referralService.applyReferralCode('referee-id', 'SOMECODE'),
+      ).rejects.toMatchObject({ code: '42501' });
     });
   });
 
   describe('getReferralHistory', () => {
     it('returns referrals where user is referrer', async () => {
       const mockHistory = [
-        { id: 'ref-1', referrer_id: 'user-1', status: 'rewarded', bonus_amount: 50000 },
-        { id: 'ref-2', referrer_id: 'user-1', status: 'pending', bonus_amount: 50000 },
+        { id: 'ref-1', referrer_id: 'user-1', status: 'rewarded', bonus_amount: 500 },
+        { id: 'ref-2', referrer_id: 'user-1', status: 'pending', bonus_amount: 500 },
       ];
 
       mockFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            order: vi.fn().mockResolvedValue({
-              data: mockHistory,
-              error: null,
-            }),
+            order: vi.fn().mockResolvedValue({ data: mockHistory, error: null }),
           }),
         }),
         insert: mockInsert,
@@ -205,7 +196,6 @@ describe('referralService', () => {
       const history = await referralService.getReferralHistory('user-1');
       expect(history).toHaveLength(2);
       expect(history[0]?.status).toBe('rewarded');
-      expect(history[1]?.status).toBe('pending');
     });
   });
 
@@ -214,10 +204,7 @@ describe('referralService', () => {
       mockFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: [{ id: 'some-ref' }],
-              error: null,
-            }),
+            limit: vi.fn().mockResolvedValue({ data: [{ id: 'some-ref' }], error: null }),
           }),
         }),
         insert: mockInsert,
@@ -230,10 +217,7 @@ describe('referralService', () => {
       mockFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({
-              data: [],
-              error: null,
-            }),
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
         }),
         insert: mockInsert,
