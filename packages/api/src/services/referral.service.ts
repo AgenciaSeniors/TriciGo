@@ -1,6 +1,17 @@
 // ============================================================
 // TriciGo — Referral Service
 // Manages referral codes, applications, history, and admin ops.
+//
+// R-CRIT-1 (2026-05-26): el flujo legacy resolvía code → referrer
+// via `users.id ILIKE 'prefix%'`. Estaba doblemente roto:
+//   - RLS `users_select_own` (00001:540) bloquea SELECT de otros
+//     users → la query nunca matcheaba → "Código inválido" siempre.
+//   - 8 hex chars = 2^32 espacio (colisión esperable a ~9300 users).
+// Fix: tabla `referral_codes` + RPCs SECURITY DEFINER
+// `get_or_create_referral_code` y `apply_referral_code`
+// (migración 00319). Tolerancia: si la migración no se aplicó aún
+// (PGRST202 / function does not exist), fallback al comportamiento
+// legacy para no crashear la UI.
 // ============================================================
 
 import type { Referral, ReferralStatus } from '@tricigo/types';
@@ -8,15 +19,31 @@ import { getSupabaseClient } from '../client';
 
 const DEFAULT_BONUS_CUP = 500; // 500 CUP whole pesos
 
+function isMissingFunctionError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST202') return true;
+  return !!error.message && /function .* does not exist|could not find the function/i.test(error.message);
+}
+
 export const referralService = {
   /**
    * Get or generate a referral code for the user.
-   * Uses first 8 chars of user ID (uppercase) as a simple unique code.
+   * Prefers the RPC `get_or_create_referral_code` (migration 00319).
+   * Falls back to UUID-prefix legacy code if the migration isn't applied.
    */
   async getOrCreateReferralCode(userId: string): Promise<string> {
     const supabase = getSupabaseClient();
 
-    // Check if user already has referrals as referrer (reuse that code)
+    const { data, error } = await supabase.rpc('get_or_create_referral_code');
+    if (!error && typeof data === 'string' && data.length > 0) {
+      return data;
+    }
+
+    if (error && !isMissingFunctionError(error)) {
+      throw error;
+    }
+
+    // Migration 00319 not yet applied — legacy fallback.
     const { data: existing } = await supabase
       .from('referrals')
       .select('code')
@@ -27,60 +54,49 @@ export const referralService = {
       return existing[0].code;
     }
 
-    // Generate code from userId prefix
     return userId.substring(0, 8).toUpperCase();
   },
 
   /**
    * Apply a referral code. The current user becomes the referee.
+   * Uses RPC `apply_referral_code` for atomic validation + insert.
+   * Falls back to legacy ILIKE path only if the RPC doesn't exist.
+   * Postgres error codes are mapped to user-facing Spanish strings.
    */
   async applyReferralCode(refereeId: string, code: string): Promise<Referral> {
     const supabase = getSupabaseClient();
     const normalizedCode = code.trim().toUpperCase();
 
-    // Find the referrer by matching user ID prefix
-    const { data: users, error: userErr } = await supabase
-      .from('users')
-      .select('id')
-      .ilike('id', `${normalizedCode.toLowerCase()}%`);
+    const { data: referralId, error } = await supabase.rpc('apply_referral_code', {
+      p_code: normalizedCode,
+    });
 
-    if (userErr) throw userErr;
-    if (!users || users.length === 0 || !users[0]) {
-      throw new Error('Código de referido inválido');
+    if (!error && typeof referralId === 'string') {
+      const { data, error: fetchErr } = await supabase
+        .from('referrals')
+        .select('*')
+        .eq('id', referralId)
+        .single();
+      if (fetchErr) throw fetchErr;
+      return data as Referral;
     }
 
-    const referrerId = users[0].id;
+    if (error) {
+      // Custom error codes from the RPC
+      if (error.code === 'P0001') throw new Error('Código de referido inválido');
+      if (error.code === 'P0002') throw new Error('No puedes usar tu propio código');
+      if (error.code === 'P0003') throw new Error('Ya usaste un código de referido');
 
-    if (referrerId === refereeId) {
-      throw new Error('No puedes usar tu propio código');
+      // Migration not yet applied — legacy fallback (works only for admins
+      // due to RLS on users; non-admins get "invalid" same as before).
+      if (isMissingFunctionError(error)) {
+        return await applyReferralCodeLegacy(refereeId, normalizedCode);
+      }
+
+      throw error;
     }
 
-    // Check if referee already used a referral
-    const { data: existingRef } = await supabase
-      .from('referrals')
-      .select('id')
-      .eq('referee_id', refereeId)
-      .limit(1);
-
-    if (existingRef && existingRef.length > 0) {
-      throw new Error('Ya usaste un código de referido');
-    }
-
-    // Create the referral record
-    const { data, error } = await supabase
-      .from('referrals')
-      .insert({
-        referrer_id: referrerId,
-        referee_id: refereeId,
-        code: normalizedCode,
-        status: 'pending',
-        bonus_amount: DEFAULT_BONUS_CUP,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data as Referral;
+    throw new Error('Código de referido inválido');
   },
 
   /**
@@ -199,3 +215,53 @@ export const referralService = {
     if (error) throw error;
   },
 };
+
+// ============================================================
+// Legacy fallback — kept ONLY for the brief window where the
+// migration isn't applied. Same broken behavior as before:
+// non-admins hit RLS and get "invalid", admins resolve OK.
+// ============================================================
+async function applyReferralCodeLegacy(refereeId: string, normalizedCode: string): Promise<Referral> {
+  const supabase = getSupabaseClient();
+
+  const { data: users, error: userErr } = await supabase
+    .from('users')
+    .select('id')
+    .ilike('id', `${normalizedCode.toLowerCase()}%`);
+
+  if (userErr) throw userErr;
+  if (!users || users.length === 0 || !users[0]) {
+    throw new Error('Código de referido inválido');
+  }
+
+  const referrerId = users[0].id;
+
+  if (referrerId === refereeId) {
+    throw new Error('No puedes usar tu propio código');
+  }
+
+  const { data: existingRef } = await supabase
+    .from('referrals')
+    .select('id')
+    .eq('referee_id', refereeId)
+    .limit(1);
+
+  if (existingRef && existingRef.length > 0) {
+    throw new Error('Ya usaste un código de referido');
+  }
+
+  const { data, error } = await supabase
+    .from('referrals')
+    .insert({
+      referrer_id: referrerId,
+      referee_id: refereeId,
+      code: normalizedCode,
+      status: 'pending',
+      bonus_amount: DEFAULT_BONUS_CUP,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Referral;
+}
