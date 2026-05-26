@@ -17,7 +17,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert, Linking, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -31,19 +31,31 @@ import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV } from '@tricigo/utils';
-import { colors, driverStandardLightColors } from '@tricigo/theme';
+import { colors, driverStandardLightColors, driverDarkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const PAGE_SIZE = 20;
-const lt = driverStandardLightColors;
-const CARD_SHADOW = { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 };
 
 export default function WalletScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
+  // 00324: dark mode support — driver app respects device theme. Picks between
+  // driverStandardLightColors (default) and driverDarkColors based on system.
+  // Both palettes share the same shape (text.{primary,secondary,tertiary},
+  // background.tertiary, card), so call sites need no further branching.
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const lt = isDark ? driverDarkColors : driverStandardLightColors;
+  const CARD_SHADOW = {
+    shadowColor: isDark ? '#FFF' : '#000',
+    shadowOpacity: isDark ? 0.06 : 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  };
 
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
@@ -107,13 +119,22 @@ export default function WalletScreen() {
           // Non-fatal: txn rows just won't have a download button.
         }
       }
-    } catch {
-      // Silent — wallet is best-effort. Empty state will show.
+    } catch (err) {
+      // 00324: surface the error via Toast so we catch RPC regressions early
+      // (we just lost a critical week of "everyone sees 0" due to the silent
+      // catch swallowing an ambiguous-column exception from get_wallet_summary).
+      console.error('[Wallet] fetchData error:', err);
+      Toast.show({
+        type: 'error',
+        text1: t('wallet.fetch_error', { defaultValue: 'Error al cargar saldo' }),
+        text2: err instanceof Error ? err.message : String(err),
+        visibilityTime: 4500,
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, page]);
+  }, [userId, page, t]);
 
   useEffect(() => {
     fetchData(true);
@@ -300,7 +321,7 @@ export default function WalletScreen() {
 
   if (loading) {
     return (
-      <Screen bg="lightPrimary" statusBarStyle="dark-content" padded scroll>
+      <Screen bg={isDark ? 'dark' : 'lightPrimary'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded scroll>
         <View className="pt-4">
           <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
             {t('wallet.title', { defaultValue: 'Billetera' })}
@@ -319,7 +340,7 @@ export default function WalletScreen() {
   const totalSpent = summary?.total_spent ?? 0;
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content">
+    <Screen bg={isDark ? 'dark' : 'lightPrimary'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
       <FlatList
         data={transactions}
         keyExtractor={(item) => item.id}
@@ -359,7 +380,7 @@ export default function WalletScreen() {
             {/* Balance card principal */}
             <Card variant="surface" padding="lg" className="mb-4" style={{ backgroundColor: lt.card, ...CARD_SHADOW }}>
               <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
-                {t('wallet.balance_label', { defaultValue: 'Saldo disponible' })}
+                {t('wallet.balance_label', { defaultValue: 'Crédito de comisión' })}
               </Text>
               <Text variant="stat" style={{ color: lt.text.primary }}>
                 {formatCUP(balance)}
