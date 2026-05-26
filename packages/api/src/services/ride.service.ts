@@ -520,26 +520,33 @@ export const rideService = {
       throw new Error(`createRide failed: ${detail}`);
     }
 
-    // Record promo usage if applicable (both ops must succeed or neither)
+    // P-CRIT-1/P-HIGH-4 (migration 00320): el trigger BEFORE INSERT en
+    // `rides` (`tg_rides_validate_promo_discount`) ahora hace el dedupe
+    // per-user + claim atómico del slot. Post-migración:
+    //   * INSERT en promotion_uses falla con código 23505 (UNIQUE) —
+    //     silently ignored porque el trigger ya lo insertó.
+    //   * `increment_promo_uses` es un no-op (kept para compat backward).
+    //   * NO rollback on catch — eso borraría el row del trigger y dejaría
+    //     a current_uses incrementado sin marker → drift.
+    // Pre-migración (deploy gap): el código sigue funcionando como antes.
     if (validParams.promo_code_id && data) {
-      try {
-        await supabase.from('promotion_uses').insert({
-          promotion_id: validParams.promo_code_id,
-          user_id: user.id,
-          ride_id: (data as Ride).id,
+      const { error: puErr } = await supabase.from('promotion_uses').insert({
+        promotion_id: validParams.promo_code_id,
+        user_id: user.id,
+        ride_id: (data as Ride).id,
+      });
+      if (puErr && puErr.code !== '23505') {
+        // Real error, not the expected post-migration UNIQUE conflict.
+        logger.warn('promo_use_insert_unexpected_error', {
+          rideId: (data as Ride).id,
+          error: puErr.message,
         });
-        await supabase.rpc('increment_promo_uses', {
-          p_promo_id: validParams.promo_code_id,
-        });
-      } catch (promoErr) {
-        // Rollback: delete the promotion_use record if increment failed
-        try {
-          await supabase.from('promotion_uses')
-            .delete()
-            .eq('ride_id', (data as Ride).id)
-            .eq('promotion_id', validParams.promo_code_id);
-        } catch { /* best-effort rollback */ }
-        console.warn('[Ride] Promo usage recording failed:', promoErr);
+      }
+      const { error: incErr } = await supabase.rpc('increment_promo_uses', {
+        p_promo_id: validParams.promo_code_id,
+      });
+      if (incErr) {
+        logger.warn('increment_promo_uses_failed', { error: incErr.message });
       }
     }
 
